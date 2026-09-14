@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 import pytest
 
+from astrbot.core.agent.message import bind_checkpoint_messages
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
 
 
@@ -458,3 +457,40 @@ async def test_streaming_pending_history_is_frozen_before_delivery_receipt():
     stage._save_to_history.assert_awaited_once()
     assert event.get_extra("_pending_assistant_history") is pending
     assert event.get_extra("delivery_receipt") is None
+
+
+@pytest.mark.asyncio
+async def test_internal_save_to_history_drops_handed_over_loop_turns():
+    """Turns handed over from the other BTW loop never enter this history.
+
+    The dialogue loop receives what the work loop produced as provider-only
+    context, built exactly the way ``_prepare_loop_contexts`` builds it.  Only
+    the accepted turn of this loop may be persisted.
+    """
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
+    event = FakeEvent()
+    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-chat"))
+    handed_over = bind_checkpoint_messages(
+        [
+            {"role": "user", "content": "a work task", "_no_save": True},
+            {"role": "assistant", "content": "work answer", "_no_save": True},
+            {"role": "user", "content": "hi"},
+        ]
+    )
+
+    pending = await stage._save_to_history(
+        event,
+        req,
+        LLMResponse(role="assistant", completion_text="chat-answer"),
+        [
+            Message(role="system", content="sys"),
+            *handed_over,
+            Message(role="assistant", content="chat-answer"),
+        ],
+        runner_stats=None,
+    )
+
+    assert pending is not None
+    assert list(pending.history_snapshot) == [{"role": "user", "content": "hi"}]

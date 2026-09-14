@@ -20,6 +20,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.skills._skill_snapshot import SkillSnapshot
 from astrbot.core.tool_catalog import ToolCatalogInputs, assemble_tool_catalog
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
+from astrbot.core.tools.work_tools import SubmitWorkTaskTool
 
 
 @pytest.fixture
@@ -227,3 +228,24 @@ def test_mcp_routes_survive_profile_save(tmp_path):
     assert (
         json.loads(path.read_text(encoding="utf-8-sig"))["btw"]["mcp_routes"] == routes
     )
+
+
+def test_work_submission_tool_is_offered_only_when_asked_for():
+    """The work tool is a conversation-loop tool, gated by its catalog flag."""
+    tool = SubmitWorkTaskTool()
+    inputs = {
+        "snapshot": SkillSnapshot(skills=(), runtime="none"),
+        "persona_tools": None,
+        "surface": "im",
+        "computer_use_runtime": "none",
+        "plugin_names": None,
+        "registered_tools": {tool.name: tool},
+    }
+
+    offered = assemble_tool_catalog(
+        ToolCatalogInputs(**inputs, work_loop_submission=True)
+    )
+    withheld = assemble_tool_catalog(ToolCatalogInputs(**inputs))
+
+    assert "submit_work_task" in offered.names()
+    assert "submit_work_task" not in withheld.names()

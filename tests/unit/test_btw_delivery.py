@@ -1,19 +1,29 @@
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.agent.btw import runtime_registry
 from astrbot.core.agent.btw.types import WorkSessionStatus
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.stage import Stage
+from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 from astrbot.core.webchat.emitter import emit_webchat_response
 from astrbot.core.webchat.queue_manager import WebChatQueueManager
 from astrbot.core.webchat.run_coordinator import WebChatRunCoordinator
+from tests.unit.agent_sub_stage_support import (
+    FakeThirdPartyRunner,
+    ThirdPartyResponseExecutor,
+)
+
+PROFILE_ID = "profile-1"
 
 
 class WorkEvent:
@@ -25,10 +35,12 @@ class WorkEvent:
         self.message_str = "run work"
         self.queues = queues
         self.attachments = attachments
+        self.resource = SimpleNamespace(config_id=PROFILE_ID)
         self.extras = {}
         self.result = None
         self.cleaned = 0
         self.trace = []
+        self._stopped = False
 
     def get_extra(self, key, default=None):
         return self.extras.get(key, default)
@@ -40,7 +52,10 @@ class WorkEvent:
         self.result = result
 
     def is_stopped(self):
-        return False
+        return self._stopped
+
+    def stop_event(self):
+        self._stopped = True
 
     def get_platform_id(self):
         return "webchat"
@@ -112,7 +127,20 @@ class SendStage(Stage):
         event.result = None
 
 
-async def setup_work(tmp_path):
+class StopAfterAcknowledgementStage(Stage):
+    """Stops the event once the acknowledgement has reached the platform."""
+
+    async def initialize(self, ctx):
+        pass
+
+    async def process(self, event):
+        if event.result is not None:
+            return
+        event.trace.append("stop")
+        event.stop_event()
+
+
+async def setup_work(tmp_path, *, stop_after_acknowledgement: bool = False):
     queues = WebChatQueueManager()
     coordinator = WebChatRunCoordinator(queues)
     executor = BlockingExecutor()
@@ -125,7 +153,10 @@ async def setup_work(tmp_path):
         )
     )
     scheduler = PipelineScheduler(ctx)
-    scheduler.stage_classes = [lambda: SubmitStage(work), DecorateStage, SendStage]
+    stage_classes = [lambda: SubmitStage(work), DecorateStage, SendStage]
+    if stop_after_acknowledgement:
+        stage_classes.append(StopAfterAcknowledgementStage)
+    scheduler.stage_classes = stage_classes
     await scheduler.initialize()
     events = []
     for request_id in ("first", "second"):
@@ -219,7 +250,8 @@ async def test_work_delivery_failure_marks_failed_and_finishes_the_request(tmp_p
     work._result_dispatcher = fail_delivery
     task = next(iter(work._tasks))
     executor.release[event.message_id].set()
-    await task
+    task_result = await task
+    assert task_result is None
     session = await work.sessions.get_for_origin(event.unified_msg_origin)
     assert session.status is WorkSessionStatus.FAILED
     assert session.error == "Work task failed."
@@ -249,3 +281,451 @@ async def test_closed_work_rejects_submission_without_creating_a_session(tmp_pat
     await scheduler.execute(events[0])
     assert await work.sessions.get_for_origin(events[0].unified_msg_origin) is None
     assert not work._tasks
+
+
+@pytest.mark.asyncio
+async def test_interrupted_acknowledgement_leaves_no_queued_work(tmp_path):
+    """A stop between the acknowledgement and the hand-off must not strand work.
+
+    The scheduler drops the submission generator the moment a later stage stops
+    the event, so the acknowledgement is delivered while nothing owns the
+    background run yet.
+    """
+    scheduler, work, _, queues, events = await setup_work(
+        tmp_path, stop_after_acknowledgement=True
+    )
+    event = events[0]
+    runtime_registry.register(PROFILE_ID, work.sessions)
+    try:
+        await scheduler.execute(event)
+    finally:
+        runtime_registry.unregister(PROFILE_ID, work.sessions)
+        await scheduler.close()
+
+    assert event.get_extra("btw_detached_work") is None
+    assert queues.back_queues[event.message_id].get_nowait()["type"] == "plain"
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.CANCELLED
+    assert not work._tasks
+    assert event.cleaned == 1
+
+
+class ReceiptWorkEvent:
+    """A work event whose platform answers every send with a real result."""
+
+    requires_empty_completion = False
+
+    def __init__(self, run, send_results):
+        self.message_id = run.request_id
+        self.unified_msg_origin = "webchat:FriendMessage:shared"
+        self.message_str = "run work"
+        self.resource = SimpleNamespace(config_id=PROFILE_ID)
+        self.extras = {}
+        self.result = None
+        self.cleaned = 0
+        self.trace = []
+        self.plugins_name = []
+        self.send_streaming = AsyncMock()
+        self.stop_typing = AsyncMock()
+        self._send_results = iter(send_results)
+
+    def get_extra(self, key, default=None):
+        return self.extras.get(key, default)
+
+    def set_extra(self, key, value):
+        self.extras[key] = value
+
+    def get_result(self):
+        return self.result
+
+    def set_result(self, result):
+        self.result = result
+
+    def clear_result(self):
+        self.result = None
+
+    def is_stopped(self):
+        return False
+
+    def cleanup_temporary_local_files(self):
+        self.cleaned += 1
+
+    def get_platform_id(self):
+        return "test"
+
+    def get_platform_name(self):
+        return "test"
+
+    def get_sender_name(self):
+        return "tester"
+
+    def get_sender_id(self):
+        return "user"
+
+    def _outline_chain(self, _chain):
+        return "test"
+
+    async def send(self, _chain):
+        """Answer with the next scripted platform result."""
+        result = next(self._send_results)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+
+class WorkResultExecutor:
+    """One work run that publishes a result and finishes."""
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def process(self, event):
+        self.started.set()
+        await self.release.wait()
+        event.set_result(MessageEventResult().message("work result"))
+        yield
+
+
+class ReceiptRespondStage(RespondStage):
+    """The real respond stage bound to an isolated test runtime."""
+
+    async def initialize(self, ctx):
+        self.ctx = ctx
+        self.config = {"provider_settings": {}}
+        self.platform_settings = {"path_mapping": []}
+        self.enable_seg = False
+
+
+def _accepted() -> PlatformSendResult:
+    return PlatformSendResult(
+        platform_id="test",
+        success=True,
+        target="target",
+        message_count=1,
+        message_id="accepted-1",
+    )
+
+
+def _rejected() -> PlatformSendResult:
+    return PlatformSendResult(
+        platform_id="test",
+        success=False,
+        target="target",
+        message_count=1,
+        error_message="adapter rejected the final result",
+    )
+
+
+async def setup_receipt_work(executor, send_results):
+    """Wire a real scheduler and respond stage around one work submission."""
+    sessions = WorkSessionManager()
+    work = WorkLoop(executor, sessions)
+    ctx = SimpleNamespace(
+        astrbot_config={},
+        file_token_service=MagicMock(),
+        handlers=SimpleNamespace(get_handlers_by_event_type=lambda *_a, **_k: []),
+        plugins=SimpleNamespace(),
+        execution_context=SimpleNamespace(
+            active_event_registry=ActiveEventRegistry(),
+            background_tasks=set(),
+            persist_accepted_group_response=AsyncMock(),
+        ),
+    )
+    scheduler = PipelineScheduler(ctx)
+    scheduler.stage_classes = [
+        lambda: SubmitStage(work),
+        DecorateStage,
+        ReceiptRespondStage,
+    ]
+    await scheduler.initialize()
+    run = WebChatRunCoordinator(WebChatQueueManager()).create_run(
+        session_id="shared", username="test", request_id="first"
+    )
+    return scheduler, work, ReceiptWorkEvent(run, send_results)
+
+
+async def _run_receipt_work(scheduler, work, executor, event):
+    await scheduler.execute(event)
+    await asyncio.wait_for(executor.started.wait(), timeout=1)
+    executor.release.set()
+    task = next(task for task, (owner, _) in work._tasks.items() if owner is event)
+    await asyncio.wait_for(task, timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_rejected_result_delivery_marks_the_work_failed():
+    """The platform refused the final result after accepting the ack."""
+    executor = WorkResultExecutor()
+    scheduler, work, event = await setup_receipt_work(
+        executor, [_accepted(), _rejected()]
+    )
+    try:
+        await _run_receipt_work(scheduler, work, executor, event)
+    finally:
+        await scheduler.close()
+
+    receipt = event.get_extra("delivery_receipt")
+    assert receipt.status == "failed"
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.FAILED
+    assert session.error == "Work result was not delivered."
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_result_delivery_is_not_reported_as_completed():
+    """A send that raised proves neither delivery nor its absence."""
+    executor = WorkResultExecutor()
+    scheduler, work, event = await setup_receipt_work(
+        executor, [_accepted(), OSError("delivery unavailable")]
+    )
+    try:
+        await _run_receipt_work(scheduler, work, executor, event)
+    finally:
+        await scheduler.close()
+
+    receipt = event.get_extra("delivery_receipt")
+    assert receipt.status == "unknown"
+    session = await work.sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.UNCONFIRMED
+
+
+class StoppingThirdPartyRunner(FakeThirdPartyRunner):
+    """A third-party runner whose stream is stopped part-way through."""
+
+    def __init__(self, chunks, stop) -> None:
+        super().__init__(responses=chunks, final_resp=None)
+        self.chunks = chunks
+        self.stop = stop
+        self.consumed = 0
+
+    async def step_until_done(self, max_step: int = 30):
+        del max_step
+        for index, chunk in enumerate(self.chunks):
+            if index == 1:
+                # The user's stop lands while the runner is still streaming.
+                self.stop()
+            self.consumed += 1
+            yield chunk
+
+
+def _third_party_chunk(text: str, kind: str = "llm_result"):
+    return SimpleNamespace(type=kind, data={"chain": MessageChain().message(text)})
+
+
+def _work_event(tmp_path, request_id: str = "first"):
+    run = WebChatRunCoordinator(WebChatQueueManager()).create_run(
+        session_id="shared", username="test", request_id=request_id
+    )
+    return WorkEvent(run, WebChatQueueManager(), tmp_path)
+
+
+def _stoppable_work(runner, registry):
+    """Wire a work loop whose detached run finalizes through the scheduler."""
+    work = WorkLoop(ThirdPartyResponseExecutor(runner), WorkSessionManager())
+    dispatcher = AsyncMock()
+    execution_context = SimpleNamespace(
+        active_event_registry=registry,
+        background_tasks=set(),
+    )
+    scheduler = PipelineScheduler(SimpleNamespace(execution_context=execution_context))
+    work.configure_detached_execution(
+        background_tasks=execution_context.background_tasks,
+        result_dispatcher=dispatcher,
+        event_finalizer=scheduler.finalize_detached_event,
+    )
+    return work, dispatcher
+
+
+@pytest.mark.asyncio
+async def test_stopped_third_party_work_stops_consuming_its_stream(tmp_path):
+    """A stop must end the local wait instead of draining the whole runner."""
+    registry = ActiveEventRegistry()
+    event = _work_event(tmp_path)
+    registry.register(event)
+    chunks = [_third_party_chunk(text) for text in ("one", "two", "three")]
+    runner = StoppingThirdPartyRunner(
+        chunks, lambda: registry.stop_all(event.unified_msg_origin)
+    )
+    work, dispatcher = _stoppable_work(runner, registry)
+
+    session = await work.schedule(event)
+    await asyncio.wait_for(next(iter(work._tasks)), timeout=5)
+
+    # The stop arrives as the second response is pulled, so the third is never
+    # consumed and nothing from the aborted runner is delivered.
+    assert runner.consumed < len(chunks)
+    dispatcher.assert_not_awaited()
+    assert event.result is None
+    assert session.status is WorkSessionStatus.CANCELLED
+    assert event.cleaned == 1
+    assert not registry._events
+
+
+@pytest.mark.asyncio
+async def test_stopped_work_delivers_no_further_results(tmp_path):
+    """A stream that kept producing must not keep being delivered."""
+    registry = ActiveEventRegistry()
+    event = _work_event(tmp_path)
+    registry.register(event)
+    chunks = [
+        _third_party_chunk(text, "streaming_delta") for text in ("one", "two", "three")
+    ]
+    runner = FakeThirdPartyRunner(responses=chunks, final_resp=None)
+    work, dispatcher = _stoppable_work(runner, registry)
+
+    async def stop_on_first_delivery(_event):
+        registry.stop_all(event.unified_msg_origin)
+
+    dispatcher.side_effect = stop_on_first_delivery
+
+    session = await work.schedule(event)
+    await asyncio.wait_for(next(iter(work._tasks)), timeout=5)
+
+    assert dispatcher.await_count == 1
+    assert session.status is WorkSessionStatus.CANCELLED
+    assert event.cleaned == 1
+    assert not registry._events
+
+
+class StopBetweenChunksExecutor:
+    """A local work run whose event is stopped while it is still producing."""
+
+    def __init__(self) -> None:
+        self.yielded = 0
+
+    async def process(self, event):
+        self.yielded += 1
+        yield "first"
+        event.stop_event()
+        self.yielded += 1
+        yield "second"
+
+
+class _StopMidRunExecutor:
+    """A local work run stopped mid-flight by the agent stop request.
+
+    ``/task stop`` for a local Agent goes through ``request_agent_stop_all``,
+    which sets the extra and never touches the event's own stop flag.
+    """
+
+    async def process(self, event):
+        yield None
+        event.set_extra("agent_stop_requested", True)
+        yield None
+
+
+@pytest.mark.asyncio
+async def test_stopped_run_never_delivers_the_chunks_after_the_stop(tmp_path):
+    """A local run keeps yielding; delivery must stop at the stop flag."""
+    event = _work_event(tmp_path)
+    executor = StopBetweenChunksExecutor()
+    dispatcher = AsyncMock()
+    work = WorkLoop(executor, WorkSessionManager())
+    work.configure_detached_execution(
+        background_tasks=set(),
+        result_dispatcher=dispatcher,
+        event_finalizer=AsyncMock(),
+    )
+
+    session = await work.schedule(event)
+    await asyncio.wait_for(next(iter(work._tasks)), timeout=5)
+
+    assert executor.yielded == 2
+    assert dispatcher.await_count == 1
+    assert session.status is WorkSessionStatus.CANCELLED
+
+
+class GatedExecutor:
+    """A work executor that runs one item at a time."""
+
+    def __init__(self) -> None:
+        self.started: list[str] = []
+        self.release = asyncio.Event()
+
+    async def process(self, event):
+        self.started.append(event.message_id)
+        await self.release.wait()
+        event.set_result(MessageEventResult().message("done"))
+        yield
+
+
+@pytest.mark.asyncio
+async def test_queued_work_never_starts_once_its_request_is_stopped(tmp_path):
+    """A stop withdraws a task that is still waiting its turn."""
+    registry = ActiveEventRegistry()
+    executor = GatedExecutor()
+    work = WorkLoop(executor, WorkSessionManager(), max_concurrent=1)
+    work.configure_detached_execution(
+        background_tasks=set(),
+        result_dispatcher=AsyncMock(),
+        event_finalizer=AsyncMock(),
+    )
+    running = _work_event(tmp_path, "running")
+    queued = _work_event(tmp_path, "queued")
+    registry.register(running)
+    registry.register(queued)
+
+    await work.schedule(running)
+    queued_session = await work.schedule(queued)
+    await asyncio.sleep(0)
+    assert queued_session.status is WorkSessionStatus.PENDING
+
+    registry.stop_all(queued.unified_msg_origin, exclude=running)
+    tasks = list(work._tasks)
+    executor.release.set()
+    await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
+
+    assert executor.started == ["running"]
+    assert queued_session.status is WorkSessionStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_stopped_third_party_work_stops_on_the_agent_stop_request(tmp_path):
+    """``/task stop`` on a third-party run sets the agent stop, not the flag.
+
+    ``request_agent_stop_all`` is what the command uses for a third-party
+    runner, and it never calls ``stop_event``.  A stop that only reads the
+    event's own flag keeps draining the runner and finishes as ``failed``.
+    """
+    registry = ActiveEventRegistry()
+    event = _work_event(tmp_path)
+    registry.register(event)
+    chunks = [_third_party_chunk(text) for text in ("one", "two", "three")]
+    runner = StoppingThirdPartyRunner(
+        chunks, lambda: registry.request_agent_stop_all(event.unified_msg_origin)
+    )
+    work, dispatcher = _stoppable_work(runner, registry)
+
+    session = await work.schedule(event)
+    await asyncio.wait_for(next(iter(work._tasks)), timeout=5)
+
+    assert runner.consumed < len(chunks)
+    dispatcher.assert_not_awaited()
+    assert event.result is None
+    assert session.status is WorkSessionStatus.CANCELLED
+    assert event.cleaned == 1
+    assert not registry._events
+
+
+@pytest.mark.asyncio
+async def test_stopped_local_work_is_cancelled_not_completed(tmp_path):
+    """An admitted stop request must not read as a finished local run.
+
+    A local non-streaming run consumes every response and yields progress, so
+    the terminal status is the only place the stop can show up.  Reading only
+    ``is_stopped`` reports it as ``completed``.
+    """
+    event = _work_event(tmp_path)
+    sessions = WorkSessionManager()
+    work = WorkLoop(_StopMidRunExecutor(), sessions)
+
+    output = [item async for item in work.process(event)]
+
+    assert output == [None, None]
+    session = await sessions.get_for_origin(event.unified_msg_origin)
+    assert session is not None
+    assert session.status is WorkSessionStatus.CANCELLED

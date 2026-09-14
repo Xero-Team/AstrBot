@@ -20,12 +20,19 @@ class FakeAgentRequest:
 class FakeEvent:
     def __init__(self) -> None:
         self.extras = {}
+        self._stopped = False
 
     def set_extra(self, key, value) -> None:
         self.extras[key] = value
 
     def get_extra(self, key):
         return self.extras.get(key)
+
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+    def stop_event(self) -> None:
+        self._stopped = True
 
 
 @pytest.mark.asyncio

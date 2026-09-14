@@ -35,6 +35,10 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.llm_types import LLMResponse
     from astrbot.core.agent.runners.base import BaseAgentRunner
+from astrbot.core.agent.btw.types import (
+    THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
+    stop_requested,
+)
 from astrbot.core.agent.llm_types import (
     ProviderRequest,
 )
@@ -47,7 +51,6 @@ from astrbot.core.utils.task_utils import create_tracked_task
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
 from ....context import PipelineContext, call_event_hook
 
-THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
 RUNNER_NO_RESULT_FALLBACK_MESSAGE = DEFAULT_AGENT_ERROR_MESSAGE
 RUNNER_NO_FINAL_RESPONSE_LOG = (
@@ -61,13 +64,21 @@ async def run_third_party_agent(
     max_step: int = 30,
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> AsyncGenerator[tuple[MessageChain, bool]]:
     """
     运行第三方 agent runner 并转换响应格式
     类似于 run_agent 函数，但专门处理第三方 agent runner
+
+    ``should_stop`` is polled as the stream is consumed, so a request that was
+    stopped stops draining this runner instead of waiting for it to finish.  It
+    ends the local wait only; whether the remote service stops its own task is
+    not something this side can observe.
     """
     try:
         async for resp in runner.step_until_done(max_step=max_step):  # type: ignore[misc]
+            if should_stop is not None and should_stop():
+                return
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
@@ -241,6 +252,7 @@ class ThirdPartyAgentSubStage:
                     max_step=max_step,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
+                    should_stop=lambda: stop_requested(event),
                 ):
                     aggregator.add_chunk(chain, is_error)
                     if is_error:
@@ -257,6 +269,11 @@ class ThirdPartyAgentSubStage:
             .set_async_stream(_stream_runner_chain()),
         )
         yield
+
+        if stop_requested(event):
+            # A stopped request did not fail.  Report nothing instead of the
+            # fallback error an unfinished runner would otherwise produce.
+            return
 
         if runner.done():
             final_chain, is_runner_error = aggregator.finalize(
@@ -285,11 +302,17 @@ class ThirdPartyAgentSubStage:
             max_step=max_step,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
+            should_stop=lambda: stop_requested(event),
         ):
             aggregator.add_chunk(chain, is_error)
             if is_error:
                 event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
             yield
+
+        if stop_requested(event):
+            # A stopped request did not fail.  Report nothing instead of the
+            # fallback error an unfinished runner would otherwise produce.
+            return
 
         final_chain, is_runner_error = aggregator.finalize(runner.get_final_llm_resp())
         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)

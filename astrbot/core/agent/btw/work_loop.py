@@ -12,7 +12,13 @@ from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
 from . import i18n as work_i18n
-from .types import WorkSessionStatus
+from .types import (
+    THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
+    WORK_FAILED_EXTRA,
+    WorkSession,
+    WorkSessionStatus,
+    stop_requested,
+)
 from .work_sessions import WorkSessionManager
 
 
@@ -126,23 +132,84 @@ class WorkLoop:
                 )
             )
         )
-        yield
+        handed_off = False
+        try:
+            yield
 
-        if self._closed:
+            if self._closed:
+                return
+
+            # The first yield returns only after the normal response stages
+            # deliver the acknowledgement.  Marking it here prevents the
+            # scheduler from releasing event-owned temporary files before the
+            # worker needs them.  Losing this race to a concurrent close() only
+            # skips the work.
+            handed_off = self._schedule_detached(event, session.id)
+        finally:
+            # Nothing owns the queued session until the background run is
+            # registered.  A generator closed first -- a later stage stops the
+            # event, or the request is cancelled -- would otherwise leave a
+            # queued task that expires only on reload.
+            if not handed_off:
+                await self.sessions.cancel_if_pending(session.id)
+
+    async def schedule(self, event: AstrMessageEvent) -> WorkSession:
+        """Run one work task detached, without delivering its result here.
+
+        This is how the work loop acts as a tool for the conversation loop: the
+        caller has already put the complete task in ``event.message_str``, the
+        work run executes in the background, and its result is delivered
+        through the normal response stages when it finishes.
+
+        Args:
+            event: The prepared work event carrying the task to run.
+
+        Returns:
+            The created work session.
+
+        Raises:
+            RuntimeError: The loop is closed or has no runtime services
+                attached, so it cannot run work in the background.
+        """
+        if not self._detached_ready():
+            raise RuntimeError("Work loop cannot run detached work")
+        session = await self.sessions.create(
+            event.unified_msg_origin, event.message_str
+        )
+        self._prepare_event(event, session.id)
+        if not self._schedule_detached(event, session.id):
             await self.sessions.update_status(session.id, WorkSessionStatus.CANCELLED)
-            return
+            raise RuntimeError("Work loop cannot run detached work")
+        return session
 
-        # The first yield returns only after the normal response stages deliver
-        # the acknowledgement.  Marking it here prevents the scheduler from
-        # releasing event-owned temporary files before the worker needs them.
+    def _detached_ready(self) -> bool:
+        """Return whether this loop owns the services detached work needs."""
+        return (
+            not self._closed
+            and self._background_tasks is not None
+            and self._result_dispatcher is not None
+            and self._event_finalizer is not None
+        )
+
+    def _schedule_detached(self, event: AstrMessageEvent, session_id: str) -> bool:
+        """Hand one prepared work event to the runtime's background registry.
+
+        Returns:
+            Whether the work run was registered; ``False`` when the loop has no
+            services to run it, which happens only while shutting down.
+        """
+        if not self._detached_ready():
+            return False
+        assert self._background_tasks is not None
         event.set_extra("btw_detached_work", True)
         task = create_tracked_task(
             self._background_tasks,
-            self._run_detached(event, session.id),
-            name=f"btw_work:{session.id}",
+            self._run_detached(event, session_id),
+            name=f"btw_work:{session_id}",
         )
-        self._tasks[task] = (event, session.id)
+        self._tasks[task] = (event, session_id)
         task.add_done_callback(lambda done: self._tasks.pop(done, None))
+        return True
 
     async def close(self) -> None:
         """Cancel and finalize this profile's work, including unstarted tasks."""
@@ -179,13 +246,23 @@ class WorkLoop:
         session_id: str,
     ) -> AsyncGenerator[None]:
         """Run one already-created work session and update its lifecycle."""
+        produced = False
         try:
             async with self._semaphore:
+                if stop_requested(event):
+                    # The request was stopped while this run waited its turn, so
+                    # it never starts work the user already withdrew.
+                    await self.sessions.update_status(
+                        session_id,
+                        WorkSessionStatus.CANCELLED,
+                    )
+                    return
                 await self.sessions.update_status(
                     session_id,
                     WorkSessionStatus.RUNNING,
                 )
                 async for progress in self.executor.process(event):
+                    produced = True
                     yield progress
         except asyncio.CancelledError:
             await self.sessions.update_status(
@@ -201,8 +278,14 @@ class WorkLoop:
             )
             raise
         else:
-            failed = bool(event.get_extra("btw_work_failed"))
-            cancelled = bool(event.get_extra("agent_stop_requested"))
+            failed = bool(event.get_extra(WORK_FAILED_EXTRA)) or bool(
+                event.get_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY)
+            )
+            cancelled = stop_requested(event)
+            # An executor that produced nothing never reached an Agent: a run
+            # the session turned away is the reported case.  The generator
+            # ending only proves the task ran when something actually ran.
+            failed = failed or (not produced and not cancelled)
             await self.sessions.update_status(
                 session_id,
                 WorkSessionStatus.FAILED
@@ -222,7 +305,17 @@ class WorkLoop:
         try:
             async with aclosing(self._execute(event, session_id)) as execution:
                 async for _ in execution:
+                    if stop_requested(event):
+                        # Closing the execution releases the executor and the
+                        # runner behind it.  This ends the local run and its
+                        # waiting only: whether the remote service stopped its
+                        # own task is not something this side can claim.
+                        await self.sessions.update_status(
+                            session_id, WorkSessionStatus.CANCELLED
+                        )
+                        return
                     await self._result_dispatcher(event)
+            await self._record_delivery_outcome(event, session_id)
         except asyncio.CancelledError:
             await self.sessions.update_status(session_id, WorkSessionStatus.CANCELLED)
             raise
@@ -235,3 +328,32 @@ class WorkLoop:
             logger.error("BTW work task failed: %s", safe_error("", exc))
         finally:
             await self._event_finalizer(event)
+
+    async def _record_delivery_outcome(
+        self, event: AstrMessageEvent, session_id: str
+    ) -> None:
+        """Fold the platform's answer about the result into the work status.
+
+        The response stage turns a refused or unconfirmed send into a delivery
+        receipt rather than raising, so a run whose result never reached the
+        user still ends here successfully.  Only a completed run is adjusted:
+        a failed or cancelled one already has the stronger answer.
+
+        Args:
+            event: The finished work event carrying the delivery receipt.
+            session_id: The work session that produced the result.
+        """
+        receipt_status = getattr(event.get_extra("delivery_receipt"), "status", None)
+        if receipt_status == "failed":
+            await self.sessions.update_status_if(
+                session_id,
+                WorkSessionStatus.COMPLETED,
+                WorkSessionStatus.FAILED,
+                error="Work result was not delivered.",
+            )
+        elif receipt_status == "unknown":
+            await self.sessions.update_status_if(
+                session_id,
+                WorkSessionStatus.COMPLETED,
+                WorkSessionStatus.UNCONFIRMED,
+            )

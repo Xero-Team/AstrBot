@@ -19,6 +19,33 @@ from astrbot.core.db.protocols import ConversationStore
 from astrbot.core.utils.datetime_utils import to_utc_timestamp
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
+DIALOGUE_LOOP_SCOPE = ""
+"""The conversation scope a session's chat uses by default."""
+
+WORK_LOOP_SCOPE = "work"
+"""The conversation scope owned by the BTW work loop.
+
+A work run keeps its own conversation so the two loops never write one
+history.  Both conversations still belong to the same session, so the
+session's conversation list and the Dashboard show them side by side.
+"""
+
+_SCOPE_KEY_SEP = ":"
+
+
+def _scoped_selection_key(scope: str) -> str:
+    """Return the session preference key that stores one scope's selection."""
+    if not scope:
+        return "sel_conv_id"
+    return f"sel_conv_id{_SCOPE_KEY_SEP}{scope}"
+
+
+def _scoped_cache_key(unified_msg_origin: str, scope: str) -> str:
+    """Return the in-memory cache key that stores one scope's selection."""
+    if not scope:
+        return unified_msg_origin
+    return f"{unified_msg_origin}{_SCOPE_KEY_SEP}{scope}"
+
 
 def load_sanitized_history(history_json: str | None) -> list[dict]:
     """Deserialize provider history while removing legacy base64 image data.
@@ -108,11 +135,14 @@ class ConversationManager:
         content: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
+        scope: str = DIALOGUE_LOOP_SCOPE,
     ) -> str:
         """新建对话，并将当前会话的对话转移到新对话.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            scope (str): 拥有该对话的循环。空字符串为对话循环的默认对话；
+                `WORK_LOOP_SCOPE` 为工作循环的独立对话。
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
@@ -131,9 +161,13 @@ class ConversationManager:
             title=title,
             persona_id=persona_id,
         )
-        self.session_conversations[unified_msg_origin] = conv.conversation_id
+        self.session_conversations[_scoped_cache_key(unified_msg_origin, scope)] = (
+            conv.conversation_id
+        )
         await self.preferences.session_put(
-            unified_msg_origin, "sel_conv_id", conv.conversation_id
+            unified_msg_origin,
+            _scoped_selection_key(scope),
+            conv.conversation_id,
         )
         return conv.conversation_id
 
@@ -182,27 +216,40 @@ class ConversationManager:
         """
         await self.db.delete_conversations_by_user_id(user_id=unified_msg_origin)
         self.session_conversations.pop(unified_msg_origin, None)
+        self.session_conversations.pop(
+            _scoped_cache_key(unified_msg_origin, WORK_LOOP_SCOPE), None
+        )
         await self.preferences.session_remove(unified_msg_origin, "sel_conv_id")
+        await self.preferences.session_remove(
+            unified_msg_origin, _scoped_selection_key(WORK_LOOP_SCOPE)
+        )
 
         # 触发会话删除回调（级联清理）
         await self._trigger_session_deleted(unified_msg_origin)
 
-    async def get_curr_conversation_id(self, unified_msg_origin: str) -> str | None:
+    async def get_curr_conversation_id(
+        self,
+        unified_msg_origin: str,
+        scope: str = DIALOGUE_LOOP_SCOPE,
+    ) -> str | None:
         """获取会话当前的对话 ID
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            scope (str): 拥有该对话的循环。空字符串为对话循环的默认对话；
+                `WORK_LOOP_SCOPE` 为工作循环的独立对话。
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
         """
-        ret = self.session_conversations.get(unified_msg_origin, None)
+        cache_key = _scoped_cache_key(unified_msg_origin, scope)
+        ret = self.session_conversations.get(cache_key, None)
         if not ret:
             ret = await self.preferences.session_get(
-                unified_msg_origin, "sel_conv_id", None
+                unified_msg_origin, _scoped_selection_key(scope), None
             )
             if ret:
-                self.session_conversations[unified_msg_origin] = ret
+                self.session_conversations[cache_key] = ret
         return ret
 
     async def get_conversation(

@@ -105,6 +105,9 @@ async def test_third_party_runner_receives_inline_profile_config(
     event.message_obj.message = []
     event.platform_meta.support_streaming_message = True
     event.get_extra.return_value = None
+    # The stage polls the event's stop flag while it consumes the runner, so a
+    # loose mock must answer it instead of returning a truthy mock.
+    event.is_stopped.return_value = False
 
     results = [item async for item in stage.process(event)]
 

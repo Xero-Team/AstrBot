@@ -562,6 +562,7 @@
       :is-touch-device="isTouchDevice"
       :deleting="deletingThread"
       :web-chat-step-up-tokens="webChatStepUpTokens"
+      :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
       @consume-step-up="webChatStepUpTokens = null"
     />

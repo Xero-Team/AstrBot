@@ -172,6 +172,10 @@ describe('chat side panels', () => {
           selected_text: 'Selected thread excerpt',
         },
         isDark: false,
+        getProviderSelection: () => ({
+          providerId: 'provider-1',
+          modelName: 'gpt-4.1-mini',
+        }),
       },
     });
     await flushPromises();
@@ -183,6 +187,14 @@ describe('chat side panels', () => {
       '/threads/thread-1/messages',
       expect.objectContaining({ method: 'POST' }),
     );
+    const body = JSON.parse(
+      testState.fetchWithAuthMock.mock.calls[0][1].body,
+    ) as {
+      selected_provider?: string;
+      selected_model?: string;
+    };
+    expect(body.selected_provider).toBe('provider-1');
+    expect(body.selected_model).toBe('gpt-4.1-mini');
     expect(wrapper.find('.chat-message-list-stub').text()).toContain(
       'partial response',
     );

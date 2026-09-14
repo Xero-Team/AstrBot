@@ -12,6 +12,7 @@ import type {
 import type {
   ChatBatchDeleteData,
   ChatMessageMutationData,
+  ChatHistoryPageParams,
   ChatSessionDetailData,
   ChatSessionListParams,
   ChatSessionSummary,
@@ -47,9 +48,12 @@ export const chatApi = {
       }),
     );
   },
-  getSession(sessionId: string) {
+  getSession(sessionId: string, params?: ChatHistoryPageParams) {
     return typed<ChatSessionDetailData>(
-      openApiV1.getChatSession({ path: { session_id: sessionId } }),
+      openApiV1.getChatSession({
+        path: { session_id: sessionId },
+        query: generatedQuery(params),
+      }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {

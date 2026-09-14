@@ -376,6 +376,20 @@ async def test_plugin_updator_install_prefers_download_url(
     assert calls["unzip"] == (str(expected_path) + ".zip", str(expected_path))
 
 
+@pytest.mark.asyncio
+async def test_plugin_updator_install_rejects_escaping_target_dir(
+    tmp_path: Path,
+) -> None:
+    updator = PluginUpdator()
+    updator.plugin_store_path = str(tmp_path)
+
+    with pytest.raises(Exception, match="目标目录不合法"):
+        await updator.install(
+            "https://github.com/Owner/plugin-name",
+            target_dir=tmp_path / ".." / "outside",
+        )
+
+
 def _plugin_updator_for_update(tmp_path: Path) -> PluginUpdator:
     updater = PluginUpdator.__new__(PluginUpdator)
     updater.plugin_store_path = str(tmp_path)

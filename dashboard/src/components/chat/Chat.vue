@@ -371,8 +371,27 @@
           class="messages-panel"
           @scroll="handleMessagesScroll"
         >
+          <v-progress-linear
+            v-if="activeSessionPagination?.loading"
+            class="history-loading"
+            color="primary"
+            height="2"
+            indeterminate
+            :aria-label="tm('history.loading')"
+          />
           <div v-if="loadingMessages" class="center-state">
             <v-progress-circular indeterminate size="32" width="3" />
+          </div>
+
+          <div
+            v-else-if="!activeMessages.length && activeSessionPagination?.error"
+            class="welcome-state"
+          >
+            <ChatLoadError
+              :message="tm('history.loadFailed')"
+              :loading="loadingMessages"
+              @retry="retryCurrentSessionLoad"
+            />
           </div>
 
           <div v-else-if="sessionProject" class="session-project-breadcrumb">
@@ -389,6 +408,13 @@
             v-if="!loadingMessages && activeMessages.length"
             class="messages-list-shell"
           >
+            <ChatLoadError
+              v-if="activeSessionPagination?.error"
+              class="history-load-error"
+              :message="tm('history.loadEarlierFailed')"
+              :loading="activeSessionPagination.loading"
+              @retry="retryCurrentSessionLoad"
+            />
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -536,6 +562,7 @@
       :is-touch-device="isTouchDevice"
       :deleting="deletingThread"
       :web-chat-step-up-tokens="webChatStepUpTokens"
+      :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
       @consume-step-up="webChatStepUpTokens = null"
     />
@@ -580,6 +607,7 @@ import ProjectView from '@/components/chat/ProjectView.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
+import ChatLoadError from '@/components/chat/ChatLoadError.vue';
 import type { RegenerateModelSelection } from '@/components/chat/RegenerateMenu.vue';
 import ReasoningSidebar from '@/components/chat/ReasoningSidebar.vue';
 import ThreadPanel from '@/components/chat/ThreadPanel.vue';
@@ -696,6 +724,8 @@ const selectedTokenProviderId = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
+const suppressAutoScroll = ref(false);
+const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
@@ -765,12 +795,14 @@ const {
   loadingMessages,
   sending,
   loadedSessions,
+  paginationBySession,
   sessionProjects,
   activeMessages,
   isSessionRunning,
   isUserMessage,
   messageParts,
   loadSessionMessages,
+  loadEarlierMessages,
   createLocalExchange,
   sendMessageStream,
   editMessage,
@@ -847,6 +879,12 @@ const {
   },
 });
 
+const activeSessionPagination = computed(() =>
+  currSessionId.value
+    ? paginationBySession.get(currSessionId.value)
+    : undefined,
+);
+
 const {
   dialogOpen: stepUpDialogOpen,
   loading: stepUpLoading,
@@ -912,7 +950,9 @@ const currentSession = computed(
     null,
 );
 const sessionProject = computed(() =>
-  currSessionId.value ? sessionProjects[currSessionId.value] : null,
+  currSessionId.value
+    ? (sessionProjects.get(currSessionId.value) ?? null)
+    : null,
 );
 const currentSessionTitle = computed(() =>
   currentSession.value ? sessionTitle(currentSession.value) : '',
@@ -1042,7 +1082,7 @@ watch(
 );
 
 watch(activeMessages, () => {
-  if (shouldStickToBottom.value) {
+  if (!suppressAutoScroll.value && shouldStickToBottom.value) {
     scrollToBottom();
   }
 });
@@ -1260,9 +1300,11 @@ async function selectSession(sessionId: string, pushRoute = true) {
   replyTarget.value = null;
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
+    if (currSessionId.value !== sessionId) return;
   }
-  if (!loadedSessions[sessionId]) {
+  if (!loadedSessions.get(sessionId)) {
     await loadSessionMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
   }
   scrollToBottom();
   closeMobileSidebar();
@@ -1281,13 +1323,16 @@ async function sendCurrentMessage() {
       sessionId = await newSession();
       if (targetProjectId) {
         await addSessionToProject(sessionId, targetProjectId);
-        sessionProjects[sessionId] = targetProject
-          ? {
-              project_id: targetProject.project_id,
-              title: targetProject.title,
-              emoji: targetProject.emoji,
-            }
-          : null;
+        sessionProjects.set(
+          sessionId,
+          targetProject
+            ? {
+                project_id: targetProject.project_id,
+                title: targetProject.title,
+                emoji: targetProject.emoji,
+              }
+            : null,
+        );
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }
@@ -1435,20 +1480,24 @@ function cancelMessageEdit() {
 
 async function saveMessageEdit() {
   if (!currSessionId.value || !editingMessage.value) return;
+  const sessionId = currSessionId.value;
+  const target = editingMessage.value;
   savingMessageEdit.value = true;
   try {
-    const target = editingMessage.value;
-    const result = await editMessage(
-      currSessionId.value,
-      target,
-      messageEditDraft.value,
-    );
+    const result = await editMessage(sessionId, target, messageEditDraft.value);
+    if (
+      currSessionId.value !== sessionId ||
+      !activeMessages.value.includes(target)
+    ) {
+      cancelMessageEdit();
+      return;
+    }
     cancelMessageEdit();
 
     if (result.needsRegenerate && result.truncatedAfterMessage) {
       const selection = getSelectedProviderSelection();
       continueEditedMessage({
-        sessionId: currSessionId.value,
+        sessionId,
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
         enableReasoning: enableReasoning.value,
@@ -1675,12 +1724,66 @@ function handleMessagesScroll() {
   const distance =
     container.scrollHeight - container.scrollTop - container.clientHeight;
   shouldStickToBottom.value = distance < 80;
+  maybeLoadEarlierOnScroll(container);
+}
+
+async function loadEarlierWithAnchor() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  const container = messagesContainer.value;
+  const firstMessage = activeMessages.value[0];
+  const firstId =
+    firstMessage?.id === undefined || firstMessage?.id === null
+      ? ''
+      : String(firstMessage.id);
+  const beforeTop = firstId
+    ? container
+        ?.querySelector<HTMLElement>(
+          `[data-message-id="${CSS.escape(firstId)}"]`,
+        )
+        ?.getBoundingClientRect().top
+    : undefined;
+  suppressAutoScroll.value = true;
+  try {
+    await loadEarlierMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
+    await nextTick();
+    if (beforeTop === undefined || !container || !firstId) return;
+    const row = container.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(firstId)}"]`,
+    );
+    if (row) {
+      container.scrollTop += row.getBoundingClientRect().top - beforeTop;
+    }
+  } finally {
+    suppressAutoScroll.value = false;
+  }
+}
+
+async function retryCurrentSessionLoad() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  if (activeMessages.value.length && activeSessionPagination.value?.has_more) {
+    await loadEarlierWithAnchor();
+    return;
+  }
+  await loadSessionMessages(sessionId, true, true);
+}
+
+function maybeLoadEarlierOnScroll(container: HTMLElement) {
+  const sessionId = currSessionId.value;
+  const pagination = activeSessionPagination.value;
+  if (!sessionId || !pagination) return;
+  if (!pagination.has_more || pagination.loading || pagination.error) return;
+  if (container.scrollHeight <= container.clientHeight) return;
+  if (container.scrollTop > LOAD_EARLIER_SCROLL_THRESHOLD) return;
+  void loadEarlierWithAnchor();
 }
 
 function scrollToBottom() {
   void nextTick(() => {
     const container = messagesContainer.value;
-    if (!container) return;
+    if (!container || suppressAutoScroll.value) return;
     container.scrollTop = container.scrollHeight;
     shouldStickToBottom.value = true;
   });
@@ -2011,6 +2114,17 @@ function toggleTheme() {
   min-height: 0;
   overflow-y: auto;
   padding: 24px max(24px, calc((100% - 980px) / 2)) 18px;
+}
+
+.history-loading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.history-load-error {
+  margin: 0 auto 12px;
 }
 
 .empty-chat .messages-panel {

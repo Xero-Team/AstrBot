@@ -503,6 +503,13 @@ class MessageHistoryStore(Protocol):
         before_id: int | None = None,
     ) -> list[PlatformMessageHistory]: ...
 
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        return 0
+
     async def get_group_message_history(
         self,
         platform_id: str,

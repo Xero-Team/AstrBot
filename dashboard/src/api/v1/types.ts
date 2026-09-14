@@ -204,6 +204,10 @@ export interface ChatSessionDetailData {
   history?: HistoryRecordData[];
   threads?: ChatThreadData[];
   project?: ProjectData | null;
+  total?: number;
+  page?: number;
+  page_size?: number;
+  has_more?: boolean;
   [key: string]: unknown;
 }
 
@@ -615,6 +619,11 @@ export interface SessionRuleListParams {
   page?: number;
   page_size?: number;
   search?: string;
+}
+
+export interface ChatHistoryPageParams {
+  page?: number;
+  page_size?: number;
 }
 
 export interface ChatSessionListParams {

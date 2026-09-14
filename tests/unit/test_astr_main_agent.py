@@ -2190,14 +2190,24 @@ class TestBuildMainAgent:
         assert result is not None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("quoted", [False, True])
     async def test_build_main_agent_with_images(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, tmp_path, monkeypatch, quoted
     ):
-        """Test building main agent with image attachments."""
+        """Keep original attachment paths in labels after provider JPEG preparation."""
+        from PIL import Image as PILImage
+
+        from astrbot.core.utils import media_utils
+
         module = ama
-        mock_image = MagicMock(spec=Image)
-        mock_image.convert_to_file_path = AsyncMock(return_value="/path/to/image.jpg")
-        mock_event.message_obj.message = [mock_image]
+        monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+        source_path = tmp_path / "image.jpg"
+        PILImage.new("RGB", (8, 8), (255, 0, 0)).save(source_path)
+        image = Image.fromFileSystem(str(source_path))
+        mock_event.message_obj.message = (
+            [Reply(id="reply-1", chain=[image])] if quoted else [image]
+        )
+        mock_event.track_temporary_local_file = MagicMock()
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
@@ -2217,10 +2227,67 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={"image_compress_enabled": True},
+                ),
             )
 
         assert result is not None
+        request = result.provider_request
+        label = "Image Attachment in quoted message" if quoted else "Image Attachment"
+        assert f"[{label}: path {source_path}]" in [
+            part.text
+            for part in request.extra_user_content_parts
+            if hasattr(part, "text")
+        ]
+        assert source_path.exists()
+        assert all(str(url).startswith("data:image/jpeg") for url in request.image_urls)
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_can_defer_image_preparation(
+        self, mock_event, mock_context, mock_provider, tmp_path, monkeypatch
+    ):
+        from PIL import Image as PILImage
+
+        from astrbot.core.utils import media_utils
+
+        module = ama
+        monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+        source_path = tmp_path / "image.png"
+        PILImage.new("RGB", (8, 8), (255, 0, 0)).save(source_path)
+        mock_event.message_obj.message = [Image.fromFileSystem(str(source_path))]
+        mock_event.track_temporary_local_file = MagicMock()
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={"image_compress_enabled": True},
+                ),
+                apply_reset=False,
+                prepare_request=False,
+            )
+
+        assert result is not None
+        try:
+            assert result.provider_request.image_urls == [str(source_path)]
+        finally:
+            if result.reset_coro:
+                result.reset_coro.close()
 
     @pytest.mark.asyncio
     async def test_build_main_agent_skips_caption_when_main_provider_supports_images(

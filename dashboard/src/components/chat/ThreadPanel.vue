@@ -94,6 +94,7 @@ const props = defineProps<{
   isTouchDevice?: boolean;
   deleting?: boolean;
   webChatStepUpTokens?: Record<string, string> | null;
+  getProviderSelection?: () => { providerId: string; modelName: string };
 }>();
 
 const emit = defineEmits<{
@@ -175,6 +176,10 @@ async function send() {
   const abort = new AbortController();
   sending.value = true;
   const stepUpTokens = props.webChatStepUpTokens || undefined;
+  const selection = props.getProviderSelection?.() ?? {
+    providerId: '',
+    modelName: '',
+  };
   try {
     const response = await fetchWithAuth(
       chatApi.sendThreadMessageUrl(props.thread.thread_id),
@@ -186,6 +191,8 @@ async function send() {
         body: JSON.stringify({
           message: [{ type: 'plain', text }],
           enable_streaming: true,
+          selected_provider: selection.providerId,
+          selected_model: selection.modelName,
           _webchat_step_up_tokens: stepUpTokens,
         }),
         signal: abort.signal,

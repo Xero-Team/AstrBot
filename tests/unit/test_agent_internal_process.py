@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot.core.agent.message import TextPart
 from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.message.components import Json
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
@@ -1249,3 +1250,58 @@ async def test_internal_process_sends_error_when_metric_task_creation_fails_afte
         == "Error occurred during AI execution."
     )
     event.stop_typing.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_refresh_prepared_request_converts_plugin_replaced_images(
+    tmp_path, monkeypatch
+):
+    from PIL import Image as PILImage
+
+    from astrbot.core.utils import media_utils
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    source = tmp_path / "plugin.png"
+    PILImage.new("RGB", (4, 4), (1, 2, 3)).save(source)
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.main_agent_cfg = MainAgentBuildConfig(
+        tool_call_timeout=60,
+        provider_settings={"image_compress_enabled": True},
+    )
+    req = ProviderRequest(prompt="hi", image_urls=[str(source)])
+    provider = SimpleNamespace(provider_config={"modalities": ["image"]})
+
+    await stage._refresh_prepared_request(req, provider)
+
+    assert req.image_urls
+    assert all(url.startswith("data:image/jpeg") for url in req.image_urls)
+    assert source.exists()
+
+
+@pytest.mark.asyncio
+async def test_refresh_prepared_request_keeps_hook_extra_parts(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    from astrbot.core.utils import media_utils
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    source = tmp_path / "plugin.png"
+    PILImage.new("RGB", (4, 4), (1, 2, 3)).save(source)
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.main_agent_cfg = MainAgentBuildConfig(
+        tool_call_timeout=60,
+        provider_settings={"image_compress_enabled": True},
+    )
+    req = ProviderRequest(
+        prompt="hi",
+        image_urls=[str(source)],
+        extra_user_content_parts=[TextPart(text="plugin note")],
+    )
+    provider = SimpleNamespace(provider_config={"modalities": ["image"]})
+
+    await stage._refresh_prepared_request(req, provider)
+
+    texts = [part.text for part in req.extra_user_content_parts]
+    assert texts.count("plugin note") == 1
+    assert all(url.startswith("data:image/jpeg") for url in req.image_urls)
+    assert not any("image omitted" in text for text in texts)

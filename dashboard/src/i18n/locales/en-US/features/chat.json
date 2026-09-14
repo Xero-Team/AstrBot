@@ -40,6 +40,11 @@
     "quickActions": "Quick Actions",
     "examples": "Example Questions"
   },
+  "history": {
+    "loadFailed": "Could not load messages",
+    "loadEarlierFailed": "Could not load earlier messages",
+    "loading": "Loading earlier messages"
+  },
   "actions": {
     "copy": "Copy",
     "regenerate": "Regenerate",

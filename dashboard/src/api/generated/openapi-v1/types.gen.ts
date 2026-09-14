@@ -2638,7 +2638,10 @@ export type GetChatSessionData = {
   path: {
     session_id: string;
   };
-  query?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+  };
   url: '/api/v1/chat/sessions/{session_id}';
 };
 

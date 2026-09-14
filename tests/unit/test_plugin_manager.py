@@ -34,6 +34,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.plugin_catalog import PluginCatalog
 from astrbot.core.star.plugin_extension_coordinator import PluginExtensionCoordinator
 from astrbot.core.star.plugin_lifecycle import PluginLifecycle
+from astrbot.core.star.plugin_package_installer import PluginPackageInstaller
 from astrbot.core.star.plugin_runtime_common import PluginDependencyInstallError
 from astrbot.core.star.plugin_runtime_loader import PluginRuntimeLoader
 from astrbot.core.star.star import StarDeclaration, StarMetadata
@@ -537,17 +538,18 @@ async def test_install_validates_dashboard_manifest_before_dependencies(
     plugin_path = Path(plugin_manager_pm.packages.store_path) / plugin_name
     ensure_requirements = AsyncMock()
 
-    async def mock_install(_repo_url, _proxy):
-        plugin_path.mkdir()
-        _write_dashboard_extension_metadata(plugin_path, plugin_name)
-        metadata_path = plugin_path / "metadata.yaml"
+    async def mock_install(_repo_url, _proxy, download_url="", *, target_dir=None):
+        dest = Path(target_dir) if target_dir is not None else plugin_path
+        dest.mkdir()
+        _write_dashboard_extension_metadata(dest, plugin_name)
+        metadata_path = dest / "metadata.yaml"
         metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
         metadata["dashboard"]["pages"][0]["module"] = "../outside.js"
         metadata_path.write_text(
             yaml.safe_dump(metadata, sort_keys=False),
             encoding="utf-8",
         )
-        return str(plugin_path)
+        return str(dest)
 
     monkeypatch.setattr(
         plugin_manager_pm.packages._updator,
@@ -574,6 +576,32 @@ async def test_install_validates_dashboard_manifest_before_dependencies(
         )
 
     ensure_requirements.assert_not_awaited()
+
+
+def test_confine_path_rejects_escape_and_keeps_store_children(tmp_path: Path):
+    root = tmp_path / "plugins"
+    root.mkdir()
+    inner = root / "demo"
+    inner.mkdir()
+
+    assert PluginPackageInstaller._confine_path(inner, root) == os.path.normpath(
+        str(inner)
+    )
+    assert PluginPackageInstaller._join_under_root(
+        str(root), "demo"
+    ) == os.path.normpath(str(inner))
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._confine_path(root / ".." / "outside", root)
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._confine_path(tmp_path / "outside", root)
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._join_under_root(str(root), "..", "outside")
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._join_under_root(str(root), "..", f"{root.name}-evil")
+
+
+def test_log_token_strips_line_breaks():
+    assert PluginPackageInstaller._log_token("a\r\nb") == "ab"
 
 
 def test_get_modules_ignores_directory_name_entrypoint(tmp_path: Path):
@@ -1013,11 +1041,14 @@ async def test_install_plugin_dependency_install_flow(
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
-    async def mock_install(repo_url: str, proxy=""):
+    async def mock_install(
+        repo_url: str, proxy="", download_url="", *, target_dir=None
+    ):
         assert repo_url == TEST_PLUGIN_REPO
-        _write_local_test_plugin(plugin_path, repo_url)
-        _write_requirements(plugin_path)
-        return str(plugin_path)
+        dest = Path(target_dir) if target_dir is not None else plugin_path
+        _write_local_test_plugin(dest, repo_url)
+        _write_requirements(dest)
+        return str(dest)
 
     monkeypatch.setattr(plugin_manager_pm.packages._updator, "install", mock_install)
     monkeypatch.setattr(
@@ -1127,6 +1158,10 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
         )
 
     assert local_updator.is_dir()
+    metadata_path = local_updator / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["name"] = "another_plugin"
+    metadata_path.write_text(yaml.safe_dump(metadata), encoding="utf-8")
     monkeypatch.setattr(
         plugin_manager_pm.packages._updator, "unzip_file", mock_unzip_file
     )
@@ -1141,6 +1176,101 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
     ]
     assert plugin_manager_pm.loader._failed_plugins == {}
     assert new_upload_dirs == []
+    assert yaml.safe_load(metadata_path.read_text(encoding="utf-8")) == metadata
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_from_file_updates_existing_plugin(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+    tmp_path: Path,
+):
+    zip_file_path = tmp_path / "plugin_upload_helloworld_v2.zip"
+    zip_file_path.write_text("placeholder", encoding="utf-8")
+    plugin_manager_pm.catalog.runtime_catalogs.plugins.publish(
+        cast(StarMetadata, MockStar())
+    )
+    (local_updator / "obsolete.py").write_text("old code", encoding="utf-8")
+
+    def mock_unzip_file(zip_path: str, target_dir: str) -> None:
+        assert zip_path == str(zip_file_path)
+        _write_local_test_plugin(
+            Path(target_dir),
+            TEST_PLUGIN_REPO,
+            version="2.0.0",
+        )
+
+    monkeypatch.setattr(
+        plugin_manager_pm.packages._updator, "unzip_file", mock_unzip_file
+    )
+    monkeypatch.setattr(plugin_manager_pm.lifecycle, "terminate_plugin", AsyncMock())
+    monkeypatch.setattr(
+        plugin_manager_pm.lifecycle,
+        "_reload_unlocked",
+        AsyncMock(return_value=(True, None)),
+    )
+
+    result = await plugin_manager_pm.lifecycle.install_plugin_from_file(
+        str(zip_file_path)
+    )
+
+    assert result is not None
+    assert result["name"] == TEST_PLUGIN_NAME
+    assert not (local_updator / "obsolete.py").exists()
+    metadata = yaml.safe_load((local_updator / "metadata.yaml").read_text())
+    assert metadata["version"] == "2.0.0"
+    assert not zip_file_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_from_file_restores_previous_files_on_reload_failure(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+    tmp_path: Path,
+):
+    zip_file_path = tmp_path / "plugin_upload_helloworld_v2.zip"
+    zip_file_path.write_text("placeholder", encoding="utf-8")
+    plugin_manager_pm.catalog.runtime_catalogs.plugins.publish(
+        cast(StarMetadata, MockStar())
+    )
+    marker = local_updator / "obsolete.py"
+    marker.write_text("old code", encoding="utf-8")
+    staging = tmp_path / "plugin-staging"
+    staging.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.star.plugin_package_installer.get_astrbot_system_tmp_path",
+        lambda: str(staging),
+    )
+
+    def mock_unzip_file(zip_path: str, target_dir: str) -> None:
+        assert zip_path == str(zip_file_path)
+        _write_local_test_plugin(
+            Path(target_dir),
+            TEST_PLUGIN_REPO,
+            version="2.0.0",
+        )
+
+    reload_plugin = AsyncMock(side_effect=[(False, "load failed"), (True, None)])
+    monkeypatch.setattr(
+        plugin_manager_pm.packages._updator, "unzip_file", mock_unzip_file
+    )
+    monkeypatch.setattr(plugin_manager_pm.lifecycle, "terminate_plugin", AsyncMock())
+    monkeypatch.setattr(
+        plugin_manager_pm.lifecycle,
+        "_reload_unlocked",
+        reload_plugin,
+    )
+
+    with pytest.raises(Exception, match="load failed"):
+        await plugin_manager_pm.lifecycle.install_plugin_from_file(str(zip_file_path))
+
+    assert marker.exists()
+    assert marker.read_text(encoding="utf-8") == "old code"
+    metadata = yaml.safe_load((local_updator / "metadata.yaml").read_text())
+    assert metadata["version"] == "1.0.0"
+    assert reload_plugin.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -2099,10 +2229,13 @@ async def test_install_plugin_skips_dependency_install_when_no_requirements_miss
     events = []
     _mock_missing_requirements(monkeypatch, set())
 
-    async def mock_install(repo_url: str, proxy=""):
-        _write_local_test_plugin(plugin_path, repo_url)
-        _write_requirements(plugin_path)
-        return str(plugin_path)
+    async def mock_install(
+        repo_url: str, proxy="", download_url="", *, target_dir=None
+    ):
+        dest = Path(target_dir) if target_dir is not None else plugin_path
+        _write_local_test_plugin(dest, repo_url)
+        _write_requirements(dest)
+        return str(dest)
 
     monkeypatch.setattr(plugin_manager_pm.packages._updator, "install", mock_install)
     monkeypatch.setattr(
@@ -2134,10 +2267,13 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
     plugin_path = Path(plugin_manager_pm.packages.store_path) / TEST_PLUGIN_DIR
     events = []
 
-    async def mock_install(repo_url: str, proxy=""):
-        _write_local_test_plugin(plugin_path, repo_url)
-        _write_requirements(plugin_path)
-        return str(plugin_path)
+    async def mock_install(
+        repo_url: str, proxy="", download_url="", *, target_dir=None
+    ):
+        dest = Path(target_dir) if target_dir is not None else plugin_path
+        _write_local_test_plugin(dest, repo_url)
+        _write_requirements(dest)
+        return str(dest)
 
     _mock_precheck_fails(monkeypatch)
     monkeypatch.setattr(plugin_manager_pm.packages._updator, "install", mock_install)

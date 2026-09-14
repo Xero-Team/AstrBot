@@ -5,16 +5,17 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 8b5f38885e381176f4bdc7fffd245336337a0e3c
-  synced_at_utc: 2026-09-11T18:44:54Z
+  commit: bd046ed29914ee559e9bf47676ccb71a84f747ba
+  synced_at_utc: 2026-09-14T11:01:17Z
   sync_method: adapt
-  source_pr: '10020,10021,10018,10023,10034,10036,10037,10025,10015'
+  source_pr: '10028,10042,9667,10050,10004,10053,10065,9703'
   note: >-
-    Reviewed 5935430b1d33699a5eab028c73787c936f58f0a6..8b5f38885e381176f4bdc7fffd245336337a0e3c
-    (9 commits): adapted #10020, #10018, #10023, #10034, #10037, #10025, and
-    #10015; skipped #10021 because its ChatUI architecture is incompatible
-    with this fork and #10036 because this fork does not publish PyPI
-    packages. Adaptations preserve runtime-injected preferences, WebChat
-    protocol boundaries, DOMPurify output sanitization, current agent event
-    ordering, and the extracted knowledge-base cleaning module. Focused pytest
-    checks and Dashboard vue-tsc passed.
+    Reviewed 8b5f38885e381176f4bdc7fffd245336337a0e3c..bd046ed29914ee559e9bf47676ccb71a84f747ba
+    (8 commits): adapted #10042, #9667, #10053, #10065, and #9703; skipped
+    #10028 because local_agent_runtime_from_profile already supplies
+    fallback_provider_ids, #10050 because this fork has no desktop app
+    updater bridge, and #10004 because conversation.reset and
+    conversation.create stay distinct under session.manage. Adaptations keep
+    request_preparation always-JPEG conversion, MessageHistoryStoreMixin
+    pagination, plugin_package_installer staging, and MDI Chat UI. Focused
+    pytest, Dashboard vitest, vue-tsc, and i18n:check passed.

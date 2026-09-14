@@ -144,20 +144,33 @@ class PluginPackageInstaller:
         return temp_root
 
     @staticmethod
-    def _confine_path(path: str | Path, *roots: Path) -> Path:
-        """Resolve `path` and reject values that escape every allowed root."""
-        candidate = Path(path)
-        if ".." in candidate.parts:
+    def _is_within_root(fullpath: str, base_path: str) -> bool:
+        """Return True when `fullpath` is `base_path` or a child of it."""
+        if not fullpath.startswith(base_path):
+            return False
+        return fullpath == base_path or fullpath.startswith(base_path + os.sep)
+
+    @staticmethod
+    def _join_under_root(base_path: str, *parts: str) -> str:
+        """Join `parts` onto `base_path` and reject values that escape it."""
+        base_path = os.path.normpath(base_path)
+        fullpath = os.path.normpath(os.path.join(base_path, *parts))
+        if not fullpath.startswith(base_path):
             raise Exception("插件路径不合法。")
-        resolved = candidate.resolve()
-        resolved_s = os.path.normpath(str(resolved))
+        if not PluginPackageInstaller._is_within_root(fullpath, base_path):
+            raise Exception("插件路径不合法。")
+        return fullpath
+
+    @staticmethod
+    def _confine_path(path: str | Path, *roots: Path) -> str:
+        """Normalize `path` and reject values that escape every allowed root."""
+        fullpath = os.path.normpath(str(path))
         for root in roots:
-            root_s = os.path.normpath(str(root.resolve()))
-            try:
-                if os.path.commonpath([resolved_s, root_s]) == root_s:
-                    return resolved
-            except ValueError:
+            base_path = os.path.normpath(str(root))
+            if not fullpath.startswith(base_path):
                 continue
+            if PluginPackageInstaller._is_within_root(fullpath, base_path):
+                return fullpath
         raise Exception("插件路径不合法。")
 
     @staticmethod
@@ -249,12 +262,10 @@ class PluginPackageInstaller:
         terminate_plugin: TerminatePlugin | None,
     ) -> dict[str, str | None] | None:
         """Install a staged plugin directory, restoring old code on update failure."""
-        plugin_path = str(
-            self._confine_path(
-                plugin_path,
-                self._staging_root(),
-                Path(self._plugin_store_path),
-            )
+        plugin_path = self._confine_path(
+            plugin_path,
+            self._staging_root(),
+            Path(self._plugin_store_path),
         )
         desti_dir = plugin_path
         dir_name = Path(plugin_path).name
@@ -262,27 +273,23 @@ class PluginPackageInstaller:
         try:
             metadata_dir_name = loader.plugin_dir_name_from_metadata(plugin_path)
             plugin = self._plugin_for_name(metadata_dir_name)
-            target_plugin_path = self._confine_path(
-                Path(self._plugin_store_path)
-                / (
-                    plugin.root_dir_name
-                    if plugin and plugin.root_dir_name
-                    else metadata_dir_name
-                ),
-                Path(self._plugin_store_path),
+            target_plugin_path = self._join_under_root(
+                self._plugin_store_path,
+                plugin.root_dir_name
+                if plugin and plugin.root_dir_name
+                else metadata_dir_name,
             )
+            target = Path(target_plugin_path)
             if plugin and plugin.reserved:
                 raise Exception("该插件是 AstrBot 保留插件，无法更新。")
-            if target_plugin_path.exists():
+            if target.exists():
                 if (
-                    target_plugin_path.is_symlink()
-                    or not target_plugin_path.is_dir()
-                    or loader.plugin_dir_name_from_metadata(str(target_plugin_path))
+                    target.is_symlink()
+                    or not target.is_dir()
+                    or loader.plugin_dir_name_from_metadata(target_plugin_path)
                     != metadata_dir_name
                 ):
-                    raise Exception(
-                        f"安装失败：目录 {target_plugin_path.name} 已存在。"
-                    )
+                    raise Exception(f"安装失败：目录 {target.name} 已存在。")
                 return await self._replace_installed_plugin(
                     plugin_path=plugin_path,
                     target_plugin_path=target_plugin_path,
@@ -295,8 +302,13 @@ class PluginPackageInstaller:
                 )
 
             track_failed_install = True
-            dir_name = target_plugin_path.name
-            desti_dir = str(target_plugin_path)
+            dir_name = target.name
+            desti_dir = target_plugin_path
+            store_root = os.path.normpath(self._plugin_store_path)
+            if not desti_dir.startswith(store_root):
+                raise Exception("插件路径不合法。")
+            if not self._is_within_root(desti_dir, store_root):
+                raise Exception("插件路径不合法。")
             shutil.move(plugin_path, desti_dir)
             loader.load_metadata(plugin_path=desti_dir)
             await self.ensure_requirements(desti_dir, dir_name)
@@ -330,7 +342,7 @@ class PluginPackageInstaller:
         self,
         *,
         plugin_path: str,
-        target_plugin_path: Path,
+        target_plugin_path: str,
         plugin,
         ignore_version_check: bool,
         loader: PluginLoaderPort,
@@ -339,7 +351,7 @@ class PluginPackageInstaller:
         terminate_plugin: TerminatePlugin | None,
     ) -> dict[str, str | None] | None:
         """Replace an installed plugin directory and restore it if loading fails."""
-        dir_name = target_plugin_path.name
+        dir_name = Path(target_plugin_path).name
         loader.load_metadata(plugin_path=plugin_path)
         await self.ensure_requirements(plugin_path, dir_name)
         backup_dir = Path(
@@ -348,7 +360,7 @@ class PluginPackageInstaller:
                 prefix=".plugin-backup-",
             )
         )
-        backup_path = backup_dir / dir_name
+        backup_path = Path(self._join_under_root(str(backup_dir), dir_name))
         backup_complete = False
         keep_backup = False
         try:
@@ -360,8 +372,13 @@ class PluginPackageInstaller:
             shutil.copytree(target_plugin_path, backup_path, symlinks=True)
             backup_complete = True
             keep_backup = True
-            remove_dir(str(target_plugin_path))
-            shutil.move(plugin_path, str(target_plugin_path))
+            store_root = os.path.normpath(self._plugin_store_path)
+            if not target_plugin_path.startswith(store_root):
+                raise Exception("插件路径不合法。")
+            if not self._is_within_root(target_plugin_path, store_root):
+                raise Exception("插件路径不合法。")
+            remove_dir(target_plugin_path)
+            shutil.move(plugin_path, target_plugin_path)
             success, error_message = await self._load_replaced_plugin(
                 plugin,
                 dir_name,
@@ -373,14 +390,14 @@ class PluginPackageInstaller:
                 raise Exception(error_message or f"更新插件 {dir_name} 失败。")
             keep_backup = False
             return self._read_plugin_info(
-                str(target_plugin_path),
+                target_plugin_path,
                 self._plugin_for_directory(dir_name) or plugin,
             )
         except BaseException:
             try:
                 if backup_complete:
-                    if target_plugin_path.exists():
-                        remove_dir(str(target_plugin_path))
+                    if Path(target_plugin_path).exists():
+                        remove_dir(target_plugin_path)
                     shutil.copytree(backup_path, target_plugin_path, symlinks=True)
                 restored, restore_error = await self._load_replaced_plugin(
                     plugin,

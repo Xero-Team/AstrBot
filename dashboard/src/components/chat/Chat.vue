@@ -880,7 +880,9 @@ const {
 });
 
 const activeSessionPagination = computed(() =>
-  currSessionId.value ? paginationBySession?.[currSessionId.value] : undefined,
+  currSessionId.value
+    ? paginationBySession.get(currSessionId.value)
+    : undefined,
 );
 
 const {
@@ -948,7 +950,9 @@ const currentSession = computed(
     null,
 );
 const sessionProject = computed(() =>
-  currSessionId.value ? sessionProjects[currSessionId.value] : null,
+  currSessionId.value
+    ? (sessionProjects.get(currSessionId.value) ?? null)
+    : null,
 );
 const currentSessionTitle = computed(() =>
   currentSession.value ? sessionTitle(currentSession.value) : '',
@@ -1298,7 +1302,7 @@ async function selectSession(sessionId: string, pushRoute = true) {
     await router.push(`${basePath()}/${sessionId}`);
     if (currSessionId.value !== sessionId) return;
   }
-  if (!loadedSessions[sessionId]) {
+  if (!loadedSessions.get(sessionId)) {
     await loadSessionMessages(sessionId);
     if (currSessionId.value !== sessionId) return;
   }
@@ -1319,13 +1323,16 @@ async function sendCurrentMessage() {
       sessionId = await newSession();
       if (targetProjectId) {
         await addSessionToProject(sessionId, targetProjectId);
-        sessionProjects[sessionId] = targetProject
-          ? {
-              project_id: targetProject.project_id,
-              title: targetProject.title,
-              emoji: targetProject.emoji,
-            }
-          : null;
+        sessionProjects.set(
+          sessionId,
+          targetProject
+            ? {
+                project_id: targetProject.project_id,
+                title: targetProject.title,
+                emoji: targetProject.emoji,
+              }
+            : null,
+        );
         await loadProjectSessions(targetProjectId);
         selectedProjectId.value = null;
       }

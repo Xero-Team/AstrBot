@@ -5,7 +5,10 @@ from pathlib import Path
 import yaml
 
 from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_path,
+    get_astrbot_system_tmp_path,
+)
 from astrbot.core.utils.io import ensure_dir, extract_zip_safely, remove_dir
 from astrbot.core.utils.outbound_http import PLUGIN_DOWNLOAD_URL
 
@@ -48,28 +51,30 @@ class PluginUpdator(RepoZipUpdator):
         """
         _, repo_name, _ = self.parse_github_url(repo_url)
         repo_name = self.format_name(repo_name)
-        if ".." in Path(repo_name).parts:
+        store_root = os.path.normpath(self.plugin_store_path)
+        if os.sep in repo_name or (os.altsep and os.altsep in repo_name):
             raise Exception("安装失败：仓库名不合法。")
         if target_dir is not None:
-            destination = Path(target_dir)
-            if ".." in destination.parts:
+            plugin_path = os.path.normpath(str(target_dir))
+            staging_root = os.path.normpath(get_astrbot_system_tmp_path())
+            if plugin_path.startswith(store_root):
+                allowed_root = store_root
+            elif plugin_path.startswith(staging_root):
+                allowed_root = staging_root
+            else:
                 raise Exception("安装失败：目标目录不合法。")
-            plugin_path = str(destination)
+            if plugin_path != allowed_root and not plugin_path.startswith(
+                allowed_root + os.sep
+            ):
+                raise Exception("安装失败：目标目录不合法。")
         else:
-            store_root = Path(self.plugin_store_path)
-            destination = store_root / repo_name
-            if ".." in destination.parts:
+            plugin_path = os.path.normpath(os.path.join(store_root, repo_name))
+            if not plugin_path.startswith(store_root):
                 raise Exception("安装失败：目标目录不合法。")
-            resolved = destination.resolve()
-            store_resolved = os.path.normpath(str(store_root.resolve()))
-            resolved_s = os.path.normpath(str(resolved))
-            try:
-                confined = os.path.commonpath([resolved_s, store_resolved])
-            except ValueError:
-                confined = ""
-            if confined != store_resolved:
+            if plugin_path != store_root and not plugin_path.startswith(
+                store_root + os.sep
+            ):
                 raise Exception("安装失败：目标目录不合法。")
-            plugin_path = resolved_s
         if os.path.exists(plugin_path):
             raise Exception(f"安装失败：目录 {Path(plugin_path).name} 已存在。")
         if download_url:

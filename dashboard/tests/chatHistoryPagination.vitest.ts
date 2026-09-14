@@ -53,7 +53,7 @@ describe('chat history pagination', () => {
       '3',
       '4',
     ]);
-    expect(messages.paginationBySession.s1.has_more).toBe(true);
+    expect(messages.paginationBySession.get('s1')?.has_more).toBe(true);
 
     await messages.loadEarlierMessages('s1');
     expect(messages.activeMessages.value.map((record) => record.id)).toEqual([
@@ -62,7 +62,7 @@ describe('chat history pagination', () => {
       '3',
       '4',
     ]);
-    expect(messages.paginationBySession.s1.has_more).toBe(false);
+    expect(messages.paginationBySession.get('s1')?.has_more).toBe(false);
     expect(api.getSession).toHaveBeenNthCalledWith(1, 's1', {
       page: 1,
       page_size: 50,
@@ -86,18 +86,7 @@ describe('chat history pagination', () => {
       '3',
       '4',
     ]);
-    expect(messages.paginationBySession.s1.error).toContain('offline');
-  });
-
-  it('rejects prototype-polluting session keys', async () => {
-    const messages = useMessages({ currentSessionId: ref('s1') });
-
-    await expect(messages.loadSessionMessages('__proto__')).rejects.toThrow(
-      'Invalid object key',
-    );
-    await expect(messages.loadEarlierMessages('constructor')).rejects.toThrow(
-      'Invalid object key',
-    );
+    expect(messages.paginationBySession.get('s1')?.error).toContain('offline');
   });
 
   it('renders a retry action for history load errors', async () => {

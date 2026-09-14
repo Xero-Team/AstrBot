@@ -114,7 +114,7 @@ describe('useMessages follow-up streams', () => {
       streaming: true,
     });
 
-    const records = messages.messagesBySession[sessionId];
+    const records = messages.messagesBySession.get(sessionId);
     expect(records).toEqual([
       first.userRecord,
       followUp.userRecord,

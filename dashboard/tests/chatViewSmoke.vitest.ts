@@ -24,8 +24,8 @@ const testState = vi.hoisted(() => ({
   projects: [] as Array<Record<string, unknown>>,
   selectedProjectId: null as string | null,
   activeMessages: [] as Array<Record<string, unknown>>,
-  loadedSessions: {} as Record<string, boolean>,
-  sessionProjects: {} as Record<string, unknown>,
+  loadedSessions: new Map<string, boolean>(),
+  sessionProjects: new Map<string, unknown>(),
   currSessionId: '',
   getSessionsMock: vi.fn(),
   newSessionMock: vi.fn(),
@@ -126,7 +126,7 @@ vi.mock('@/composables/useMessages', () => ({
     loadingMessages: ref(false),
     sending: ref(false),
     loadedSessions: testState.loadedSessions,
-    paginationBySession: {},
+    paginationBySession: new Map(),
     sessionProjects: testState.sessionProjects,
     activeMessages: ref(testState.activeMessages),
     isSessionRunning: () => false,
@@ -286,8 +286,8 @@ describe('Chat view smoke', () => {
     testState.projects = [];
     testState.selectedProjectId = null;
     testState.activeMessages = [];
-    testState.loadedSessions = {};
-    testState.sessionProjects = {};
+    testState.loadedSessions = new Map();
+    testState.sessionProjects = new Map();
     testState.currSessionId = '';
     testState.getSessionsMock.mockResolvedValue(undefined);
     testState.newSessionMock.mockResolvedValue('session-new');

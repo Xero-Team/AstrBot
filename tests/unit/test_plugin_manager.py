@@ -584,11 +584,20 @@ def test_confine_path_rejects_escape_and_keeps_store_children(tmp_path: Path):
     inner = root / "demo"
     inner.mkdir()
 
-    assert PluginPackageInstaller._confine_path(inner, root) == inner.resolve()
+    assert PluginPackageInstaller._confine_path(inner, root) == os.path.normpath(
+        str(inner)
+    )
+    assert PluginPackageInstaller._join_under_root(
+        str(root), "demo"
+    ) == os.path.normpath(str(inner))
     with pytest.raises(Exception, match="插件路径不合法"):
         PluginPackageInstaller._confine_path(root / ".." / "outside", root)
     with pytest.raises(Exception, match="插件路径不合法"):
         PluginPackageInstaller._confine_path(tmp_path / "outside", root)
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._join_under_root(str(root), "..", "outside")
+    with pytest.raises(Exception, match="插件路径不合法"):
+        PluginPackageInstaller._join_under_root(str(root), "..", f"{root.name}-evil")
 
 
 def test_log_token_strips_line_breaks():

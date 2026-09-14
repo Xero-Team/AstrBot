@@ -103,35 +103,28 @@ export interface HistoryPaginationState {
   error?: string;
 }
 
-function assertSafeObjectKey(key: string): string {
-  if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-    throw new Error('Invalid object key');
-  }
-  return key;
-}
-
 export function useMessages(options: UseMessagesOptions) {
   const loadingMessagesState = ref(false);
   const sending = ref(false);
-  const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
-  const loadedSessions = reactive<Record<string, boolean>>({});
-  const paginationBySession = reactive<Record<string, HistoryPaginationState>>(
-    {},
+  const messagesBySession = reactive(new Map<string, ChatRecord[]>());
+  const loadedSessions = reactive(new Map<string, boolean>());
+  const paginationBySession = reactive(
+    new Map<string, HistoryPaginationState>(),
   );
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
   const chatWebSockets: Record<string, WebSocket> = {};
   const closingChatWebSockets = new WeakSet<WebSocket>();
   const deferredBotAnchors = new WeakMap<ChatRecord, ChatRecord>();
   const attachmentBlobCache = new Map<string, Promise<string>>();
-  const sessionLoadEpochs = reactive<Record<string, number>>({});
+  const sessionLoadEpochs = reactive(new Map<string, number>());
   const loadingSessionId = ref<string | null>(null);
-  const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
-    {},
+  const sessionProjects = reactive(
+    new Map<string, ChatSessionProject | null>(),
   );
 
   const activeMessages = computed(() =>
     options.currentSessionId.value
-      ? messagesBySession[options.currentSessionId.value] || []
+      ? messagesBySession.get(options.currentSessionId.value) || []
       : [],
   );
   const loadingMessages = computed(
@@ -247,15 +240,14 @@ export function useMessages(options: UseMessagesOptions) {
     preserveLoadedPages = false,
   ) {
     if (!sessionId) return;
-    const sessionKey = assertSafeObjectKey(sessionId);
     if (showLoading) {
       loadingMessagesState.value = true;
-      loadingSessionId.value = sessionKey;
+      loadingSessionId.value = sessionId;
     }
-    const epoch = (sessionLoadEpochs[sessionKey] || 0) + 1;
-    sessionLoadEpochs[sessionKey] = epoch;
+    const epoch = (sessionLoadEpochs.get(sessionId) || 0) + 1;
+    sessionLoadEpochs.set(sessionId, epoch);
     try {
-      const response = await chatApi.getSession(sessionKey, {
+      const response = await chatApi.getSession(sessionId, {
         page: 1,
         page_size: 50,
       });
@@ -272,15 +264,19 @@ export function useMessages(options: UseMessagesOptions) {
       );
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
-      if (sessionLoadEpochs[sessionKey] !== epoch) return;
-      const previousPagination = paginationBySession[sessionKey];
-      if (preserveLoadedPages && previousPagination?.page > 1) {
+      if (sessionLoadEpochs.get(sessionId) !== epoch) return;
+      const previousPagination = paginationBySession.get(sessionId);
+      if (
+        preserveLoadedPages &&
+        previousPagination &&
+        previousPagination.page > 1
+      ) {
         const refreshedById = new Map(
           records
             .filter((record) => record.id !== undefined && record.id !== null)
             .map((record) => [String(record.id), record]),
         );
-        const existing = messagesBySession[sessionKey] || [];
+        const existing = messagesBySession.get(sessionId) || [];
         const merged = existing.map(
           (record) => refreshedById.get(String(record.id)) || record,
         );
@@ -289,7 +285,7 @@ export function useMessages(options: UseMessagesOptions) {
             .filter((record) => record.id !== undefined && record.id !== null)
             .map((record) => String(record.id)),
         );
-        messagesBySession[sessionKey] = [
+        messagesBySession.set(sessionId, [
           ...merged,
           ...records.filter(
             (record) =>
@@ -297,48 +293,48 @@ export function useMessages(options: UseMessagesOptions) {
               record.id === null ||
               !existingIds.has(String(record.id)),
           ),
-        ];
-        paginationBySession[sessionKey] = {
+        ]);
+        paginationBySession.set(sessionId, {
           ...previousPagination,
           total: Number(payload.total) || previousPagination.total,
           has_more: previousPagination.has_more,
           loading: false,
           error: undefined,
-        };
+        });
       } else {
-        messagesBySession[sessionKey] = records;
-        paginationBySession[sessionKey] = {
+        messagesBySession.set(sessionId, records);
+        paginationBySession.set(sessionId, {
           page: Number(payload.page) || 1,
           page_size: Number(payload.page_size) || 50,
           total: Number(payload.total) || records.length,
           has_more: Boolean(payload.has_more),
           loading: false,
-        };
+        });
       }
-      sessionProjects[sessionKey] = normalizeSessionProject(payload.project);
-      loadedSessions[sessionKey] = true;
+      sessionProjects.set(sessionId, normalizeSessionProject(payload.project));
+      loadedSessions.set(sessionId, true);
       if (resumeRuns && Array.isArray(payload.active_runs)) {
-        await restoreNextActiveRun(sessionKey, payload.active_runs);
+        await restoreNextActiveRun(sessionId, payload.active_runs);
       }
     } catch (error) {
-      if (sessionLoadEpochs[sessionKey] !== epoch) return;
+      if (sessionLoadEpochs.get(sessionId) !== epoch) return;
       console.error('Failed to load session messages:', error);
-      messagesBySession[sessionKey] = messagesBySession[sessionKey] || [];
-      const previousPagination = paginationBySession[sessionKey];
-      paginationBySession[sessionKey] = {
+      const existing = messagesBySession.get(sessionId) || [];
+      messagesBySession.set(sessionId, existing);
+      const previousPagination = paginationBySession.get(sessionId);
+      paginationBySession.set(sessionId, {
         page: previousPagination?.page || 1,
         page_size: previousPagination?.page_size || 50,
-        total:
-          previousPagination?.total || messagesBySession[sessionKey].length,
+        total: previousPagination?.total || existing.length,
         has_more: previousPagination?.has_more || false,
         loading: false,
         error: String((error as Error)?.message || error),
-      };
+      });
     } finally {
       if (
         showLoading &&
-        sessionLoadEpochs[sessionKey] === epoch &&
-        loadingSessionId.value === sessionKey
+        sessionLoadEpochs.get(sessionId) === epoch &&
+        loadingSessionId.value === sessionId
       ) {
         loadingMessagesState.value = false;
         loadingSessionId.value = null;
@@ -348,19 +344,18 @@ export function useMessages(options: UseMessagesOptions) {
 
   async function loadEarlierMessages(sessionId: string) {
     if (!sessionId) return;
-    const sessionKey = assertSafeObjectKey(sessionId);
-    const state = paginationBySession[sessionKey];
+    const state = paginationBySession.get(sessionId);
     if (!state || !state.has_more || state.loading) return;
-    const epoch = sessionLoadEpochs[sessionKey] || 0;
+    const epoch = sessionLoadEpochs.get(sessionId) || 0;
     const nextPage = state.page + 1;
     state.loading = true;
     state.error = undefined;
     try {
-      const response = await chatApi.getSession(sessionKey, {
+      const response = await chatApi.getSession(sessionId, {
         page: nextPage,
         page_size: state.page_size,
       });
-      if (sessionLoadEpochs[sessionKey] !== epoch) return;
+      if (sessionLoadEpochs.get(sessionId) !== epoch) return;
       const status = response.data?.status;
       if (status && status !== 'ok') {
         throw new Error(
@@ -371,8 +366,8 @@ export function useMessages(options: UseMessagesOptions) {
       const records = (payload.history || []).map(normalizeHistoryRecord);
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
-      if (sessionLoadEpochs[sessionKey] !== epoch) return;
-      const existing = messagesBySession[sessionKey] || [];
+      if (sessionLoadEpochs.get(sessionId) !== epoch) return;
+      const existing = messagesBySession.get(sessionId) || [];
       const existingIds = new Set(
         existing
           .filter((record) => record.id !== undefined && record.id !== null)
@@ -384,16 +379,16 @@ export function useMessages(options: UseMessagesOptions) {
           record.id === null ||
           !existingIds.has(String(record.id)),
       );
-      messagesBySession[sessionKey] = [...freshRecords, ...existing];
+      messagesBySession.set(sessionId, [...freshRecords, ...existing]);
       state.page = Number(payload.page) || nextPage;
       state.total = Number(payload.total) || state.total;
       state.has_more = Boolean(payload.has_more);
     } catch (error) {
-      if (sessionLoadEpochs[sessionKey] !== epoch) return;
+      if (sessionLoadEpochs.get(sessionId) !== epoch) return;
       state.error = String((error as Error)?.message || error);
       console.error('Failed to load earlier session messages:', error);
     } finally {
-      if (sessionLoadEpochs[sessionKey] === epoch) state.loading = false;
+      if (sessionLoadEpochs.get(sessionId) === epoch) state.loading = false;
     }
   }
 
@@ -405,13 +400,15 @@ export function useMessages(options: UseMessagesOptions) {
     if (!run?.run_id || isSessionRunning(sessionId)) return;
 
     const checkpointId = run.llm_checkpoint_id || null;
-    const records = (messagesBySession[sessionId] || []).filter((record) => {
-      return !(
-        checkpointId &&
-        record.llm_checkpoint_id === checkpointId &&
-        messageContent(record).type === 'bot'
-      );
-    });
+    const records = (messagesBySession.get(sessionId) || []).filter(
+      (record) => {
+        return !(
+          checkpointId &&
+          record.llm_checkpoint_id === checkpointId &&
+          messageContent(record).type === 'bot'
+        );
+      },
+    );
     const botRecord = normalizeHistoryRecord({
       id: `active-run-${run.run_id}`,
       content: run.content || { type: 'bot', message: [] },
@@ -420,8 +417,8 @@ export function useMessages(options: UseMessagesOptions) {
     });
     botRecord.content.isLoading = botRecord.content.message.length === 0;
     records.push(botRecord);
-    messagesBySession[sessionId] = records;
-    const restoredRecords = messagesBySession[sessionId];
+    messagesBySession.set(sessionId, records);
+    const restoredRecords = messagesBySession.get(sessionId) || records;
     const reactiveBotRecord = restoredRecords[restoredRecords.length - 1];
     await resolveRecordMedia([reactiveBotRecord]);
     startResumeStream(sessionId, run.run_id, reactiveBotRecord);
@@ -432,8 +429,10 @@ export function useMessages(options: UseMessagesOptions) {
     messageId,
     parts,
   }: CreateLocalExchangeOptions) {
-    loadedSessions[sessionId] = true;
-    messagesBySession[sessionId] = messagesBySession[sessionId] || [];
+    loadedSessions.set(sessionId, true);
+    if (!messagesBySession.get(sessionId)) {
+      messagesBySession.set(sessionId, []);
+    }
 
     const userRecord = reactive<ChatRecord>({
       id: `local-user-${messageId}`,
@@ -455,7 +454,7 @@ export function useMessages(options: UseMessagesOptions) {
       },
     });
 
-    const sessionMessages = messagesBySession[sessionId];
+    const sessionMessages = messagesBySession.get(sessionId) || [];
     if (isSessionRunning(sessionId)) {
       const activeBotConnections = Object.values(activeConnections).filter(
         (connection) =>
@@ -564,7 +563,7 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (payload.truncated_after_message) {
       truncateMessagesAfter(sessionId, record);
-      const pagination = paginationBySession[sessionId];
+      const pagination = paginationBySession.get(sessionId);
       if (pagination?.has_more) {
         pagination.page = 0;
         pagination.error = undefined;
@@ -577,7 +576,7 @@ export function useMessages(options: UseMessagesOptions) {
   }
 
   function truncateMessagesAfter(sessionId: string, record: ChatRecord) {
-    const records = messagesBySession[sessionId];
+    const records = messagesBySession.get(sessionId);
     if (!records?.length || record.id === undefined || record.id === null) {
       return;
     }
@@ -585,7 +584,7 @@ export function useMessages(options: UseMessagesOptions) {
       (message) => String(message.id) === String(record.id),
     );
     if (index < 0) return;
-    messagesBySession[sessionId] = records.slice(0, index + 1);
+    messagesBySession.set(sessionId, records.slice(0, index + 1));
   }
 
   function continueEditedMessage({
@@ -599,7 +598,9 @@ export function useMessages(options: UseMessagesOptions) {
     if (!sessionId) return;
     const parts = messageParts(sourceRecord).map(stripUploadOnlyFields);
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    messagesBySession[sessionId] = messagesBySession[sessionId] || [];
+    if (!messagesBySession.get(sessionId)) {
+      messagesBySession.set(sessionId, []);
+    }
 
     const botRecord: ChatRecord = {
       id: `local-edited-bot-${messageId}`,
@@ -611,7 +612,7 @@ export function useMessages(options: UseMessagesOptions) {
         isLoading: true,
       },
     };
-    messagesBySession[sessionId].push(botRecord);
+    messagesBySession.get(sessionId)?.push(botRecord);
 
     const stepUpTokens = takeWebChatStepUpTokens();
     startSseStream(
@@ -791,7 +792,8 @@ export function useMessages(options: UseMessagesOptions) {
       abort,
       botRecord,
       userRecord,
-      botVisible: messagesBySession[sessionId]?.includes(botRecord) ?? false,
+      botVisible:
+        messagesBySession.get(sessionId)?.includes(botRecord) ?? false,
       deferredBeforeBot: deferredBotAnchors.get(botRecord),
     };
     activeConnections[messageId] = connection;
@@ -947,7 +949,8 @@ export function useMessages(options: UseMessagesOptions) {
       userRecord,
       completed: false,
       errorShown: false,
-      botVisible: messagesBySession[sessionId]?.includes(botRecord) ?? false,
+      botVisible:
+        messagesBySession.get(sessionId)?.includes(botRecord) ?? false,
       deferredBeforeBot: deferredBotAnchors.get(botRecord),
     };
     activeConnections[messageId] = connection;
@@ -1133,7 +1136,7 @@ export function useMessages(options: UseMessagesOptions) {
   function ensureBotRecordVisible(connection: ActiveConnection) {
     const { botRecord, userRecord } = connection;
     if (!botRecord) return;
-    const records = messagesBySession[connection.sessionId] || [];
+    const records = messagesBySession.get(connection.sessionId) || [];
     if (records.includes(botRecord)) {
       connection.botVisible = true;
       return;
@@ -1193,7 +1196,7 @@ export function useMessages(options: UseMessagesOptions) {
             candidate.runId === connection.followUpTargetRunId &&
             candidate.botRecord,
         );
-        const records = messagesBySession[connection.sessionId] || [];
+        const records = messagesBySession.get(connection.sessionId) || [];
         if (target?.botRecord && connection.userRecord) {
           const userIndex = records.indexOf(connection.userRecord);
           const targetIndex = records.indexOf(target.botRecord);

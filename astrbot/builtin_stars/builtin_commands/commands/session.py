@@ -50,6 +50,17 @@ def parse_unwatch_spec(spec: str, current_umo: str) -> tuple[str, str]:
     return _resolve_listener(parts[0], current_umo), parts[1]
 
 
+def parse_unlink_spec(spec: str) -> str:
+    """Parse `/session unlink <rule_id>`."""
+    parts = spec.split()
+    if len(parts) != 1:
+        raise ValueError("Invalid unlink arguments")
+    rule_id = parts[0]
+    if len(rule_id) != 12 or any(char not in "0123456789abcdef" for char in rule_id):
+        raise ValueError("Invalid unlink arguments")
+    return rule_id
+
+
 def parse_watches_spec(spec: str, current_umo: str) -> str:
     """Parse `/session watches [listener|this]`."""
     parts = spec.split()
@@ -330,6 +341,50 @@ class SessionCommands:
             event,
             "session.connect.ok",
             umo=item.target_umo,
+        )
+
+    async def links(self, event: AstrMessageEvent) -> None:
+        """List watch/connect edges visible to the current actor."""
+        try:
+            items = await self.context.bridges._manager.list_links(event)
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
+        if not items:
+            await reply_i18n(self.context, event, "session.links.empty")
+            return
+        lines = []
+        for watch, kind in items:
+            ttl = (
+                "unbounded"
+                if watch.expires_at is None
+                else f"{watch.remaining_seconds}s"
+            )
+            lines.append(
+                f"{watch.rule_id} {kind} {watch.source_umo} -> {watch.target_umo} ({ttl})"
+            )
+        await reply_i18n(
+            self.context,
+            event,
+            "session.links.body",
+            links="\n".join(lines),
+        )
+
+    async def unlink(self, event: AstrMessageEvent, spec: str) -> None:
+        """Remove a watch or connect by public id."""
+        try:
+            rule_id = parse_unlink_spec(spec)
+            removed = await self.context.bridges._manager.unlink(event, rule_id)
+        except ValueError:
+            await reply_i18n(self.context, event, "session.unlink.usage")
+            return
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
+        await reply_i18n(
+            self.context,
+            event,
+            "session.unlink.ok" if removed else "session.unlink.missing",
         )
 
     async def disconnect(self, event: AstrMessageEvent) -> None:

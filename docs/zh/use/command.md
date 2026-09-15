@@ -73,12 +73,14 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/session unwatch [监听会话|this] <被监听会话>`：停止你创建的指定监听。监听会话可省略或写 `this`。
 - `/session connect <UMO>`：把当前会话无期限连接到目标会话，需要 `session.watch`。目标会话的新消息会一直转发，直到 `/session disconnect` 或 `/session unlink`。每个主体在每个监听会话只能有一条连接，再次连接会替换目标。省略 UMO 可查看当前连接。指令不接受秒数。
 - `/session disconnect`：断开当前会话的无期限连接，需要 `session.read`。
-- `/session links`：列出可见的监听和连接，包含 `rule_id`、类型和剩余时间或无期限。权限与 `watches` 相同（`session.read`）。创建者只看到自己的规则；当前会话配置上的 `instance_operator` 额外看到两端任一配置 id 属于当前会话配置的规则；`operator` / `root` 看到全部。
-- `/session unlink <rule_id>`：按 12 位小写十六进制 id 撤销一条监听或连接。创建者可撤自己的规则（角色被撤后仍可）。本配置 `instance_operator` 可撤两端任一配置属于当前会话配置的规则；`operator` / `root` 可撤全部。
+- `/session pair <UMO>`：在当前会话与目标之间建立两条无头、无期限的有向边，需要 `session.watch`。两端适配器都必须已加载且可主动发送。只转发真人消息，跳过 Bot 自己的发言和回显，避免回环。对岸看到的是**目标侧 Bot 账号**在说话，不伪造源发送者的平台身份，也不把消息灌进目标入站管道。不绑定 `/send`；省略 UMO 的 `/send` 仍只走 `connect`。指令不接受秒数。每主体最多 8 对（16 条 `pair` 边），与 16 条 connect 并列，不挤占 watch 配额。同一对端点再次 `pair` 会保留原来的 `pair_id` 和两条 `rule_id`。对已有 watch/connect 建 pair 会替换那两条方向上属于该主体的旧边。
+- `/session unpair [UMO]`：删除共享 `pair_id` 的两条边，需要 `session.read`。恰好一对且当前会话是其中一端时可省略 UMO；0 对提示没有；多于一对必须带 UMO。
+- `/session links`：列出可见的监听、连接和 pair，包含 `rule_id`、类型和剩余时间或无期限；pair 额外显示 `pair_id`。权限与 `watches` 相同（`session.read`）。创建者只看到自己的规则；当前会话配置上的 `instance_operator` 额外看到两端任一配置 id 属于当前会话配置的规则；`operator` / `root` 看到全部。
+- `/session unlink <rule_id>`：按 12 位小写十六进制 id 撤销一条监听或连接。创建者可撤自己的规则（角色被撤后仍可）。本配置 `instance_operator` 可撤两端任一配置属于当前会话配置的规则；`operator` / `root` 可撤全部。目标是 `kind=pair` 时拒绝并提示使用 `unpair`，两条边都还在。
 - `/send <UMO> [内容]`：借助目标平台的 Bot 账号发送文字和同一条消息中的附件，需要 `session.send`。可以只附图片而不填写正文；不会占用 `reply` 指令。
-- `/send [内容]`：在 `/session connect` 之后，不写 UMO 也会发往已连接的目标会话。可以只附图片。
+- `/send [内容]`：在 `/session connect` 之后，不写 UMO 也会发往已连接的目标会话。可以只附图片。`pair` 不会成为 `/send` 的默认目标。
 
-监听、连接和发送要求当前身份拥有同一配置下的 `instance_operator` 权限。群管理员、私聊会话所有者身份不能替代它。监听内容对接收会话的所有成员可见；仅转发开始监听之后收到的消息，不读取历史。规则写入 SQLite，进程重启后未过期的监听和全部连接仍在；过期监听会在启动或到期时清除并通知监听端。每人最多 16 条监听和 16 条连接。每次转发都会重新检查权限，撤权后停止投递。对同一对会话再次 `/session watch` 会保留 `rule_id` 并重置时长。同一方向的 watch 与 connect 会互相替换。
+监听、连接、配对和发送要求当前身份拥有同一配置下的 `instance_operator` 权限。群管理员、私聊会话所有者身份不能替代它。监听内容对接收会话的所有成员可见；仅转发开始监听之后收到的消息，不读取历史。规则写入 SQLite，进程重启后未过期的监听、全部连接和全部 pair 仍在；过期监听会在启动或到期时清除并通知监听端。每人最多 16 条监听、16 条连接和 8 对 pair。每次转发都会重新检查权限，撤权后停止投递。对同一对会话再次 `/session watch` 会保留 `rule_id` 并重置时长。同一方向的 watch 与 connect 会互相替换。任一条目标方向已是 pair 时，`watch` / `connect` 会拒绝并提示先 `unpair`，不会拆成半对。
 
 正文保留消息链中的图文先后顺序；不能混排的目标拆成多条消息。跨平台提及转成文字，引用优先通过已接受消息的 ID 映射还原；映射不存在时附引用摘要。无法解析的附件和不支持的原生内容会保留文字占位。平台自己的卡片、私有语法和小程序不能保证在别的平台重现。
 

@@ -61,6 +61,26 @@ def parse_unlink_spec(spec: str) -> str:
     return rule_id
 
 
+def parse_pair_spec(spec: str) -> str:
+    """Parse `/session pair <UMO>` and reject a duration token."""
+    parts = spec.split()
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2 and parts[1].isdigit():
+        raise ValueError("Invalid pair duration")
+    raise ValueError("Invalid pair arguments")
+
+
+def parse_unpair_spec(spec: str) -> str | None:
+    """Parse `/session unpair [UMO]`."""
+    parts = spec.split()
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    raise ValueError("Invalid unpair arguments")
+
+
 def parse_watches_spec(spec: str, current_umo: str) -> str:
     """Parse `/session watches [listener|this]`."""
     parts = spec.split()
@@ -251,6 +271,9 @@ class SessionCommands:
             if str(exc) == "Invalid watch arguments":
                 await reply_i18n(self.context, event, "session.watch.usage")
                 return
+            if str(exc) == "Direction is occupied by a pair":
+                await reply_i18n(self.context, event, "session.watch.occupied")
+                return
             await reply_i18n(self.context, event, "session.watch.failed")
             return
         except LookupError:
@@ -333,7 +356,13 @@ class SessionCommands:
         except PermissionError:
             await reply_i18n(self.context, event, "session.bridge.denied")
             return
-        except ValueError, LookupError:
+        except LookupError:
+            await reply_i18n(self.context, event, "session.connect.failed")
+            return
+        except ValueError as exc:
+            if str(exc) == "Direction is occupied by a pair":
+                await reply_i18n(self.context, event, "session.connect.occupied")
+                return
             await reply_i18n(self.context, event, "session.connect.failed")
             return
         await reply_i18n(
@@ -363,9 +392,14 @@ class SessionCommands:
                     "session.links.ttl_seconds",
                     seconds=watch.remaining_seconds,
                 )
-            lines.append(
-                f"{watch.rule_id} {kind} {watch.source_umo} -> {watch.target_umo} ({ttl})"
-            )
+            if kind == "pair" and watch.pair_id:
+                lines.append(
+                    f"{watch.rule_id} pair {watch.pair_id} {watch.source_umo} -> {watch.target_umo} ({ttl})"
+                )
+            else:
+                lines.append(
+                    f"{watch.rule_id} {kind} {watch.source_umo} -> {watch.target_umo} ({ttl})"
+                )
         await reply_i18n(
             self.context,
             event,
@@ -378,7 +412,10 @@ class SessionCommands:
         try:
             rule_id = parse_unlink_spec(spec)
             removed = await self.context.bridges._manager.unlink(event, rule_id)
-        except ValueError:
+        except ValueError as exc:
+            if str(exc) == "Pair edges cannot be unlinked":
+                await reply_i18n(self.context, event, "session.unlink.pair")
+                return
             await reply_i18n(self.context, event, "session.unlink.usage")
             return
         except PermissionError:
@@ -388,6 +425,55 @@ class SessionCommands:
             self.context,
             event,
             "session.unlink.ok" if removed else "session.unlink.missing",
+        )
+
+    async def pair(self, event: AstrMessageEvent, spec: str) -> None:
+        """Create a headerless pair between the current session and a target."""
+        try:
+            target_umo = parse_pair_spec(spec)
+            left, right = await self.context.bridges._manager.pair(event, target_umo)
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
+        except ValueError as exc:
+            if str(exc) == "Invalid pair duration":
+                await reply_i18n(self.context, event, "session.pair.ttl_invalid")
+                return
+            if str(exc) == "Invalid pair arguments":
+                await reply_i18n(self.context, event, "session.pair.usage")
+                return
+            await reply_i18n(self.context, event, "session.pair.failed")
+            return
+        except LookupError:
+            await reply_i18n(self.context, event, "session.pair.failed")
+            return
+        await reply_i18n(
+            self.context,
+            event,
+            "session.pair.ok",
+            umo=left.target_umo,
+            pair_id=left.pair_id or "",
+            rule_ids=f"{left.rule_id}/{right.rule_id}",
+        )
+
+    async def unpair(self, event: AstrMessageEvent, spec: str = "") -> None:
+        """Remove both pair edges that share a pair id."""
+        try:
+            target_umo = parse_unpair_spec(spec)
+            removed = await self.context.bridges._manager.unpair(event, target_umo)
+        except ValueError as exc:
+            if str(exc) == "Multiple pairs require a UMO":
+                await reply_i18n(self.context, event, "session.unpair.ambiguous")
+                return
+            await reply_i18n(self.context, event, "session.unpair.usage")
+            return
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
+        await reply_i18n(
+            self.context,
+            event,
+            "session.unpair.ok" if removed else "session.unpair.missing",
         )
 
     async def disconnect(self, event: AstrMessageEvent) -> None:

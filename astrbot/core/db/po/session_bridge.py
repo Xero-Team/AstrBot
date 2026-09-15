@@ -4,7 +4,7 @@ from astrbot.core.db.po.mixins import TimestampMixin
 
 
 class SessionBridgeRule(TimestampMixin, SQLModel, table=True):
-    """Persisted directed edge for a session-bridge watch, connect, or later pair."""
+    """Persisted directed edge for a session-bridge watch, connect, or pair."""
 
     __tablename__ = "session_bridge_rules"  # type: ignore
 

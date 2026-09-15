@@ -36,10 +36,10 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
             target_umo: Observed session whose inbound traffic is forwarded.
             source_config_id: Config id of the listening session at write time.
             target_config_id: Config id of the observed session at write time.
-            kind: Edge kind. S1 writes ``watch`` or ``connect``.
+            kind: Edge kind. Writes ``watch``, ``connect``, or ``pair``.
             expires_at: Wall-clock UTC unix seconds, or None for unbounded edges.
-            header: Whether deliveries include a source header. S1 writes True.
-            pair_id: Paired-edge id. S1 writes None.
+            header: Whether deliveries include a source header. Pair writes False.
+            pair_id: Shared 12-hex id for a pair. Watch and connect write None.
             match: Inclusive filter document. S1 writes ``{}``.
             except_: Exclusive filter document. S1 writes ``{}``.
             rule_id: Optional 12-hex id. Allocated on collision retry when omitted.

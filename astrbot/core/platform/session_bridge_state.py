@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from time import time
@@ -16,18 +17,22 @@ if TYPE_CHECKING:
     from astrbot.core.db.protocols import SessionBridgeStore
 
 PAIR_OCCUPIED = "Direction is occupied by a pair"
+PAIR_UNLINK_REFUSED = "Pair edges cannot be unlinked"
+PAIR_LIMIT = "Pair limit exceeded"
+PAIR_AMBIGUOUS = "Multiple pairs require a UMO"
 GrantKey = tuple[str, str, str]
 
 
 @dataclass(frozen=True, slots=True)
 class SessionWatch:
-    """One watch or unbounded link owned by a trusted authorization subject."""
+    """One watch, connect, or pair edge owned by a trusted authorization subject."""
 
     source_umo: str
     target_umo: str
     subject_id: str
     expires_at: float | None
     rule_id: str
+    pair_id: str | None = None
 
     @property
     def remaining_seconds(self) -> int:
@@ -38,7 +43,7 @@ class SessionWatch:
 
 @dataclass(frozen=True, slots=True)
 class WatchGrant:
-    """Trusted actor snapshot paired with one live watch or connect."""
+    """Trusted actor snapshot paired with one live watch, connect, or pair."""
 
     watch: SessionWatch
     subject: Subject
@@ -46,6 +51,8 @@ class WatchGrant:
     kind: str
     source_config_id: str
     target_config_id: str
+    header: bool = True
+    pair_id: str | None = None
 
 
 ExpireWatch = Callable[[GrantKey, WatchGrant], Coroutine[object, object, None]]
@@ -65,6 +72,17 @@ class SessionBridgeState:
             1
             for grant in self._grants.values()
             if grant.watch.subject_id == subject_id and grant.kind == kind
+        )
+
+    def count_pairs(self, subject_id: str) -> int:
+        return len(
+            {
+                grant.watch.pair_id
+                for grant in self._grants.values()
+                if grant.kind == "pair"
+                and grant.watch.subject_id == subject_id
+                and grant.watch.pair_id
+            }
         )
 
     def total_kind(self, kind: str) -> int:
@@ -251,6 +269,105 @@ class SessionBridgeState:
         self._index(grant)
         return grant
 
+    async def save_pair(
+        self,
+        *,
+        subject: Subject,
+        context: AuthContext,
+        source_umo: str,
+        target_umo: str,
+        source_config_id: str,
+        target_config_id: str,
+        max_pairs_per_subject: int,
+    ) -> tuple[WatchGrant, WatchGrant]:
+        forward_key = (subject.id, source_umo, target_umo)
+        reverse_key = (subject.id, target_umo, source_umo)
+        forward = await self._store.get_session_bridge_rule_by_direction(
+            subject.id, source_umo, target_umo
+        )
+        reverse = await self._store.get_session_bridge_rule_by_direction(
+            subject.id, target_umo, source_umo
+        )
+        if (
+            forward is not None
+            and reverse is not None
+            and forward.kind == "pair"
+            and reverse.kind == "pair"
+            and forward.pair_id
+            and forward.pair_id == reverse.pair_id
+        ):
+            left = self._grant_from_row(forward, subject, context)
+            right = self._grant_from_row(reverse, subject, context)
+            self._index(left)
+            self._index(right)
+            return left, right
+        occupying = {
+            row.pair_id
+            for row in (forward, reverse)
+            if row is not None and row.kind == "pair" and row.pair_id
+        }
+        projected = self.count_pairs(subject.id) - len(occupying) + 1
+        if projected > max_pairs_per_subject:
+            raise ValueError(PAIR_LIMIT)
+        removing_edges = sum(
+            1 for row in (forward, reverse) if row is not None and row.kind == "pair"
+        )
+        if self.total_kind("pair") - removing_edges + 2 > 1024:
+            raise ValueError("Runtime pair limit exceeded")
+        for stored, key in ((forward, forward_key), (reverse, reverse_key)):
+            if stored is not None:
+                await self._delete_row(stored.rule_id, key)
+        pair_id = secrets.token_hex(6)
+        forward_row = None
+        try:
+            forward_row = await self._store.insert_session_bridge_rule(
+                subject_id=subject.id,
+                source_umo=source_umo,
+                target_umo=target_umo,
+                source_config_id=source_config_id,
+                target_config_id=target_config_id,
+                kind="pair",
+                expires_at=None,
+                header=False,
+                pair_id=pair_id,
+            )
+            reverse_row = await self._store.insert_session_bridge_rule(
+                subject_id=subject.id,
+                source_umo=target_umo,
+                target_umo=source_umo,
+                source_config_id=target_config_id,
+                target_config_id=source_config_id,
+                kind="pair",
+                expires_at=None,
+                header=False,
+                pair_id=pair_id,
+            )
+        except BaseException:
+            if forward_row is not None:
+                await self._delete_row(
+                    forward_row.rule_id, (subject.id, source_umo, target_umo)
+                )
+            raise
+        left = self._grant_from_row(forward_row, subject, context)
+        right = self._grant_from_row(reverse_row, subject, context)
+        self._index(left)
+        self._index(right)
+        return left, right
+
+    async def drop_pair(self, subject_id: str, pair_id: str) -> bool:
+        rows = [
+            row
+            for row in await self.stored_rules_by_subject(subject_id)
+            if row.kind == "pair" and row.pair_id == pair_id
+        ]
+        if not rows:
+            return False
+        for row in rows:
+            await self._delete_row(
+                row.rule_id, (row.subject_id, row.source_umo, row.target_umo)
+            )
+        return True
+
     async def drop_watch(
         self, subject_id: str, source_umo: str, target_umo: str
     ) -> bool:
@@ -301,6 +418,13 @@ class SessionBridgeState:
 
     async def stored_rule(self, rule_id: str) -> SessionBridgeRule | None:
         return await self._store.get_session_bridge_rule(rule_id)
+
+    async def stored_rule_by_direction(
+        self, subject_id: str, source_umo: str, target_umo: str
+    ) -> SessionBridgeRule | None:
+        return await self._store.get_session_bridge_rule_by_direction(
+            subject_id, source_umo, target_umo
+        )
 
     async def stored_rules_by_subject(self, subject_id: str) -> list[SessionBridgeRule]:
         return await self._store.list_session_bridge_rules_by_subject(subject_id)
@@ -355,6 +479,7 @@ class SessionBridgeState:
             row.subject_id,
             expires_at,
             row.rule_id,
+            row.pair_id,
         )
         return WatchGrant(
             watch,
@@ -363,6 +488,8 @@ class SessionBridgeState:
             row.kind,
             row.source_config_id,
             row.target_config_id,
+            row.header,
+            row.pair_id,
         )
 
     def _index(self, grant: WatchGrant) -> None:

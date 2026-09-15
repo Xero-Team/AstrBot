@@ -148,6 +148,22 @@ class Main(star.Star):
         """Drop the unbounded session link for the current session."""
         await self.session_c.disconnect(event)
 
+    @filter.permission("session.watch")
+    @session.command("pair")
+    async def session_pair(
+        self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Pair the current session with another session without a source header."""
+        await self.session_c.pair(event, spec)
+
+    @filter.permission("session.read")
+    @session.command("unpair")
+    async def session_unpair(
+        self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Remove both headerless pair edges that share a pair id."""
+        await self.session_c.unpair(event, spec)
+
     @filter.permission("session.read")
     @session.command("links")
     async def session_links(self, event: AstrMessageEvent) -> None:

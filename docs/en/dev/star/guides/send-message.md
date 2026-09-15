@@ -84,14 +84,17 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
 - `send(event, target_umo, *, target_in_header=True)`: deliver the current message body and attachments after stripping the command header; returns `DeliveryReceipt`. Linked `/send` without a UMO passes `target_in_header=False`.
 
 These methods call `authorize()` again. They require `session.watch` or
-`session.send`, and both sessions must share a configuration. Watches and
-links persist in SQLite, so unexpired rules survive process restart.
-`remaining_seconds` uses the wall clock; unbounded links return `0`.
+`session.send`, and both sessions must share a configuration. Watches,
+links, and pairs persist in SQLite, so unexpired rules survive process
+restart. `remaining_seconds` uses the wall clock; unbounded links return `0`.
 Do not construct `SessionBridgeManager` yourself. Import `SessionWatch` and
-the duration constants from `astrbot.api.platform`. `links` / `unlink` are
-IM commands only in this stage; `SessionBridgeCapability` does not expose
-them. There is no Dashboard management surface, and plugins must not assume
-a matching HTTP API.
+the duration constants from `astrbot.api.platform`. `links` / `unlink` /
+`pair` / `unpair` are IM commands only in this stage;
+`SessionBridgeCapability` does not expose them. A pair is two headerless
+directed edges that share a `pair_id`: the far side sees the destination Bot
+account, the source platform identity is not forged, `/send` is not bound,
+and splitting the pair requires `unpair`. There is no Dashboard management
+surface, and plugins must not assume a matching HTTP API.
 
 ## Rich-Media Chains
 

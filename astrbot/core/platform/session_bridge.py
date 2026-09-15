@@ -27,11 +27,20 @@ from .message_protocol import (
 from .message_renderers import render_source_header
 from .message_session import MessageSession
 from .send_result import DeliveryAttempt, DeliveryReceipt, PlatformSendResult
-from .session_bridge_state import GrantKey, SessionBridgeState, SessionWatch, WatchGrant
+from .session_bridge_state import (
+    PAIR_AMBIGUOUS,
+    PAIR_OCCUPIED,
+    PAIR_UNLINK_REFUSED,
+    GrantKey,
+    SessionBridgeState,
+    SessionWatch,
+    WatchGrant,
+)
 
 MIN_WATCH_TTL_SECONDS = 1
 DEFAULT_WATCH_TTL_SECONDS = 12 * 60 * 60
 MAX_WATCH_TTL_SECONDS = 10 * 24 * 60 * 60
+DEFAULT_MAX_PAIRS_PER_SUBJECT = 8
 
 if TYPE_CHECKING:
     from astrbot.core.auth.service import AuthorizationService
@@ -61,6 +70,7 @@ class SessionBridgeManager:
         store: SessionBridgeStore,
         default_ttl_seconds: int = DEFAULT_WATCH_TTL_SECONDS,
         max_watches_per_subject: int = 16,
+        max_pairs_per_subject: int = DEFAULT_MAX_PAIRS_PER_SUBJECT,
     ) -> None:
         self._send_message = send_message
         self._get_capabilities = get_capabilities
@@ -74,6 +84,7 @@ class SessionBridgeManager:
             MAX_WATCH_TTL_SECONDS, max(MIN_WATCH_TTL_SECONDS, default_ttl_seconds)
         )
         self._max_watches_per_subject = max(1, max_watches_per_subject)
+        self._max_pairs_per_subject = max(1, max_pairs_per_subject)
         self._state = SessionBridgeState(store)
         self._forwarded: OrderedDict[tuple[str, str, str], None] = OrderedDict()
         self._message_ids: OrderedDict[tuple[str, str, str], str] = OrderedDict()
@@ -228,6 +239,79 @@ class SessionBridgeManager:
             grant = self._state.connect_for(subject.id, listener)
         return grant.watch if grant is not None else None
 
+    def _require_loaded_proactive(self, umo: str) -> None:
+        capabilities = self._get_capabilities(umo)
+        if not capabilities.available:
+            raise ValueError("Target adapter is unavailable")
+        if not capabilities.proactive:
+            raise ValueError("Source adapter cannot receive forwarded messages")
+
+    async def pair(
+        self, event: AstrMessageEvent, target_umo: str
+    ) -> tuple[SessionWatch, SessionWatch]:
+        """Create two headerless reverse edges between the current session and target."""
+        listener = event.unified_msg_origin.strip()
+        target = target_umo.strip()
+        if listener == target:
+            raise ValueError("Source and target sessions must differ")
+        subject, context = self._actor(event)
+        await self._authorize(subject, context, listener, "session.watch")
+        await self._authorize(subject, context, target, "session.watch")
+        self._require_loaded_proactive(listener)
+        self._require_loaded_proactive(target)
+        async with self._lock:
+            left, right = await self._state.save_pair(
+                subject=subject,
+                context=context,
+                source_umo=listener,
+                target_umo=target,
+                source_config_id=self._config_id(listener),
+                target_config_id=self._config_id(target),
+                max_pairs_per_subject=self._max_pairs_per_subject,
+            )
+        return left.watch, right.watch
+
+    async def unpair(
+        self, event: AstrMessageEvent, target_umo: str | None = None
+    ) -> bool:
+        """Remove both edges that share a pair id owned by the current actor."""
+        subject, _ = self._actor(event)
+        listener = event.unified_msg_origin.strip()
+        target = None if target_umo is None else target_umo.strip()
+        async with self._lock:
+            pair_id = await self._pair_id_for_unpair(subject.id, listener, target)
+            if pair_id is None:
+                return False
+            return await self._state.drop_pair(subject.id, pair_id)
+
+    async def _pair_id_for_unpair(
+        self, subject_id: str, listener: str, target: str | None
+    ) -> str | None:
+        if target:
+            row = await self._state.stored_rule_by_direction(
+                subject_id, listener, target
+            )
+            if row is None:
+                row = await self._state.stored_rule_by_direction(
+                    subject_id, target, listener
+                )
+            if row is None or row.kind != "pair" or not row.pair_id:
+                return None
+            return row.pair_id
+        rows = [
+            row
+            for row in await self._state.stored_rules_by_subject(subject_id)
+            if row.kind == "pair"
+            and row.pair_id
+            and listener in {row.source_umo, row.target_umo}
+        ]
+        pair_ids = list(dict.fromkeys(row.pair_id for row in rows if row.pair_id))
+        if not pair_ids:
+            return None
+        if len(pair_ids) > 1:
+            raise ValueError(PAIR_AMBIGUOUS)
+        return pair_ids[0]
+
     async def list_links(
         self, event: AstrMessageEvent
     ) -> tuple[tuple[SessionWatch, str], ...]:
@@ -251,7 +335,7 @@ class SessionBridgeManager:
             rows = own
         items: list[tuple[SessionWatch, str]] = []
         for row in rows:
-            if row.kind not in {"watch", "connect"}:
+            if row.kind not in {"watch", "connect", "pair"}:
                 continue
             if (
                 row.kind == "watch"
@@ -268,7 +352,7 @@ class SessionBridgeManager:
         stored = await self._state.stored_rule(rule_id)
         if stored is None or stored.kind == "pair":
             if stored is not None:
-                raise ValueError("Pair edges cannot be unlinked")
+                raise ValueError(PAIR_UNLINK_REFUSED)
             return False
         if stored.subject_id != subject.id:
             role = await self._operator_role(event)
@@ -291,6 +375,7 @@ class SessionBridgeManager:
             row.subject_id,
             expires_at,
             row.rule_id,
+            row.pair_id,
         )
 
     async def _operator_role(self, event: AstrMessageEvent) -> Role | None:
@@ -391,9 +476,9 @@ class SessionBridgeManager:
                         if len(self._forwarded) > 8192:
                             self._forwarded.popitem(last=False)
                 locale = await self._locale_for(watch.source_umo)
-                forwarded = replace(
-                    envelope,
-                    content=(
+                content = envelope.content
+                if grant.header:
+                    content = (
                         PortablePart(
                             ContentKind.TEXT,
                             render_source_header(
@@ -403,8 +488,8 @@ class SessionBridgeManager:
                             ),
                         ),
                         *envelope.content,
-                    ),
-                )
+                    )
+                forwarded = replace(envelope, content=content)
                 receipt = await self._deliver(
                     watch.source_umo,
                     forwarded,
@@ -627,7 +712,7 @@ class SessionBridgeManager:
         expired: list[WatchGrant] = []
         async with self._lock:
             for row in rows:
-                if row.kind not in {"watch", "connect"}:
+                if row.kind not in {"watch", "connect", "pair"}:
                     continue
                 if (
                     row.kind == "watch"
@@ -723,9 +808,13 @@ class SessionBridgeManager:
 
 
 __all__ = [
+    "DEFAULT_MAX_PAIRS_PER_SUBJECT",
     "DEFAULT_WATCH_TTL_SECONDS",
     "MAX_WATCH_TTL_SECONDS",
     "MIN_WATCH_TTL_SECONDS",
+    "PAIR_AMBIGUOUS",
+    "PAIR_OCCUPIED",
+    "PAIR_UNLINK_REFUSED",
     "SessionBridgeManager",
     "SessionWatch",
 ]

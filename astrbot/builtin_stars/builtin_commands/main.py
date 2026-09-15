@@ -178,6 +178,14 @@ class Main(star.Star):
         """Remove a session-bridge rule by id."""
         await self.session_c.unlink(event, spec)
 
+    @filter.permission("session.read")
+    @session.command("filter")
+    async def session_filter(
+        self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Show or change match/except filters on one session-bridge edge."""
+        await self.session_c.filter_rule(event, spec)
+
     @filter.permission("session.block")
     @session.command("block")
     async def session_block(

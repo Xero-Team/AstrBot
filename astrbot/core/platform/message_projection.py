@@ -228,7 +228,10 @@ def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
         source_message_id=str(source_message_id) if source_message_id else None,
         quote=quote,
         created_at=event.created_at,
-        metadata={"platform_name": event.get_platform_name()},
+        metadata={
+            "platform_name": event.get_platform_name(),
+            "bot_account_id": str(event.get_self_id() or ""),
+        },
     )
 
 

@@ -13,6 +13,7 @@ from astrbot.core.db.stores.persona_runtime import PersonaRuntimeStoreMixin
 from astrbot.core.db.stores.personas import PersonaStoreMixin
 from astrbot.core.db.stores.preferences import PreferenceStoreMixin
 from astrbot.core.db.stores.projects import ChatProjectStoreMixin
+from astrbot.core.db.stores.session_bridge import SessionBridgeStoreMixin
 from astrbot.core.db.stores.sessions import PlatformSessionStoreMixin
 from astrbot.core.db.stores.statistics import StatisticsStoreMixin
 from astrbot.core.db.stores.webchat import WebChatThreadStoreMixin
@@ -33,6 +34,7 @@ class SQLiteDatabase(
     CommandStoreMixin,
     CronStoreMixin,
     PlatformSessionStoreMixin,
+    SessionBridgeStoreMixin,
     UmoAliasStoreMixin,
     ChatProjectStoreMixin,
     BaseDatabase,

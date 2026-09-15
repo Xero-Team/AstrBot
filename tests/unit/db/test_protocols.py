@@ -26,6 +26,7 @@ from astrbot.core.db.protocols import (
     PersonaStore,
     PlatformSessionStore,
     PreferenceStore,
+    SessionBridgeStore,
     SessionManagementStore,
     StatisticsSessionStore,
     StatisticsStore,
@@ -50,6 +51,7 @@ DOMAIN_PROTOCOLS: tuple[type[Protocol], ...] = (
     CommandStore,
     CronStore,
     PlatformSessionStore,
+    SessionBridgeStore,
     UmoAliasStore,
     ChatProjectStore,
 )

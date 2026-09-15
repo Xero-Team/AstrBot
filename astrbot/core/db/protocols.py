@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         PlatformStat,
         Preference,
         ProviderStat,
+        SessionBridgeRule,
         SessionProjectRelation,
         UmoAlias,
         WebChatThread,
@@ -912,6 +913,82 @@ class UmoAliasStore(Protocol):
 
 
 @runtime_checkable
+class SessionBridgeStore(Protocol):
+    """Operations for persisted session-bridge directed edges."""
+
+    async def insert_session_bridge_rule(
+        self,
+        *,
+        subject_id: str,
+        source_umo: str,
+        target_umo: str,
+        source_config_id: str,
+        target_config_id: str,
+        kind: str,
+        expires_at: int | None = None,
+        header: bool = True,
+        pair_id: str | None = None,
+        match: dict | None = None,
+        except_: dict | None = None,
+        rule_id: str | None = None,
+    ) -> SessionBridgeRule:
+        return T.cast("SessionBridgeRule", None)
+
+    async def get_session_bridge_rule(self, rule_id: str) -> SessionBridgeRule | None:
+        return None
+
+    async def get_session_bridge_rule_by_direction(
+        self,
+        subject_id: str,
+        source_umo: str,
+        target_umo: str,
+    ) -> SessionBridgeRule | None:
+        return None
+
+    async def list_session_bridge_rules(self) -> list[SessionBridgeRule]:
+        return []
+
+    async def list_session_bridge_rules_by_subject(
+        self, subject_id: str
+    ) -> list[SessionBridgeRule]:
+        return []
+
+    async def list_session_bridge_connects_for_listener(
+        self, subject_id: str, source_umo: str
+    ) -> list[SessionBridgeRule]:
+        return []
+
+    async def list_session_bridge_rules_touching_config(
+        self, config_id: str
+    ) -> list[SessionBridgeRule]:
+        return []
+
+    async def update_session_bridge_rule(
+        self,
+        rule_id: str,
+        *,
+        expires_at: int | None = None,
+        kind: str | None = None,
+        target_umo: str | None = None,
+        source_config_id: str | None = None,
+        target_config_id: str | None = None,
+        header: bool | None = None,
+        pair_id: str | None = None,
+        match: dict | None = None,
+        except_: dict | None = None,
+    ) -> SessionBridgeRule | None:
+        return None
+
+    async def delete_session_bridge_rule(self, rule_id: str) -> None:
+        return None
+
+    async def delete_session_bridge_connects_for_listener(
+        self, subject_id: str, source_umo: str
+    ) -> None:
+        return None
+
+
+@runtime_checkable
 class ChatProjectStore(Protocol):
     """Operations for ChatUI projects and their session relations."""
 
@@ -1056,6 +1133,7 @@ __all__ = [
     "PlatformSessionStore",
     "PluginRuntimeStore",
     "PreferenceStore",
+    "SessionBridgeStore",
     "SessionManagementStore",
     "StatisticsStore",
     "StatisticsSessionStore",

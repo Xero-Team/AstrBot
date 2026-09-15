@@ -46,6 +46,7 @@ EXPECTED_TABLE_NAMES = frozenset(
         "platform_stats",
         "preferences",
         "provider_stats",
+        "session_bridge_rules",
         "session_project_relations",
         "umo_aliases",
         "webchat_threads",
@@ -87,6 +88,7 @@ EXPECTED_TABLE_MODELS = frozenset(
         "PlatformStat",
         "Preference",
         "ProviderStat",
+        "SessionBridgeRule",
         "SessionProjectRelation",
         "UmoAlias",
         "WebChatThread",
@@ -202,6 +204,41 @@ async def test_command_configs_have_unique_command_id(
     assert "keep_original_alias" not in config_columns
     assert "command_id" in conflict_columns
     assert ("command_id",) in config_uniques
+
+
+@pytest.mark.asyncio
+async def test_session_bridge_rules_have_required_columns_and_direction_unique(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+
+    def inspect_rules(sync_conn):
+        return (
+            _column_map(sync_conn, "session_bridge_rules"),
+            _unique_column_sets(sync_conn, "session_bridge_rules"),
+        )
+
+    async with temp_db.engine.connect() as conn:
+        columns, uniques = await conn.run_sync(inspect_rules)
+
+    for name in (
+        "rule_id",
+        "subject_id",
+        "source_umo",
+        "target_umo",
+        "source_config_id",
+        "target_config_id",
+        "kind",
+        "expires_at",
+        "header",
+        "pair_id",
+        "match",
+        "except",
+    ):
+        assert name in columns
+    assert columns["rule_id"]["nullable"] is False
+    assert columns["kind"]["nullable"] is False
+    assert ("subject_id", "source_umo", "target_umo") in uniques
 
 
 @pytest.mark.asyncio

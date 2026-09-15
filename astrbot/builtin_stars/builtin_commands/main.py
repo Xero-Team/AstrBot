@@ -148,6 +148,20 @@ class Main(star.Star):
         """Drop the unbounded session link for the current session."""
         await self.session_c.disconnect(event)
 
+    @filter.permission("session.read")
+    @session.command("links")
+    async def session_links(self, event: AstrMessageEvent) -> None:
+        """List visible session-bridge watch and connect rules."""
+        await self.session_c.links(event)
+
+    @filter.permission("session.read")
+    @session.command("unlink")
+    async def session_unlink(
+        self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
+    ) -> None:
+        """Remove a session-bridge rule by id."""
+        await self.session_c.unlink(event, spec)
+
     @filter.permission("session.block")
     @session.command("block")
     async def session_block(

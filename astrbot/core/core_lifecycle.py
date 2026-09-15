@@ -571,6 +571,7 @@ class AstrBotCoreLifecycle:
             self.execution_context.session_bridge_manager.observe
         )
         await self.platform_manager.initialize()
+        await self.execution_context.session_bridge_manager.restore()
 
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()

@@ -35,6 +35,7 @@ from astrbot.core.db.po.personas import (
 )
 from astrbot.core.db.po.preferences import Preference
 from astrbot.core.db.po.projects import ChatUIProject, SessionProjectRelation
+from astrbot.core.db.po.session_bridge import SessionBridgeRule
 from astrbot.core.db.po.sessions import PlatformSession, UmoAlias
 from astrbot.core.db.po.statistics import PlatformStat, ProviderStat
 from astrbot.core.db.po.webchat import WebChatThread
@@ -73,6 +74,7 @@ TABLE_MODELS: tuple[type, ...] = (
     PlatformStat,
     Preference,
     ProviderStat,
+    SessionBridgeRule,
     SessionProjectRelation,
     UmoAlias,
     WebChatThread,

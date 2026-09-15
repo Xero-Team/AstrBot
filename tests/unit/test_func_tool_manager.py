@@ -93,6 +93,7 @@ def test_computer_tools_are_registered_as_builtin_tools():
     assert tool.name == "astrbot_execute_shell"
     assert tool.parameters["properties"]["background"]["default"] is False
     assert manager.is_builtin_tool("astrbot_execute_shell") is True
+    assert manager.is_builtin_tool("astrbot_shell_session") is True
 
 
 @pytest.mark.asyncio

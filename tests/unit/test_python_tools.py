@@ -176,3 +176,59 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
         allow_network=True,
         filesystem_scope="host",
     )
+
+
+@pytest.mark.asyncio
+async def test_local_python_reports_disabled_network_policy(tmp_path, monkeypatch):
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    python_exec = AsyncMock(
+        return_value={
+            "data": {
+                "output": {"text": "ok", "images": []},
+                "error": "",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.workspace_root",
+        lambda umo: tmp_path / umo.replace(":", "_"),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.util.create_process_sandbox",
+        lambda: object(),
+    )
+    event = SimpleNamespace(
+        unified_msg_origin="onebot:GroupMessage:12345",
+        role="admin",
+        get_platform_name=lambda: "onebot",
+    )
+    runtime = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {
+                "computer_use_runtime": "local",
+                "computer_use_local_permissions": {
+                    "admin": {
+                        "allow_execution": True,
+                        "allow_network": False,
+                        "filesystem_scope": "host",
+                    }
+                },
+            }
+        },
+        computer_runtime=SimpleNamespace(
+            get_local_booter=lambda: SimpleNamespace(
+                python=SimpleNamespace(exec=python_exec)
+            )
+        ),
+    )
+    attach_authorized_tool_context(event, runtime, "tool.python_exec")
+    context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=runtime),
+        tool_call_timeout=60,
+    )
+
+    result = await LocalPythonTool().call(context, code="print('ok')")
+    output = [part.text for part in result.content]
+    assert computer_util.LOCAL_NETWORK_POLICY_NOTICE in output
+    assert "ok" in output

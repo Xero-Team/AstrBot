@@ -16,6 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
+    LOCAL_NETWORK_POLICY_NOTICE,
     check_local_execution_permission,
     get_local_permission_policy,
     is_local_runtime,
@@ -117,6 +118,11 @@ class ExecuteShellTool(FunctionTool):
         if permission_error:
             return permission_error
         sandboxed = bool(local_policy and local_policy.requires_sandbox)
+        policy_notice = (
+            f"{LOCAL_NETWORK_POLICY_NOTICE}\n"
+            if local_policy and not local_policy.allow_network
+            else ""
+        )
 
         sb = await context.context.context.computer_runtime.get_booter(
             context.context.context,
@@ -151,37 +157,37 @@ class ExecuteShellTool(FunctionTool):
                         "writable_roots": _write_allowed_roots(umo),
                     }
                 requested_timeout = kwargs.get("timeout", timeout_seconds)
-                return json.dumps(
-                    await sb.shell.exec_managed(
-                        command,
-                        owner_id=context.context.event.unified_msg_origin,
-                        runtime_id="local",
-                        sender_id=creator_id,
-                        creator_is_admin=creator_is_admin,
-                        sandboxed=sandboxed,
-                        permission_check=lambda: (
-                            is_local_runtime(context)
-                            and get_local_permission_policy(context) == local_policy
-                        ),
-                        allow_network=(
-                            local_policy.allow_network if local_policy else True
-                        ),
-                        filesystem_scope=(
-                            local_policy.filesystem_scope if local_policy else "host"
-                        ),
-                        cwd=cwd,
-                        env=dict(env or {}),
-                        timeout=(
-                            min(requested_timeout or 300, 300)
-                            if sandboxed
-                            else requested_timeout
-                        ),
-                        yield_time_ms=0 if background else yield_time_ms,
-                        allowed_root=str(current_workspace_root),
-                        **sandbox_roots,
+                result = await sb.shell.exec_managed(
+                    command,
+                    owner_id=context.context.event.unified_msg_origin,
+                    runtime_id="local",
+                    sender_id=creator_id,
+                    creator_is_admin=creator_is_admin,
+                    sandboxed=sandboxed,
+                    permission_check=lambda: (
+                        is_local_runtime(context)
+                        and get_local_permission_policy(context) == local_policy
                     ),
-                    ensure_ascii=False,
+                    allow_network=(
+                        local_policy.allow_network if local_policy else True
+                    ),
+                    filesystem_scope=(
+                        local_policy.filesystem_scope if local_policy else "host"
+                    ),
+                    cwd=cwd,
+                    env=dict(env or {}),
+                    timeout=(
+                        min(requested_timeout or 300, 300)
+                        if sandboxed
+                        else requested_timeout
+                    ),
+                    yield_time_ms=0 if background else yield_time_ms,
+                    allowed_root=str(current_workspace_root),
+                    **sandbox_roots,
                 )
+                if policy_notice:
+                    result["policy_notice"] = LOCAL_NETWORK_POLICY_NOTICE
+                return json.dumps(result, ensure_ascii=False)
 
             env = dict(env or {})
             effective_background = background and not _is_self_detached_command(command)
@@ -218,7 +224,7 @@ class ExecuteShellTool(FunctionTool):
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             detail = str(e) or type(e).__name__
-            return f"Error executing command: {detail}"
+            return f"{policy_notice}Error executing command: {detail}"
 
 
 @builtin_tool(config=_LOCAL_RUNTIME_TOOL_CONFIG, required_actions=("tool.local_exec",))

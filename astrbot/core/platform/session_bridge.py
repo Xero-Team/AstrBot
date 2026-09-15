@@ -26,7 +26,7 @@ from .message_protocol import (
 from .message_renderers import render_source_header
 from .message_session import MessageSession
 from .send_result import DeliveryAttempt, DeliveryReceipt, PlatformSendResult
-from .session_bridge_state import SessionBridgeState, SessionWatch, WatchGrant
+from .session_bridge_state import GrantKey, SessionBridgeState, SessionWatch, WatchGrant
 
 MIN_WATCH_TTL_SECONDS = 1
 DEFAULT_WATCH_TTL_SECONDS = 12 * 60 * 60
@@ -34,6 +34,7 @@ MAX_WATCH_TTL_SECONDS = 10 * 24 * 60 * 60
 
 if TYPE_CHECKING:
     from astrbot.core.auth.service import AuthorizationService
+    from astrbot.core.db.po.session_bridge import SessionBridgeRule
     from astrbot.core.db.protocols import SessionBridgeStore
     from astrbot.core.file_token_service import FileTokenService
 
@@ -233,6 +234,10 @@ class SessionBridgeManager:
         subject, _ = self._actor(event)
         role = await self._operator_role(event)
         current_config = self._config_id(event.unified_msg_origin)
+        now = time()
+        async with self._lock:
+            expired = await self._state.purge(now)
+        await self._notify_expired_watches(expired)
         own = await self._state.stored_rules_by_subject(subject.id)
         if role in {Role.ROOT, Role.OPERATOR}:
             rows = await self._state.list_stored_rules()
@@ -245,7 +250,13 @@ class SessionBridgeManager:
             rows = own
         items: list[tuple[SessionWatch, str]] = []
         for row in rows:
-            if row.kind == "pair":
+            if row.kind not in {"watch", "connect"}:
+                continue
+            if (
+                row.kind == "watch"
+                and row.expires_at is not None
+                and row.expires_at <= now
+            ):
                 continue
             items.append((self._watch_from_row(row), row.kind))
         return tuple(items)
@@ -271,7 +282,7 @@ class SessionBridgeManager:
             await self._state.delete_rule(rule_id)
         return True
 
-    def _watch_from_row(self, row) -> SessionWatch:
+    def _watch_from_row(self, row: SessionBridgeRule) -> SessionWatch:
         expires_at = None if row.expires_at is None else float(row.expires_at)
         return SessionWatch(
             row.source_umo,
@@ -294,7 +305,7 @@ class SessionBridgeManager:
         )
         if not decision.allowed:
             return None
-        return getattr(decision, "effective_role", None)
+        return decision.effective_role
 
     async def send(
         self,
@@ -330,10 +341,10 @@ class SessionBridgeManager:
             locale=await self._locale_for(target_umo),
         )
 
-    def _store_key(self, watch: SessionWatch) -> tuple[str, ...]:
+    def _store_key(self, watch: SessionWatch) -> GrantKey:
         return self._state.store_key(watch)
 
-    def _grant_active(self, key: tuple, grant: WatchGrant, now: float) -> bool:
+    def _grant_active(self, key: GrantKey, grant: WatchGrant, now: float) -> bool:
         return self._state.grant_active(key, grant, now)
 
     async def _check_watch(self, grant: WatchGrant) -> None:
@@ -577,7 +588,7 @@ class SessionBridgeManager:
                 self._message_ids.popitem(last=False)
         return receipt
 
-    async def _expire_watch(self, key: tuple[str, str, str], grant: WatchGrant) -> None:
+    async def _expire_watch(self, key: GrantKey, grant: WatchGrant) -> None:
         expires_at = grant.watch.expires_at
         if expires_at is None:
             return
@@ -613,13 +624,18 @@ class SessionBridgeManager:
         expired: list[WatchGrant] = []
         async with self._lock:
             for row in rows:
+                if row.kind not in {"watch", "connect"}:
+                    continue
                 if (
                     row.kind == "watch"
                     and row.expires_at is not None
                     and row.expires_at <= now
                 ):
                     await self._state.discard_stored_rule(row.rule_id)
-                    expired.append(self._grant_for_notice(row))
+                    try:
+                        expired.append(self._grant_for_notice(row))
+                    except ValueError:
+                        pass
                     continue
                 grant = await self._restore_row(row)
                 if grant is None:
@@ -630,19 +646,15 @@ class SessionBridgeManager:
                 )
         await self._notify_expired_watches(tuple(expired))
 
-    def _grant_for_notice(self, row) -> WatchGrant:
+    def _grant_for_notice(self, row: SessionBridgeRule) -> WatchGrant:
         subject = Subject.from_id(row.subject_id)
         context = AuthContext(subject=subject, source="im", authenticated=True)
         return self._state.grant_from_row(row, subject, context)
 
-    async def _restore_row(self, row) -> WatchGrant | None:
+    async def _restore_row(self, row: SessionBridgeRule) -> WatchGrant | None:
         try:
             subject = Subject.from_id(row.subject_id)
-        except Exception:
-            await self._state.discard_stored_rule(row.rule_id)
-            return None
-        source = "webchat" if subject.kind == "dashboard-account" else "im"
-        try:
+            source = "webchat" if subject.kind == "dashboard-account" else "im"
             source_config_id = self._config_id(row.source_umo)
             target_config_id = self._config_id(row.target_umo)
             context = AuthContext(
@@ -665,7 +677,7 @@ class SessionBridgeManager:
                 ).id,
             )
             await self._authorize(subject, context, row.target_umo, "session.watch")
-        except PermissionError:
+        except PermissionError, ValueError:
             await self._state.discard_stored_rule(row.rule_id)
             return None
         grant_context = AuthContext(

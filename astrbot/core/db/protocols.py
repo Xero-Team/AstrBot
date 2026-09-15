@@ -931,32 +931,37 @@ class SessionBridgeStore(Protocol):
         match: dict | None = None,
         except_: dict | None = None,
         rule_id: str | None = None,
-    ) -> SessionBridgeRule: ...
+    ) -> SessionBridgeRule:
+        return T.cast("SessionBridgeRule", None)
 
-    async def get_session_bridge_rule(
-        self, rule_id: str
-    ) -> SessionBridgeRule | None: ...
+    async def get_session_bridge_rule(self, rule_id: str) -> SessionBridgeRule | None:
+        return None
 
     async def get_session_bridge_rule_by_direction(
         self,
         subject_id: str,
         source_umo: str,
         target_umo: str,
-    ) -> SessionBridgeRule | None: ...
+    ) -> SessionBridgeRule | None:
+        return None
 
-    async def list_session_bridge_rules(self) -> list[SessionBridgeRule]: ...
+    async def list_session_bridge_rules(self) -> list[SessionBridgeRule]:
+        return []
 
     async def list_session_bridge_rules_by_subject(
         self, subject_id: str
-    ) -> list[SessionBridgeRule]: ...
+    ) -> list[SessionBridgeRule]:
+        return []
 
     async def list_session_bridge_connects_for_listener(
         self, subject_id: str, source_umo: str
-    ) -> list[SessionBridgeRule]: ...
+    ) -> list[SessionBridgeRule]:
+        return []
 
     async def list_session_bridge_rules_touching_config(
         self, config_id: str
-    ) -> list[SessionBridgeRule]: ...
+    ) -> list[SessionBridgeRule]:
+        return []
 
     async def update_session_bridge_rule(
         self,
@@ -971,13 +976,16 @@ class SessionBridgeStore(Protocol):
         pair_id: str | None = None,
         match: dict | None = None,
         except_: dict | None = None,
-    ) -> SessionBridgeRule | None: ...
+    ) -> SessionBridgeRule | None:
+        return None
 
-    async def delete_session_bridge_rule(self, rule_id: str) -> None: ...
+    async def delete_session_bridge_rule(self, rule_id: str) -> None:
+        return None
 
     async def delete_session_bridge_connects_for_listener(
         self, subject_id: str, source_umo: str
-    ) -> None: ...
+    ) -> None:
+        return None
 
 
 @runtime_checkable

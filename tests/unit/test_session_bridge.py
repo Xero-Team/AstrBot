@@ -156,9 +156,11 @@ class FakeSessionBridgeStore:
                 await self.delete_session_bridge_rule(row.rule_id)
 
 
-def _manager(send=None, store=None):
+def _manager(send=None, store=None, *, max_watches_per_subject=16):
     authorization = SimpleNamespace(
-        authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
+        authorize=AsyncMock(
+            return_value=SimpleNamespace(allowed=True, effective_role=None)
+        )
     )
     sender = send or AsyncMock(
         return_value=PlatformSendResult("target", True, "target", message_ids=("sent",))
@@ -169,6 +171,7 @@ def _manager(send=None, store=None):
         authorization=authorization,
         get_config_id=lambda _: "default",
         store=store or FakeSessionBridgeStore(),
+        max_watches_per_subject=max_watches_per_subject,
     )
     return manager, authorization, sender
 
@@ -655,4 +658,95 @@ async def test_unlink_allows_creator_after_revoke_and_scopes_instance_operator()
     with pytest.raises(PermissionError):
         await manager.unlink(owner, "foreignwatch01")
     assert await store.get_session_bridge_rule("foreignwatch01") is not None
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_watch_limit_does_not_drop_existing_connect():
+    manager, _, _ = _manager(max_watches_per_subject=1)
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:one", ttl_seconds=30)
+    link = await manager.connect(event, "target:GroupMessage:two")
+    with pytest.raises(ValueError, match="Watch limit exceeded"):
+        await manager.watch(event, "target:GroupMessage:two", ttl_seconds=30)
+    current = await manager.connection(event)
+    assert current is not None
+    assert current.rule_id == link.rule_id
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_connect_limit_does_not_drop_existing_watch():
+    manager, _, _ = _manager(max_watches_per_subject=1)
+    event = _event()
+    other = _event("source:FriendMessage:other")
+    await manager.connect(other, "target:GroupMessage:two")
+    watch = await manager.watch(event, "target:GroupMessage:one", ttl_seconds=30)
+    with pytest.raises(ValueError, match="Watch limit exceeded"):
+        await manager.connect(event, "target:GroupMessage:one")
+    listed = await manager.list_watches(event)
+    assert [item.rule_id for item in listed] == [watch.rule_id]
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_skips_pair_and_discards_invalid_umo():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="pairrule00001",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="pair",
+        expires_at=None,
+    )
+    store.seed(
+        rule_id="badumorule001",
+        subject_id=event.subject.id,
+        source_umo="not-a-umo",
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time()) + 3600,
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+    assert await store.get_session_bridge_rule("pairrule00001") is not None
+    assert await store.get_session_bridge_rule("badumorule001") is None
+    assert manager._state.total_kind("pair") == 0
+    assert manager._state.total_kind("watch") == 0
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_list_links_hides_expired_watches():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="expiredlink01",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time()) - 10,
+    )
+    store.seed(
+        rule_id="liveconnect01",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="other:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="connect",
+        expires_at=None,
+    )
+    manager, _, _ = _manager(store=store)
+    links = await manager.list_links(event)
+    assert [item[0].rule_id for item in links] == ["liveconnect01"]
     await manager.terminate()

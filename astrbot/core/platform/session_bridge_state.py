@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from time import time
 from typing import TYPE_CHECKING
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from astrbot.core.db.protocols import SessionBridgeStore
 
 PAIR_OCCUPIED = "Direction is occupied by a pair"
+GrantKey = tuple[str, str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,14 +48,17 @@ class WatchGrant:
     target_config_id: str
 
 
+ExpireWatch = Callable[[GrantKey, WatchGrant], Coroutine[object, object, None]]
+
+
 class SessionBridgeState:
     """Unified direction index, connect 1:1 map, expiry tasks, and store IO."""
 
     def __init__(self, store: SessionBridgeStore) -> None:
         self._store = store
-        self._grants: dict[tuple[str, str, str], WatchGrant] = {}
-        self._connect_by_listener: dict[tuple[str, str], tuple[str, str, str]] = {}
-        self._expiry_tasks: dict[tuple[str, str, str], asyncio.Task] = {}
+        self._grants: dict[GrantKey, WatchGrant] = {}
+        self._connect_by_listener: dict[tuple[str, str], GrantKey] = {}
+        self._expiry_tasks: dict[GrantKey, asyncio.Task[None]] = {}
 
     def count_kind(self, subject_id: str, kind: str) -> int:
         return sum(
@@ -66,7 +70,7 @@ class SessionBridgeState:
     def total_kind(self, kind: str) -> int:
         return sum(1 for grant in self._grants.values() if grant.kind == kind)
 
-    def get(self, key: tuple[str, str, str]) -> WatchGrant | None:
+    def get(self, key: GrantKey) -> WatchGrant | None:
         return self._grants.get(key)
 
     def connect_for(self, subject_id: str, source_umo: str) -> WatchGrant | None:
@@ -80,17 +84,17 @@ class SessionBridgeState:
             if key[:2] == (subject_id, source_umo) and grant.kind == "watch"
         )
 
-    def grants_observing(self, origin: str) -> tuple[tuple[tuple, WatchGrant], ...]:
+    def grants_observing(self, origin: str) -> tuple[tuple[GrantKey, WatchGrant], ...]:
         return tuple(
             (key, grant)
             for key, grant in self._grants.items()
             if grant.watch.target_umo == origin
         )
 
-    def store_key(self, watch: SessionWatch) -> tuple[str, str, str]:
+    def store_key(self, watch: SessionWatch) -> GrantKey:
         return (watch.subject_id, watch.source_umo, watch.target_umo)
 
-    def grant_active(self, key: tuple, grant: WatchGrant, now: float) -> bool:
+    def grant_active(self, key: GrantKey, grant: WatchGrant, now: float) -> bool:
         if self._grants.get(key) is not grant:
             return False
         return grant.watch.expires_at is None or grant.watch.expires_at > now
@@ -108,19 +112,19 @@ class SessionBridgeState:
                 expired.append(grant)
         return tuple(expired)
 
-    def pop_matching_grant(self, key: tuple, grant: WatchGrant) -> WatchGrant | None:
+    def pop_matching_grant(self, key: GrantKey, grant: WatchGrant) -> WatchGrant | None:
         if self._grants.get(key) is not grant:
             return None
         return self._drop_memory(key)
 
-    def pop_expiry(self, key: tuple[str, str, str]) -> asyncio.Task | None:
+    def pop_expiry(self, key: GrantKey) -> asyncio.Task[None] | None:
         return self._expiry_tasks.pop(key, None)
 
     def arm_expiry(
         self,
-        key: tuple[str, str, str],
+        key: GrantKey,
         grant: WatchGrant,
-        expire: Callable[[tuple[str, str, str], WatchGrant], Awaitable[None]],
+        expire: ExpireWatch,
     ) -> None:
         previous = self._expiry_tasks.pop(key, None)
         if previous is not None:
@@ -133,7 +137,7 @@ class SessionBridgeState:
         )
         self._expiry_tasks[key] = task
 
-        def _done(done: asyncio.Task) -> None:
+        def _done(done: asyncio.Task[None]) -> None:
             if self._expiry_tasks.get(key) is done:
                 self._expiry_tasks.pop(key, None)
             if done.cancelled():
@@ -147,7 +151,7 @@ class SessionBridgeState:
 
         task.add_done_callback(_done)
 
-    def take_expiry_tasks(self) -> list[asyncio.Task]:
+    def take_expiry_tasks(self) -> list[asyncio.Task[None]]:
         tasks = list(self._expiry_tasks.values())
         self._expiry_tasks.clear()
         return tasks
@@ -182,12 +186,12 @@ class SessionBridgeState:
             grant = self._grant_from_row(row, subject, context)
             self._index(grant)
             return grant
-        if stored is not None:
-            await self._delete_row(stored.rule_id, key)
         if self.count_kind(subject.id, "watch") >= max_per_subject:
             raise ValueError("Watch limit exceeded")
         if self.total_kind("watch") >= 1024:
             raise ValueError("Runtime watch limit exceeded")
+        if stored is not None:
+            await self._delete_row(stored.rule_id, key)
         row = await self._store.insert_session_bridge_rule(
             subject_id=subject.id,
             source_umo=source_umo,
@@ -224,22 +228,18 @@ class SessionBridgeState:
             return grant
         listener = (subject.id, source_umo)
         had_connect = listener in self._connect_by_listener
-        await self._store.delete_session_bridge_connects_for_listener(
-            subject.id, source_umo
-        )
-        self._drop_connects_for_listener(subject.id, source_umo)
-        stored = await self._store.get_session_bridge_rule_by_direction(
-            subject.id, source_umo, target_umo
-        )
-        if stored is not None:
-            if stored.kind == "pair":
-                raise ValueError(PAIR_OCCUPIED)
-            await self._delete_row(stored.rule_id, key)
         if not had_connect:
             if self.count_kind(subject.id, "connect") >= max_per_subject:
                 raise ValueError("Watch limit exceeded")
             if self.total_kind("connect") >= 1024:
                 raise ValueError("Runtime watch limit exceeded")
+        occupant = stored
+        await self._store.delete_session_bridge_connects_for_listener(
+            subject.id, source_umo
+        )
+        self._drop_connects_for_listener(subject.id, source_umo)
+        if occupant is not None:
+            await self._delete_row(occupant.rule_id, key)
         row = await self._store.insert_session_bridge_rule(
             subject_id=subject.id,
             source_umo=source_umo,
@@ -298,16 +298,18 @@ class SessionBridgeState:
         )
         return None
 
-    async def list_stored_rules(self):
+    async def list_stored_rules(self) -> list[SessionBridgeRule]:
         return await self._store.list_session_bridge_rules()
 
-    async def stored_rule(self, rule_id: str):
+    async def stored_rule(self, rule_id: str) -> SessionBridgeRule | None:
         return await self._store.get_session_bridge_rule(rule_id)
 
-    async def stored_rules_by_subject(self, subject_id: str):
+    async def stored_rules_by_subject(self, subject_id: str) -> list[SessionBridgeRule]:
         return await self._store.list_session_bridge_rules_by_subject(subject_id)
 
-    async def stored_rules_touching_config(self, config_id: str):
+    async def stored_rules_touching_config(
+        self, config_id: str
+    ) -> list[SessionBridgeRule]:
         return await self._store.list_session_bridge_rules_touching_config(config_id)
 
     async def discard_stored_rule(self, rule_id: str) -> None:
@@ -356,7 +358,7 @@ class SessionBridgeState:
         elif self._connect_by_listener.get(listener) == key:
             self._connect_by_listener.pop(listener, None)
 
-    def _drop_memory(self, key: tuple[str, str, str]) -> WatchGrant | None:
+    def _drop_memory(self, key: GrantKey) -> WatchGrant | None:
         grant = self._grants.pop(key, None)
         listener = key[:2]
         if self._connect_by_listener.get(listener) == key:
@@ -376,7 +378,7 @@ class SessionBridgeState:
             ):
                 self._grants.pop(grant_key, None)
 
-    async def _delete_row(self, rule_id: str, key: tuple[str, str, str]) -> None:
+    async def _delete_row(self, rule_id: str, key: GrantKey) -> None:
         await self._store.delete_session_bridge_rule(rule_id)
         self._drop_memory(key)
         task = self._expiry_tasks.pop(key, None)

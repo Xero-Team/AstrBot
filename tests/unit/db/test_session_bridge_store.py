@@ -42,7 +42,7 @@ async def test_insert_session_bridge_rule_writes_s1_defaults(
     )
 
     assert len(watch.rule_id) == 12
-    assert watch.rule_id.islower()
+    assert watch.rule_id == watch.rule_id.lower()
     assert watch.rule_id.isalnum()
     assert int(watch.rule_id, 16) >= 0
     assert watch.header is True
@@ -53,6 +53,18 @@ async def test_insert_session_bridge_rule_writes_s1_defaults(
     assert watch.expires_at == 1_800_000_000
     assert connect.kind == "connect"
     assert connect.expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_insert_session_bridge_rule_accepts_digit_only_hex_id(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+    watch = await _insert_rule(temp_db, rule_id="225823821909")
+
+    assert watch.rule_id == "225823821909"
+    assert watch.rule_id == watch.rule_id.lower()
+    assert int(watch.rule_id, 16) >= 0
 
 
 @pytest.mark.asyncio

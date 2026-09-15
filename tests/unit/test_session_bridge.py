@@ -217,6 +217,7 @@ def _manager(
         lambda _: MessageDeliveryCapabilities(quote=True, media=frozenset({"image"})),
         authorization=authorization,
         get_config_id=get_config_id or (lambda _: "default"),
+        get_self_id=lambda _: "bot",
         store=store or FakeSessionBridgeStore(),
         max_watches_per_subject=max_watches_per_subject,
         max_pairs_per_subject=max_pairs_per_subject,

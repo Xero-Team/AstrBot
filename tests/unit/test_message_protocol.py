@@ -751,6 +751,13 @@ def test_projection_bounds_forward_nesting_and_component_count():
     )
 
 
+def test_envelope_from_event_records_bot_account_id():
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(_event())
+    assert envelope.metadata["bot_account_id"] == "bot"
+
+
 def test_projection_unknown_component_keeps_native_payload_and_safe_fallback():
     from astrbot.core.message.components import Poke
     from astrbot.core.platform.message_projection import envelope_from_event

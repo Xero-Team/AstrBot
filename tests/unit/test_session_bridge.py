@@ -1459,3 +1459,36 @@ async def test_filter_allows_creator_after_revoke_and_scopes_instance_operator()
     with pytest.raises(PermissionError):
         await manager.append_filter(owner, "foreignwatch01", "match", "text", "no")
     await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_append_filter_rereads_and_returns_none_on_persist_miss():
+    store = FakeSessionBridgeStore()
+    manager, _, _ = _manager(store=store)
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    original_get = store.get_session_bridge_rule
+    reads = {"n": 0}
+
+    async def get_after_concurrent_write(rule_id: str):
+        reads["n"] += 1
+        row = await original_get(rule_id)
+        if reads["n"] == 2 and row is not None:
+            row.match = {"text": ["alpha"]}
+        return row
+
+    store.get_session_bridge_rule = get_after_concurrent_write
+    result = await manager.append_filter(event, watch.rule_id, "match", "text", "beta")
+    assert result == ({"text": ["alpha", "beta"]}, {})
+
+    async def miss(_rule_id: str, **_kwargs):
+        return None
+
+    store.update_session_bridge_rule = miss
+    assert (
+        await manager.append_filter(event, watch.rule_id, "match", "text", "gamma")
+        is None
+    )
+    live = await manager.get_filter(event, watch.rule_id)
+    assert live == ({"text": ["alpha", "beta"]}, {})
+    await manager.terminate()

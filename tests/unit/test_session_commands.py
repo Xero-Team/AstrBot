@@ -246,13 +246,20 @@ def test_parse_filter_spec_show_append_and_clear():
 async def test_session_commands_filter_show_append_and_clear():
     replies: list[str] = []
 
+    async def get_filter(_event, rule_id):
+        if rule_id == "deadbeef0001":
+            return None
+        return ({}, {})
+
     async def append_filter(_event, _rule_id, _side, _dimension, value):
         if value == "admin":
             raise ValueError("Invalid filter role")
+        if value == "(":
+            raise ValueError("Invalid filter pattern")
         return ({"text": ["hello world"]}, {})
 
     manager = SimpleNamespace(
-        get_filter=AsyncMock(return_value=({}, {})),
+        get_filter=AsyncMock(side_effect=get_filter),
         append_filter=AsyncMock(side_effect=append_filter),
         clear_filter=AsyncMock(return_value=({}, {})),
     )
@@ -272,6 +279,8 @@ async def test_session_commands_filter_show_append_and_clear():
     await commands.filter_rule(event, "abcdef123456 clear")
     await commands.filter_rule(event, "not-an-id")
     await commands.filter_rule(event, "abcdef123456 match role admin")
+    await commands.filter_rule(event, "abcdef123456 match text (")
+    await commands.filter_rule(event, "deadbeef0001")
     assert replies == [
         "session.filter.empty",
         "session.filter.empty",
@@ -283,8 +292,11 @@ async def test_session_commands_filter_show_append_and_clear():
         "session.filter.cleared",
         "session.filter.usage",
         "session.filter.invalid_role",
+        "session.filter.invalid_pattern",
+        "session.filter.missing",
     ]
-    manager.get_filter.assert_awaited_once_with(event, "abcdef123456")
+    manager.get_filter.assert_any_await(event, "abcdef123456")
+    manager.get_filter.assert_any_await(event, "deadbeef0001")
     manager.append_filter.assert_any_await(
         event, "abcdef123456", "match", "text", "hello world"
     )

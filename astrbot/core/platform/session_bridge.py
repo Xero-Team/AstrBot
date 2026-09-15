@@ -34,6 +34,7 @@ from .message_renderers import render_source_header
 from .message_session import MessageSession
 from .send_result import DeliveryAttempt, DeliveryReceipt, PlatformSendResult
 from .session_bridge_filter import (
+    FILTER_SIDES,
     append_filter_value,
     coerce_filter_side,
     compact_filter_side,
@@ -404,35 +405,41 @@ class SessionBridgeManager:
     ) -> tuple[dict, dict] | None:
         """Append one match or except value onto a directed edge."""
         stored = validate_filter_value(dimension, value)
-        row = await self._accessible_rule(event, rule_id)
-        if row is None:
-            return None
-        match = coerce_filter_side(row.match)
-        except_ = coerce_filter_side(row.except_)
-        if side == "match":
-            match = append_filter_value(match, dimension, stored)
-        elif side == "except":
-            except_ = append_filter_value(except_, dimension, stored)
-        else:
+        if side not in FILTER_SIDES:
             raise ValueError("Invalid filter arguments")
-        return await self._persist_filters(row, match, except_)
+        if await self._accessible_rule(event, rule_id) is None:
+            return None
+        async with self._lock:
+            fresh = await self._state.stored_rule(rule_id)
+            if fresh is None:
+                return None
+            match = coerce_filter_side(fresh.match)
+            except_ = coerce_filter_side(fresh.except_)
+            if side == "match":
+                match = append_filter_value(match, dimension, stored)
+            else:
+                except_ = append_filter_value(except_, dimension, stored)
+            return await self._commit_filters(fresh, match, except_)
 
     async def clear_filter(
         self, event: AstrMessageEvent, rule_id: str, side: str
     ) -> tuple[dict, dict] | None:
         """Clear match, except, or both sides of one edge."""
-        row = await self._accessible_rule(event, rule_id)
-        if row is None:
-            return None
-        match = coerce_filter_side(row.match)
-        except_ = coerce_filter_side(row.except_)
-        if side in {"match", "all"}:
-            match = {}
-        if side in {"except", "all"}:
-            except_ = {}
-        if side not in {"match", "except", "all"}:
+        if side not in {*FILTER_SIDES, "all"}:
             raise ValueError("Invalid filter arguments")
-        return await self._persist_filters(row, match, except_)
+        if await self._accessible_rule(event, rule_id) is None:
+            return None
+        async with self._lock:
+            fresh = await self._state.stored_rule(rule_id)
+            if fresh is None:
+                return None
+            match = coerce_filter_side(fresh.match)
+            except_ = coerce_filter_side(fresh.except_)
+            if side in {"match", "all"}:
+                match = {}
+            if side in {"except", "all"}:
+                except_ = {}
+            return await self._commit_filters(fresh, match, except_)
 
     async def _accessible_rule(
         self, event: AstrMessageEvent, rule_id: str
@@ -453,22 +460,23 @@ class SessionBridgeManager:
             raise PermissionError("Session operation is not authorized")
         return stored
 
-    async def _persist_filters(
+    async def _commit_filters(
         self,
         row: SessionBridgeRule,
         match: dict,
         except_: dict,
-    ) -> tuple[dict, dict]:
+    ) -> tuple[dict, dict] | None:
+        """Write compacted filters. Caller must hold ``self._lock``."""
         match = compact_filter_side(match)
         except_ = compact_filter_side(except_)
-        async with self._lock:
-            updated = await self._state.persist_filters(row.rule_id, match, except_)
-            stored = updated or row
-            grant = self._state.refresh_grant_filters(stored, match, except_)
-            if grant is not None:
-                self._state.arm_expiry(
-                    self._state.store_key(grant.watch), grant, self._expire_watch
-                )
+        updated = await self._state.persist_filters(row.rule_id, match, except_)
+        if updated is None:
+            return None
+        grant = self._state.refresh_grant_filters(updated, match, except_)
+        if grant is not None:
+            self._state.arm_expiry(
+                self._state.store_key(grant.watch), grant, self._expire_watch
+            )
         return match, except_
 
     def _watch_from_row(self, row: SessionBridgeRule) -> SessionWatch:

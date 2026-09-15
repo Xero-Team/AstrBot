@@ -267,6 +267,7 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "session_unpair",
         "session_links",
         "session_unlink",
+        "session_filter",
         "session_block",
         "session_unblock",
         "send_to_session",
@@ -1109,6 +1110,7 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
             "unpair",
             "links",
             "unlink",
+            "filter",
         },
         "conversation": {
             "create",
@@ -1179,6 +1181,7 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
         "session_unpair": "session.read",
         "session_links": "session.read",
         "session_unlink": "session.read",
+        "session_filter": "session.read",
         "session_block": "session.block",
         "session_unblock": "session.block",
         "send_to_session": "session.send",

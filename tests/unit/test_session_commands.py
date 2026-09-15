@@ -4,10 +4,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.builtin_stars.builtin_commands.commands.session import (
+    FilterSpec,
     SessionCommands,
+    parse_filter_spec,
     parse_pair_spec,
     parse_unlink_spec,
     parse_unpair_spec,
+    parse_watch_spec,
 )
 from astrbot.core.auth.models import AuthContext, Resource, Subject
 from astrbot.core.platform.route_identity import PlatformRouteIdentity
@@ -211,3 +214,78 @@ async def test_session_commands_watch_connect_report_pair_occupied():
     await commands.watch(event, "target:GroupMessage:room")
     await commands.connect(event, "target:GroupMessage:room")
     assert replies == ["session.watch.occupied", "session.connect.occupied"]
+
+
+def test_parse_watch_spec_rejects_filter_flags():
+    current = "source:FriendMessage:sender"
+    with pytest.raises(ValueError, match="Invalid watch arguments"):
+        parse_watch_spec("target:GroupMessage:room match text hello", current)
+
+
+def test_parse_filter_spec_show_append_and_clear():
+    assert parse_filter_spec("abcdef123456") == FilterSpec("abcdef123456", "show")
+    assert parse_filter_spec("abcdef123456 clear") == FilterSpec(
+        "abcdef123456", "clear", "all"
+    )
+    assert parse_filter_spec("abcdef123456 clear match") == FilterSpec(
+        "abcdef123456", "clear", "match"
+    )
+    assert parse_filter_spec("abcdef123456 match text hello world") == FilterSpec(
+        "abcdef123456", "append", "match", "text", "hello world"
+    )
+    assert parse_filter_spec("abcdef123456 except role member") == FilterSpec(
+        "abcdef123456", "append", "except", "roles", "member"
+    )
+    with pytest.raises(ValueError):
+        parse_filter_spec("abcdef123456 match role member extra")
+    with pytest.raises(ValueError):
+        parse_filter_spec("ABCDEF123456")
+
+
+@pytest.mark.asyncio
+async def test_session_commands_filter_show_append_and_clear():
+    replies: list[str] = []
+
+    async def append_filter(_event, _rule_id, _side, _dimension, value):
+        if value == "admin":
+            raise ValueError("Invalid filter role")
+        return ({"text": ["hello world"]}, {})
+
+    manager = SimpleNamespace(
+        get_filter=AsyncMock(return_value=({}, {})),
+        append_filter=AsyncMock(side_effect=append_filter),
+        clear_filter=AsyncMock(return_value=({}, {})),
+    )
+
+    async def translate(_event, key, **_kwargs):
+        replies.append(key)
+        return key
+
+    context = SimpleNamespace(
+        bridges=SimpleNamespace(_manager=manager),
+        i18n=SimpleNamespace(t=translate),
+    )
+    commands = SessionCommands(context)
+    event = _event()
+    await commands.filter_rule(event, "abcdef123456")
+    await commands.filter_rule(event, "abcdef123456 match text hello world")
+    await commands.filter_rule(event, "abcdef123456 clear")
+    await commands.filter_rule(event, "not-an-id")
+    await commands.filter_rule(event, "abcdef123456 match role admin")
+    assert replies == [
+        "session.filter.empty",
+        "session.filter.empty",
+        "session.filter.body",
+        "session.filter.empty",
+        "session.filter.updated",
+        "session.filter.empty",
+        "session.filter.empty",
+        "session.filter.cleared",
+        "session.filter.usage",
+        "session.filter.invalid_role",
+    ]
+    manager.get_filter.assert_awaited_once_with(event, "abcdef123456")
+    manager.append_filter.assert_any_await(
+        event, "abcdef123456", "match", "text", "hello world"
+    )
+    manager.clear_filter.assert_awaited_once_with(event, "abcdef123456", "all")

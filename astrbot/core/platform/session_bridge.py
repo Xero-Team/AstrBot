@@ -11,7 +11,13 @@ from time import time
 from typing import TYPE_CHECKING
 
 from astrbot import logger
-from astrbot.core.auth.models import AuthContext, Resource, Role, Subject
+from astrbot.core.auth.models import (
+    AuthContext,
+    AuthorizationValueError,
+    Resource,
+    Role,
+    Subject,
+)
 from astrbot.core.message.message_event_result import MessageChain
 
 from .message_delivery import plan_message_delivery
@@ -27,6 +33,15 @@ from .message_protocol import (
 from .message_renderers import render_source_header
 from .message_session import MessageSession
 from .send_result import DeliveryAttempt, DeliveryReceipt, PlatformSendResult
+from .session_bridge_filter import (
+    append_filter_value,
+    coerce_filter_side,
+    compact_filter_side,
+    evaluate_filter,
+    has_filter_constraints,
+    portable_text,
+    validate_filter_value,
+)
 from .session_bridge_state import (
     PAIR_AMBIGUOUS,
     PAIR_OCCUPIED,
@@ -68,6 +83,7 @@ class SessionBridgeManager:
         get_callback_base: Callable[[str], str] | None = None,
         get_locale: Callable[[str], Awaitable[str]] | None = None,
         get_platform_family: Callable[[str], str] | None = None,
+        get_self_id: Callable[[str], str | None] | None = None,
         store: SessionBridgeStore,
         default_ttl_seconds: int = DEFAULT_WATCH_TTL_SECONDS,
         max_watches_per_subject: int = 16,
@@ -81,6 +97,7 @@ class SessionBridgeManager:
         self._get_callback_base = get_callback_base
         self._get_locale = get_locale
         self._get_platform_family = get_platform_family
+        self._get_self_id = get_self_id
         self._default_ttl_seconds = min(
             MAX_WATCH_TTL_SECONDS, max(MIN_WATCH_TTL_SECONDS, default_ttl_seconds)
         )
@@ -368,6 +385,92 @@ class SessionBridgeManager:
             await self._state.delete_rule(rule_id)
         return True
 
+    async def get_filter(
+        self, event: AstrMessageEvent, rule_id: str
+    ) -> tuple[dict, dict] | None:
+        """Return match/except for a rule visible like ``list_links``."""
+        row = await self._accessible_rule(event, rule_id)
+        if row is None:
+            return None
+        return coerce_filter_side(row.match), coerce_filter_side(row.except_)
+
+    async def append_filter(
+        self,
+        event: AstrMessageEvent,
+        rule_id: str,
+        side: str,
+        dimension: str,
+        value: str,
+    ) -> tuple[dict, dict] | None:
+        """Append one match or except value onto a directed edge."""
+        stored = validate_filter_value(dimension, value)
+        row = await self._accessible_rule(event, rule_id)
+        if row is None:
+            return None
+        match = coerce_filter_side(row.match)
+        except_ = coerce_filter_side(row.except_)
+        if side == "match":
+            match = append_filter_value(match, dimension, stored)
+        elif side == "except":
+            except_ = append_filter_value(except_, dimension, stored)
+        else:
+            raise ValueError("Invalid filter arguments")
+        return await self._persist_filters(row, match, except_)
+
+    async def clear_filter(
+        self, event: AstrMessageEvent, rule_id: str, side: str
+    ) -> tuple[dict, dict] | None:
+        """Clear match, except, or both sides of one edge."""
+        row = await self._accessible_rule(event, rule_id)
+        if row is None:
+            return None
+        match = coerce_filter_side(row.match)
+        except_ = coerce_filter_side(row.except_)
+        if side in {"match", "all"}:
+            match = {}
+        if side in {"except", "all"}:
+            except_ = {}
+        if side not in {"match", "except", "all"}:
+            raise ValueError("Invalid filter arguments")
+        return await self._persist_filters(row, match, except_)
+
+    async def _accessible_rule(
+        self, event: AstrMessageEvent, rule_id: str
+    ) -> SessionBridgeRule | None:
+        stored = await self._state.stored_rule(rule_id)
+        if stored is None:
+            return None
+        subject, _ = self._actor(event)
+        if stored.subject_id == subject.id:
+            return stored
+        role = await self._operator_role(event)
+        current_config = self._config_id(event.unified_msg_origin)
+        allowed = role in {Role.ROOT, Role.OPERATOR} or (
+            role is Role.INSTANCE_OPERATOR
+            and current_config in {stored.source_config_id, stored.target_config_id}
+        )
+        if not allowed:
+            raise PermissionError("Session operation is not authorized")
+        return stored
+
+    async def _persist_filters(
+        self,
+        row: SessionBridgeRule,
+        match: dict,
+        except_: dict,
+    ) -> tuple[dict, dict]:
+        match = compact_filter_side(match)
+        except_ = compact_filter_side(except_)
+        async with self._lock:
+            updated = await self._state.persist_filters(row.rule_id, match, except_)
+            stored = updated or row
+            grant = self._state.refresh_grant_filters(stored, match, except_)
+            if grant is not None:
+                self._state.arm_expiry(
+                    self._state.store_key(grant.watch), grant, self._expire_watch
+                )
+        return match, except_
+
     def _watch_from_row(self, row: SessionBridgeRule) -> SessionWatch:
         expires_at = None if row.expires_at is None else float(row.expires_at)
         return SessionWatch(
@@ -466,6 +569,8 @@ class SessionBridgeManager:
                 await self._authorize(
                     grant.subject, grant.context, watch.target_umo, "session.watch"
                 )
+                if not await self._passes_filter(grant, envelope):
+                    continue
                 async with self._lock:
                     if not self._grant_active(key, grant, time()):
                         continue
@@ -509,6 +614,82 @@ class SessionBridgeManager:
             except Exception:
                 # Transport exceptions may contain credentials or private URLs.
                 logger.warning("Session bridge delivery failed")
+
+    async def _passes_filter(
+        self, grant: WatchGrant, envelope: MessageEnvelope
+    ) -> bool:
+        match = coerce_filter_side(grant.match)
+        except_ = coerce_filter_side(grant.except_)
+        if not has_filter_constraints(match) and not has_filter_constraints(except_):
+            return True
+        needs_subjects = bool(match.get("subjects") or except_.get("subjects"))
+        needs_roles = bool(match.get("roles") or except_.get("roles"))
+        subject_id = self._sender_subject_id(envelope) if needs_subjects else None
+        role = Role.GUEST.value
+        if needs_roles:
+            role = (await self._sender_role(envelope)).value
+        return evaluate_filter(
+            match,
+            except_,
+            subject_id=subject_id,
+            has_sender=envelope.sender is not None,
+            role=role,
+            text=portable_text(envelope.content),
+        )
+
+    def _bot_account_id(self, envelope: MessageEnvelope) -> str:
+        metadata_id = envelope.metadata.get("bot_account_id")
+        if isinstance(metadata_id, str) and metadata_id:
+            return metadata_id
+        if self._get_self_id is None:
+            return ""
+        return self._get_self_id(envelope.source_route.platform_id) or ""
+
+    def _sender_subject_id(self, envelope: MessageEnvelope) -> str | None:
+        if envelope.sender is None:
+            return None
+        bot_account_id = self._bot_account_id(envelope)
+        if not bot_account_id:
+            return None
+        try:
+            return Subject.im(
+                platform_instance=envelope.source_route.platform_id,
+                bot_account_id=bot_account_id,
+                sender_id=envelope.sender.id,
+            ).id
+        except AuthorizationValueError, ValueError:
+            return None
+
+    async def _sender_role(self, envelope: MessageEnvelope) -> Role:
+        subject_id = self._sender_subject_id(envelope)
+        if (
+            subject_id is None
+            or self._authorization is None
+            or self._get_config_id is None
+        ):
+            return Role.GUEST
+        try:
+            subject = Subject.from_id(subject_id)
+            origin = envelope.source_umo
+            config_id = self._config_id(origin)
+            resource = Resource.session(config_id, origin)
+            context = AuthContext(
+                subject=subject,
+                source="im",
+                config_id=config_id,
+                authenticated=True,
+                origin_session_resource_id=resource.id,
+            )
+            decision = await self._authorization.authorize(
+                subject, "session.read", resource, context
+            )
+        except AuthorizationValueError, PermissionError, ValueError:
+            return Role.GUEST
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return Role.GUEST
+        return decision.effective_role or Role.GUEST
 
     def _platform_family(self, umo: str) -> str:
         if self._get_platform_family is None:

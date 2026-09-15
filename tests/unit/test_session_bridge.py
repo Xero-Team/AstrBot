@@ -1210,3 +1210,252 @@ async def test_pair_insert_failure_keeps_replaced_watch():
     assert [item.rule_id for item in listed] == [watch.rule_id]
     assert await store.get_session_bridge_rule(watch.rule_id) is not None
     await manager.terminate()
+
+
+_OBSERVE_SEQ = 0
+
+
+def _observed_envelope(*, sender="1", content=None, metadata=None, message_id=""):
+    global _OBSERVE_SEQ
+    _OBSERVE_SEQ += 1
+    return MessageEnvelope(
+        PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
+        source_message_id=message_id or f"msg-{_OBSERVE_SEQ}",
+        sender=None if sender is None else SenderSnapshot(sender, "Alice", "napcat"),
+        content=content or (PortablePart(ContentKind.TEXT, "hello from room"),),
+        metadata=metadata or {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_empty_filter_forwards_human_messages():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain.get_plain_text())
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_observed_envelope())
+    assert any("hello from room" in item for item in sent)
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_observe_match_except_subjects_roles_text_and_media():
+    from astrbot.core.platform.message_protocol import MediaReference
+
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain.get_plain_text())
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    async def authorize(subject, action, resource, context):
+        if action == "session.read":
+            role = Role.MEMBER if subject.id.endswith(":1") else Role.GUEST
+            return SimpleNamespace(allowed=True, effective_role=role)
+        return SimpleNamespace(allowed=True, effective_role=Role.INSTANCE_OPERATOR)
+
+    manager, authorization, _ = _manager(send)
+    authorization.authorize = AsyncMock(side_effect=authorize)
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    subject_id = Subject.im(
+        platform_instance="target", bot_account_id="bot", sender_id="1"
+    ).id
+    assert await manager.append_filter(
+        event, watch.rule_id, "match", "subjects", subject_id
+    )
+    sent.clear()
+    await manager.observe(_observed_envelope(sender="2"))
+    assert sent == []
+    await manager.observe(_observed_envelope(sender="1"))
+    assert any("hello from room" in item for item in sent)
+    await manager.append_filter(event, watch.rule_id, "except", "text", "hello")
+    sent.clear()
+    await manager.observe(_observed_envelope(sender="1"))
+    assert sent == []
+    await manager.clear_filter(event, watch.rule_id, "all")
+    await manager.append_filter(event, watch.rule_id, "match", "roles", "member")
+    sent.clear()
+    await manager.observe(_observed_envelope(sender="1"))
+    assert any("hello from room" in item for item in sent)
+    await manager.observe(_observed_envelope(sender="9"))
+    assert len([item for item in sent if "hello from room" in item]) == 1
+    read_calls = [
+        call
+        for call in authorization.authorize.await_args_list
+        if call.args[1] == "session.read"
+    ]
+    assert read_calls
+    assert read_calls[0].args[3].platform_member_role == "unknown"
+    await manager.clear_filter(event, watch.rule_id, "all")
+    await manager.append_filter(event, watch.rule_id, "match", "text", "hello")
+    sent.clear()
+    await manager.observe(
+        _observed_envelope(
+            content=(PortablePart(ContentKind.IMAGE, MediaReference("file:///x.jpg")),)
+        )
+    )
+    assert sent == []
+    await manager.clear_filter(event, watch.rule_id, "match")
+    await manager.append_filter(event, watch.rule_id, "except", "text", "hello")
+    sent.clear()
+    await manager.observe(
+        _observed_envelope(
+            content=(PortablePart(ContentKind.IMAGE, MediaReference("file:///x.jpg")),)
+        )
+    )
+    assert sent
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_filter_uses_adapter_self_id_not_default():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain.get_plain_text())
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send)
+    manager._get_self_id = lambda _: "real-bot"
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    default_id = Subject.im(
+        platform_instance="target", bot_account_id="default", sender_id="1"
+    ).id
+    real_id = Subject.im(
+        platform_instance="target", bot_account_id="real-bot", sender_id="1"
+    ).id
+    await manager.append_filter(event, watch.rule_id, "match", "subjects", default_id)
+    await manager.observe(_observed_envelope())
+    assert sent == []
+    await manager.clear_filter(event, watch.rule_id, "match")
+    await manager.append_filter(event, watch.rule_id, "match", "subjects", real_id)
+    await manager.observe(_observed_envelope(metadata={"bot_account_id": "real-bot"}))
+    assert any("hello from room" in item for item in sent)
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_filter_missing_sender_and_pair_edges_independent():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(1)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    store = FakeSessionBridgeStore()
+    manager, _, _ = _manager(send, store=store)
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    subject_id = Subject.im(
+        platform_instance="target", bot_account_id="bot", sender_id="1"
+    ).id
+    await manager.append_filter(event, watch.rule_id, "match", "subjects", subject_id)
+    await manager.observe(_observed_envelope(sender=None))
+    assert sent == []
+    await manager.clear_filter(event, watch.rule_id, "match")
+    await manager.append_filter(event, watch.rule_id, "except", "subjects", subject_id)
+    await manager.observe(_observed_envelope(sender=None))
+    assert sent
+    left = store.seed(
+        rule_id="pairleft00001",
+        subject_id=event.subject.id,
+        source_umo="pair:FriendMessage:left",
+        target_umo="pair:FriendMessage:right",
+        source_config_id="default",
+        target_config_id="default",
+        kind="pair",
+        expires_at=None,
+        pair_id="pairid000001",
+    )
+    right = store.seed(
+        rule_id="pairright0001",
+        subject_id=event.subject.id,
+        source_umo="pair:FriendMessage:right",
+        target_umo="pair:FriendMessage:left",
+        source_config_id="default",
+        target_config_id="default",
+        kind="pair",
+        expires_at=None,
+        pair_id="pairid000001",
+    )
+    await manager.append_filter(event, left.rule_id, "match", "text", "alpha")
+    await manager.append_filter(event, right.rule_id, "except", "text", "beta")
+    left_match, left_except = await manager.get_filter(event, left.rule_id)
+    right_match, right_except = await manager.get_filter(event, right.rule_id)
+    assert left_match == {"text": ["alpha"]}
+    assert left_except == {}
+    assert right_match == {}
+    assert right_except == {"text": ["beta"]}
+    with pytest.raises(ValueError, match="Invalid filter pattern"):
+        await manager.append_filter(event, watch.rule_id, "match", "text", "(")
+    await manager.clear_filter(event, watch.rule_id, "all")
+    for index in range(16):
+        await manager.append_filter(
+            event, watch.rule_id, "match", "subjects", f"im:target:bot:{index}"
+        )
+    with pytest.raises(ValueError, match="Filter limit exceeded"):
+        await manager.append_filter(
+            event, watch.rule_id, "match", "subjects", "im:target:bot:16"
+        )
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_filter_allows_creator_after_revoke_and_scopes_instance_operator():
+    owner = _event()
+    other = _event(sender="other")
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="ownwatch00001",
+        subject_id=owner.subject.id,
+        source_umo=owner.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time()) + 60,
+    )
+    store.seed(
+        rule_id="foreignwatch01",
+        subject_id=other.subject.id,
+        source_umo="alt:FriendMessage:x",
+        target_umo="alt:GroupMessage:y",
+        source_config_id="othercfg",
+        target_config_id="othercfg",
+        kind="watch",
+        expires_at=int(time()) + 60,
+    )
+    manager, authorization, _ = _manager(store=store)
+    authorization.authorize = AsyncMock(
+        return_value=SimpleNamespace(allowed=False, effective_role=None)
+    )
+    assert await manager.append_filter(owner, "ownwatch00001", "match", "text", "keep")
+    assert await manager.get_filter(owner, "missingrule01") is None
+    store.seed(
+        rule_id="samecfgwatch01",
+        subject_id=other.subject.id,
+        source_umo="ops:FriendMessage:box",
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="ops",
+        kind="connect",
+        expires_at=None,
+    )
+    authorization.authorize = AsyncMock(
+        return_value=SimpleNamespace(
+            allowed=True, effective_role=Role.INSTANCE_OPERATOR
+        )
+    )
+    assert await manager.append_filter(
+        owner, "samecfgwatch01", "except", "roles", "guest"
+    )
+    with pytest.raises(PermissionError):
+        await manager.append_filter(owner, "foreignwatch01", "match", "text", "no")
+    await manager.terminate()

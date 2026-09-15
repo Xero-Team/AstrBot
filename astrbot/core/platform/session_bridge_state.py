@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import secrets
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from time import time
 from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.core.auth.models import AuthContext, Subject
+from astrbot.core.platform.session_bridge_filter import coerce_filter_side
 
 if TYPE_CHECKING:
     from astrbot.core.db.po.session_bridge import SessionBridgeRule
@@ -79,6 +80,8 @@ class WatchGrant:
     target_config_id: str
     header: bool = True
     pair_id: str | None = None
+    match: dict = field(default_factory=dict)
+    except_: dict = field(default_factory=dict)
 
 
 ExpireWatch = Callable[[GrantKey, WatchGrant], Coroutine[object, object, None]]
@@ -444,6 +447,14 @@ class SessionBridgeState:
     async def discard_stored_rule(self, rule_id: str) -> None:
         await self._store.delete_session_bridge_rule(rule_id)
 
+    async def persist_filters(
+        self, rule_id: str, match: dict, except_: dict
+    ) -> SessionBridgeRule | None:
+        """Replace match and except documents on one stored edge."""
+        return await self._store.update_session_bridge_rule(
+            rule_id, match=match, except_=except_
+        )
+
     async def persist_config_ids(
         self,
         row: SessionBridgeRule,
@@ -497,7 +508,21 @@ class SessionBridgeState:
             row.target_config_id,
             row.header,
             row.pair_id,
+            coerce_filter_side(row.match),
+            coerce_filter_side(row.except_),
         )
+
+    def refresh_grant_filters(
+        self, row: SessionBridgeRule, match: dict, except_: dict
+    ) -> WatchGrant | None:
+        """Replace live match/except without dropping the grant identity map."""
+        key = (row.subject_id, row.source_umo, row.target_umo)
+        grant = self._grants.get(key)
+        if grant is None or grant.watch.rule_id != row.rule_id:
+            return None
+        updated = replace(grant, match=match, except_=except_)
+        self._index(updated)
+        return updated
 
     def _index(self, grant: WatchGrant) -> None:
         key = self.store_key(grant.watch)

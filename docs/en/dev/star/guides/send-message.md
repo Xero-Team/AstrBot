@@ -89,7 +89,7 @@ links, and pairs persist in SQLite, so unexpired rules survive process
 restart. `remaining_seconds` uses the wall clock; unbounded links return `0`.
 Do not construct `SessionBridgeManager` yourself. Import `SessionWatch` and
 the duration constants from `astrbot.api.platform`. `links` / `unlink` /
-`pair` / `unpair` are IM commands only in this stage;
+`pair` / `unpair` / `filter` are IM commands only in this stage;
 `SessionBridgeCapability` does not expose them. A pair is two headerless
 directed edges that share a `pair_id`: the far side sees the destination Bot
 account, the source platform identity is not forged, `/send` is not bound,

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from astrbot.api import Subject, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.platform import (
@@ -8,6 +10,20 @@ from astrbot.api.platform import (
 
 from .reply import reply_i18n
 from .target import resolve_target_umo
+
+_RULE_ID_CHARS = frozenset("0123456789abcdef")
+_FILTER_SIDES = frozenset({"match", "except"})
+_COMMAND_DIMENSIONS = {
+    "subject": "subjects",
+    "role": "roles",
+    "text": "text",
+}
+
+
+def _parse_rule_id(token: str) -> str:
+    if len(token) != 12 or any(char not in _RULE_ID_CHARS for char in token):
+        raise ValueError("Invalid filter arguments")
+    return token
 
 
 def _resolve_listener(token: str, current_umo: str) -> str:
@@ -55,10 +71,55 @@ def parse_unlink_spec(spec: str) -> str:
     parts = spec.split()
     if len(parts) != 1:
         raise ValueError("Invalid unlink arguments")
-    rule_id = parts[0]
-    if len(rule_id) != 12 or any(char not in "0123456789abcdef" for char in rule_id):
-        raise ValueError("Invalid unlink arguments")
-    return rule_id
+    try:
+        return _parse_rule_id(parts[0])
+    except ValueError:
+        raise ValueError("Invalid unlink arguments") from None
+
+
+@dataclass(frozen=True, slots=True)
+class FilterSpec:
+    """Parsed `/session filter` arguments."""
+
+    rule_id: str
+    action: str
+    side: str = ""
+    dimension: str = ""
+    value: str = ""
+
+
+def parse_filter_spec(spec: str) -> FilterSpec:
+    """Parse `/session filter <rule_id> [match|except|clear ...]`.
+
+    ``text`` consumes the remainder as ``GreedyStr``. ``clear`` without a
+    side equals ``all``.
+    """
+    stripped = spec.strip()
+    if not stripped:
+        raise ValueError("Invalid filter arguments")
+    parts = stripped.split()
+    rule_id = _parse_rule_id(parts[0])
+    if len(parts) == 1:
+        return FilterSpec(rule_id, "show")
+    if parts[1] == "clear":
+        if len(parts) == 2:
+            return FilterSpec(rule_id, "clear", "all")
+        if len(parts) == 3 and parts[2] in {"match", "except", "all"}:
+            return FilterSpec(rule_id, "clear", parts[2])
+        raise ValueError("Invalid filter arguments")
+    if parts[1] not in _FILTER_SIDES or len(parts) < 4:
+        raise ValueError("Invalid filter arguments")
+    command_dimension = parts[2]
+    dimension = _COMMAND_DIMENSIONS.get(command_dimension)
+    if dimension is None:
+        raise ValueError("Invalid filter arguments")
+    if command_dimension == "text":
+        value = stripped.split(None, 3)[3]
+    elif len(parts) == 4:
+        value = parts[3]
+    else:
+        raise ValueError("Invalid filter arguments")
+    return FilterSpec(rule_id, "append", parts[1], dimension, value)
 
 
 def parse_pair_spec(spec: str) -> str:
@@ -474,6 +535,69 @@ class SessionCommands:
             self.context,
             event,
             "session.unpair.ok" if removed else "session.unpair.missing",
+        )
+
+    async def _format_filter_side(self, event: AstrMessageEvent, payload: dict) -> str:
+        lines = []
+        for key in ("subjects", "roles", "text"):
+            values = payload.get(key) or []
+            if values:
+                lines.append(f"  {key}: {', '.join(values)}")
+        if lines:
+            return "\n".join(lines)
+        return await self.context.i18n.t(event, "session.filter.empty")
+
+    async def filter_rule(self, event: AstrMessageEvent, spec: str) -> None:
+        """Show or change match/except filters on one directed edge."""
+        try:
+            parsed = parse_filter_spec(spec)
+            manager = self.context.bridges._manager
+            if parsed.action == "show":
+                result = await manager.get_filter(event, parsed.rule_id)
+            elif parsed.action == "clear":
+                result = await manager.clear_filter(event, parsed.rule_id, parsed.side)
+            else:
+                result = await manager.append_filter(
+                    event,
+                    parsed.rule_id,
+                    parsed.side,
+                    parsed.dimension,
+                    parsed.value,
+                )
+        except PermissionError:
+            await reply_i18n(self.context, event, "session.bridge.denied")
+            return
+        except ValueError as exc:
+            message = str(exc)
+            if message == "Invalid filter role":
+                await reply_i18n(self.context, event, "session.filter.invalid_role")
+                return
+            if message == "Invalid filter pattern":
+                await reply_i18n(self.context, event, "session.filter.invalid_pattern")
+                return
+            if message == "Filter limit exceeded":
+                await reply_i18n(self.context, event, "session.filter.limit")
+                return
+            await reply_i18n(self.context, event, "session.filter.usage")
+            return
+        if result is None:
+            await reply_i18n(self.context, event, "session.filter.missing")
+            return
+        match, except_ = result
+        match_text = await self._format_filter_side(event, match)
+        except_text = await self._format_filter_side(event, except_)
+        key = "session.filter.body"
+        if parsed.action == "clear":
+            key = "session.filter.cleared"
+        elif parsed.action == "append":
+            key = "session.filter.updated"
+        await reply_i18n(
+            self.context,
+            event,
+            key,
+            rule_id=parsed.rule_id,
+            match=match_text,
+            except_=except_text,
         )
 
     async def disconnect(self, event: AstrMessageEvent) -> None:

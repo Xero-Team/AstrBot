@@ -32,7 +32,7 @@
     "session.pair.usage": "Usage: /session pair <UMO>. Extra tokens such as a duration are not accepted.",
     "session.pair.ttl_invalid": "Pair does not accept a duration. Use /session watch for timed forwarding.",
     "session.pair.failed": "Cannot pair. Both sessions must be loaded and able to send, and the pair limit is 8.",
-    "session.pair.ok": "Paired with {umo}. Human messages are forwarded as this Bot with no source header. /send is unchanged. pair_id {pair_id}; rule_id {rule_ids}.",
+    "session.pair.ok": "Paired with {umo}. Human messages are forwarded as the destination Bot with no source header. /send is unchanged. pair_id {pair_id}; rule_id {rule_ids}.",
     "session.unpair.usage": "Usage: /session unpair [UMO]. Omit the UMO only when this session has exactly one pair.",
     "session.unpair.ok": "Removed both pair edges.",
     "session.unpair.missing": "No pair in this session.",

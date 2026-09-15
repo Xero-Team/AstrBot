@@ -32,7 +32,7 @@
     "session.pair.usage": "用法：/session pair <UMO>。不接受秒数或其他额外参数。",
     "session.pair.ttl_invalid": "pair 不接受秒数。限时转发请用 /session watch。",
     "session.pair.failed": "无法配对。两端适配器都必须已加载且可主动发送，每主体最多 8 对。",
-    "session.pair.ok": "已与 {umo} 配对。只转发真人消息，对岸看到的是本侧 Bot 账号，无来源头。不改变 /send。pair_id {pair_id}；rule_id {rule_ids}。",
+    "session.pair.ok": "已与 {umo} 配对。只转发真人消息，对岸看到的是目标侧 Bot 账号，无来源头。不改变 /send。pair_id {pair_id}；rule_id {rule_ids}。",
     "session.unpair.usage": "用法：/session unpair [UMO]。当前会话恰好只有一对时可省略 UMO。",
     "session.unpair.ok": "已删除该 pair 的两条边。",
     "session.unpair.missing": "当前会话没有 pair。",

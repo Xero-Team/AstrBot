@@ -90,6 +90,96 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
             "Unable to allocate a session bridge rule id"
         ) from last_error
 
+    async def insert_session_bridge_pair(
+        self,
+        *,
+        subject_id: str,
+        source_umo: str,
+        target_umo: str,
+        source_config_id: str,
+        target_config_id: str,
+        pair_id: str,
+        drop_rule_ids: tuple[str, ...] = (),
+    ) -> tuple[SessionBridgeRule, SessionBridgeRule]:
+        """Replace optional occupying edges and insert both pair rows atomically.
+
+        Args:
+            subject_id: Authorization subject that owns both edges.
+            source_umo: Listening session for the forward edge.
+            target_umo: Observed session for the forward edge.
+            source_config_id: Config id of the forward listening session.
+            target_config_id: Config id of the forward observed session.
+            pair_id: Shared 12-hex id written on both edges.
+            drop_rule_ids: Existing rule ids on those two directions to delete
+                in the same transaction.
+
+        Returns:
+            The inserted forward and reverse rows.
+
+        Raises:
+            IntegrityError: Direction uniqueness failed after the drops.
+            RuntimeError: A pair of ids could not be allocated after retries.
+        """
+        unique_drops = tuple(dict.fromkeys(drop_rule_ids))
+        last_error: IntegrityError | None = None
+        for _ in range(_RULE_ID_ATTEMPTS):
+            left_id = secrets.token_hex(6)
+            right_id = secrets.token_hex(6)
+            if left_id == right_id:
+                continue
+            try:
+                async with store_session(self) as session:
+                    session: AsyncSession
+                    async with session.begin():
+                        if unique_drops:
+                            await session.execute(
+                                delete(SessionBridgeRule).where(
+                                    col(SessionBridgeRule.rule_id).in_(unique_drops)
+                                )
+                            )
+                        left = SessionBridgeRule(
+                            rule_id=left_id,
+                            subject_id=subject_id,
+                            source_umo=source_umo,
+                            target_umo=target_umo,
+                            source_config_id=source_config_id,
+                            target_config_id=target_config_id,
+                            kind="pair",
+                            expires_at=None,
+                            header=False,
+                            pair_id=pair_id,
+                            match={},
+                            except_={},
+                        )
+                        right = SessionBridgeRule(
+                            rule_id=right_id,
+                            subject_id=subject_id,
+                            source_umo=target_umo,
+                            target_umo=source_umo,
+                            source_config_id=target_config_id,
+                            target_config_id=source_config_id,
+                            kind="pair",
+                            expires_at=None,
+                            header=False,
+                            pair_id=pair_id,
+                            match={},
+                            except_={},
+                        )
+                        session.add(left)
+                        session.add(right)
+                        await session.flush()
+                        await session.refresh(left)
+                        await session.refresh(right)
+                        return left, right
+            except IntegrityError as exc:
+                last_error = exc
+                orig = str(getattr(exc, "orig", exc))
+                if "rule_id" not in orig:
+                    raise
+        raise RuntimeError(
+            "Unable to allocate a session bridge rule id"
+        ) from last_error
+
     async def get_session_bridge_rule(self, rule_id: str) -> SessionBridgeRule | None:
         """Return one rule by public id."""
         async with store_session(self) as session:

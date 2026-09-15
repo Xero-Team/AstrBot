@@ -35,6 +35,7 @@ from .session_bridge_state import (
     SessionBridgeState,
     SessionWatch,
     WatchGrant,
+    incomplete_pair_rule_ids,
 )
 
 MIN_WATCH_TTL_SECONDS = 1
@@ -315,7 +316,7 @@ class SessionBridgeManager:
     async def list_links(
         self, event: AstrMessageEvent
     ) -> tuple[tuple[SessionWatch, str], ...]:
-        """List watch/connect edges visible to the current actor."""
+        """List watch, connect, and pair edges visible to the current actor."""
         subject, _ = self._actor(event)
         role = await self._operator_role(event)
         current_config = self._config_id(event.unified_msg_origin)
@@ -710,8 +711,12 @@ class SessionBridgeManager:
         rows = await self._state.list_stored_rules()
         now = time()
         expired: list[WatchGrant] = []
+        orphan_ids = incomplete_pair_rule_ids(rows)
         async with self._lock:
             for row in rows:
+                if row.rule_id in orphan_ids:
+                    await self._state.discard_stored_rule(row.rule_id)
+                    continue
                 if row.kind not in {"watch", "connect", "pair"}:
                     continue
                 if (

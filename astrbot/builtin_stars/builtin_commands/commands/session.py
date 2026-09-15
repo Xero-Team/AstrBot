@@ -373,7 +373,7 @@ class SessionCommands:
         )
 
     async def links(self, event: AstrMessageEvent) -> None:
-        """List watch/connect edges visible to the current actor."""
+        """List watch, connect, and pair edges visible to the current actor."""
         try:
             items = await self.context.bridges._manager.list_links(event)
         except PermissionError:

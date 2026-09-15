@@ -167,7 +167,7 @@ class Main(star.Star):
     @filter.permission("session.read")
     @session.command("links")
     async def session_links(self, event: AstrMessageEvent) -> None:
-        """List visible session-bridge watch and connect rules."""
+        """List visible session-bridge watch, connect, and pair rules."""
         await self.session_c.links(event)
 
     @filter.permission("session.read")

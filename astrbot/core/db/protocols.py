@@ -934,6 +934,19 @@ class SessionBridgeStore(Protocol):
     ) -> SessionBridgeRule:
         return T.cast("SessionBridgeRule", None)
 
+    async def insert_session_bridge_pair(
+        self,
+        *,
+        subject_id: str,
+        source_umo: str,
+        target_umo: str,
+        source_config_id: str,
+        target_config_id: str,
+        pair_id: str,
+        drop_rule_ids: tuple[str, ...] = (),
+    ) -> tuple[SessionBridgeRule, SessionBridgeRule]:
+        return T.cast("tuple[SessionBridgeRule, SessionBridgeRule]", (None, None))
+
     async def get_session_bridge_rule(self, rule_id: str) -> SessionBridgeRule | None:
         return None
 

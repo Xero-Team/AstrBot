@@ -59,6 +59,7 @@ class FakeSessionBridgeStore:
     def __init__(self) -> None:
         self.rows: dict[str, SimpleNamespace] = {}
         self.by_direction: dict[tuple[str, str, str], str] = {}
+        self.fail_pair_insert = False
 
     def seed(self, **fields) -> SimpleNamespace:
         payload = {
@@ -96,6 +97,45 @@ class FakeSessionBridgeStore:
             match=kwargs.get("match") or {},
             except_=kwargs.get("except_") or {},
         )
+
+    async def insert_session_bridge_pair(
+        self, **kwargs
+    ) -> tuple[SimpleNamespace, SimpleNamespace]:
+        if self.fail_pair_insert:
+            raise RuntimeError("pair insert")
+        snapshot_rows = dict(self.rows)
+        snapshot_dir = dict(self.by_direction)
+        try:
+            for rule_id in kwargs.get("drop_rule_ids") or ():
+                await self.delete_session_bridge_rule(rule_id)
+            pair_id = kwargs["pair_id"]
+            left = await self.insert_session_bridge_rule(
+                subject_id=kwargs["subject_id"],
+                source_umo=kwargs["source_umo"],
+                target_umo=kwargs["target_umo"],
+                source_config_id=kwargs["source_config_id"],
+                target_config_id=kwargs["target_config_id"],
+                kind="pair",
+                expires_at=None,
+                header=False,
+                pair_id=pair_id,
+            )
+            right = await self.insert_session_bridge_rule(
+                subject_id=kwargs["subject_id"],
+                source_umo=kwargs["target_umo"],
+                target_umo=kwargs["source_umo"],
+                source_config_id=kwargs["target_config_id"],
+                target_config_id=kwargs["source_config_id"],
+                kind="pair",
+                expires_at=None,
+                header=False,
+                pair_id=pair_id,
+            )
+            return left, right
+        except Exception:
+            self.rows = snapshot_rows
+            self.by_direction = snapshot_dir
+            raise
 
     async def get_session_bridge_rule(self, rule_id: str):
         return self.rows.get(rule_id)
@@ -1131,3 +1171,42 @@ async def test_restore_pair_reauthorizes_and_lists_links():
     assert await store.get_session_bridge_rule("pairright0001") is None
     await manager.terminate()
     await manager2.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_drops_orphan_pair_edge():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="pairorphan001",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="pair",
+        expires_at=None,
+        header=False,
+        pair_id="pairidabcdef",
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+    assert await store.get_session_bridge_rule("pairorphan001") is None
+    assert manager._state.total_kind("pair") == 0
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pair_insert_failure_keeps_replaced_watch():
+    store = FakeSessionBridgeStore()
+    store.fail_pair_insert = True
+    manager, _, _ = _manager(store=store)
+    event = _event()
+    target = "target:GroupMessage:room"
+    watch = await manager.watch(event, target, ttl_seconds=30)
+    with pytest.raises(RuntimeError, match="pair insert"):
+        await manager.pair(event, target)
+    listed = await manager.list_watches(event)
+    assert [item.rule_id for item in listed] == [watch.rule_id]
+    assert await store.get_session_bridge_rule(watch.rule_id) is not None
+    await manager.terminate()

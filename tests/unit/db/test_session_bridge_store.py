@@ -110,3 +110,63 @@ async def test_session_bridge_rule_queries_update_and_delete(
     await temp_db.delete_session_bridge_rule(watch.rule_id)
     remaining = await temp_db.list_session_bridge_rules()
     assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_insert_session_bridge_pair_replaces_both_directions(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+    watch = await _insert_rule(temp_db)
+    reverse = await _insert_rule(
+        temp_db,
+        source_umo="target:GroupMessage:room",
+        target_umo="source:FriendMessage:sender",
+        kind="connect",
+        expires_at=None,
+    )
+    left, right = await temp_db.insert_session_bridge_pair(
+        subject_id=watch.subject_id,
+        source_umo=watch.source_umo,
+        target_umo=watch.target_umo,
+        source_config_id=watch.source_config_id,
+        target_config_id=watch.target_config_id,
+        pair_id="pairidabcdef",
+        drop_rule_ids=(watch.rule_id, reverse.rule_id),
+    )
+    assert left.kind == "pair"
+    assert right.kind == "pair"
+    assert left.header is False
+    assert right.header is False
+    assert left.pair_id == right.pair_id == "pairidabcdef"
+    assert left.source_umo == watch.source_umo
+    assert right.source_umo == watch.target_umo
+    assert await temp_db.get_session_bridge_rule(watch.rule_id) is None
+    assert await temp_db.get_session_bridge_rule(reverse.rule_id) is None
+
+
+@pytest.mark.asyncio
+async def test_insert_session_bridge_pair_rolls_back_partial_replace(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+    watch = await _insert_rule(temp_db)
+    reverse = await _insert_rule(
+        temp_db,
+        source_umo="target:GroupMessage:room",
+        target_umo="source:FriendMessage:sender",
+        kind="watch",
+        expires_at=1_800_000_000,
+    )
+    with pytest.raises(IntegrityError):
+        await temp_db.insert_session_bridge_pair(
+            subject_id=watch.subject_id,
+            source_umo=watch.source_umo,
+            target_umo=watch.target_umo,
+            source_config_id=watch.source_config_id,
+            target_config_id=watch.target_config_id,
+            pair_id="pairidabcdef",
+            drop_rule_ids=(watch.rule_id,),
+        )
+    assert await temp_db.get_session_bridge_rule(watch.rule_id) is not None
+    assert await temp_db.get_session_bridge_rule(reverse.rule_id) is not None

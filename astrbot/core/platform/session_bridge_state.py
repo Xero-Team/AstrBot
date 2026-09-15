@@ -23,6 +23,32 @@ PAIR_AMBIGUOUS = "Multiple pairs require a UMO"
 GrantKey = tuple[str, str, str]
 
 
+def incomplete_pair_rule_ids(rows: list[SessionBridgeRule]) -> frozenset[str]:
+    grouped: dict[str, list[SessionBridgeRule]] = {}
+    incomplete: set[str] = set()
+    for row in rows:
+        if row.kind != "pair":
+            continue
+        if not row.pair_id:
+            incomplete.add(row.rule_id)
+            continue
+        grouped.setdefault(row.pair_id, []).append(row)
+    for edges in grouped.values():
+        if len(edges) != 2:
+            incomplete.update(edge.rule_id for edge in edges)
+            continue
+        left, right = edges
+        if (
+            left.subject_id == right.subject_id
+            and left.source_umo == right.target_umo
+            and left.target_umo == right.source_umo
+            and left.source_umo != left.target_umo
+        ):
+            continue
+        incomplete.update(edge.rule_id for edge in edges)
+    return frozenset(incomplete)
+
+
 @dataclass(frozen=True, slots=True)
 class SessionWatch:
     """One watch, connect, or pair edge owned by a trusted authorization subject."""
@@ -314,40 +340,21 @@ class SessionBridgeState:
         )
         if self.total_kind("pair") - removing_edges + 2 > 1024:
             raise ValueError("Runtime pair limit exceeded")
+        pair_id = secrets.token_hex(6)
+        forward_row, reverse_row = await self._store.insert_session_bridge_pair(
+            subject_id=subject.id,
+            source_umo=source_umo,
+            target_umo=target_umo,
+            source_config_id=source_config_id,
+            target_config_id=target_config_id,
+            pair_id=pair_id,
+            drop_rule_ids=tuple(
+                row.rule_id for row in (forward, reverse) if row is not None
+            ),
+        )
         for stored, key in ((forward, forward_key), (reverse, reverse_key)):
             if stored is not None:
-                await self._delete_row(stored.rule_id, key)
-        pair_id = secrets.token_hex(6)
-        forward_row = None
-        try:
-            forward_row = await self._store.insert_session_bridge_rule(
-                subject_id=subject.id,
-                source_umo=source_umo,
-                target_umo=target_umo,
-                source_config_id=source_config_id,
-                target_config_id=target_config_id,
-                kind="pair",
-                expires_at=None,
-                header=False,
-                pair_id=pair_id,
-            )
-            reverse_row = await self._store.insert_session_bridge_rule(
-                subject_id=subject.id,
-                source_umo=target_umo,
-                target_umo=source_umo,
-                source_config_id=target_config_id,
-                target_config_id=source_config_id,
-                kind="pair",
-                expires_at=None,
-                header=False,
-                pair_id=pair_id,
-            )
-        except BaseException:
-            if forward_row is not None:
-                await self._delete_row(
-                    forward_row.rule_id, (subject.id, source_umo, target_umo)
-                )
-            raise
+                self._forget(key)
         left = self._grant_from_row(forward_row, subject, context)
         right = self._grant_from_row(reverse_row, subject, context)
         self._index(left)
@@ -524,10 +531,13 @@ class SessionBridgeState:
             ):
                 self._grants.pop(grant_key, None)
 
-    async def _delete_row(self, rule_id: str, key: GrantKey) -> None:
-        await self._store.delete_session_bridge_rule(rule_id)
+    def _forget(self, key: GrantKey) -> None:
         self._drop_memory(key)
         task = self._expiry_tasks.pop(key, None)
         current = asyncio.current_task()
         if task is not None and task is not current:
             task.cancel()
+
+    async def _delete_row(self, rule_id: str, key: GrantKey) -> None:
+        await self._store.delete_session_bridge_rule(rule_id)
+        self._forget(key)

@@ -207,6 +207,8 @@ def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
                 part = replace(part, sender=forwarded_sender)
             content.append(part)
         if native_component is not None:
+            if forwarded_sender is not None:
+                native_component = replace(native_component, sender=forwarded_sender)
             content.append(native_component)
 
     sender = SenderSnapshot(

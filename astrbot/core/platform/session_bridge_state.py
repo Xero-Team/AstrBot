@@ -112,14 +112,6 @@ class SessionBridgeState:
                 expired.append(grant)
         return tuple(expired)
 
-    def pop_matching_grant(self, key: GrantKey, grant: WatchGrant) -> WatchGrant | None:
-        if self._grants.get(key) is not grant:
-            return None
-        return self._drop_memory(key)
-
-    def pop_expiry(self, key: GrantKey) -> asyncio.Task[None] | None:
-        return self._expiry_tasks.pop(key, None)
-
     def arm_expiry(
         self,
         key: GrantKey,
@@ -378,6 +370,9 @@ class SessionBridgeState:
         self._grants[key] = grant
         listener = (grant.watch.subject_id, grant.watch.source_umo)
         if grant.kind == "connect":
+            previous_key = self._connect_by_listener.get(listener)
+            if previous_key is not None and previous_key != key:
+                self._drop_memory(previous_key)
             self._connect_by_listener[listener] = key
         elif self._connect_by_listener.get(listener) == key:
             self._connect_by_listener.pop(listener, None)

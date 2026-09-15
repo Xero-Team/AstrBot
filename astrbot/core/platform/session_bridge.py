@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
@@ -148,7 +149,7 @@ class SessionBridgeManager:
                 target_umo=target,
                 source_config_id=self._config_id(listener),
                 target_config_id=self._config_id(target),
-                expires_at=int(now) + ttl,
+                expires_at=math.ceil(now + ttl),
                 max_per_subject=self._max_watches_per_subject,
             )
             self._state.arm_expiry(key, grant, self._expire_watch)
@@ -642,6 +643,15 @@ class SessionBridgeManager:
                 grant = await self._restore_row(row)
                 if grant is None:
                     continue
+                if grant.kind == "connect":
+                    existing = self._state.connect_for(
+                        grant.watch.subject_id, grant.watch.source_umo
+                    )
+                    if (
+                        existing is not None
+                        and existing.watch.rule_id != grant.watch.rule_id
+                    ):
+                        await self._state.delete_rule(existing.watch.rule_id)
                 self._state.index_grant(grant)
                 self._state.arm_expiry(
                     self._state.store_key(grant.watch), grant, self._expire_watch

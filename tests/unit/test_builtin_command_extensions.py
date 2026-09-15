@@ -1103,6 +1103,8 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
             "watches",
             "connect",
             "disconnect",
+            "links",
+            "unlink",
         },
         "conversation": {
             "create",

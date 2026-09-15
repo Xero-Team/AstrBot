@@ -123,7 +123,12 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
         """Return every persisted session-bridge edge."""
         async with store_session(self) as session:
             session: AsyncSession
-            result = await session.execute(select(SessionBridgeRule))
+            result = await session.execute(
+                select(SessionBridgeRule).order_by(
+                    col(SessionBridgeRule.created_at),
+                    col(SessionBridgeRule.rule_id),
+                )
+            )
             return list(result.scalars().all())
 
     async def list_session_bridge_rules_by_subject(
@@ -133,8 +138,11 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
         async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
-                select(SessionBridgeRule).where(
-                    col(SessionBridgeRule.subject_id) == subject_id
+                select(SessionBridgeRule)
+                .where(col(SessionBridgeRule.subject_id) == subject_id)
+                .order_by(
+                    col(SessionBridgeRule.created_at),
+                    col(SessionBridgeRule.rule_id),
                 )
             )
             return list(result.scalars().all())
@@ -146,10 +154,15 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
         async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
-                select(SessionBridgeRule).where(
+                select(SessionBridgeRule)
+                .where(
                     col(SessionBridgeRule.subject_id) == subject_id,
                     col(SessionBridgeRule.source_umo) == source_umo,
                     col(SessionBridgeRule.kind) == "connect",
+                )
+                .order_by(
+                    col(SessionBridgeRule.created_at),
+                    col(SessionBridgeRule.rule_id),
                 )
             )
             return list(result.scalars().all())
@@ -161,9 +174,14 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
         async with store_session(self) as session:
             session: AsyncSession
             result = await session.execute(
-                select(SessionBridgeRule).where(
+                select(SessionBridgeRule)
+                .where(
                     (col(SessionBridgeRule.source_config_id) == config_id)
                     | (col(SessionBridgeRule.target_config_id) == config_id)
+                )
+                .order_by(
+                    col(SessionBridgeRule.created_at),
+                    col(SessionBridgeRule.rule_id),
                 )
             )
             return list(result.scalars().all())

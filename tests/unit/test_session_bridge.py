@@ -194,7 +194,8 @@ async def test_watch_records_rule_id_and_rejects_zero_ttl():
     assert len(watch.rule_id) == 12
     assert watch.rule_id == watch.rule_id.lower()
     int(watch.rule_id, 16)
-    assert 0 <= watch.remaining_seconds <= 1
+    assert watch.expires_at is not None
+    assert watch.expires_at > time()
     with pytest.raises(ValueError, match="Invalid watch duration"):
         await manager.watch(event, target, ttl_seconds=0)
     await manager.terminate()
@@ -211,7 +212,8 @@ async def test_watch_custom_source_and_ttl_and_rejects_out_of_range():
     )
     assert watch.source_umo == listener
     assert watch.target_umo == target
-    assert MIN_WATCH_TTL_SECONDS - 1 <= watch.remaining_seconds <= MIN_WATCH_TTL_SECONDS
+    assert watch.expires_at is not None
+    assert watch.expires_at > time()
     assert [call.args[2].umo for call in authorization.authorize.await_args_list] == [
         listener,
         target,
@@ -650,11 +652,23 @@ async def test_unlink_allows_creator_after_revoke_and_scopes_instance_operator()
     )
     assert await manager.unlink(owner, "ownwatch00001")
     assert await store.get_session_bridge_rule("ownwatch00001") is None
+    store.seed(
+        rule_id="samecfgwatch01",
+        subject_id=other.subject.id,
+        source_umo="ops:FriendMessage:box",
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="ops",
+        kind="connect",
+        expires_at=None,
+    )
     authorization.authorize = AsyncMock(
         return_value=SimpleNamespace(
             allowed=True, effective_role=Role.INSTANCE_OPERATOR
         )
     )
+    assert await manager.unlink(owner, "samecfgwatch01")
+    assert await store.get_session_bridge_rule("samecfgwatch01") is None
     with pytest.raises(PermissionError):
         await manager.unlink(owner, "foreignwatch01")
     assert await store.get_session_bridge_rule("foreignwatch01") is not None
@@ -869,4 +883,53 @@ async def test_restore_refreshes_stale_config_ids():
     assert row is not None
     assert row.source_config_id == "default"
     assert row.target_config_id == "default"
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_one_second_watch_stays_active_after_create():
+    manager, _, _ = _manager()
+    event = _event()
+    created = time()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=1)
+    key = manager._state.store_key(watch)
+    grant = manager._state.get(key)
+    assert grant is not None
+    assert watch.expires_at is not None
+    assert watch.expires_at >= created + 1
+    assert manager._state.grant_active(key, grant, time())
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_keeps_one_connect_per_listener():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="oldconnect0001",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:one",
+        source_config_id="default",
+        target_config_id="default",
+        kind="connect",
+        expires_at=None,
+    )
+    store.seed(
+        rule_id="newconnect0001",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:two",
+        source_config_id="default",
+        target_config_id="default",
+        kind="connect",
+        expires_at=None,
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+    link = await manager.connection(event)
+    assert link is not None
+    assert link.rule_id == "newconnect0001"
+    assert await store.get_session_bridge_rule("oldconnect0001") is None
+    assert manager._state.total_kind("connect") == 1
     await manager.terminate()

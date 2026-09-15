@@ -75,20 +75,23 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
     yield event.plain_result(f"watching {watch.target_umo}")
 ```
 
-- `watch(event, target_umo, *, source_umo=None, ttl_seconds=None)`: create an expiring watch owned by the event's trusted actor; returns `SessionWatch`. `source_umo` is the listening session that receives forwards and defaults to the current session. `ttl_seconds` is 60–864000, default 43200. When it expires, the listener session receives an end notice.
+- `watch(event, target_umo, *, source_umo=None, ttl_seconds=None)`: create an expiring watch owned by the event's trusted actor; returns `SessionWatch`. `source_umo` is the listening session that receives forwards and defaults to the current session. `ttl_seconds` is 1–864000, default 43200. `expires_at` is wall-clock UTC unix seconds. `rule_id` is a stable 12-character lowercase hex id. When it expires, the listener session receives an end notice.
 - `unwatch(event, target_umo, *, source_umo=None)`: stop a matching watch this actor created.
-- `list(event, *, source_umo=None)`: list this actor's active watches. `source_umo` is the listening session and defaults to the current session.
-- `connect(event, target_umo)`: create an unbounded 1:1 link from the current session; returns `SessionWatch` with no expiry.
+- `list(event, *, source_umo=None)`: list this actor's active watches (not connects). `source_umo` is the listening session and defaults to the current session.
+- `connect(event, target_umo)`: create an unbounded 1:1 link from the current session; returns `SessionWatch` with `expires_at is None`. There is no `ttl_seconds` argument.
 - `disconnect(event)`: drop that link.
 - `connection(event)`: return the current unbounded link, or `None`.
 - `send(event, target_umo, *, target_in_header=True)`: deliver the current message body and attachments after stripping the command header; returns `DeliveryReceipt`. Linked `/send` without a UMO passes `target_in_header=False`.
 
 These methods call `authorize()` again. They require `session.watch` or
 `session.send`, and both sessions must share a configuration. Watches and
-links stay in memory and disappear when they expire or the process restarts.
+links persist in SQLite, so unexpired rules survive process restart.
+`remaining_seconds` uses the wall clock; unbounded links return `0`.
 Do not construct `SessionBridgeManager` yourself. Import `SessionWatch` and
-the duration constants from `astrbot.api.platform`. There is no Dashboard
-management surface, and plugins must not assume a matching HTTP API.
+the duration constants from `astrbot.api.platform`. `links` / `unlink` are
+IM commands only in this stage; `SessionBridgeCapability` does not expose
+them. There is no Dashboard management surface, and plugins must not assume
+a matching HTTP API.
 
 ## Rich-Media Chains
 

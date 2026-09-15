@@ -59,6 +59,7 @@ class FakeSessionBridgeStore:
     def __init__(self) -> None:
         self.rows: dict[str, SimpleNamespace] = {}
         self.by_direction: dict[tuple[str, str, str], str] = {}
+        self.fail_pair_insert = False
 
     def seed(self, **fields) -> SimpleNamespace:
         payload = {
@@ -96,6 +97,45 @@ class FakeSessionBridgeStore:
             match=kwargs.get("match") or {},
             except_=kwargs.get("except_") or {},
         )
+
+    async def insert_session_bridge_pair(
+        self, **kwargs
+    ) -> tuple[SimpleNamespace, SimpleNamespace]:
+        if self.fail_pair_insert:
+            raise RuntimeError("pair insert")
+        snapshot_rows = dict(self.rows)
+        snapshot_dir = dict(self.by_direction)
+        try:
+            for rule_id in kwargs.get("drop_rule_ids") or ():
+                await self.delete_session_bridge_rule(rule_id)
+            pair_id = kwargs["pair_id"]
+            left = await self.insert_session_bridge_rule(
+                subject_id=kwargs["subject_id"],
+                source_umo=kwargs["source_umo"],
+                target_umo=kwargs["target_umo"],
+                source_config_id=kwargs["source_config_id"],
+                target_config_id=kwargs["target_config_id"],
+                kind="pair",
+                expires_at=None,
+                header=False,
+                pair_id=pair_id,
+            )
+            right = await self.insert_session_bridge_rule(
+                subject_id=kwargs["subject_id"],
+                source_umo=kwargs["target_umo"],
+                target_umo=kwargs["source_umo"],
+                source_config_id=kwargs["target_config_id"],
+                target_config_id=kwargs["source_config_id"],
+                kind="pair",
+                expires_at=None,
+                header=False,
+                pair_id=pair_id,
+            )
+            return left, right
+        except Exception:
+            self.rows = snapshot_rows
+            self.by_direction = snapshot_dir
+            raise
 
     async def get_session_bridge_rule(self, rule_id: str):
         return self.rows.get(rule_id)
@@ -156,7 +196,14 @@ class FakeSessionBridgeStore:
                 await self.delete_session_bridge_rule(row.rule_id)
 
 
-def _manager(send=None, store=None, *, max_watches_per_subject=16, get_config_id=None):
+def _manager(
+    send=None,
+    store=None,
+    *,
+    max_watches_per_subject=16,
+    max_pairs_per_subject=8,
+    get_config_id=None,
+):
     authorization = SimpleNamespace(
         authorize=AsyncMock(
             return_value=SimpleNamespace(allowed=True, effective_role=None)
@@ -172,6 +219,7 @@ def _manager(send=None, store=None, *, max_watches_per_subject=16, get_config_id
         get_config_id=get_config_id or (lambda _: "default"),
         store=store or FakeSessionBridgeStore(),
         max_watches_per_subject=max_watches_per_subject,
+        max_pairs_per_subject=max_pairs_per_subject,
     )
     return manager, authorization, sender
 
@@ -703,20 +751,62 @@ async def test_connect_limit_does_not_drop_existing_watch():
     await manager.terminate()
 
 
-@pytest.mark.asyncio
-async def test_restore_skips_pair_and_discards_invalid_umo():
-    event = _event()
-    store = FakeSessionBridgeStore()
+def _seed_pair(
+    store: FakeSessionBridgeStore,
+    event,
+    *,
+    target="target:GroupMessage:room",
+    pair_id="pairidabcdef",
+    left_id="pairleft00001",
+    right_id="pairright0001",
+) -> None:
     store.seed(
-        rule_id="pairrule00001",
+        rule_id=left_id,
         subject_id=event.subject.id,
         source_umo=event.unified_msg_origin,
-        target_umo="target:GroupMessage:room",
+        target_umo=target,
         source_config_id="default",
         target_config_id="default",
         kind="pair",
         expires_at=None,
+        header=False,
+        pair_id=pair_id,
     )
+    store.seed(
+        rule_id=right_id,
+        subject_id=event.subject.id,
+        source_umo=target,
+        target_umo=event.unified_msg_origin,
+        source_config_id="default",
+        target_config_id="default",
+        kind="pair",
+        expires_at=None,
+        header=False,
+        pair_id=pair_id,
+    )
+
+
+def _text_envelope(umo: str, text: str, *, is_self_message=False, message_id="9"):
+    session_platform, _, session_id = umo.split(":", 2)
+    message_type = (
+        MessageType.GROUP_MESSAGE
+        if "GroupMessage" in umo
+        else MessageType.FRIEND_MESSAGE
+    )
+    return MessageEnvelope(
+        PlatformRouteIdentity(session_platform, message_type, session_id),
+        source_message_id=message_id,
+        sender=SenderSnapshot("1", "Alice", "napcat"),
+        content=(PortablePart(ContentKind.TEXT, text),),
+        is_self_message=is_self_message,
+    )
+
+
+@pytest.mark.asyncio
+async def test_restore_reloads_pair_and_discards_invalid_umo():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    _seed_pair(store, event)
     store.seed(
         rule_id="badumorule001",
         subject_id=event.subject.id,
@@ -729,9 +819,10 @@ async def test_restore_skips_pair_and_discards_invalid_umo():
     )
     manager, _, _ = _manager(store=store)
     await manager.restore()
-    assert await store.get_session_bridge_rule("pairrule00001") is not None
+    assert await store.get_session_bridge_rule("pairleft00001") is not None
+    assert await store.get_session_bridge_rule("pairright0001") is not None
     assert await store.get_session_bridge_rule("badumorule001") is None
-    assert manager._state.total_kind("pair") == 0
+    assert manager._state.total_kind("pair") == 2
     assert manager._state.total_kind("watch") == 0
     await manager.terminate()
 
@@ -932,4 +1023,190 @@ async def test_restore_keeps_one_connect_per_listener():
     assert link.rule_id == "newconnect0001"
     assert await store.get_session_bridge_rule("oldconnect0001") is None
     assert manager._state.total_kind("connect") == 1
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pair_creates_headerless_edges_without_binding_send():
+    sent = []
+
+    async def send(session, chain):
+        sent.append((str(session), chain.get_plain_text()))
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    target = "target:GroupMessage:room"
+    left, right = await manager.pair(event, target)
+    assert left.expires_at is None
+    assert right.expires_at is None
+    assert left.pair_id == right.pair_id
+    assert left.pair_id is not None
+    assert len(left.pair_id) == 12
+    assert left.rule_id != right.rule_id
+    assert left.source_umo == event.unified_msg_origin
+    assert left.target_umo == target
+    assert right.source_umo == target
+    assert right.target_umo == event.unified_msg_origin
+    assert await manager.connection(event) is None
+    again_left, again_right = await manager.pair(event, target)
+    assert again_left.rule_id == left.rule_id
+    assert again_right.rule_id == right.rule_id
+    assert again_left.pair_id == left.pair_id
+    await manager.observe(_text_envelope(target, "hello"))
+    assert sent[-1] == (event.unified_msg_origin, "hello")
+    await manager.observe(
+        _text_envelope(target, "echo", is_self_message=True, message_id="bot")
+    )
+    assert sent[-1] == (event.unified_msg_origin, "hello")
+    await manager.observe(
+        _text_envelope(event.unified_msg_origin, "from-here", message_id="src")
+    )
+    assert sent[-1] == (target, "from-here")
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pair_rejects_the_same_session():
+    manager, _, _ = _manager()
+    event = _event()
+    with pytest.raises(ValueError, match="must differ"):
+        await manager.pair(event, event.unified_msg_origin)
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pair_requires_loaded_proactive_adapters():
+    manager, _, _ = _manager()
+    event = _event()
+
+    def caps(umo: str):
+        if "missing" in umo:
+            return MessageDeliveryCapabilities(proactive=False, available=False)
+        if "passive" in umo:
+            return MessageDeliveryCapabilities(proactive=False, available=True)
+        return MessageDeliveryCapabilities(quote=True, media=frozenset({"image"}))
+
+    manager._get_capabilities = caps
+    with pytest.raises(ValueError, match="unavailable"):
+        await manager.pair(event, "missing:GroupMessage:room")
+    with pytest.raises(ValueError, match="cannot receive forwarded messages"):
+        await manager.pair(event, "passive:GroupMessage:room")
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pair_replaces_watch_and_connect_on_those_directions():
+    manager, _, _ = _manager()
+    event = _event()
+    target = "target:GroupMessage:room"
+    watch = await manager.watch(event, target, ttl_seconds=30)
+    left, right = await manager.pair(event, target)
+    assert left.rule_id != watch.rule_id
+    assert await manager.list_watches(event) == ()
+    assert manager._state.total_kind("pair") == 2
+    other = _event("source:FriendMessage:other")
+    link = await manager.connect(other, target)
+    paired, reverse = await manager.pair(other, target)
+    assert paired.rule_id != link.rule_id
+    assert await manager.connection(other) is None
+    assert reverse.pair_id == paired.pair_id
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_unlink_refuses_pair_and_unpair_removes_both():
+    manager, _, _ = _manager()
+    event = _event()
+    target = "target:GroupMessage:room"
+    left, right = await manager.pair(event, target)
+    with pytest.raises(ValueError, match="cannot be unlinked"):
+        await manager.unlink(event, left.rule_id)
+    assert manager._state.total_kind("pair") == 2
+    assert await manager.unpair(event, target)
+    assert manager._state.total_kind("pair") == 0
+    assert await manager.unpair(event, target) is False
+    second_target = "other:GroupMessage:room"
+    await manager.pair(event, target)
+    await manager.pair(event, second_target)
+    with pytest.raises(ValueError, match="Multiple pairs require a UMO"):
+        await manager.unpair(event)
+    assert await manager.unpair(event, target)
+    assert await manager.unpair(event) is True
+    assert manager._state.total_kind("pair") == 0
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pair_quota_does_not_consume_watch_or_connect():
+    manager, _, _ = _manager(max_watches_per_subject=1, max_pairs_per_subject=1)
+    event = _event()
+    await manager.pair(event, "target:GroupMessage:one")
+    with pytest.raises(ValueError, match="Pair limit exceeded"):
+        await manager.pair(event, "target:GroupMessage:two")
+    watch = await manager.watch(event, "target:GroupMessage:two", ttl_seconds=30)
+    other = _event("source:FriendMessage:other")
+    link = await manager.connect(other, "target:GroupMessage:two")
+    assert watch.rule_id
+    assert link.rule_id
+    assert manager._state.total_kind("pair") == 2
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_pair_reauthorizes_and_lists_links():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    _seed_pair(store, event)
+    manager, authorization, _ = _manager(store=store)
+    await manager.restore()
+    links = await manager.list_links(event)
+    assert {item[1] for item in links} == {"pair"}
+    assert {item[0].pair_id for item in links} == {"pairidabcdef"}
+    authorization.authorize = AsyncMock(return_value=SimpleNamespace(allowed=False))
+    manager2, authorization2, _ = _manager(store=store)
+    authorization2.authorize = AsyncMock(return_value=SimpleNamespace(allowed=False))
+    await manager2.restore()
+    assert await store.get_session_bridge_rule("pairleft00001") is None
+    assert await store.get_session_bridge_rule("pairright0001") is None
+    await manager.terminate()
+    await manager2.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_drops_orphan_pair_edge():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="pairorphan001",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="pair",
+        expires_at=None,
+        header=False,
+        pair_id="pairidabcdef",
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+    assert await store.get_session_bridge_rule("pairorphan001") is None
+    assert manager._state.total_kind("pair") == 0
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pair_insert_failure_keeps_replaced_watch():
+    store = FakeSessionBridgeStore()
+    store.fail_pair_insert = True
+    manager, _, _ = _manager(store=store)
+    event = _event()
+    target = "target:GroupMessage:room"
+    watch = await manager.watch(event, target, ttl_seconds=30)
+    with pytest.raises(RuntimeError, match="pair insert"):
+        await manager.pair(event, target)
+    listed = await manager.list_watches(event)
+    assert [item.rule_id for item in listed] == [watch.rule_id]
+    assert await store.get_session_bridge_rule(watch.rule_id) is not None
     await manager.terminate()

@@ -221,6 +221,7 @@ def test_bundled_platform_capabilities_cover_all_adapter_families() -> None:
         "weixin_official_account",
     }
     assert set(MESSAGE_CAPABILITIES) == expected
+    assert MESSAGE_CAPABILITIES["webchat"].forward is False
 
 
 def test_line_and_slack_capabilities_match_message_payload_limits() -> None:
@@ -690,6 +691,44 @@ async def test_media_resolution_failure_preserves_order_and_hides_credentials():
         ]
 
 
+@pytest.mark.asyncio
+async def test_media_resolution_failure_preserves_sender():
+    from astrbot.core.message.components import Plain
+    from astrbot.core.platform.message_media import materialize_message_media
+
+    sender = SenderSnapshot("1001", "Alice", "napcat")
+    resolver = AsyncMock(side_effect=ValueError("https://private/?token=secret"))
+    envelope = MessageEnvelope(
+        _route(),
+        content=(
+            PortablePart(ContentKind.TEXT, "[Alice]\n", sender=sender),
+            PortablePart(
+                ContentKind.IMAGE,
+                MediaReference("", resolve_source=resolver),
+                sender=sender,
+            ),
+            PortablePart(ContentKind.TEXT, "after", sender=sender),
+        ),
+    )
+    async with materialize_message_media(
+        envelope, MessageDeliveryCapabilities(media=frozenset({"image"}))
+    ) as result:
+        assert result.content[1].kind == ContentKind.TEXT
+        assert result.content[1].sender == sender
+        chains = plan_message_delivery(
+            result,
+            MESSAGE_CAPABILITIES["napcat"],
+            target_umo="napcat:GroupMessage:room",
+        )
+        nodes = _forward_nodes(chains)
+        assert len(nodes) == 1
+        texts = [
+            part.text for part in nodes[0].nodes[0].content if isinstance(part, Plain)
+        ]
+        assert any("无法获取" in text for text in texts)
+        assert "after" in texts
+
+
 def test_forwarded_transcripts_preserve_authors_and_nested_media():
     from astrbot.core.message.components import Image, Node, Nodes, Plain
     from astrbot.core.platform.message_projection import envelope_from_event
@@ -1084,3 +1123,406 @@ async def test_session_commands_report_denied_without_actor():
         "session.bridge.denied",
         "session.bridge.denied",
     ]
+
+
+def _forward_nodes(chains):
+    from astrbot.core.message.components import Nodes
+
+    found = []
+    for chain in chains:
+        for component in chain.chain:
+            if isinstance(component, Nodes):
+                found.append(component)
+    return found
+
+
+def _napcat_event(components):
+    event = _event(components=components)
+    event.get_platform_name = lambda: "napcat"
+    return event
+
+
+def test_projection_stamps_sender_on_native_forward_parts():
+    from astrbot.core.message.components import Face, Json, MFace, Node, Nodes, Plain
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[
+                                Face(id=111),
+                                MFace(
+                                    emoji_package_id=1,
+                                    emoji_id="eid",
+                                    key="key",
+                                    summary="s",
+                                ),
+                                Json(data={"app": "x"}),
+                                Plain("hi"),
+                            ],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    natives = [item for item in envelope.content if isinstance(item, NativeContent)]
+    assert {item.kind for item in natives} == {"face", "mface", "json"}
+    assert all(
+        item.sender is not None and item.sender.name == "Alice" for item in natives
+    )
+
+
+def test_plan_message_delivery_reconstructs_nodes_when_target_supports_forward():
+    from astrbot.core.message.components import Node, Nodes, Plain
+    from astrbot.core.platform.message_projection import envelope_from_event
+    from astrbot.core.platform.message_renderers import render_source_header
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(name="Alice", uin="1001", content=[Plain("one")]),
+                        Node(name="Alice", uin="1001", content=[Plain("two")]),
+                        Node(name="Bob", uin="1002", content=[Plain("three")]),
+                    ]
+                )
+            ]
+        )
+    )
+    header = PortablePart(
+        ContentKind.TEXT,
+        render_source_header(envelope, "napcat"),
+    )
+    chains = plan_message_delivery(
+        replace_content(envelope, (header, *envelope.content)),
+        MESSAGE_CAPABILITIES["napcat"],
+        target_umo="napcat:GroupMessage:room",
+    )
+    nodes = _forward_nodes(chains)
+    assert len(nodes) == 1
+    assert [(node.name, node.uin) for node in nodes[0].nodes] == [
+        ("Alice", "1001"),
+        ("Alice", "1001"),
+        ("Bob", "1002"),
+    ]
+    bodies = [
+        "".join(part.text for part in node.content if isinstance(part, Plain))
+        for node in nodes[0].nodes
+    ]
+    assert bodies == ["one", "two", "three"]
+    header_text = chains[0].get_plain_text()
+    assert "来自" in header_text
+    assert all("[Alice]\n" not in body and "[Bob]\n" not in body for body in bodies)
+
+
+def replace_content(envelope, content):
+    from dataclasses import replace
+
+    return replace(envelope, content=tuple(content))
+
+
+def test_plan_message_delivery_splits_sender_islands():
+    from astrbot.core.message.components import Node, Nodes, Plain
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    forwarded = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(name="Alice", uin="1001", content=[Plain("first")]),
+                        Node(name="Bob", uin="1002", content=[Plain("second")]),
+                    ]
+                )
+            ]
+        )
+    )
+    middle = PortablePart(ContentKind.TEXT, "between")
+    envelope = replace_content(
+        forwarded, (*forwarded.content[:2], middle, *forwarded.content[2:])
+    )
+    chains = plan_message_delivery(
+        envelope,
+        MESSAGE_CAPABILITIES["napcat"],
+        target_umo="napcat:GroupMessage:room",
+    )
+    nodes = _forward_nodes(chains)
+    assert len(nodes) == 2
+    assert [chain.get_plain_text() for chain in chains if chain.get_plain_text()] == [
+        "between"
+    ]
+    assert nodes[0].nodes[0].name == "Alice"
+    assert nodes[1].nodes[0].name == "Bob"
+
+
+def test_plan_message_delivery_strips_unknown_author_separator():
+    from astrbot.core.message.components import Node, Nodes, Plain
+    from astrbot.core.platform.message_i18n import message_key
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event([Nodes(nodes=[Node(name="", uin="", content=[Plain("hi")])])])
+    )
+    assert envelope.content[0].value == message_key("unknown_author")
+    chains = plan_message_delivery(
+        envelope,
+        MESSAGE_CAPABILITIES["napcat"],
+        target_umo="napcat:GroupMessage:room",
+        locale="zh-CN",
+    )
+    node = _forward_nodes(chains)[0].nodes[0]
+    assert node.name == "未知"
+    assert node.uin == "0"
+    texts = [part.text for part in node.content if isinstance(part, Plain)]
+    assert texts == ["hi"]
+    assert all("[未知]\n" not in text for text in texts)
+
+
+def test_plan_message_delivery_does_not_wrap_ordinary_messages():
+    chains = plan_message_delivery(
+        MessageEnvelope(_route(), content=(PortablePart(ContentKind.TEXT, "hello"),)),
+        MESSAGE_CAPABILITIES["napcat"],
+        target_umo="napcat:GroupMessage:room",
+    )
+    assert _forward_nodes(chains) == []
+    assert chains[0].get_plain_text() == "hello"
+
+
+def test_plan_message_delivery_keeps_qq_node_segments():
+    from astrbot.core.message.components import (
+        RPS,
+        Contact,
+        Dice,
+        Face,
+        Json,
+        Location,
+        Markdown,
+        Mention,
+        MentionAll,
+        MFace,
+        MiniApp,
+        Music,
+        Node,
+        Nodes,
+        Plain,
+        Poke,
+        Shake,
+        Share,
+        Xml,
+    )
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[
+                                Face(id=111),
+                                MFace(
+                                    emoji_package_id=1,
+                                    emoji_id="eid",
+                                    key="key",
+                                    summary="wow",
+                                ),
+                                Json(data={"app": "x"}),
+                                Poke(id="42"),
+                                Markdown("md"),
+                                MiniApp(data="mini"),
+                                Xml(data="<xml/>"),
+                                Dice(),
+                                RPS(),
+                                Shake(),
+                                Share(url="https://example.com", title="t"),
+                                Music(_type="qq", id=1),
+                                Location(lat=1.5, lon=2.5, title="park"),
+                                Contact(_type="qq", id=99),
+                                Mention(target="7", name="Bob"),
+                                MentionAll(),
+                                Plain("end"),
+                            ],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    chains = plan_message_delivery(
+        envelope,
+        MESSAGE_CAPABILITIES["napcat"],
+        target_umo="napcat:GroupMessage:room",
+    )
+    content = _forward_nodes(chains)[0].nodes[0].content
+    types = [type(part) for part in content]
+    assert types[:12] == [
+        Face,
+        MFace,
+        Json,
+        Poke,
+        Markdown,
+        MiniApp,
+        Xml,
+        Dice,
+        RPS,
+        Shake,
+        Share,
+        Music,
+    ]
+    assert isinstance(content[12], Location)
+    assert content[12].lat == 1.5
+    assert content[12].lon == 2.5
+    assert content[12].title == "park"
+    assert content[12].content == ""
+    assert isinstance(content[13], Contact)
+    assert content[13].sub_type == "qq"
+    assert [part.text for part in content if isinstance(part, Plain)] == [
+        "@Bob",
+        "@all",
+        "end",
+    ]
+
+
+def test_plan_message_delivery_contact_uses_sub_type():
+    from astrbot.core.message.components import Contact, Node, Nodes
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[Contact(_type="group", id=8)],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    contact = (
+        _forward_nodes(
+            plan_message_delivery(
+                envelope,
+                MESSAGE_CAPABILITIES["napcat"],
+                target_umo="napcat:GroupMessage:room",
+            )
+        )[0]
+        .nodes[0]
+        .content[0]
+    )
+    assert isinstance(contact, Contact)
+    assert contact.sub_type == "group"
+
+
+def test_plan_message_delivery_cross_platform_id_replays_node_faces():
+    from astrbot.core.message.components import Face, Json, MFace, Node, Nodes
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[
+                                Face(id=111),
+                                MFace(
+                                    emoji_package_id=1,
+                                    emoji_id="eid",
+                                    key="key",
+                                    summary="s",
+                                ),
+                                Json(data={"app": "x"}),
+                            ],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    content = (
+        _forward_nodes(
+            plan_message_delivery(
+                envelope,
+                MESSAGE_CAPABILITIES["napcat"],
+                target_umo="other-napcat:GroupMessage:room",
+            )
+        )[0]
+        .nodes[0]
+        .content
+    )
+    assert [type(part) for part in content] == [Face, MFace, Json]
+
+
+def test_plan_message_delivery_does_not_emit_root_level_poke():
+    from astrbot.core.message.components import Poke
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(_napcat_event([Poke(id="42")]))
+    chains = plan_message_delivery(
+        envelope,
+        MESSAGE_CAPABILITIES["napcat"],
+        target_umo="napcat:GroupMessage:room",
+    )
+    assert _forward_nodes(chains) == []
+    assert all(not isinstance(part, Poke) for chain in chains for part in chain.chain)
+    assert "[Poke]" in chains[0].get_plain_text()
+
+
+def test_plan_message_delivery_flattens_native_summaries_when_forward_false():
+    from astrbot.core.message.components import Face, Json, MFace, Node, Nodes, Plain
+    from astrbot.core.message.json_card import format_json_card_prompt
+    from astrbot.core.message.qq_face import format_qq_face
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    json_card = Json(data={"app": "com.example.unknown"})
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[
+                                Face(id=111),
+                                MFace(
+                                    emoji_package_id=1,
+                                    emoji_id="eid",
+                                    key="key",
+                                    summary="wow",
+                                ),
+                                json_card,
+                                Plain("hi"),
+                            ],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    chains = plan_message_delivery(
+        envelope,
+        MessageDeliveryCapabilities(),
+        target_umo="telegram:FriendMessage:1",
+    )
+    assert _forward_nodes(chains) == []
+    text = chains[0].get_plain_text()
+    assert text.startswith("[Alice]\n")
+    assert format_qq_face(111) in text
+    assert "wow" in text
+    assert format_json_card_prompt(json_card) in text

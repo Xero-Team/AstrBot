@@ -180,7 +180,10 @@ class SessionBridgeState:
             raise ValueError(PAIR_OCCUPIED)
         if stored is not None and stored.kind == "watch":
             updated = await self._store.update_session_bridge_rule(
-                stored.rule_id, expires_at=expires_at
+                stored.rule_id,
+                expires_at=expires_at,
+                source_config_id=source_config_id,
+                target_config_id=target_config_id,
             )
             row = updated or stored
             grant = self._grant_from_row(row, subject, context)
@@ -223,7 +226,10 @@ class SessionBridgeState:
         if stored is not None and stored.kind == "pair":
             raise ValueError(PAIR_OCCUPIED)
         if stored is not None and stored.kind == "connect":
-            grant = self._grant_from_row(stored, subject, context)
+            row = await self.persist_config_ids(
+                stored, source_config_id, target_config_id
+            )
+            grant = self._grant_from_row(row, subject, context)
             self._index(grant)
             return grant
         listener = (subject.id, source_umo)
@@ -314,6 +320,24 @@ class SessionBridgeState:
 
     async def discard_stored_rule(self, rule_id: str) -> None:
         await self._store.delete_session_bridge_rule(rule_id)
+
+    async def persist_config_ids(
+        self,
+        row: SessionBridgeRule,
+        source_config_id: str,
+        target_config_id: str,
+    ) -> SessionBridgeRule:
+        if (
+            row.source_config_id == source_config_id
+            and row.target_config_id == target_config_id
+        ):
+            return row
+        updated = await self._store.update_session_bridge_rule(
+            row.rule_id,
+            source_config_id=source_config_id,
+            target_config_id=target_config_id,
+        )
+        return updated or row
 
     def index_grant(self, grant: WatchGrant) -> None:
         self._index(grant)

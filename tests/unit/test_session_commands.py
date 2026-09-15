@@ -79,13 +79,20 @@ async def test_session_commands_links_and_unlink():
         remaining_seconds=12,
         expires_at=1.0,
     )
+    link = SimpleNamespace(
+        rule_id="abc123def456",
+        source_umo="source:FriendMessage:sender",
+        target_umo="other:GroupMessage:room",
+        remaining_seconds=0,
+        expires_at=None,
+    )
 
     async def translate(_event, key, **_kwargs):
         replies.append(key)
         return key
 
     manager = SimpleNamespace(
-        list_links=AsyncMock(return_value=((watch, "watch"),)),
+        list_links=AsyncMock(return_value=((watch, "watch"), (link, "connect"))),
         unlink=AsyncMock(return_value=True),
     )
     context = SimpleNamespace(
@@ -98,6 +105,8 @@ async def test_session_commands_links_and_unlink():
     await commands.unlink(event, "abcdef123456")
     await commands.unlink(event, "not-an-id")
     assert replies == [
+        "session.links.ttl_seconds",
+        "session.links.ttl_unbounded",
         "session.links.body",
         "session.unlink.ok",
         "session.unlink.usage",

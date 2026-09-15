@@ -21,6 +21,8 @@
     "session.connect.status": "Connected to {umo}. Incoming messages are forwarded without expiry. /send without a UMO uses this target.",
     "session.links.empty": "No visible session-bridge rules.",
     "session.links.body": "Session-bridge rules:\n{links}",
+    "session.links.ttl_unbounded": "unbounded",
+    "session.links.ttl_seconds": "{seconds}s",
     "session.unlink.usage": "Usage: /session unlink <rule_id>. rule_id is 12 lowercase hex characters.",
     "session.unlink.ok": "Removed that session-bridge rule.",
     "session.unlink.missing": "No matching rule to remove.",

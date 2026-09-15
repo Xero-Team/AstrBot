@@ -371,6 +371,8 @@ class SessionBridgeManager:
         for key, grant in watches:
             watch = grant.watch
             try:
+                if not self._get_capabilities(watch.source_umo).available:
+                    continue
                 await self._authorize(
                     grant.subject, grant.context, watch.source_umo, "session.watch"
                 )
@@ -635,7 +637,7 @@ class SessionBridgeManager:
                     try:
                         expired.append(self._grant_for_notice(row))
                     except ValueError:
-                        pass
+                        logger.warning("Session watch expiry notice skipped")
                     continue
                 grant = await self._restore_row(row)
                 if grant is None:
@@ -677,8 +679,14 @@ class SessionBridgeManager:
                 ).id,
             )
             await self._authorize(subject, context, row.target_umo, "session.watch")
+            row = await self._state.persist_config_ids(
+                row, source_config_id, target_config_id
+            )
         except PermissionError, ValueError:
             await self._state.discard_stored_rule(row.rule_id)
+            return None
+        except Exception:
+            logger.warning("Session bridge restore skipped a rule")
             return None
         grant_context = AuthContext(
             subject=subject,

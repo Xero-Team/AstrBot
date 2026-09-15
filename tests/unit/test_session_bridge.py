@@ -156,7 +156,7 @@ class FakeSessionBridgeStore:
                 await self.delete_session_bridge_rule(row.rule_id)
 
 
-def _manager(send=None, store=None, *, max_watches_per_subject=16):
+def _manager(send=None, store=None, *, max_watches_per_subject=16, get_config_id=None):
     authorization = SimpleNamespace(
         authorize=AsyncMock(
             return_value=SimpleNamespace(allowed=True, effective_role=None)
@@ -169,7 +169,7 @@ def _manager(send=None, store=None, *, max_watches_per_subject=16):
         sender,
         lambda _: MessageDeliveryCapabilities(quote=True, media=frozenset({"image"})),
         authorization=authorization,
-        get_config_id=lambda _: "default",
+        get_config_id=get_config_id or (lambda _: "default"),
         store=store or FakeSessionBridgeStore(),
         max_watches_per_subject=max_watches_per_subject,
     )
@@ -749,4 +749,124 @@ async def test_list_links_hides_expired_watches():
     manager, _, _ = _manager(store=store)
     links = await manager.list_links(event)
     assert [item[0].rule_id for item in links] == ["liveconnect01"]
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_expired_invalid_subject_does_not_abort():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="expiredbadid1",
+        subject_id="not-a-subject",
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time()) - 10,
+    )
+    store.seed(
+        rule_id="livewatch00001",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="other:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time()) + 3600,
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+    assert await store.get_session_bridge_rule("expiredbadid1") is None
+    watches = await manager.list_watches(event)
+    assert [item.rule_id for item in watches] == ["livewatch00001"]
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_continues_after_unexpected_authorize_error():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="brokenwatch01",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time()) + 3600,
+    )
+    store.seed(
+        rule_id="goodwatch0001",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="other:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time()) + 3600,
+    )
+    manager, authorization, _ = _manager(store=store)
+
+    async def authorize(_subject, _action, resource, _context):
+        if resource.umo == "target:GroupMessage:room":
+            raise RuntimeError("transient")
+        return SimpleNamespace(allowed=True, effective_role=None)
+
+    authorization.authorize = authorize
+    await manager.restore()
+    assert await store.get_session_bridge_rule("brokenwatch01") is not None
+    watches = await manager.list_watches(event)
+    assert [item.rule_id for item in watches] == ["goodwatch0001"]
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_same_direction_refresh_updates_config_ids():
+    store = FakeSessionBridgeStore()
+    manager, _, _ = _manager(store=store, get_config_id=lambda _: "ops")
+    event = _event()
+    target = "target:GroupMessage:room"
+    watch = await manager.watch(event, target, ttl_seconds=30)
+    manager._get_config_id = lambda _: "other"
+    watch_again = await manager.watch(event, target, ttl_seconds=30)
+    assert watch_again.rule_id == watch.rule_id
+    watch_row = await store.get_session_bridge_rule(watch.rule_id)
+    assert watch_row is not None
+    assert watch_row.source_config_id == "other"
+    assert watch_row.target_config_id == "other"
+
+    link = await manager.connect(event, target)
+    manager._get_config_id = lambda _: "third"
+    link_again = await manager.connect(event, target)
+    assert link_again.rule_id == link.rule_id
+    link_row = await store.get_session_bridge_rule(link.rule_id)
+    assert link_row is not None
+    assert link_row.source_config_id == "third"
+    assert link_row.target_config_id == "third"
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_refreshes_stale_config_ids():
+    event = _event()
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="staleconfig01",
+        subject_id=event.subject.id,
+        source_umo=event.unified_msg_origin,
+        target_umo="target:GroupMessage:room",
+        source_config_id="stale",
+        target_config_id="stale",
+        kind="watch",
+        expires_at=int(time()) + 3600,
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+    row = await store.get_session_bridge_rule("staleconfig01")
+    assert row is not None
+    assert row.source_config_id == "default"
+    assert row.target_config_id == "default"
     await manager.terminate()

@@ -21,6 +21,8 @@
     "session.connect.status": "当前已连接到 {umo}。将无限期转发其新消息。不带 UMO 的 /send 会发往该会话。",
     "session.links.empty": "没有可见的会话桥接规则。",
     "session.links.body": "会话桥接规则：\n{links}",
+    "session.links.ttl_unbounded": "无期限",
+    "session.links.ttl_seconds": "{seconds}秒",
     "session.unlink.usage": "用法：/session unlink <rule_id>。rule_id 为 12 位小写十六进制。",
     "session.unlink.ok": "已撤销该会话桥接规则。",
     "session.unlink.missing": "没有找到可撤销的规则。",

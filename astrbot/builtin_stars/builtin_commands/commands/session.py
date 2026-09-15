@@ -355,11 +355,14 @@ class SessionCommands:
             return
         lines = []
         for watch, kind in items:
-            ttl = (
-                "unbounded"
-                if watch.expires_at is None
-                else f"{watch.remaining_seconds}s"
-            )
+            if watch.expires_at is None:
+                ttl = await self.context.i18n.t(event, "session.links.ttl_unbounded")
+            else:
+                ttl = await self.context.i18n.t(
+                    event,
+                    "session.links.ttl_seconds",
+                    seconds=watch.remaining_seconds,
+                )
             lines.append(
                 f"{watch.rule_id} {kind} {watch.source_umo} -> {watch.target_umo} ({ttl})"
             )

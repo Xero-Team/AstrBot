@@ -368,6 +368,7 @@ const localTabGroups = computed(() => {
       'websearch',
       'agent_computer_use',
       'proactive_capability',
+      'btw',
     ]
       .filter((key) => props.metadata?.[key])
       .map((key) => ({

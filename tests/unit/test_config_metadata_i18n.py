@@ -1,7 +1,5 @@
 """Ensure Dashboard config-metadata i18n keys cover runtime metadata."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
@@ -137,23 +135,32 @@ def test_config_metadata_locale_trees_match() -> None:
 
 def test_every_btw_profile_field_reaches_dashboard_controls() -> None:
     converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
-    items = converted["plugin_group"]["metadata"]["btw"]["items"]
+    items = converted["ai_group"]["metadata"]["btw"]["items"]
     expected_fields = {f"btw.{field}" for field in _flatten(DEFAULT_CONFIG["btw"])}
     assert set(items) == expected_fields
 
 
 def test_btw_controls_survive_dashboard_metadata_conversion() -> None:
     converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
-    section = converted["plugin_group"]["metadata"]["btw"]
-    assert section["description"] == "plugin_group.btw.description"
+    section = converted["ai_group"]["metadata"]["btw"]
+    assert section["description"] == "ai_group.btw.description"
     enabled = section["items"]["btw.enabled"]
     assert enabled["type"] == "bool"
-    assert enabled["description"] == "plugin_group.btw.btw.enabled.description"
-    assert enabled["hint"] == "plugin_group.btw.btw.enabled.hint"
+    assert enabled["description"] == "ai_group.btw.btw.enabled.description"
+    assert enabled["hint"] == "ai_group.btw.btw.enabled.hint"
+    runtime = section["items"]["btw.work_loop.computer_use_runtime"]
+    assert runtime["options"] == ["inherit", "none", "local", "sandbox"]
+    assert runtime["labels"] == "ai_group.btw.btw.work_loop.computer_use_runtime.labels"
     for locale in LOCALES:
         catalog = _load_locale(locale)
         assert catalog[enabled["description"]]
         assert catalog[enabled["hint"]]
+        assert len(catalog[runtime["labels"]]) == len(runtime["options"])
+
+
+def test_btw_section_stays_out_of_the_plugin_group() -> None:
+    converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+    assert set(converted["plugin_group"]["metadata"]) == {"plugin"}
 
 
 def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:

@@ -373,7 +373,35 @@ class AiocqhttpAdapter(Platform):
 
                 message_str += "".join(at_parts)
             elif t == "mface":
-                continue
+                for m in m_group:
+                    data = m.get("data") or {}
+                    emoji_id = data.get("emoji_id")
+                    key = data.get("key")
+                    summary = data.get("summary")
+                    emoji_package_id = data.get("emoji_package_id")
+                    if isinstance(emoji_package_id, str):
+                        try:
+                            emoji_package_id = (
+                                float(emoji_package_id)
+                                if "." in emoji_package_id
+                                else int(emoji_package_id)
+                            )
+                        except ValueError:
+                            continue
+                    if (
+                        isinstance(emoji_id, str)
+                        and isinstance(key, str)
+                        and isinstance(summary, str)
+                        and isinstance(emoji_package_id, int | float)
+                    ):
+                        abm.message.append(
+                            MFace(
+                                emoji_package_id=emoji_package_id,
+                                emoji_id=emoji_id,
+                                key=key,
+                                summary=summary,
+                            )
+                        )
             elif t == "markdown":
                 for m in m_group:
                     text = m["data"].get("markdown") or m["data"].get("content", "")

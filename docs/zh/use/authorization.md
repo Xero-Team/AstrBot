@@ -54,7 +54,7 @@ AstrBot 把 Dashboard 登录、IM 会话管理和高风险操作拆开。把群�
 
 `session.watch` 和 `session.send` 是独立的跨会话权限，要求 `instance_operator` 或更高角色，且两个会话必须属于同一配置。源会话的群管理员或私聊所有者身份不能用于监听其他会话。已有的 `session.manage`、`session.assign` 跨会话限制保持不变。
 
-`/session watch` 使用可信事件身份创建有期限的监听，不接受命令参数指定身份。`/session connect` 用同一套授权规则创建无期限的一对一连接。`/session pair` 同样需要 `session.watch`，写出两条无头有向边；`/session unpair` 的权限与 `disconnect` 相同（`session.read`）。规则会持久化；启动时用 `Subject.from_id` 重建主体并再次鉴权，权限已无则删除该边，不会静默续转。每次投递前重新检查权限，停止监听、连接或 pair、或撤销权限会阻止后续排队的投递。转发内容对接收会话的所有成员可见。`pair` 不伪造源发送者的平台身份，也不把转发灌进目标入站管道。规则建好后可用 `/session filter` 按主体、角色或正文限制转发；创建指令不带过滤 flag。本阶段没有 Dashboard 管理面，见 [内置指令](./command#跨会话监听与发送)。
+`/session watch` 使用可信事件身份创建有期限的监听，不接受命令参数指定身份。`/session connect` 用同一套授权规则创建无期限的一对一连接。`/session pair` 同样需要 `session.watch`，写出两条带本地化来源头的有向边；`/session unpair` 的权限与 `disconnect` 相同（`session.read`）。规则会持久化；启动时用 `Subject.from_id` 重建主体并再次鉴权，权限已无则删除该边，不会静默续转。每次投递前重新检查权限，停止监听、连接或 pair、或撤销权限会阻止后续排队的投递。转发内容对接收会话的所有成员可见。`pair` 不伪造源发送者的平台身份，也不把转发灌进目标入站管道。规则建好后可用 `/session filter` 按主体、角色或正文限制转发；创建指令不带过滤 flag。本阶段没有 Dashboard 管理面，见 [内置指令](./command#跨会话监听与发送)。
 
 ## 二次验证（step-up）
 

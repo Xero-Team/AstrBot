@@ -117,7 +117,7 @@ class FakeSessionBridgeStore:
                 target_config_id=kwargs["target_config_id"],
                 kind="pair",
                 expires_at=None,
-                header=False,
+                header=True,
                 pair_id=pair_id,
             )
             right = await self.insert_session_bridge_rule(
@@ -128,7 +128,7 @@ class FakeSessionBridgeStore:
                 target_config_id=kwargs["source_config_id"],
                 kind="pair",
                 expires_at=None,
-                header=False,
+                header=True,
                 pair_id=pair_id,
             )
             return left, right
@@ -1028,7 +1028,7 @@ async def test_restore_keeps_one_connect_per_listener():
 
 
 @pytest.mark.asyncio
-async def test_pair_creates_headerless_edges_without_binding_send():
+async def test_pair_forwards_with_source_header_without_binding_send():
     sent = []
 
     async def send(session, chain):
@@ -1055,15 +1055,15 @@ async def test_pair_creates_headerless_edges_without_binding_send():
     assert again_right.rule_id == right.rule_id
     assert again_left.pair_id == left.pair_id
     await manager.observe(_text_envelope(target, "hello"))
-    assert sent[-1] == (event.unified_msg_origin, "hello")
+    assert sent[-1] == (event.unified_msg_origin, "[来自 target · Alice]\nhello")
     await manager.observe(
         _text_envelope(target, "echo", is_self_message=True, message_id="bot")
     )
-    assert sent[-1] == (event.unified_msg_origin, "hello")
+    assert sent[-1] == (event.unified_msg_origin, "[来自 target · Alice]\nhello")
     await manager.observe(
         _text_envelope(event.unified_msg_origin, "from-here", message_id="src")
     )
-    assert sent[-1] == (target, "from-here")
+    assert sent[-1] == (target, "[来自 source · Alice]\nfrom-here")
     await manager.terminate()
 
 

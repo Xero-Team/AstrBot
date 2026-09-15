@@ -73,7 +73,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/session unwatch [监听会话|this] <被监听会话>`：停止你创建的指定监听。监听会话可省略或写 `this`。
 - `/session connect <UMO>`：把当前会话无期限连接到目标会话，需要 `session.watch`。目标会话的新消息会一直转发，直到 `/session disconnect` 或 `/session unlink`。每个主体在每个监听会话只能有一条连接，再次连接会替换目标。省略 UMO 可查看当前连接。指令不接受秒数。
 - `/session disconnect`：断开当前会话的无期限连接，需要 `session.read`。
-- `/session pair <UMO>`：在当前会话与目标之间建立两条无头、无期限的有向边，需要 `session.watch`。两端适配器都必须已加载且可主动发送。只转发真人消息，跳过 Bot 自己的发言和回显，避免回环。对岸看到的是**目标侧 Bot 账号**在说话，不伪造源发送者的平台身份，也不把消息灌进目标入站管道。不绑定 `/send`；省略 UMO 的 `/send` 仍只走 `connect`。指令不接受秒数。每主体最多 8 对（16 条 `pair` 边），与 16 条 connect 并列，不挤占 watch 配额。同一对端点再次 `pair` 会保留原来的 `pair_id` 和两条 `rule_id`。对已有 watch/connect 建 pair 会替换那两条方向上属于该主体的旧边。
+- `/session pair <UMO>`：在当前会话与目标之间建立两条无期限的有向边，需要 `session.watch`。两端适配器都必须已加载且可主动发送。只转发真人消息，跳过 Bot 自己的发言和回显，避免回环。对岸看到的是**目标侧 Bot 账号**在说话，并带上与 watch 相同的本地化来源头（发送者名和源平台）。不伪造源发送者的平台身份，也不把消息灌进目标入站管道。不绑定 `/send`；省略 UMO 的 `/send` 仍只走 `connect`。指令不接受秒数。每主体最多 8 对（16 条 `pair` 边），与 16 条 connect 并列，不挤占 watch 配额。同一对端点再次 `pair` 会保留原来的 `pair_id` 和两条 `rule_id`。对已有 watch/connect 建 pair 会替换那两条方向上属于该主体的旧边。已写入的无头 pair 保持原样，需要重新 `unpair` 再 `pair` 才会带上来源头。
 - `/session unpair [UMO]`：删除共享 `pair_id` 的两条边，需要 `session.read`。恰好一对且当前会话是其中一端时可省略 UMO；0 对提示没有；多于一对必须带 UMO。
 - `/session links`：列出可见的监听、连接和 pair，包含 `rule_id`、类型和剩余时间或无期限；pair 额外显示 `pair_id`。权限与 `watches` 相同（`session.read`）。创建者只看到自己的规则；当前会话配置上的 `instance_operator` 额外看到两端任一配置 id 属于当前会话配置的规则；`operator` / `root` 看到全部。
 - `/session unlink <rule_id>`：按 12 位小写十六进制 id 撤销一条监听或连接。创建者可撤自己的规则（角色被撤后仍可）。本配置 `instance_operator` 可撤两端任一配置属于当前会话配置的规则；`operator` / `root` 可撤全部。目标是 `kind=pair` 时拒绝并提示使用 `unpair`，两条边都还在。

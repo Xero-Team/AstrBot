@@ -136,8 +136,8 @@ async def test_insert_session_bridge_pair_replaces_both_directions(
     )
     assert left.kind == "pair"
     assert right.kind == "pair"
-    assert left.header is False
-    assert right.header is False
+    assert left.header is True
+    assert right.header is True
     assert left.pair_id == right.pair_id == "pairidabcdef"
     assert left.source_umo == watch.source_umo
     assert right.source_umo == watch.target_umo

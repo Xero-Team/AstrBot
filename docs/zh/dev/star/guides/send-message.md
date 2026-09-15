@@ -75,7 +75,7 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
 - `connection(event)`：返回当前无期限连接，没有则是 `None`。
 - `send(event, target_umo, *, target_in_header=True)`：把当前消息去掉指令头后的正文和附件投递到目标会话，返回 `DeliveryReceipt`。已连接且不带 UMO 的 `/send` 传 `target_in_header=False`。
 
-这些方法会再次调用 `authorize()`，要求 `session.watch` 或 `session.send`，且两个会话属于同一配置。监听、连接和 pair 会持久化，重启后未过期的规则仍在。`remaining_seconds` 按墙钟计算，无期限返回 `0`。不要自己构造 `SessionBridgeManager`。`SessionWatch` 和时长常量可从 `astrbot.api.platform` 导入。`links` / `unlink` / `pair` / `unpair` / `filter` 本阶段只做 IM 指令，没有对应的 `SessionBridgeCapability` 方法。`pair` 是两条共享 `pair_id` 的无头有向边：对岸看到的是目标侧 Bot 账号，不伪造源平台身份，不绑定 `/send`，拆对只能 `unpair`。当前没有 Dashboard 管理面，插件也不应假设存在对应 HTTP API。
+这些方法会再次调用 `authorize()`，要求 `session.watch` 或 `session.send`，且两个会话属于同一配置。监听、连接和 pair 会持久化，重启后未过期的规则仍在。`remaining_seconds` 按墙钟计算，无期限返回 `0`。不要自己构造 `SessionBridgeManager`。`SessionWatch` 和时长常量可从 `astrbot.api.platform` 导入。`links` / `unlink` / `pair` / `unpair` / `filter` 本阶段只做 IM 指令，没有对应的 `SessionBridgeCapability` 方法。`pair` 是两条共享 `pair_id` 的有向边：对岸看到的是目标侧 Bot 账号，并带上与 watch 相同的本地化来源头，不伪造源平台身份，不绑定 `/send`，拆对只能 `unpair`。当前没有 Dashboard 管理面，插件也不应假设存在对应 HTTP API。
 
 ## 富媒体消息链
 

@@ -153,7 +153,7 @@ class Main(star.Star):
     async def session_pair(
         self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
     ) -> None:
-        """Pair the current session with another session without a source header."""
+        """Pair the current session with another session."""
         await self.session_c.pair(event, spec)
 
     @filter.permission("session.read")
@@ -161,7 +161,7 @@ class Main(star.Star):
     async def session_unpair(
         self, event: AstrMessageEvent, spec: GreedyStr = GreedyStr("")
     ) -> None:
-        """Remove both headerless pair edges that share a pair id."""
+        """Remove both pair edges that share a pair id."""
         await self.session_c.unpair(event, spec)
 
     @filter.permission("session.read")

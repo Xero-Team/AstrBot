@@ -38,7 +38,7 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
             target_config_id: Config id of the observed session at write time.
             kind: Edge kind. Writes ``watch``, ``connect``, or ``pair``.
             expires_at: Wall-clock UTC unix seconds, or None for unbounded edges.
-            header: Whether deliveries include a source header. Pair writes False.
+            header: Whether deliveries include a source header. Pair writes True.
             pair_id: Shared 12-hex id for a pair. Watch and connect write None.
             match: Inclusive filter document. S1 writes ``{}``.
             except_: Exclusive filter document. S1 writes ``{}``.
@@ -146,7 +146,7 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
                             target_config_id=target_config_id,
                             kind="pair",
                             expires_at=None,
-                            header=False,
+                            header=True,
                             pair_id=pair_id,
                             match={},
                             except_={},
@@ -160,7 +160,7 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
                             target_config_id=source_config_id,
                             kind="pair",
                             expires_at=None,
-                            header=False,
+                            header=True,
                             pair_id=pair_id,
                             match={},
                             except_={},

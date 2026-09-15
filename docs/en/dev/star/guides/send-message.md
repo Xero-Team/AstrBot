@@ -90,11 +90,12 @@ restart. `remaining_seconds` uses the wall clock; unbounded links return `0`.
 Do not construct `SessionBridgeManager` yourself. Import `SessionWatch` and
 the duration constants from `astrbot.api.platform`. `links` / `unlink` /
 `pair` / `unpair` / `filter` are IM commands only in this stage;
-`SessionBridgeCapability` does not expose them. A pair is two headerless
-directed edges that share a `pair_id`: the far side sees the destination Bot
-account, the source platform identity is not forged, `/send` is not bound,
-and splitting the pair requires `unpair`. There is no Dashboard management
-surface, and plugins must not assume a matching HTTP API.
+`SessionBridgeCapability` does not expose them. A pair is two directed
+edges that share a `pair_id`: the far side sees the destination Bot
+account with the same localized source header as a watch, the source
+platform identity is not forged, `/send` is not bound, and splitting
+the pair requires `unpair`. There is no Dashboard management surface,
+and plugins must not assume a matching HTTP API.
 
 ## Rich-Media Chains
 

@@ -489,7 +489,7 @@ class SessionCommands:
         )
 
     async def pair(self, event: AstrMessageEvent, spec: str) -> None:
-        """Create a headerless pair between the current session and a target."""
+        """Create a pair between the current session and a target."""
         try:
             target_umo = parse_pair_spec(spec)
             left, right = await self.context.bridges._manager.pair(event, target_umo)

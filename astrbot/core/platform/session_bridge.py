@@ -268,7 +268,7 @@ class SessionBridgeManager:
     async def pair(
         self, event: AstrMessageEvent, target_umo: str
     ) -> tuple[SessionWatch, SessionWatch]:
-        """Create two headerless reverse edges between the current session and target."""
+        """Create two reverse edges between the current session and target."""
         listener = event.unified_msg_origin.strip()
         target = target_umo.strip()
         if listener == target:

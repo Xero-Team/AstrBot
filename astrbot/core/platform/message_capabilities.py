@@ -148,7 +148,7 @@ MESSAGE_CAPABILITIES: dict[str, MessageDeliveryCapabilities] = {
         media=_MEDIA,
         mixed_parts=False,
         quote=False,
-        forward=True,
+        forward=False,
         mention=True,
         native_namespaces=frozenset({"webchat"}),
     ),

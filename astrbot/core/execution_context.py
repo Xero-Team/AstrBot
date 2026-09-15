@@ -2,7 +2,7 @@ import asyncio
 import logging
 from asyncio import Queue, QueueFull
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from astrbot.core.agent.follow_up import FollowUpCoordinator
 from astrbot.core.agent.hooks import BaseAgentRunHooks
@@ -17,7 +17,7 @@ from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.db.protocols import PluginRuntimeStore
+from astrbot.core.db.protocols import PluginRuntimeStore, SessionBridgeStore
 from astrbot.core.exceptions import ProviderNotFoundError
 from astrbot.core.group_sender_concurrency import GroupOutboundGate
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
@@ -249,6 +249,7 @@ class CoreExecutionContext:
             ),
             get_locale=self._session_locale,
             get_platform_family=self._adapter_family,
+            store=cast(SessionBridgeStore, db),
         )
         """Runtime-owned expiring cross-session watch state."""
         self.conversation_manager = conversation_manager

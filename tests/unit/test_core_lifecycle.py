@@ -434,6 +434,8 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_execution_context.session_waiter_registry = SimpleNamespace(
             terminate=AsyncMock()
         )
+        mock_execution_context.session_bridge_manager.restore = AsyncMock()
+        mock_execution_context.session_bridge_manager.terminate = AsyncMock()
 
         mock_plugin_manager = MagicMock()
         mock_plugin_manager.catalog.plugins.all.return_value = []
@@ -688,7 +690,9 @@ class TestAstrBotCoreLifecycleInitialize:
             background_tasks=set(),
             session_waiter_registry=SimpleNamespace(terminate=AsyncMock()),
             session_bridge_manager=SimpleNamespace(
-                observe=AsyncMock(), terminate=AsyncMock()
+                observe=AsyncMock(),
+                terminate=AsyncMock(),
+                restore=AsyncMock(),
             ),
         )
         plugin_manager = SimpleNamespace(

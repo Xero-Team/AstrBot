@@ -22,6 +22,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.route_identity import PlatformRouteIdentity
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.session_bridge import SessionBridgeManager
+from tests.unit.test_session_bridge import FakeSessionBridgeStore
 
 
 def test_message_i18n_catalogs_share_keys():
@@ -143,6 +144,7 @@ def _manager(send=None):
         lambda _: MessageDeliveryCapabilities(quote=True, media=frozenset({"image"})),
         authorization=authorization,
         get_config_id=lambda _: "default",
+        store=FakeSessionBridgeStore(),
     )
     return manager, authorization, sender
 
@@ -266,6 +268,7 @@ async def test_session_bridge_forwards_to_matching_source() -> None:
             authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
         ),
         get_config_id=lambda _: "default",
+        store=FakeSessionBridgeStore(),
     )
     source = "webchat:FriendMessage:source"
     target = "telegram:GroupMessage:target"
@@ -309,6 +312,7 @@ async def test_session_bridge_header_follows_target_locale() -> None:
         ),
         get_config_id=lambda _: "default",
         get_locale=AsyncMock(return_value="en-US"),
+        store=FakeSessionBridgeStore(),
     )
     source = "webchat:FriendMessage:source"
     target = "telegram:GroupMessage:target"
@@ -346,6 +350,7 @@ async def test_session_bridge_header_uses_adapter_family_not_instance_id() -> No
         get_platform_family=lambda umo: {
             "tg-main:FriendMessage:source": "telegram",
         }.get(umo, umo.split(":", 1)[0]),
+        store=FakeSessionBridgeStore(),
     )
     source = "tg-main:FriendMessage:source"
     target = "napcat:GroupMessage:room"
@@ -973,127 +978,6 @@ def test_parse_watch_spec_accepts_this_omission_and_duration():
     )
 
 
-@pytest.mark.asyncio
-async def test_watch_custom_source_and_ttl_and_rejects_out_of_range():
-    from astrbot.core.platform.session_bridge import (
-        DEFAULT_WATCH_TTL_SECONDS,
-        MAX_WATCH_TTL_SECONDS,
-        MIN_WATCH_TTL_SECONDS,
-    )
-
-    manager, authorization, _ = _manager()
-    event = _event()
-    listener = "other:FriendMessage:box"
-    target = "target:GroupMessage:room"
-    watch = await manager.watch(
-        event, target, source_umo=listener, ttl_seconds=MIN_WATCH_TTL_SECONDS
-    )
-    assert watch.source_umo == listener
-    assert watch.target_umo == target
-    assert MIN_WATCH_TTL_SECONDS - 1 <= watch.remaining_seconds <= MIN_WATCH_TTL_SECONDS
-    assert [call.args[2].umo for call in authorization.authorize.await_args_list] == [
-        listener,
-        target,
-    ]
-    default = await manager.watch(_event("source:FriendMessage:two"), target)
-    assert (
-        DEFAULT_WATCH_TTL_SECONDS - 1
-        <= default.remaining_seconds
-        <= DEFAULT_WATCH_TTL_SECONDS
-    )
-    with pytest.raises(ValueError, match="Invalid watch duration"):
-        await manager.watch(event, target, ttl_seconds=MIN_WATCH_TTL_SECONDS - 1)
-    with pytest.raises(ValueError, match="Invalid watch duration"):
-        await manager.watch(event, target, ttl_seconds=MAX_WATCH_TTL_SECONDS + 1)
-    assert await manager.unwatch(event, target, source_umo=listener)
-    await manager.terminate()
-
-
-@pytest.mark.asyncio
-async def test_watch_expiry_notifies_listener(monkeypatch):
-    import asyncio
-
-    sent = []
-
-    async def send(session, chain):
-        sent.append((str(session), chain.get_plain_text()))
-        return PlatformSendResult(session.platform_id, True, str(session))
-
-    async def instant_sleep(_delay):
-        return
-
-    monkeypatch.setattr(
-        "astrbot.core.platform.session_bridge.asyncio.sleep", instant_sleep
-    )
-    manager, _, _ = _manager(send)
-    source = "source:FriendMessage:sender"
-    target = "target:GroupMessage:room"
-    await manager.watch(_event(source), target, ttl_seconds=60)
-    await asyncio.sleep(0)
-    pending = [
-        task
-        for task in asyncio.all_tasks()
-        if task.get_name().startswith("session-watch-expire")
-    ]
-    if pending:
-        await asyncio.gather(*pending)
-    assert sent == [(source, "对 target:GroupMessage:room 的监听已结束。")]
-    assert await manager.list_watches(_event(source)) == ()
-    await manager.terminate()
-
-
-@pytest.mark.asyncio
-async def test_watch_expiry_notice_follows_locale(monkeypatch):
-    import asyncio
-
-    sent = []
-
-    async def send(session, chain):
-        sent.append(chain.get_plain_text())
-        return PlatformSendResult(session.platform_id, True, str(session))
-
-    async def instant_sleep(_delay):
-        return
-
-    monkeypatch.setattr(
-        "astrbot.core.platform.session_bridge.asyncio.sleep", instant_sleep
-    )
-    manager, _, _ = _manager(send)
-    manager._get_locale = AsyncMock(return_value="en-US")
-    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
-    await asyncio.sleep(0)
-    pending = [
-        task
-        for task in asyncio.all_tasks()
-        if task.get_name().startswith("session-watch-expire")
-    ]
-    if pending:
-        await asyncio.gather(*pending)
-    assert sent == ["The watch on target:GroupMessage:room has ended."]
-    await manager.terminate()
-
-
-@pytest.mark.asyncio
-async def test_terminate_clears_watches_and_message_maps():
-    manager, _, _ = _manager()
-    event = _event()
-    await manager.watch(event, "target:GroupMessage:room")
-    await manager.observe(
-        MessageEnvelope(
-            PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
-            source_message_id="original",
-            content=(PortablePart(ContentKind.TEXT, "hello"),),
-        )
-    )
-    assert manager._watches
-    assert manager._message_ids
-    await manager.terminate()
-    assert manager._watches == {}
-    assert manager._links == {}
-    assert manager._forwarded == {}
-    assert manager._message_ids == {}
-
-
 def test_is_umo_accepts_session_strings():
     from astrbot.builtin_stars.builtin_commands.commands.session import _is_umo
 
@@ -1115,47 +999,6 @@ def test_send_projection_strips_command_only_when_target_not_in_header():
     ] == ["hello there"]
     with pytest.raises(ValueError):
         envelope_from_send_event(event, "target:GroupMessage:room")
-
-
-@pytest.mark.asyncio
-async def test_connect_forwards_without_expiry_and_send_uses_link():
-    from astrbot.core.message.components import Plain
-    from astrbot.core.star.plugin_context import SessionBridgeCapability
-
-    sent = []
-
-    async def send(session, chain):
-        sent.append((str(session), chain.get_plain_text()))
-        return PlatformSendResult(session.platform_id, True, str(session))
-
-    manager, authorization, _ = _manager(send)
-    event = _event()
-    target = "target:GroupMessage:room"
-    capability = SessionBridgeCapability(manager)
-    link = await capability.connect(event, target)
-    assert link.expires_at is None
-    assert await capability.connection(event) == link
-    assert [call.args[2].umo for call in authorization.authorize.await_args_list] == [
-        event.unified_msg_origin,
-        target,
-    ]
-    await manager.observe(
-        MessageEnvelope(
-            PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
-            source_message_id="9",
-            sender=SenderSnapshot("1", "Alice", "napcat"),
-            content=(PortablePart(ContentKind.TEXT, "hello"),),
-        )
-    )
-    assert sent[-1][0] == event.unified_msg_origin
-    assert "hello" in sent[-1][1]
-
-    send_event = _event(components=[Plain("/send ping")])
-    receipt = await capability.send(send_event, target, target_in_header=False)
-    assert receipt.status == "accepted"
-    assert await capability.disconnect(event)
-    assert await capability.connection(event) is None
-    await manager.terminate()
 
 
 @pytest.mark.asyncio

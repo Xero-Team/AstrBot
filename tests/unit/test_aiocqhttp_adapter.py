@@ -516,3 +516,52 @@ async def test_aiocqhttp_mface_conversion_keeps_market_face(monkeypatch):
     assert face.emoji_id == "eid"
     assert face.key == "key"
     assert face.summary == "wow"
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_mface_conversion_accepts_string_package_id(monkeypatch):
+    from tests.fixtures.mocks.aiocqhttp import create_mock_aiocqhttp_modules
+
+    mock_aiocqhttp = create_mock_aiocqhttp_modules()
+    mock_aiocqhttp.CQHttp = _FakeCQHttp
+    monkeypatch.setitem(sys.modules, "aiocqhttp", mock_aiocqhttp)
+    monkeypatch.setitem(sys.modules, "aiocqhttp.exceptions", mock_aiocqhttp.exceptions)
+
+    from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+        AiocqhttpAdapter,
+    )
+
+    adapter = AiocqhttpAdapter.__new__(AiocqhttpAdapter)
+    event = _FakeEvent(
+        {
+            "post_type": "message",
+            "message_type": "group",
+            "group_id": 654321,
+            "self_id": 123456,
+            "message_id": 781,
+            "message": [
+                {
+                    "type": "mface",
+                    "data": {
+                        "emoji_package_id": "1",
+                        "emoji_id": "eid",
+                        "key": "key",
+                        "summary": "wow",
+                    },
+                },
+                {"type": "mface", "data": "bad"},
+            ],
+            "sender": {
+                "user_id": 111222,
+                "nickname": "tester",
+                "card": "tester-card",
+            },
+        }
+    )
+
+    abm = await adapter._convert_handle_message_event(event)
+
+    assert len(abm.message) == 1
+    face = abm.message[0]
+    assert isinstance(face, MFace)
+    assert face.emoji_package_id == 1

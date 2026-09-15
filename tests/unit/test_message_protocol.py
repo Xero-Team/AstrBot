@@ -1426,6 +1426,91 @@ def test_plan_message_delivery_contact_uses_sub_type():
     assert contact.sub_type == "group"
 
 
+def test_plan_message_delivery_omits_invalid_location_and_contact():
+    from astrbot.core.message.components import Location, Node, Nodes, Plain
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[
+                                Location(lat=1.5, lon=2.5, title="park"),
+                                Plain("kept"),
+                            ],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    broken = replace_content(
+        envelope,
+        (
+            envelope.content[0],
+            PortablePart(
+                ContentKind.LOCATION,
+                {"lat": None, "lon": 2},
+                sender=envelope.content[1].sender,
+            ),
+            PortablePart(
+                ContentKind.CONTACT,
+                {"type": "qq", "id": "not-a-number"},
+                sender=envelope.content[1].sender,
+            ),
+            envelope.content[1],
+            envelope.content[2],
+        ),
+    )
+    content = (
+        _forward_nodes(
+            plan_message_delivery(
+                broken,
+                MESSAGE_CAPABILITIES["napcat"],
+                target_umo="napcat:GroupMessage:room",
+            )
+        )[0]
+        .nodes[0]
+        .content
+    )
+    assert [type(part) for part in content] == [Location, Plain]
+    assert content[0].lat == 1.5
+    assert [part.text for part in content if isinstance(part, Plain)] == ["kept"]
+
+
+def test_plan_message_delivery_contact_coerces_string_id():
+    from astrbot.core.message.components import Contact
+
+    sender = SenderSnapshot("1001", "Alice", "napcat")
+    envelope = MessageEnvelope(
+        _route(),
+        content=(
+            PortablePart(ContentKind.TEXT, "[Alice]\n", sender=sender),
+            PortablePart(
+                ContentKind.CONTACT, {"type": "qq", "id": "99"}, sender=sender
+            ),
+        ),
+    )
+    contact = (
+        _forward_nodes(
+            plan_message_delivery(
+                envelope,
+                MESSAGE_CAPABILITIES["napcat"],
+                target_umo="napcat:GroupMessage:room",
+            )
+        )[0]
+        .nodes[0]
+        .content[0]
+    )
+    assert isinstance(contact, Contact)
+    assert contact.sub_type == "qq"
+    assert contact.id == 99
+
+
 def test_plan_message_delivery_cross_platform_id_replays_node_faces():
     from astrbot.core.message.components import Face, Json, MFace, Node, Nodes
     from astrbot.core.platform.message_projection import envelope_from_event

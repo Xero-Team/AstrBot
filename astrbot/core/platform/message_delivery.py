@@ -37,6 +37,7 @@ from .message_protocol import (
     MessageEnvelope,
     NativeContent,
     PortablePart,
+    QuoteReference,
     SenderSnapshot,
     plan_delivery,
 )
@@ -187,22 +188,60 @@ def _node_identity(sender: SenderSnapshot, locale: str) -> tuple[str, str]:
     return uin, name
 
 
+def _as_float(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _as_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _part_mapping(value: object) -> Mapping[str, object]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _location_component(value: object) -> Location | None:
+    data = _part_mapping(value)
+    lat = _as_float(data.get("lat"))
+    lon = _as_float(data.get("lon"))
+    if lat is None or lon is None:
+        return None
+    return Location(lat=lat, lon=lon, title=str(data.get("title") or ""))
+
+
+def _contact_component(value: object) -> Contact | None:
+    data = _part_mapping(value)
+    raw_id = data.get("id")
+    if raw_id is None or raw_id == "":
+        contact_id = None
+    else:
+        contact_id = _as_int(raw_id)
+        if contact_id is None:
+            return None
+    return Contact(_type=str(data.get("type") or ""), id=contact_id)
+
+
 def _portable_node_component(
     part: PortablePart, *, cross_session: bool
 ) -> BaseMessageComponent | None:
     if part.kind == ContentKind.LOCATION:
-        data = part.value if isinstance(part.value, Mapping) else {}
-        try:
-            return Location(
-                lat=float(data.get("lat")),
-                lon=float(data.get("lon")),
-                title=str(data.get("title") or ""),
-            )
-        except TypeError, ValueError:
-            return None
+        return _location_component(part.value)
     if part.kind == ContentKind.CONTACT:
-        data = part.value if isinstance(part.value, Mapping) else {}
-        return Contact(_type=str(data.get("type") or ""), id=data.get("id"))
+        return _contact_component(part.value)
     if part.kind == ContentKind.MENTION and cross_session:
         data = (
             part.value if isinstance(part.value, Mapping) else {"id": str(part.value)}
@@ -246,11 +285,11 @@ def _reconstruct_forward_chain(
         current = Node(content=[], uin=uin, name=name)
 
     for item in items:
-        if _is_author_separator(item, locale):
-            assert item.sender is not None
-            open_node(item.sender)
-            continue
         sender = _item_sender(item)
+        if _is_author_separator(item, locale):
+            if sender is not None:
+                open_node(sender)
+            continue
         if current is None:
             if sender is None:
                 continue
@@ -262,6 +301,49 @@ def _reconstruct_forward_chain(
     if not nodes:
         return None
     return MessageChain([Nodes(nodes=nodes)]).use_markdown(False)
+
+
+def _with_quote(
+    chain: MessageChain,
+    quote: QuoteReference | None,
+    *,
+    capabilities: MessageDeliveryCapabilities,
+    quote_id: str | None,
+) -> MessageChain:
+    if quote is None:
+        return chain
+    if capabilities.quote and quote_id:
+        return MessageChain([Reply(id=quote_id), *chain.chain]).use_markdown(False)
+    preview = quote.preview or quote.message_id
+    return MessageChain([Plain(f"> {preview}\n"), *chain.chain]).use_markdown(False)
+
+
+def _deliver_island(
+    items: Sequence[PortablePart | NativeContent],
+    *,
+    envelope: MessageEnvelope,
+    capabilities: MessageDeliveryCapabilities,
+    quote_id: str | None,
+    locale: str,
+    cross_session: bool,
+    has_sender: bool,
+) -> tuple[MessageChain, ...]:
+    sub_envelope = replace(envelope, content=tuple(items))
+    if not has_sender:
+        return _plan_flat(sub_envelope, capabilities, quote_id=quote_id, locale=locale)
+    reconstructed = _reconstruct_forward_chain(
+        items, locale=locale, cross_session=cross_session
+    )
+    if reconstructed is None:
+        return _plan_flat(sub_envelope, capabilities, quote_id=quote_id, locale=locale)
+    return (
+        _with_quote(
+            reconstructed,
+            sub_envelope.quote,
+            capabilities=capabilities,
+            quote_id=quote_id,
+        ),
+    )
 
 
 def batch_to_message_chain(
@@ -328,48 +410,23 @@ def plan_message_delivery(
     remaining_quote = envelope.quote
     remaining_quote_id = quote_id
     for has_sender, items in _split_sender_islands(envelope.content):
-        sub_envelope = replace(
-            envelope,
-            content=tuple(items),
-            quote=remaining_quote if first else None,
+        chains.extend(
+            _deliver_island(
+                items,
+                envelope=replace(
+                    envelope,
+                    quote=remaining_quote if first else None,
+                ),
+                capabilities=root_capabilities,
+                quote_id=remaining_quote_id if first else None,
+                locale=locale,
+                cross_session=cross_session,
+                has_sender=has_sender,
+            )
         )
-        sub_quote_id = remaining_quote_id if first else None
         first = False
         remaining_quote = None
         remaining_quote_id = None
-        if not has_sender:
-            chains.extend(
-                _plan_flat(
-                    sub_envelope,
-                    root_capabilities,
-                    quote_id=sub_quote_id,
-                    locale=locale,
-                )
-            )
-            continue
-        reconstructed = _reconstruct_forward_chain(
-            items, locale=locale, cross_session=cross_session
-        )
-        if reconstructed is None:
-            chains.extend(
-                _plan_flat(
-                    sub_envelope,
-                    root_capabilities,
-                    quote_id=sub_quote_id,
-                    locale=locale,
-                )
-            )
-            continue
-        if sub_envelope.quote is not None and root_capabilities.quote and sub_quote_id:
-            reconstructed = MessageChain(
-                [Reply(id=sub_quote_id), *reconstructed.chain]
-            ).use_markdown(False)
-        elif sub_envelope.quote is not None:
-            preview = sub_envelope.quote.preview or sub_envelope.quote.message_id
-            reconstructed = MessageChain(
-                [Plain(f"> {preview}\n"), *reconstructed.chain]
-            ).use_markdown(False)
-        chains.append(reconstructed)
     return tuple(chains)
 
 

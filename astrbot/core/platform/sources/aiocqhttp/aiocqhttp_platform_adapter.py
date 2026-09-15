@@ -27,6 +27,19 @@ from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
 
+def _mface_package_id(value: object) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return value
+    if isinstance(value, str):
+        try:
+            return float(value) if "." in value else int(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _payload_field(payload: Any, name: str) -> Any:
     if payload is None:
         return None
@@ -374,25 +387,18 @@ class AiocqhttpAdapter(Platform):
                 message_str += "".join(at_parts)
             elif t == "mface":
                 for m in m_group:
-                    data = m.get("data") or {}
+                    data = m.get("data")
+                    if not isinstance(data, dict):
+                        continue
                     emoji_id = data.get("emoji_id")
                     key = data.get("key")
                     summary = data.get("summary")
-                    emoji_package_id = data.get("emoji_package_id")
-                    if isinstance(emoji_package_id, str):
-                        try:
-                            emoji_package_id = (
-                                float(emoji_package_id)
-                                if "." in emoji_package_id
-                                else int(emoji_package_id)
-                            )
-                        except ValueError:
-                            continue
+                    emoji_package_id = _mface_package_id(data.get("emoji_package_id"))
                     if (
                         isinstance(emoji_id, str)
                         and isinstance(key, str)
                         and isinstance(summary, str)
-                        and isinstance(emoji_package_id, int | float)
+                        and emoji_package_id is not None
                     ):
                         abm.message.append(
                             MFace(

@@ -1493,3 +1493,107 @@ async def test_append_filter_rereads_and_returns_none_on_persist_miss():
     live = await manager.get_filter(event, watch.rule_id)
     assert live == ({"text": ["alpha", "beta"]}, {})
     await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_observe_delivers_nodes_when_target_supports_forward():
+    from astrbot.core.message.components import Face, Node, Nodes, Plain
+    from astrbot.core.platform.message_capabilities import MESSAGE_CAPABILITIES
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    def capabilities(umo: str):
+        family = umo.split(":", 1)[0]
+        if family in MESSAGE_CAPABILITIES:
+            return MESSAGE_CAPABILITIES[family]
+        return MessageDeliveryCapabilities(quote=True, media=frozenset({"image"}))
+
+    authorization = SimpleNamespace(
+        authorize=AsyncMock(
+            return_value=SimpleNamespace(allowed=True, effective_role=None)
+        )
+    )
+    manager = SessionBridgeManager(
+        send,
+        capabilities,
+        authorization=authorization,
+        get_config_id=lambda _: "default",
+        get_self_id=lambda _: "bot",
+        store=FakeSessionBridgeStore(),
+    )
+    source_event = _event()
+    source_event.get_platform_name = lambda: "napcat"
+    source_event.get_messages = lambda: [
+        Nodes(
+            nodes=[
+                Node(
+                    name="Alice",
+                    uin="1001",
+                    content=[Plain("hi"), Face(id=111)],
+                )
+            ]
+        )
+    ]
+    envelope = envelope_from_event(source_event)
+
+    napcat_listener = _event(umo="napcat:GroupMessage:room")
+    await manager.watch(
+        napcat_listener, source_event.unified_msg_origin, ttl_seconds=60
+    )
+    await manager.observe(envelope)
+    napcat_chains = list(sent)
+    assert any(
+        isinstance(part, Nodes) and any(isinstance(item, Face) for item in node.content)
+        for chain in napcat_chains
+        for part in chain.chain
+        for node in (part.nodes if isinstance(part, Nodes) else [])
+    )
+    assert any(
+        chain.get_plain_text() and "来自" in chain.get_plain_text()
+        for chain in napcat_chains
+    )
+    assert not any(
+        isinstance(part, Nodes)
+        and any("[Alice]\n" in getattr(item, "text", "") for item in node.content)
+        for chain in napcat_chains
+        for part in chain.chain
+        for node in (part.nodes if isinstance(part, Nodes) else [])
+    )
+
+    sent.clear()
+    aiocqhttp_listener = _event(umo="aiocqhttp:GroupMessage:room")
+    await manager.watch(
+        aiocqhttp_listener, source_event.unified_msg_origin, ttl_seconds=60
+    )
+    await manager.observe(envelope)
+    assert any(isinstance(part, Nodes) for chain in sent for part in chain.chain)
+    assert any(
+        chain.get_plain_text() and "来自" in chain.get_plain_text() for chain in sent
+    )
+
+    sent.clear()
+    webchat_listener = _event(umo="webchat:FriendMessage:user")
+    await manager.watch(
+        webchat_listener, source_event.unified_msg_origin, ttl_seconds=60
+    )
+    await manager.observe(envelope)
+    assert all(
+        not any(isinstance(part, Nodes) for part in chain.chain) for chain in sent
+    )
+    assert any("[Alice]" in chain.get_plain_text() for chain in sent)
+
+    sent.clear()
+    telegram_listener = _event(umo="telegram:FriendMessage:user")
+    await manager.watch(
+        telegram_listener, source_event.unified_msg_origin, ttl_seconds=60
+    )
+    await manager.observe(envelope)
+    assert all(
+        not any(isinstance(part, Nodes) for part in chain.chain) for chain in sent
+    )
+    await manager.terminate()

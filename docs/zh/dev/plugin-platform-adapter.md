@@ -220,7 +220,7 @@ make napcat-check
 
 ## 跨平台消息投递
 
-跨会话监听使用 `MessageEnvelope` 保存入站语义快照。`content` 是唯一的有序内容序列；`source_route` 保留传输路由，`source_umo` 保留入站会话身份，不能混为一个可变字段。源适配器负责解析私有文件 ID 和延迟媒体引用，目标适配器负责上传和协议编码。合并转发记录展开后保留作者标签和媒体顺序。
+跨会话监听使用 `MessageEnvelope` 保存入站语义快照。`content` 是唯一的有序内容序列；`source_route` 保留传输路由，`source_umo` 保留入站会话身份，不能混为一个可变字段。源适配器负责解析私有文件 ID 和延迟媒体引用，目标适配器负责上传和协议编码。投影层会把合并转发展平；目标 `MessageDeliveryCapabilities.forward` 为真时，投递规划器把带发送者快照的片段重建为单层 `Nodes`。否则保持带作者标签的线性转录，并把节点内 Face / Json / MFace 做成摘要。WebChat 的 `forward` 为假，不接收合并转发卡片。
 
 适配器通过 `message_capabilities(session)` 返回不可变的 `MessageDeliveryCapabilities`。插件适配器可以从 `astrbot.api.platform` 导入这些类型并覆写该方法。描述必须反映当前发送路径、账号模式和目标会话，不应直接照搬平台协议能力。支持的原生消息需要同时匹配命名空间与内容种类；跨 Bot 实例默认降级，不能仅凭平台名称复用私有 payload。
 

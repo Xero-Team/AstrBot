@@ -220,7 +220,7 @@ make napcat-check
 
 ## Cross-platform message delivery
 
-Cross-session watches capture inbound semantics in `MessageEnvelope`. Its `content` is the only ordered sequence. `source_route` retains the transport route, while `source_umo` retains the inbound session identity. The source adapter resolves private file IDs and deferred media; the target owns uploads and protocol encoding. Forwarded transcripts are expanded with author labels and their original media order.
+Cross-session watches capture inbound semantics in `MessageEnvelope`. Its `content` is the only ordered sequence. `source_route` retains the transport route, while `source_umo` retains the inbound session identity. The source adapter resolves private file IDs and deferred media; the target owns uploads and protocol encoding. Projection flattens merged forwards. When the target `MessageDeliveryCapabilities.forward` is true, the delivery planner reconstructs sender-tagged fragments as one-level `Nodes`. Otherwise delivery stays a labeled transcript and node-internal Face / Json / MFace become summaries. WebChat sets `forward` to false and does not receive merged-forward cards.
 
 Adapters return immutable `MessageDeliveryCapabilities` from `message_capabilities(session)`. Plugin adapters can import these types from `astrbot.api.platform` and override the method. Describe the current sender, account mode, and target session instead of copying a platform protocol's theoretical capabilities. Native JSON snapshots must match both namespace and content kind. Delivery across Bot instances defaults to fallback; matching platform names alone does not make private payloads reusable.
 

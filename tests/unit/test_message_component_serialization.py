@@ -7,6 +7,7 @@ from astrbot.core.message.components import (
     Anonymous,
     BaseMessageComponent,
     ComponentTypes,
+    File,
     FlashTransfer,
     Forward,
     Mention,
@@ -17,6 +18,7 @@ from astrbot.core.message.components import (
     Plain,
     Poke,
     Reply,
+    Video,
 )
 from astrbot.core.message.message_event_result import MessageEventResult
 
@@ -158,3 +160,26 @@ async def test_node_to_dict_does_not_map_mention_target_all_to_everyone():
         {"type": "text", "data": {"text": "@all"}},
         {"type": "text", "data": {"text": "hi"}},
     ]
+
+
+@pytest.mark.asyncio
+async def test_node_to_dict_encodes_video_and_file_as_base64(tmp_path):
+    video_payload = "aGVsbG8="
+    file_path = tmp_path / "clip.bin"
+    file_path.write_bytes(b"hello")
+    node = Node(
+        uin="10001",
+        name="Mock Sender",
+        content=[
+            Video.fromBase64(video_payload),
+            File(name="clip.bin", file=str(file_path)),
+        ],
+    )
+
+    payload = await node.to_dict()
+    content = payload["data"]["content"]
+
+    assert content[0]["type"] == "video"
+    assert content[0]["data"]["file"].startswith("base64://")
+    assert content[1]["type"] == "file"
+    assert content[1]["data"]["file"].startswith("base64://")

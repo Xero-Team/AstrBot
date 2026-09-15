@@ -441,6 +441,22 @@ class Video(DeferredMediaSourceComponent):
             pass
         raise Exception(f"not a valid file: {file_source}")
 
+    async def convert_to_base64(self) -> str:
+        """将视频统一转换为 base64 编码。
+
+        Returns:
+            str: 视频的 base64 编码，不以 base64:// 开头。
+
+        """
+        file_source = await self._resolve_file_source()
+        if not file_source:
+            raise Exception(f"not a valid file: {self.file}")
+        return await MediaResolver(
+            file_source,
+            media_type="video",
+            default_suffix=".mp4",
+        ).to_base64()
+
     async def register_to_file_service(self) -> str:
         """将视频注册到文件服务。
 
@@ -793,8 +809,7 @@ class Node(BaseMessageComponent):
     async def to_dict(self) -> dict:
         data_content = []
         for comp in self.content:
-            if isinstance(comp, Image | Record):
-                # For Image and Record segments, we convert them to base64
+            if isinstance(comp, Image | Record | Video | File):
                 bs64 = await comp.convert_to_base64()
                 data_content.append(
                     {
@@ -1042,6 +1057,18 @@ class File(BaseMessageComponent):
                 return os.path.abspath(path)
 
         return ""
+
+    async def convert_to_base64(self) -> str:
+        """将文件统一转换为 base64 编码。
+
+        Returns:
+            str: 文件的 base64 编码，不以 base64:// 开头。
+
+        """
+        file_source = await self.get_file(allow_return_url=True)
+        if not file_source:
+            raise Exception(f"not a valid file: {self.file_ or self.url}")
+        return await MediaResolver(file_source, media_type="file").to_base64()
 
     async def _download_file(self) -> None:
         """下载文件"""

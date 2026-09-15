@@ -91,6 +91,7 @@ class NativeContent:
     kind: str
     payload: str
     fallback: str = ""
+    sender: SenderSnapshot | None = None
 
 
 @dataclass(frozen=True, slots=True)

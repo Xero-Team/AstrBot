@@ -4736,7 +4736,7 @@ CONFIG_METADATA_3 = {
     },
 }
 
-CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
+CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
     "description": "BTW 双循环",
     "type": "object",
     "items": {
@@ -4769,6 +4769,7 @@ CONFIG_METADATA_3["plugin_group"]["metadata"]["btw"] = {
             "description": "工作循环 Computer Use 运行时",
             "type": "string",
             "options": ["inherit", "none", "local", "sandbox"],
+            "labels": ["继承", "无", "本地", "沙箱"],
             "hint": "inherit 沿用当前 Computer Use 配置。对话循环始终禁用电脑和文件工具；工作循环仍须满足已有角色、路径和沙箱授权规则。",
             "condition": {"btw.enabled": True},
         },

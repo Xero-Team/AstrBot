@@ -209,7 +209,7 @@ The conversation loop can read the work loop's history: its request context carr
 
 ## BTW plugin tool assignments
 
-When BTW is enabled in a configuration profile, **Config → BTW dual loops → Plugin tool loop assignments** assigns each enabled non-system plugin's LLM tools to conversation, work, or both loops. An unassigned plugin defaults to work. Selecting both saves an explicit override; selecting work again removes it. Disabling BTW preserves normal tool availability.
+When BTW is enabled in a configuration profile, **Config → AI → Capabilities → BTW dual loops → Plugin tool loop assignments** assigns each enabled non-system plugin's LLM tools to conversation, work, or both loops. An unassigned plugin defaults to work. Selecting both saves an explicit override; selecting work again removes it. Disabling BTW preserves normal tool availability.
 
 The main Agent and its subagent handoffs apply the same assignment, together with existing Persona, profile, and authorization restrictions. An assignment never grants permission to execute a tool. Plugin event handlers and explicit commands keep their existing execution path; this setting does not turn an entire plugin into a background task.
 

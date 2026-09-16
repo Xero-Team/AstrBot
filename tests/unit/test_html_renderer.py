@@ -5,60 +5,30 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.utils.t2i import local_strategy
-from astrbot.core.utils.t2i.local_strategy import LocalRenderStrategy, ScreenshotOptions
+from astrbot.core.utils.t2i.local_strategy import ScreenshotOptions
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.core.utils.t2i.template_runtime import render_markdown
 
 
 @pytest.mark.asyncio
-async def test_render_t2i_uses_only_local_strategy():
+async def test_render_t2i_uses_local_renderer():
     renderer = HtmlRenderer()
-    renderer.local_strategy.render = AsyncMock(return_value="D:/temp/local.png")
+    renderer.render = AsyncMock(return_value="D:/temp/local.png")
 
     result = await renderer.render_t2i("hello", template_name="astrbot_help")
 
-    renderer.local_strategy.render.assert_awaited_once_with(
+    renderer.render.assert_awaited_once_with(
         "hello",
         template_name="astrbot_help",
     )
     assert result == "D:/temp/local.png"
     assert not hasattr(renderer, "network_strategy")
-
-
-@pytest.mark.asyncio
-async def test_render_custom_template_uses_only_local_strategy():
-    renderer = HtmlRenderer()
-    renderer.local_strategy.render_custom_template = AsyncMock(
-        return_value="D:/temp/local.png"
-    )
-
-    result = await renderer.render_custom_template(
-        "<html>{{ text }}</html>",
-        {"text": "hello"},
-        options={"type": "png"},
-    )
-
-    renderer.local_strategy.render_custom_template.assert_awaited_once_with(
-        "<html>{{ text }}</html>",
-        {"text": "hello"},
-        {"type": "png"},
-    )
-    assert result == "D:/temp/local.png"
-
-
-@pytest.mark.asyncio
-async def test_renderer_terminate_delegates_to_local_strategy():
-    renderer = HtmlRenderer()
-    renderer.local_strategy.terminate = AsyncMock()
-
-    await renderer.terminate()
-
-    renderer.local_strategy.terminate.assert_awaited_once()
+    assert not hasattr(renderer, "local_strategy")
 
 
 @pytest.mark.asyncio
 async def test_local_strategy_terminate_cleans_playwright_resources():
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     context_a = MagicMock()
     context_a.close = AsyncMock()
     context_b = MagicMock()
@@ -85,7 +55,7 @@ async def test_local_strategy_terminate_cleans_playwright_resources():
 
 @pytest.mark.asyncio
 async def test_local_strategy_serializes_browser_initialization(monkeypatch):
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     context = MagicMock()
     browser = MagicMock()
     browser.is_connected.return_value = True
@@ -113,7 +83,7 @@ async def test_local_strategy_serializes_browser_initialization(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_local_strategy_discards_contexts_when_browser_restarts(monkeypatch):
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     stale_context = MagicMock()
     stale_context.close = AsyncMock()
     stale_browser = MagicMock()
@@ -144,7 +114,7 @@ async def test_local_strategy_discards_contexts_when_browser_restarts(monkeypatc
 
 @pytest.mark.asyncio
 async def test_local_strategy_removes_intermediate_html_file(tmp_path):
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     strategy.temp_dir = tmp_path
     page = MagicMock()
     page.route = AsyncMock()
@@ -173,7 +143,7 @@ async def test_local_strategy_removes_intermediate_html_file(tmp_path):
 
 @pytest.mark.asyncio
 async def test_local_strategy_removes_partial_files_on_render_failure(tmp_path):
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     strategy.temp_dir = tmp_path
     page = MagicMock()
     page.route = AsyncMock()
@@ -197,7 +167,7 @@ async def test_local_strategy_removes_partial_files_on_render_failure(tmp_path):
 
 @pytest.mark.asyncio
 async def test_local_strategy_records_cancelled_renders(tmp_path):
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     strategy.temp_dir = tmp_path
     page = MagicMock()
     page.route = AsyncMock()
@@ -224,7 +194,7 @@ async def test_local_strategy_records_cancelled_renders(tmp_path):
 async def test_local_strategy_uses_html_meta_viewport_and_blocks_remote_requests(
     tmp_path,
 ):
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     strategy.temp_dir = tmp_path
     page = MagicMock()
     page.route = AsyncMock()
@@ -272,7 +242,7 @@ async def test_local_strategy_recreates_closed_context_once(monkeypatch, tmp_pat
         pass
 
     monkeypatch.setattr(local_strategy, "TargetClosedError", ClosedContextError)
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     strategy.temp_dir = tmp_path
     closed_context = MagicMock()
     closed_context.close = AsyncMock()
@@ -306,7 +276,7 @@ async def test_local_strategy_recreates_closed_context_once(monkeypatch, tmp_pat
 
 @pytest.mark.asyncio
 async def test_local_strategy_records_non_sensitive_runtime_statistics(tmp_path):
-    strategy = LocalRenderStrategy()
+    strategy = HtmlRenderer()
     strategy.temp_dir = tmp_path
     page = MagicMock()
     page.route = AsyncMock()

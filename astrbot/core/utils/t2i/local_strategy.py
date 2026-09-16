@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from astrbot.core.config import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
-from . import RenderStrategy
 from .runtime_stats import RenderResult, T2iRuntimeStats
 from .template_manager import TemplateManager
 from .template_runtime import (
@@ -55,7 +54,7 @@ class ScreenshotOptions(BaseModel):
     device_scale_factor_level: Literal["normal", "high", "ultra", None] = None
 
 
-class LocalRenderStrategy(RenderStrategy):
+class HtmlRenderer:
     DEFAULT_VIEWPORT_WIDTH = 1280
     DEFAULT_VIEWPORT_HEIGHT = 720
     SCALE_FACTOR_MAP = {
@@ -337,6 +336,13 @@ class LocalRenderStrategy(RenderStrategy):
                 "version": f"v{VERSION}",
             },
         )
+
+    async def render_t2i(
+        self,
+        text: str,
+        template_name: str | None = None,
+    ) -> str:
+        return await self.render(text, template_name=template_name)
 
     def get_runtime_stats(self) -> dict[str, int | float | bool]:
         """Return a non-sensitive snapshot of the local renderer state."""

@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 
 from ..chat_model import ChatModel
-from .compressor import ContextCompressor
-from .token_counter import TokenCounter
 
 
 @dataclass
@@ -26,7 +24,3 @@ class ContextConfig:
     """Percent of current context tokens to keep as exact recent context during LLM-based compression."""
     llm_compress_provider: ChatModel | None = None
     """Chat model used for compression tasks. If None, truncation is used."""
-    custom_token_counter: TokenCounter | None = None
-    """Custom token counting method. If None, the default method is used."""
-    custom_compressor: ContextCompressor | None = None
-    """Custom context compression method. If None, the default method is used."""

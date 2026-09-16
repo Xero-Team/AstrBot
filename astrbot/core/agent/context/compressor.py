@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
 
 from ..chat_model import ChatModel
 from ..message import Message
@@ -6,7 +6,7 @@ from .modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
-from .token_counter import EstimateTokenCounter, TokenCounter
+from .token_counter import EstimateTokenCounter
 
 if TYPE_CHECKING:
     from astrbot import logger
@@ -19,40 +19,6 @@ else:
         logger = logging.getLogger("astrbot")
 
 from ..context.truncator import ContextTruncator
-
-
-@runtime_checkable
-class ContextCompressor(Protocol):
-    """
-    Protocol for context compressors.
-    Provides an interface for compressing message lists.
-    """
-
-    def should_compress(
-        self, messages: list[Message], current_tokens: int, max_tokens: int
-    ) -> bool:
-        """Check if compression is needed.
-
-        Args:
-            messages: The message list to evaluate.
-            current_tokens: The current token count.
-            max_tokens: The maximum allowed tokens for the model.
-
-        Returns:
-            True if compression is needed, False otherwise.
-        """
-        ...
-
-    async def __call__(self, messages: list[Message]) -> list[Message]:
-        """Compress the message list.
-
-        Args:
-            messages: The original message list.
-
-        Returns:
-            The compressed message list.
-        """
-        ...
 
 
 class TruncateByTurnsCompressor:
@@ -127,7 +93,7 @@ class LLMSummaryCompressor:
         keep_recent_ratio: float = 0.15,
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
-        token_counter: TokenCounter | None = None,
+        token_counter: EstimateTokenCounter | None = None,
     ) -> None:
         """Initialize the LLM summary compressor.
 

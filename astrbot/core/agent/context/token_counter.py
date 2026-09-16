@@ -1,32 +1,6 @@
 import json
-from typing import Protocol, runtime_checkable
 
 from ..message import AudioURLPart, ImageURLPart, Message, TextPart, ThinkPart
-
-
-@runtime_checkable
-class TokenCounter(Protocol):
-    """
-    Protocol for token counters.
-    Provides an interface for counting tokens in message lists.
-    """
-
-    def count_tokens(
-        self, messages: list[Message], trusted_token_usage: int = 0
-    ) -> int:
-        """Count the total tokens in the message list.
-
-        Args:
-            messages: The message list.
-            trusted_token_usage: The total token usage that LLM API returned.
-                For some cases, this value is more accurate.
-                But some API does not return it, so the value defaults to 0.
-
-        Returns:
-            The total token count.
-        """
-        ...
-
 
 # 图片/音频 token 开销估算值，参考 OpenAI vision pricing:
 # low-res ~85 tokens, high-res ~170 per 512px tile, 通常几百到上千。

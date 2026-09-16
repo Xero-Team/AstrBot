@@ -25,12 +25,10 @@ class ContextManager:
         """
         self.config = config
 
-        self.token_counter = config.custom_token_counter or EstimateTokenCounter()
+        self.token_counter = EstimateTokenCounter()
         self.truncator = ContextTruncator()
 
-        if config.custom_compressor:
-            self.compressor = config.custom_compressor
-        elif config.llm_compress_provider:
+        if config.llm_compress_provider:
             self.compressor = LLMSummaryCompressor(
                 provider=config.llm_compress_provider,
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,

@@ -47,14 +47,13 @@ from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.string_utils import interpolate_placeholders
 
 from ..chat_model import ChatModel
-from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
 from ..context.modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
-from ..context.token_counter import EstimateTokenCounter, TokenCounter
+from ..context.token_counter import EstimateTokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..llm_types import LLMResponse, ProviderRequest, ToolCallsResult
 from ..message import (
@@ -258,9 +257,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_compress_provider: ChatModel | None = None,
         # truncate by turns compressor
         truncate_turns: int = 1,
-        # customize
-        custom_token_counter: TokenCounter | None = None,
-        custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[ChatModel] | None = None,
         request_max_retries: int | None = None,
@@ -275,8 +271,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_keep_recent_ratio = llm_compress_keep_recent_ratio
         self.llm_compress_provider = llm_compress_provider
         self.truncate_turns = truncate_turns
-        self.custom_token_counter = custom_token_counter
-        self.custom_compressor = custom_compressor
         self.request_max_retries = request_max_retries
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
@@ -290,8 +284,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider=self.llm_compress_provider,
-            custom_token_counter=self.custom_token_counter,
-            custom_compressor=self.custom_compressor,
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config

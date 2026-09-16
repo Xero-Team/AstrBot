@@ -4212,7 +4212,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。",
+                        "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。CUA 沙箱下输入图片不缩放，以保持像素坐标 1:1；大图可能超出服务商上传限制。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },

@@ -414,7 +414,9 @@ User/developer documentation is bilingual. A behavior, command, navigation, or
 configuration change normally requires matching updates under `docs/zh/` and
 `docs/en/`, plus `docs/.vitepress/config.mjs` when navigation changes. Keep the
 two languages structurally aligned, but write natural translations rather than
-copying stale text.
+copying stale text. For renamed, moved, or merged WebUI entry points, include
+an old-to-new mapping in the relevant docs (see `docs/zh/use/webui.md` and
+`docs/en/use/webui.md`).
 
 Validate documentation with:
 

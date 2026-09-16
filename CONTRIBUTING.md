@@ -43,6 +43,8 @@ cd dashboard && pnpm generate:api
 
 `make run` 会把文档打进 WebUI 的 `/help/`。不要把文档链接指向上游 `docs.astrbot.app`。
 
+修改 WebUI 菜单入口、页面结构或界面术语时，在同一个 PR 中更新 `docs/zh` 和 `docs/en` 的相关操作说明。入口改名、移动或合并时，在对应文档中写明「旧入口 → 新入口」，并维护 [WebUI 入口对照](docs/zh/use/webui.md#菜单与旧入口对照)。
+
 如果你修改了后端 OpenAPI、接口路由或响应结构，请同时刷新：
 
 ```bash
@@ -147,6 +149,8 @@ cd dashboard && pnpm generate:api
 ```
 
 `make run` serves documentation from the WebUI at `/help/`. Do not point documentation links at upstream `docs.astrbot.app`.
+
+When changing WebUI navigation, page structure, or labels, update the affected instructions in `docs/zh` and `docs/en` in the same PR. For renamed, moved, or merged entry points, include an **old entry → new entry** mapping and keep the [WebUI navigation reference](docs/en/use/webui.md#navigation-and-previous-entry-points) current.
 
 If you change backend OpenAPI routes, request schemas, or response schemas, also refresh:
 

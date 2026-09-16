@@ -11,7 +11,7 @@ from mcp.types import CallToolResult, ImageContent
 from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer import file_read_utils
+from astrbot.core.computer import file_read_utils, local_file_security
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
@@ -524,6 +524,25 @@ def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
     sample = '{"results": ["中文内容"]}'.encode()[:-1]
 
     assert file_read_utils.detect_text_encoding(sample) in {"utf-8", "utf-8-sig"}
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_reads_text_without_dir_fd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        local_file_security,
+        "_descriptor_relative_access_available",
+        lambda: False,
+    )
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    target = workspace / "note.txt"
+    target.write_text("hello\n", encoding="utf-8", newline="")
+
+    result = await fs_tools.FileReadTool().call(_make_context(), path="note.txt")
+
+    assert result == "hello\n"
 
 
 @pytest.mark.asyncio

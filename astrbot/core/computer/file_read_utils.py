@@ -23,7 +23,7 @@ from astrbot.core.utils.media_utils import (
 )
 
 from .booters.base import ComputerBooter
-from .local_file_security import open_file_in_allowed_roots
+from .local_file_security import open_file_in_allowed_roots, read_fd_at
 
 _MAX_FILE_READ_BYTES = 128 * 1024
 _MAX_FILE_READ_TOKENS = 25_000
@@ -293,7 +293,7 @@ async def _probe_local_file(
             return {
                 "size_bytes": os.fstat(file_descriptor).st_size,
                 "sample_b64": base64.b64encode(
-                    os.pread(file_descriptor, _FILE_SNIFF_BYTES, 0)
+                    read_fd_at(file_descriptor, _FILE_SNIFF_BYTES, 0)
                 ).decode("utf-8"),
             }
         file_path = Path(path)

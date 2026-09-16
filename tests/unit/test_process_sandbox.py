@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
+from astrbot.core.computer import local_file_security
+from astrbot.core.computer.local_file_security import (
+    open_file_in_allowed_roots,
+    read_fd_at,
+)
 from astrbot.core.computer.process_sandbox import (
     SandboxLimits,
     SandboxSpec,
@@ -72,6 +76,79 @@ def test_open_file_in_allowed_roots_rejects_escape(tmp_path: Path) -> None:
     else:
         os.close(fd)
         pytest.fail("expected PermissionError")
+
+
+def test_open_file_without_dir_fd_reads_regular_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        local_file_security,
+        "_descriptor_relative_access_available",
+        lambda: False,
+    )
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    target = allowed / "note.txt"
+    target.write_text("safe", encoding="utf-8")
+    fd = open_file_in_allowed_roots(str(target), (allowed,), access="read")
+    try:
+        assert read_fd_at(fd, 16, 0) == b"safe"
+    finally:
+        os.close(fd)
+
+
+def test_open_file_without_dir_fd_rejects_escape(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        local_file_security,
+        "_descriptor_relative_access_available",
+        lambda: False,
+    )
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "secret.txt"
+    outside.write_text("nope", encoding="utf-8")
+    with pytest.raises(PermissionError, match="outside restricted roots"):
+        open_file_in_allowed_roots(str(outside), (allowed,), access="read")
+
+
+def test_open_file_without_dir_fd_creates_parents(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        local_file_security,
+        "_descriptor_relative_access_available",
+        lambda: False,
+    )
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    target = allowed / "nested" / "note.txt"
+    fd = open_file_in_allowed_roots(
+        str(target),
+        (allowed,),
+        access="write",
+        create_parents=True,
+    )
+    try:
+        os.write(fd, b"created")
+    finally:
+        os.close(fd)
+    assert target.read_bytes() == b"created"
+
+
+def test_read_fd_at_reads_offset(tmp_path: Path) -> None:
+    target = tmp_path / "note.txt"
+    target.write_bytes(b"abcdef")
+    fd = os.open(target, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+    try:
+        assert read_fd_at(fd, 3, 2) == b"cde"
+        assert os.lseek(fd, 0, os.SEEK_CUR) == 0
+    finally:
+        os.close(fd)
 
 
 def test_sandbox_prepare_command_rejects_empty_argv(tmp_path: Path) -> None:

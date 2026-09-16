@@ -24,6 +24,7 @@ from astrbot.core.computer.file_read_utils import (
     detect_text_encoding,
     read_local_text_range_sync,
 )
+from astrbot.core.computer.local_file_security import read_fd_at
 from astrbot.core.computer.process_sandbox import (
     SandboxProcess,
     SandboxSpec,
@@ -907,7 +908,7 @@ class LocalFileSystemComponent(FileSystemComponent):
                     with open(abs_path, "rb") as f:
                         raw_sample = f.read(8192)
                 else:
-                    raw_sample = os.pread(file_descriptor, 8192, 0)
+                    raw_sample = read_fd_at(file_descriptor, 8192, 0)
                 detected_encoding = detect_text_encoding(raw_sample) or encoding
             return {
                 "success": True,

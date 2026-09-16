@@ -66,6 +66,11 @@ def get_parallel_blocked_reason(tool: Any) -> str | None:
     return None
 
 
+_JSON_SCHEMA_INSTANCE_KEYS = frozenset(
+    {"const", "default", "enum", "example", "examples"}
+)
+
+
 def _is_json_schema_null_node(node: Any) -> bool:
     """Return whether a JSON Schema node is a dedicated null type."""
     if not isinstance(node, dict):
@@ -86,11 +91,13 @@ def _collapse_null_union_key(schema: dict[str, Any], union_key: str) -> None:
     if not isinstance(branches, list):
         return
     non_null = [branch for branch in branches if not _is_json_schema_null_node(branch)]
-    if len(non_null) == len(branches):
-        return
-    schema["nullable"] = True
-    if len(non_null) != 1 or not isinstance(non_null[0], dict):
-        schema[union_key] = non_null
+    # Gemini rejects sibling fields next to anyOf/oneOf. Only Optional[T] can
+    # become {type: T, nullable: true}; leave remaining unions untouched.
+    if (
+        len(non_null) != 1
+        or len(non_null) == len(branches)
+        or not isinstance(non_null[0], dict)
+    ):
         return
     del schema[union_key]
     schema.update(non_null[0])
@@ -118,19 +125,20 @@ def _flatten_json_schema_null_unions(schema: dict[str, Any]) -> dict[str, Any]:
             return [flatten(item) for item in node]
         if not isinstance(node, dict):
             return node
-        result = {key: flatten(value) for key, value in node.items()}
+        result = {}
+        for key, value in node.items():
+            if key in _JSON_SCHEMA_INSTANCE_KEYS:
+                result[key] = copy.deepcopy(value)
+            else:
+                result[key] = flatten(value)
         for union_key in ("anyOf", "oneOf"):
             _collapse_null_union_key(result, union_key)
         origin_type = result.get("type")
         if isinstance(origin_type, list) and "null" in origin_type:
             non_null = [item for item in origin_type if item != "null"]
-            result["nullable"] = True
             if len(non_null) == 1:
                 result["type"] = non_null[0]
-            elif non_null:
-                result["type"] = non_null
-            else:
-                result["type"] = "null"
+                result["nullable"] = True
         return result
 
     return flatten(schema)

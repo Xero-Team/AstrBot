@@ -959,9 +959,9 @@ class FunctionToolManager:
 
     def openai_chat_completions_schema(
         self,
-        omit_empty_parameter_field=False,
+        omit_empty_parameter_field: bool = False,
         *,
-        flatten_null_unions=False,
+        flatten_null_unions: bool = False,
     ) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]

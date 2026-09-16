@@ -21,6 +21,24 @@ _OPTIONAL_PARAMETERS = {
         "union": {
             "anyOf": [{"type": "string"}, {"type": "integer"}],
         },
+        "nullable_union": {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "integer"},
+                {"type": "null"},
+            ],
+        },
+        "mixed_period": {
+            "type": ["string", "integer", "null"],
+            "default": None,
+        },
+        "filter": {
+            "type": "object",
+            "properties": {"q": {"type": "string"}},
+            "default": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+            },
+        },
         "tags": {
             "type": "array",
             "items": {
@@ -108,6 +126,18 @@ def test_google_schema_flattens_optional_null_unions_without_mutating_parameters
     assert properties["period"] == {"type": "string", "nullable": True}
     assert properties["union"] == {"anyOf": [{"type": "string"}, {"type": "integer"}]}
     assert "type" not in properties["union"]
+    assert properties["nullable_union"] == {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "integer"},
+            {"type": "null"},
+        ]
+    }
+    assert "nullable" not in properties["nullable_union"]
+    assert properties["filter"] == {
+        "type": "object",
+        "properties": {"q": {"type": "string"}},
+    }
     assert properties["tags"]["type"] == "array"
     assert properties["tags"]["items"] == {"type": "string", "nullable": True}
     assert tool.parameters == original
@@ -146,6 +176,17 @@ def test_openai_schema_flattens_null_unions_when_requested_without_mutating_para
         "nullable": True,
     }
     assert properties["union"] == {"anyOf": [{"type": "string"}, {"type": "integer"}]}
+    assert (
+        properties["nullable_union"]
+        == _OPTIONAL_PARAMETERS["properties"]["nullable_union"]
+    )
+    assert "nullable" not in properties["nullable_union"]
+    assert (
+        properties["mixed_period"] == _OPTIONAL_PARAMETERS["properties"]["mixed_period"]
+    )
+    assert properties["filter"]["default"] == {
+        "anyOf": [{"type": "string"}, {"type": "null"}]
+    }
     assert properties["tags"]["items"] == {"type": "string", "nullable": True}
     assert tool.parameters == original
 

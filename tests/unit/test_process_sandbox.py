@@ -48,17 +48,11 @@ def test_open_file_in_allowed_roots_reads_regular_file(tmp_path: Path) -> None:
     allowed.mkdir()
     target = allowed / "note.txt"
     target.write_text("safe", encoding="utf-8")
-    fd: int | None = None
+    fd = open_file_in_allowed_roots(str(target), (allowed,), access="read")
     try:
-        fd = open_file_in_allowed_roots(str(target), (allowed,), access="read")
-    except RuntimeError:
-        pytest.skip("Race-resistant file access is unavailable on this platform.")
-    try:
-        assert fd is not None
         assert os.read(fd, 16) == b"safe"
     finally:
-        if fd is not None:
-            os.close(fd)
+        os.close(fd)
 
 
 def test_open_file_in_allowed_roots_rejects_escape(tmp_path: Path) -> None:
@@ -66,16 +60,17 @@ def test_open_file_in_allowed_roots_rejects_escape(tmp_path: Path) -> None:
     allowed.mkdir()
     outside = tmp_path / "secret.txt"
     outside.write_text("nope", encoding="utf-8")
-    fd: int | None = None
-    try:
-        fd = open_file_in_allowed_roots(str(outside), (allowed,), access="read")
-    except RuntimeError:
-        pytest.skip("Race-resistant file access is unavailable on this platform.")
-    except PermissionError:
-        return
-    else:
-        os.close(fd)
-        pytest.fail("expected PermissionError")
+    with pytest.raises(PermissionError, match="outside restricted roots"):
+        open_file_in_allowed_roots(str(outside), (allowed,), access="read")
+
+
+def test_open_file_in_allowed_roots_rejects_directory(tmp_path: Path) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    nested = allowed / "dir"
+    nested.mkdir()
+    with pytest.raises(IsADirectoryError):
+        open_file_in_allowed_roots(str(nested), (allowed,), access="read")
 
 
 def test_open_file_without_dir_fd_reads_regular_file(

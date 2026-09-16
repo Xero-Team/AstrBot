@@ -79,7 +79,7 @@ class UnixSandboxProcess:
         try:
             os.killpg(self.pid, signal)
         except ProcessLookupError, PermissionError:
-            pass
+            return
 
 
 class UnixProcessSandbox(ProcessSandbox):

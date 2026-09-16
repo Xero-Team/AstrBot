@@ -180,8 +180,11 @@ class ProviderEdgeTTS(TTSProvider):
             try:
                 edge_tts_constants = importlib.import_module("edge_tts.constants")
                 edge_tts_constants.WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
-            except ImportError, AttributeError, TypeError:
-                pass
+            except (ImportError, AttributeError, TypeError) as exc:
+                logger.debug(
+                    "Edge TTS User-Agent override skipped: %s",
+                    safe_error("", exc),
+                )
             communicate = edge_tts_module.Communicate(proxy=self.proxy, **kwargs)
             await asyncio.wait_for(
                 communicate.save(str(mp3_path)), timeout=self.timeout

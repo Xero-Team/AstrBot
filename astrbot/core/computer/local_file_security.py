@@ -61,27 +61,20 @@ def _access_file_flags(access: Literal["read", "write", "edit"]) -> int:
     raise ValueError(f"Unsupported restricted file access mode: {access}.")
 
 
-def _validate_opened_file(file_fd: int, path: str) -> int:
-    try:
-        file_stat = os.fstat(file_fd)
-    except OSError:
-        os.close(file_fd)
-        raise
+def _validate_opened_file(file_fd: int, path: str) -> None:
+    file_stat = os.fstat(file_fd)
     if not stat.S_ISREG(file_stat.st_mode):
-        os.close(file_fd)
         if stat.S_ISDIR(file_stat.st_mode):
             raise IsADirectoryError(path)
         raise PermissionError(
             f"Access denied: restricted path is not a regular file: {path}."
         )
     if file_stat.st_nlink > 1:
-        os.close(file_fd)
         raise PermissionError(
             "Access denied: file has multiple hard links and may alias content "
             f"outside allowed directories. Link count: {file_stat.st_nlink}. "
             f"Blocked path: {path}."
         )
-    return file_fd
 
 
 def read_fd_at(file_descriptor: int, size: int, offset: int) -> bytes:
@@ -116,10 +109,7 @@ def _ensure_compat_directory(path: Path, original: str, *, create: bool) -> None
     except FileNotFoundError:
         if not create:
             raise
-        try:
-            path.mkdir(mode=0o755)
-        except FileExistsError:
-            pass  # Lost the create race; re-lstat the existing directory.
+        path.mkdir(mode=0o755, exist_ok=True)
         info = path.lstat()
     _raise_if_link(path, original)
     if not stat.S_ISDIR(info.st_mode):
@@ -163,15 +153,10 @@ def _confirm_opened_path(
     try:
         opened = _nt_final_path(file_fd)
     except OSError as exc:
-        os.close(file_fd)
         raise PermissionError(
             f"Access denied: unable to resolve opened file path: {path}."
         ) from exc
-    try:
-        _match_allowed_root(opened, allowed_roots, path)
-    except PermissionError:
-        os.close(file_fd)
-        raise
+    _match_allowed_root(opened, allowed_roots, path)
 
 
 def _open_file_without_dir_fd(
@@ -214,8 +199,13 @@ def _open_file_without_dir_fd(
         except FileExistsError:
             _raise_if_link(final_path, path)
             file_fd = os.open(final_path, file_flags)
-        _confirm_opened_path(file_fd, allowed_roots, path)
-        return _validate_opened_file(file_fd, path)
+        try:
+            _confirm_opened_path(file_fd, allowed_roots, path)
+            _validate_opened_file(file_fd, path)
+            return file_fd
+        except BaseException:
+            os.close(file_fd)
+            raise
 
     _raise_if_link(final_path, path)
     if not stat.S_ISREG(info.st_mode):
@@ -225,8 +215,13 @@ def _open_file_without_dir_fd(
             f"Access denied: restricted path is not a regular file: {path}."
         )
     file_fd = os.open(final_path, file_flags)
-    _confirm_opened_path(file_fd, allowed_roots, path)
-    return _validate_opened_file(file_fd, path)
+    try:
+        _confirm_opened_path(file_fd, allowed_roots, path)
+        _validate_opened_file(file_fd, path)
+        return file_fd
+    except BaseException:
+        os.close(file_fd)
+        raise
 
 
 def _raise_if_link_oserror(exc: OSError, path: str) -> NoReturn:
@@ -254,7 +249,10 @@ def _open_nofollow_directory(
         try:
             os.mkdir(name, mode=0o755, dir_fd=directory_fd)
         except FileExistsError:
-            pass  # Lost the create race; reopen the existing directory.
+            try:
+                return os.open(name, directory_flags, dir_fd=directory_fd)
+            except OSError as exc:
+                _raise_if_link_oserror(exc, path)
         try:
             return os.open(name, directory_flags, dir_fd=directory_fd)
         except OSError as exc:
@@ -369,6 +367,11 @@ def open_file_in_allowed_roots(
             path=path,
             create=create_parents,
         )
-        return _validate_opened_file(file_fd, path)
+        try:
+            _validate_opened_file(file_fd, path)
+            return file_fd
+        except BaseException:
+            os.close(file_fd)
+            raise
     finally:
         os.close(directory_fd)

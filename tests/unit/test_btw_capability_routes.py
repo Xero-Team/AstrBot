@@ -90,9 +90,17 @@ def test_plugin_assignments_match_main_and_handoff(
     handoff = FunctionToolExecutor._build_handoff_toolset(
         run_context, tools=handoff_selection
     )
-    expected = {"builtin_tool", "plugin_tool"} if allowed else {"builtin_tool"}
+    # ``builtin_tool`` declares no actions, so a read-only work loop reads it as
+    # a writer and drops it; the conversation loop is not subject to that rule.
+    expected = {"plugin_tool"} if allowed else set()
+    if loop != "work":
+        expected.add("builtin_tool")
     assert req.func_tool is not None
     assert set(req.func_tool.names()) == expected
+    if not expected:
+        # A handoff of nothing is no handoff at all.
+        assert handoff is None
+        return
     assert handoff is not None
     assert set(handoff.names()) == expected
 

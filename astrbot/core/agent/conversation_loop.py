@@ -4,6 +4,8 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
+from astrbot.core.agent.btw import i18n as work_i18n
+from astrbot.core.agent.btw.conversation_report import compose_work_report
 from astrbot.core.agent.btw.types import is_work_loop_enabled
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
@@ -22,6 +24,10 @@ class ConversationLoop:
     def __init__(self, agent_request: AgentRequestSubStage) -> None:
         self.agent_request = agent_request
         self._btw_enabled = False
+        self._report_via_conversation = True
+        self._result_dispatcher: (
+            Callable[[AstrMessageEvent], Awaitable[None]] | None
+        ) = None
         self.work_sessions = WorkSessionManager()
         self.work_loop: WorkLoop | None = None
 
@@ -34,6 +40,7 @@ class ConversationLoop:
         btw = btw if isinstance(btw, dict) else {}
         work = btw.get("work_loop", {})
         work = work if isinstance(work, dict) else {}
+        self._report_via_conversation = bool(work.get("report_via_conversation", True))
         retention = btw.get("work_session", {})
         retention = retention if isinstance(retention, dict) else {}
         self.work_sessions.set_max_age_seconds(retention.get("max_age_seconds", 3600))
@@ -54,11 +61,37 @@ class ConversationLoop:
         """Attach the owning scheduler's delivery and cleanup services."""
         if self.work_loop is None:
             raise RuntimeError("ConversationLoop is not initialized")
+        self._result_dispatcher = result_dispatcher
         self.work_loop.configure_detached_execution(
             background_tasks=background_tasks,
             result_dispatcher=result_dispatcher,
             event_finalizer=event_finalizer,
+            result_reporter=(
+                self.report_work_result if self._report_via_conversation else None
+            ),
         )
+
+    async def report_work_result(
+        self, event: AstrMessageEvent, session_id: str
+    ) -> None:
+        """Report one finished work run to the user.
+
+        The work loop calls this instead of delivering the result itself: the
+        conversation loop is the user's counterpart, so the completion report
+        is composed here and sent through the runtime's normal response path.
+
+        Args:
+            event: The work event whose result is ready to go out.
+            session_id: The work session that produced the result.
+
+        Raises:
+            RuntimeError: No delivery path was attached, so nothing can be sent.
+        """
+        if self._result_dispatcher is None:
+            raise RuntimeError("ConversationLoop has no result dispatcher")
+        session = await self.work_sessions.get_by_id(session_id)
+        compose_work_report(event, session, work_i18n.resolve_event_locale(event))
+        await self._result_dispatcher(event)
 
     async def close(self) -> None:
         """Stop work owned by this conversation entry."""

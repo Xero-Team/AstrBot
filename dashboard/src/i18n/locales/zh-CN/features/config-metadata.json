@@ -475,6 +475,18 @@
           "max_concurrent": {
             "description": "工作任务执行并发",
             "hint": "同时执行的工作任务数，默认 2。此值不是等待队列的长度限制。"
+          },
+          "read_only": {
+            "description": "工作循环只读",
+            "hint": "默认开启。开启后工作循环只保留读取与搜索能力，Shell、Python、写文件、浏览器和 MCP 写入工具都会被移除，写操作改由第三方编码代理在任务目录中执行。此设置只收紧能力，不授予任何权限。"
+          },
+          "report_via_conversation": {
+            "description": "由对话循环汇报工作结果",
+            "hint": "默认开启。开启后工作成果交由对话循环合成一条含完成标志与产物路径的汇报；关闭后由工作循环直接投递结果。"
+          },
+          "workspace_root": {
+            "description": "编码代理任务目录根路径",
+            "hint": "每个委派任务在此目录下拥有独立文件夹。留空时使用数据目录下的 btw/workspaces。"
           }
         },
         "work_session": {

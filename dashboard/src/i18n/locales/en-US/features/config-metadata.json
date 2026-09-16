@@ -481,6 +481,18 @@
           "max_concurrent": {
             "description": "Concurrent work execution",
             "hint": "Active execution limit, default 2. This is not a waiting-queue length limit."
+          },
+          "read_only": {
+            "description": "Read-only work loop",
+            "hint": "On by default. The work loop keeps only reading and searching: Shell, Python, file writing, browser, and MCP write tools are removed, and writes are carried out by a coding agent inside its own task folder. This setting only removes capabilities; it grants none."
+          },
+          "report_via_conversation": {
+            "description": "Report work results from the conversation loop",
+            "hint": "On by default. A finished task is handed to the conversation loop, which composes one report with a completion marker and the artifact paths. Off delivers the result from the work loop directly."
+          },
+          "workspace_root": {
+            "description": "Coding-agent task folder root",
+            "hint": "Each delegated task gets its own folder under this path. Empty uses btw/workspaces inside the data directory."
           }
         },
         "work_session": {

@@ -12,6 +12,7 @@ BUILTIN_TOOL_DECLARATION_ATTR = "__astrbot_builtin_tool_declaration__"
 
 BUILTIN_TOOL_MODULES = (
     "astrbot.core.memory.tools.memory_tools",
+    "astrbot.core.tools.coding_tools",
     "astrbot.core.tools.computer_tools",
     "astrbot.core.tools.cron_tools",
     "astrbot.core.tools.knowledge_base_tools",

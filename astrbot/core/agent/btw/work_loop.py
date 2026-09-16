@@ -13,10 +13,9 @@ from astrbot.core.utils.task_utils import create_tracked_task
 
 from . import i18n as work_i18n
 from .types import (
-    THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
-    WORK_FAILED_EXTRA,
     WorkSession,
     WorkSessionStatus,
+    resolve_run_status,
     stop_requested,
 )
 from .work_sessions import WorkSessionManager
@@ -31,6 +30,7 @@ class AgentRequestExecutor(Protocol):
 
 
 ResultDispatcher = Callable[[AstrMessageEvent], Awaitable[None]]
+ResultReporter = Callable[[AstrMessageEvent, str], Awaitable[None]]
 EventFinalizer = Callable[[AstrMessageEvent], Awaitable[None]]
 
 
@@ -49,6 +49,7 @@ class WorkLoop:
         self._semaphore = asyncio.Semaphore(max(1, max_concurrent))
         self._background_tasks: set[asyncio.Task] | None = None
         self._result_dispatcher: ResultDispatcher | None = None
+        self._result_reporter: ResultReporter | None = None
         self._event_finalizer: EventFinalizer | None = None
         self._tasks: dict[asyncio.Task, tuple[AstrMessageEvent, str]] = {}
         self._closed = False
@@ -59,6 +60,7 @@ class WorkLoop:
         background_tasks: set[asyncio.Task],
         result_dispatcher: ResultDispatcher,
         event_finalizer: EventFinalizer,
+        result_reporter: ResultReporter | None = None,
     ) -> None:
         """Attach runtime-owned background execution services.
 
@@ -67,10 +69,14 @@ class WorkLoop:
             result_dispatcher: Delivers a generated work result through the
                 configured result-decorate and response stages.
             event_finalizer: Releases the event after detached work finishes.
+            result_reporter: Delivers a work result through the conversation
+                loop, which owns what the user is told about a task.  Without
+                one, results go straight out through ``result_dispatcher``.
         """
         self._background_tasks = background_tasks
         self._result_dispatcher = result_dispatcher
         self._event_finalizer = event_finalizer
+        self._result_reporter = result_reporter
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
         """Execute one work-loop request inline.
@@ -271,24 +277,13 @@ class WorkLoop:
             )
             raise
         else:
-            failed = bool(event.get_extra(WORK_FAILED_EXTRA)) or bool(
-                event.get_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY)
-            )
-            cancelled = stop_requested(event)
-            # An executor that produced nothing never reached an Agent: a run
-            # the session turned away is the reported case.  The generator
-            # ending only proves the task ran when something actually ran.
-            failed = failed or (not produced and not cancelled)
+            status = resolve_run_status(event, produced=produced)
             await self.sessions.update_status(
                 session_id,
-                WorkSessionStatus.FAILED
-                if failed
-                else (
-                    WorkSessionStatus.CANCELLED
-                    if cancelled
-                    else WorkSessionStatus.COMPLETED
-                ),
-                error="Work task failed." if failed else None,
+                status,
+                error="Work task failed."
+                if status is WorkSessionStatus.FAILED
+                else None,
             )
 
     async def _run_detached(self, event: AstrMessageEvent, session_id: str) -> None:
@@ -307,7 +302,7 @@ class WorkLoop:
                             session_id, WorkSessionStatus.CANCELLED
                         )
                         return
-                    await self._result_dispatcher(event)
+                    await self._deliver(event, session_id)
             await self._record_delivery_outcome(event, session_id)
         except asyncio.CancelledError:
             await self.sessions.update_status(session_id, WorkSessionStatus.CANCELLED)
@@ -321,6 +316,19 @@ class WorkLoop:
             logger.error("BTW work task failed: %s", safe_error("", exc))
         finally:
             await self._event_finalizer(event)
+
+    async def _deliver(self, event: AstrMessageEvent, session_id: str) -> None:
+        """Deliver one work result through whoever owns the user-facing report.
+
+        The conversation loop owns what the user hears about a task, so a work
+        run hands its result there when a reporter is attached.  Without one,
+        the result goes straight out through the runtime's own dispatcher.
+        """
+        if self._result_reporter is None:
+            assert self._result_dispatcher is not None
+            await self._result_dispatcher(event)
+            return
+        await self._result_reporter(event, session_id)
 
     async def _record_delivery_outcome(
         self, event: AstrMessageEvent, session_id: str

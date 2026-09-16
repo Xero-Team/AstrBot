@@ -91,6 +91,29 @@ async def cancel_pending_work(event) -> bool:
     return await manager.cancel_if_pending(session_id)
 
 
+async def record_work_artifacts(event, paths: list[str]) -> bool:
+    """Attach the paths a delegated run produced to the event's work session.
+
+    The tool that delegates a task is the only owner that knows what the coding
+    agent produced, and the manager that holds the session lives here, so the
+    tool records through this function rather than reaching for a session.
+
+    Args:
+        event: The work event the delegation ran under.
+        paths: Root-relative artifact paths the delegated run reported.
+
+    Returns:
+        Whether a work session was found and the paths were recorded.
+    """
+    session_id = event.get_extra("btw_work_session_id")
+    if not paths or not isinstance(session_id, str) or not session_id:
+        return False
+    manager = _managers.get(config_id_of(event))
+    if manager is None:
+        return False
+    return await manager.record_artifacts(session_id, paths)
+
+
 async def latest_status(
     config_id: str, origin: str
 ) -> tuple[str, WorkSessionStatus] | None:

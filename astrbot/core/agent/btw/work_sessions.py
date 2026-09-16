@@ -1,6 +1,7 @@
 """In-memory runtime ownership for BTW work sessions."""
 
 import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from .types import WorkSession, WorkSessionStatus
@@ -120,6 +121,33 @@ class WorkSessionManager:
             if session is None or session.status is not expected:
                 return False
             session.update_status(status, error=error)
+            return True
+
+    async def record_artifacts(self, session_id: str, paths: Sequence[str]) -> bool:
+        """Add the paths a delegated run produced to one work session.
+
+        The work loop reports its result before it records the session's final
+        status, so the artifacts a delegated coding agent produced have to be
+        attached while the run is still going.
+
+        Args:
+            session_id: The work-session identifier.
+            paths: Root-relative artifact paths, in report order.
+
+        Returns:
+            Whether the session was still known and the paths were recorded.
+        """
+        async with self._lock:
+            self._cleanup_expired_locked()
+            session = self._by_id.get(session_id)
+            if session is None:
+                return False
+            known = set(session.artifacts)
+            for path in paths:
+                if isinstance(path, str) and path and path not in known:
+                    known.add(path)
+                    session.artifacts.append(path)
+            session.updated_at = datetime.now(UTC)
             return True
 
     async def cancel_if_pending(self, session_id: str) -> bool:

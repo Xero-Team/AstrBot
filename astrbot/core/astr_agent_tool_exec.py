@@ -11,7 +11,10 @@ from dataclasses import replace
 import mcp
 
 from astrbot import logger
-from astrbot.core.agent.btw.runtime_policy import resolve_computer_runtime
+from astrbot.core.agent.btw.runtime_policy import (
+    resolve_computer_runtime,
+    work_loop_is_read_only,
+)
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
@@ -32,7 +35,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.tool_catalog import tool_is_available_in_loop
+from astrbot.core.tool_catalog import tool_blocked_in_loop, tool_is_available_in_loop
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -67,6 +70,49 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         from astrbot.core.tool_catalog import tool_required_actions
 
         return tool_required_actions(tool)
+
+    @classmethod
+    def _loop_policy_error(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> str | None:
+        """Return an error when the originating loop must not run this tool.
+
+        The catalog is assembled from a snapshot of the profile, so a tool can
+        still be called after the loop's own policy changed: a handoff may
+        carry tools across, and a profile can be edited while a run is in
+        flight.  The same rule the catalog applies is therefore applied again
+        here, at the single point every tool call passes through.
+        """
+        event = getattr(run_context.context, "event", None)
+        runtime = getattr(run_context.context, "context", None)
+        if event is None or runtime is None:
+            return None
+        get_config = getattr(runtime, "get_config", None)
+        if not callable(get_config):
+            return None
+        try:
+            profile = get_config(umo=event.unified_msg_origin)
+        except TypeError:
+            return None
+        if not isinstance(profile, dict):
+            return None
+        btw = profile.get("btw", {})
+        if not isinstance(btw, dict) or not btw.get("enabled", False):
+            return None
+        loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
+        if not tool_blocked_in_loop(
+            str(getattr(tool, "name", "")),
+            cls._required_actions(tool),
+            loop_mode=loop_mode,
+            work_loop_read_only=work_loop_is_read_only(profile, loop_mode),
+        ):
+            return None
+        return (
+            f"error: Permission denied. Tool {getattr(tool, 'name', 'unknown')!r} "
+            f"is not available in the {loop_mode} loop."
+        )
 
     @classmethod
     async def _authorize_execution(
@@ -193,6 +239,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
             return
 
+        if blocked := cls._loop_policy_error(tool, run_context):
+            yield mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=blocked)]
+            )
+            return
+
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
@@ -302,20 +354,34 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             }
         return {}
 
-    @staticmethod
-    def _filter_handoff_tools_for_loop(toolset: ToolSet, *, cfg, ctx, event) -> ToolSet:
-        """Keep handoff tools within the originating loop's assignments."""
+    @classmethod
+    def _filter_handoff_tools_for_loop(
+        cls, toolset: ToolSet, *, cfg, ctx, event
+    ) -> ToolSet:
+        """Keep handoff tools within the originating loop's assignments.
+
+        A handoff runs inside the loop that started it, so it inherits that
+        loop's own policy: the capability routes the profile assigned, the
+        tools that belong to one loop only, and the read-only work loop.
+        """
         btw_config = cfg.get("btw", {})
         if not isinstance(btw_config, dict) or not btw_config.get("enabled", False):
             return toolset
         plugins = getattr(getattr(ctx, "catalogs", None), "plugins", None)
         loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
+        read_only = work_loop_is_read_only(cfg, loop_mode)
         return ToolSet(
             [
                 tool
                 for tool in toolset.tools
                 if tool_is_available_in_loop(
                     tool, btw_config=btw_config, loop_mode=loop_mode, plugins=plugins
+                )
+                and not tool_blocked_in_loop(
+                    tool.name,
+                    cls._required_actions(tool),
+                    loop_mode=loop_mode,
+                    work_loop_read_only=read_only,
                 )
             ]
         )

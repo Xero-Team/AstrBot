@@ -249,6 +249,18 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 
 后台工作在执行前确认接收，再通过当前回复装饰与发送阶段回送结果，包括回复内容检查；不重复运行入站阶段。WebChat 持续使用原请求标识，确认消息不会结束请求。事件临时文件保留到工作完成、失败或取消后再释放。配置档替换、删除以及运行时关闭会取消并回收其工作任务。
 
+## BTW 工作循环的只读边界与委派
+
+`btw.work_loop.read_only` 默认为 `true`。开启后工作循环的工具目录只保留读取与搜索能力：`astrbot_file_read_tool`、`astrbot_grep_tool`、网页搜索、记忆与知识库工具照常可用；Shell、Python、文件写入与编辑、上传下载、浏览器、CUA，以及 `readOnlyHint` 不为真的 MCP 工具都会被移除，`delegate_coding_task` 是唯一的写入途径。判定按语义而非名单：没有声明 `required_actions` 的工具一律视为可写，插件工具也不例外，因为没有东西为它担保。它只收紧能力：文件读取仍要求 `btw.work_loop.computer_use_runtime` 已授予 local 或 sandbox，角色、路径限制、沙箱、WebChat step-up 与逐项循环分配规则都不变。关闭 `read_only` 恢复原有的写入能力。
+
+`btw.work_loop.coding_agents` 声明可委派的本地 CLI 代理。每个条目包含 `id`、`type`（`claude_code`、`codex` 或 `custom`）、`command`、`permission_mode`（Claude Code 权限模式，默认 `acceptEdits`）、`sandbox`（Codex 沙箱，默认 `workspace-write`）、`project_dir`、`extra_args`、`env`、`timeout_seconds` 和 `providers`。`permission_mode` 与 `sandbox` 是交给该 CLI 自己执行的策略，不是操作系统级的隔离：默认值让代理只在任务目录内写入，配置了 `project_dir` 时该目录也会显式加入可写范围；`bypassPermissions` 与 `danger-full-access` 必须显式配置。Claude Code 以 `-p` 非交互方式运行，没有终端可以回答权限询问，而 `acceptEdits` 只自动放行编辑：需要跑 shell 命令（测试、git 等）的任务会一直等到 `timeout_seconds` 超时，这类任务必须显式选择 `bypassPermissions`。委派会启动本地进程并向文件系统写入，因此 `delegate_coding_task` 按 `tool.local_exec` 与 `tool.file_write` 授权：这项工作循环的 Computer Use 运行时必须是 `local`。`sandbox` 下放行等于绕过沙箱——这个进程由本机直接拉起，并不在沙箱里——`inherit` 在请求构建前等同 `none`，`provider_settings.computer_use_runtime` 默认的 `none` 会同时关闭文件读取和委派；WebChat step-up 等表面提升与逐项循环分配规则照常适用。
+
+工作循环通过 `delegate_coding_task` 交办一次写入任务：任务文本写入 `<btw.work_loop.workspace_root>/<会话 ID>-<代理 ID>-<运行 ID>/TASK.md`，`workspace_root` 留空时使用数据目录下的 `btw/workspaces`。每次委派都会新建一个带运行 ID 的目录，因此同一会话的两次委派不会互相覆盖。代理在该目录中运行，完整输出记录到同目录的 `output.log`。任务结束后工作循环读回状态、退出码、产物路径与代理的最终消息；产物是运行前后的差集——git 工作树取 `git status --porcelain` 的变化与运行期间的提交，普通目录取运行开始后写入的文件——在报告里以工作区根目录为基准给出相对路径，不暴露本机数据目录的绝对位置，最多 50 项。代理退出后仍留在其进程组或 Job Object 中的子进程会被一并结束，超时、取消与正常结束都是如此，因此一次委派不会留下还在写盘的遗留进程。
+
+每个代理的 `providers` 是 provider 预设列表，`active_provider` 选择生效的一项。预设的 `base_url`、`model` 会写进该 CLI 自己的配置层：Claude Code 用 `--settings` 指向数据目录下的 settings 文件，Codex 用 `--profile astrbot-btw-<代理 ID>` 叠加 `$CODEX_HOME/astrbot-btw-<代理 ID>.config.toml`。每个代理各用一份 Codex 配置层，两个代理同时运行时不会互相覆盖。密钥不落盘，只在拉起子进程时通过环境变量传入——Claude Code 读 `ANTHROPIC_AUTH_TOKEN`，Codex 由配置层的 `env_key` 指向按代理 ID 命名的变量——因此持久化的只有端点与模型。切换 provider 不会改写用户的全局 CLI 配置。预设既无 `base_url` 也无 `api_key` 时视为“官方登录”，不写任何配置层，代理沿用用户自己的登录。
+
+任务完成后，`btw.work_loop.report_via_conversation`（默认 `true`）让工作循环把结果交给对话循环合成一条汇报：代理的回答在前，随后是完成状态与产物路径。流式结果的中间分片不受影响，只有最终结果带上汇报，且同一次运行只追加一次。关闭此项后结果由工作循环直接投递。
+
 ## WebUI 与认证
 
 `dashboard` 的关键默认值：

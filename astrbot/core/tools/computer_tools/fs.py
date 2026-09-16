@@ -42,7 +42,6 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
-    get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
 
@@ -54,6 +53,7 @@ from .util import (
     get_local_permission_policy,
     is_local_runtime,
     normalize_umo_for_workspace,
+    session_temp_roots,
 )
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
@@ -82,8 +82,7 @@ def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> lis
     labels.extend(
         [
             f"data/workspaces/{normalized_umo}",
-            get_astrbot_system_tmp_path(),
-            get_astrbot_temp_path(),
+            *(str(root) for root in session_temp_roots(umo)),
         ]
     )
     return labels
@@ -130,8 +129,7 @@ def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
         *_plugin_skill_roots(),
         *_builtin_skill_roots(),
         _workspace_root(umo),
-        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-        Path(get_astrbot_temp_path()).resolve(strict=False),
+        *session_temp_roots(umo),
     )
 
 
@@ -139,8 +137,7 @@ def _write_allowed_roots(umo: str) -> tuple[Path, ...]:
     """Member writes never target global, plugin, or builtin Skill catalogs."""
     return (
         _workspace_root(umo),
-        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-        Path(get_astrbot_temp_path()).resolve(strict=False),
+        *session_temp_roots(umo),
     )
 
 
@@ -296,7 +293,7 @@ class FileReadTool(FunctionTool):
         path: str = kwargs["path"]
         offset: int | None = kwargs.get("offset", None)
         limit: int | None = kwargs.get("limit", None)
-        if permission_error := check_local_file_permission(context):
+        if permission_error := await check_local_file_permission(context):
             return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
@@ -385,7 +382,7 @@ class FileWriteTool(FunctionTool):
     ) -> ToolExecResult:
         path: str = kwargs["path"]
         content: str = kwargs["content"]
-        if permission_error := check_local_file_permission(context):
+        if permission_error := await check_local_file_permission(context):
             return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
@@ -486,7 +483,7 @@ class FileEditTool(FunctionTool):
         old: str = kwargs["old"]
         new: str = kwargs["new"]
         replace_all: bool = kwargs.get("replace_all", False)
-        if permission_error := check_local_file_permission(context):
+        if permission_error := await check_local_file_permission(context):
             return permission_error
         umo = str(context.context.event.unified_msg_origin)
         local_env = is_local_runtime(context)
@@ -714,7 +711,7 @@ class GrepTool(FunctionTool):
         normalized_pattern = pattern.strip()
         if not normalized_pattern:
             return "Error: `pattern` must be a non-empty string."
-        if permission_error := check_local_file_permission(context):
+        if permission_error := await check_local_file_permission(context):
             return permission_error
 
         local_env = is_local_runtime(context)

@@ -112,7 +112,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
         try:
             response = await self.client.post(
                 build_api_url(self.api_base),
-                headers={**build_headers(self.chosen_api_key), **self.request_headers},
+                headers={**self.request_headers, **build_headers(self.chosen_api_key)},
                 json=self._build_payload(text),
             )
 

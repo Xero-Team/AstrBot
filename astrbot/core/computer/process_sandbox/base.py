@@ -20,8 +20,8 @@ class SandboxLimits:
     """
 
     cpu_seconds: int = 300
-    file_size_bytes: int = 100 * 1024 * 1024
-    memory_bytes: int = 1024 * 1024 * 1024
+    file_size_bytes: int = 512 * 1024 * 1024
+    memory_bytes: int = 8 * 1024 * 1024 * 1024
     open_files: int = 256
     processes: int = 256
 

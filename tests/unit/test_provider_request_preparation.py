@@ -342,10 +342,20 @@ async def test_prepare_provider_request_warns_when_unresized_image_exceeds_5mb(
     )
     request = ProviderRequest(prompt="look", image_urls=[str(image_path)])
     with caplog.at_level("WARNING"):
-        prepared = await prepare_provider_request(request, image_compress_enabled=False)
+        prepared = await prepare_provider_request(
+            request,
+            image_compress_enabled=False,
+            warn_unresized_images=True,
+        )
 
     assert prepared.image_urls
     assert "without resize" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        await prepare_provider_request(request, image_compress_enabled=False)
+
+    assert "without resize" not in caplog.text
 
 
 @pytest.mark.asyncio

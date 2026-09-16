@@ -274,22 +274,38 @@ const sandboxUnavailable = computed(() =>
   ['missing', 'unavailable'].includes(runtime.value?.sandbox?.status),
 );
 const roles = ['member', 'admin'];
-const defaults = computed(() =>
-  runtime.value?.os === 'windows'
+const lockedPermissionDefaults = {
+  member: {
+    allow_execution: false,
+    allow_network: false,
+    filesystem_scope: 'none',
+  },
+  admin: {
+    allow_execution: false,
+    allow_network: false,
+    filesystem_scope: 'none',
+  },
+};
+const posixPermissionDefaults = {
+  member: {
+    allow_execution: false,
+    allow_network: false,
+    filesystem_scope: 'workspace',
+  },
+  admin: {
+    allow_execution: true,
+    allow_network: true,
+    filesystem_scope: 'workspace',
+  },
+};
+const defaults = computed(() => {
+  if (!runtime.value) {
+    return lockedPermissionDefaults;
+  }
+  return runtime.value.os === 'windows'
     ? windowsPermissionDefaults
-    : {
-        member: {
-          allow_execution: false,
-          allow_network: false,
-          filesystem_scope: 'workspace',
-        },
-        admin: {
-          allow_execution: true,
-          allow_network: true,
-          filesystem_scope: 'workspace',
-        },
-      },
-);
+    : posixPermissionDefaults;
+});
 
 onMounted(async () => {
   try {

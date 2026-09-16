@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from astrbot import logger
 from astrbot.core.agent.mcp_client import validate_mcp_server_config
+from astrbot.core.computer.process_sandbox import detect_local_runtime_info
 from astrbot.core.core_runtime import CoreControl, CoreRuntime
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.skills.skill_manager import SkillManager
@@ -226,6 +227,7 @@ def create_dashboard_asgi_app(
                 logger.error("Failed to roll back managed Dashboard configuration")
             raise
 
+    computer_runtime_info = detect_local_runtime_info(probe=True)
     app.state.services = SimpleNamespace(
         appearance=AppearanceService(),
         config_profiles=ConfigProfileService(
@@ -235,6 +237,7 @@ def create_dashboard_asgi_app(
             runtime.services.totp_runtime_state,
             db,
             runtime.plugin_manager.catalog,
+            runtime=computer_runtime_info,
             computer_runtime=runtime.services.computer_runtime,
         ),
         config_display=ConfigDisplayService(
@@ -362,6 +365,7 @@ def create_dashboard_asgi_app(
             html_renderer=runtime.services.html_renderer,
             plugin_catalog=runtime.catalogs.plugins,
             platform_manager=runtime.platform_manager,
+            runtime=computer_runtime_info,
         ),
         subagents=SubAgentService(
             runtime.astrbot_config,

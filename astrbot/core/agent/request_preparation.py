@@ -148,6 +148,7 @@ async def _prepare_media(
     image_compress_enabled: bool = True,
     image_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     image_quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    warn_unresized_images: bool = False,
 ) -> tuple[list[str], list[ProviderContentBlock], bool]:
     """Resolve allowed media to data URLs and report whether anything was dropped."""
     prepared_refs: list[str] = []
@@ -164,6 +165,7 @@ async def _prepare_media(
             image_compress_enabled=image_compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
+            warn_unresized_images=warn_unresized_images,
         )
 
     for ref in refs:
@@ -216,6 +218,7 @@ async def _prepare_image_refs(
     image_compress_enabled: bool = True,
     image_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     image_quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    warn_unresized_images: bool = False,
 ) -> tuple[list[str], list[ProviderContentBlock], bool]:
     prepared_refs: list[str] = []
     blocks: list[ProviderContentBlock] = []
@@ -249,7 +252,7 @@ async def _prepare_image_refs(
                     for jpeg_path in jpeg_paths:
                         jpeg_bytes = Path(jpeg_path).read_bytes()
                         if (
-                            not image_compress_enabled
+                            warn_unresized_images
                             and _CUA_IMAGE_WARN_BYTES < len(jpeg_bytes) <= max_bytes
                         ):
                             logger.warning(
@@ -306,6 +309,7 @@ async def prepare_provider_request(
     image_compress_enabled: bool = True,
     image_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     image_quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    warn_unresized_images: bool = False,
 ) -> ProviderRequest:
     """Return a sanitized, normalized copy suitable for a provider request.
 
@@ -335,6 +339,7 @@ async def prepare_provider_request(
         image_compress_enabled=image_compress_enabled,
         image_max_size=image_max_size,
         image_quality=image_quality,
+        warn_unresized_images=warn_unresized_images,
     )
     audio_refs, audio_blocks, audio_dropped = await _prepare_media(
         prepared_request.audio_urls,

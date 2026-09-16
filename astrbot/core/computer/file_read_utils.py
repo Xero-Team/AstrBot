@@ -28,6 +28,7 @@ from .local_file_security import open_file_in_allowed_roots, read_fd_at
 _MAX_FILE_READ_BYTES = 128 * 1024
 _MAX_FILE_READ_TOKENS = 25_000
 _MAX_TEXT_FILE_FULL_READ_BYTES = 256 * 1024
+_MAX_LOCAL_DOCUMENT_BYTES = 32 * 1024 * 1024
 _FILE_SNIFF_BYTES = 512
 _TOKEN_COUNTER = EstimateTokenCounter()
 _TEXT_ENCODINGS = (
@@ -307,17 +308,39 @@ async def _probe_local_file(
     return await to_thread(_run)
 
 
+def _local_file_size(path: str, file_descriptor: int | None) -> int:
+    if file_descriptor is None:
+        return Path(path).stat().st_size
+    return os.fstat(file_descriptor).st_size
+
+
+def _reject_oversized_local_file(path: str, file_descriptor: int | None) -> None:
+    size_bytes = _local_file_size(path, file_descriptor)
+    if size_bytes > _MAX_LOCAL_DOCUMENT_BYTES:
+        raise ValueError(
+            f"File is {size_bytes} bytes; local document and image reads are "
+            f"limited to {_MAX_LOCAL_DOCUMENT_BYTES} bytes."
+        )
+
+
 async def _read_local_image_base64(
     path: str,
     file_descriptor: int | None = None,
 ) -> dict[str, str | int]:
     def _run() -> dict[str, str | int]:
+        _reject_oversized_local_file(path, file_descriptor)
         if file_descriptor is None:
-            data = Path(path).read_bytes()
+            with Path(path).open("rb") as file_obj:
+                data = file_obj.read(_MAX_LOCAL_DOCUMENT_BYTES + 1)
         else:
             with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
                 file_obj.seek(0)
-                data = file_obj.read()
+                data = file_obj.read(_MAX_LOCAL_DOCUMENT_BYTES + 1)
+        if len(data) > _MAX_LOCAL_DOCUMENT_BYTES:
+            raise ValueError(
+                f"File is {len(data)} bytes; local document and image reads are "
+                f"limited to {_MAX_LOCAL_DOCUMENT_BYTES} bytes."
+            )
         return {
             "size_bytes": len(data),
             "base64": base64.b64encode(data).decode("utf-8"),
@@ -330,13 +353,21 @@ async def _read_local_file_bytes(
     path: str,
     file_descriptor: int | None = None,
 ) -> bytes:
-    if file_descriptor is None:
-        return await to_thread(Path(path).read_bytes)
-
     def _run() -> bytes:
-        with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
-            file_obj.seek(0)
-            return file_obj.read()
+        _reject_oversized_local_file(path, file_descriptor)
+        if file_descriptor is None:
+            with Path(path).open("rb") as file_obj:
+                data = file_obj.read(_MAX_LOCAL_DOCUMENT_BYTES + 1)
+        else:
+            with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
+                file_obj.seek(0)
+                data = file_obj.read(_MAX_LOCAL_DOCUMENT_BYTES + 1)
+        if len(data) > _MAX_LOCAL_DOCUMENT_BYTES:
+            raise ValueError(
+                f"File is {len(data)} bytes; local document and image reads are "
+                f"limited to {_MAX_LOCAL_DOCUMENT_BYTES} bytes."
+            )
+        return data
 
     return await to_thread(_run)
 

@@ -35,7 +35,7 @@ def test_detect_local_runtime_info_reports_platform() -> None:
 
 def test_create_process_sandbox_matches_runtime_probe() -> None:
     info = detect_local_runtime_info()
-    if info["sandbox"]["status"] == "unsupported":
+    if info["sandbox"]["status"] in {"unsupported", "missing"}:
         with pytest.raises(RuntimeError):
             create_process_sandbox()
         return

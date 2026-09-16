@@ -8,7 +8,11 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.auth.models import INSTANCE_TOOL_ROLES, Resource, Role
 from astrbot.core.computer.process_sandbox import create_process_sandbox
 from astrbot.core.config.default import get_local_permission_defaults
-from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_system_tmp_path,
+    get_astrbot_temp_path,
+    get_astrbot_workspaces_path,
+)
 
 
 def normalize_umo_for_workspace(umo: str) -> str:
@@ -50,6 +54,15 @@ def workspace_root(umo: str) -> Path:
     return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
 
 
+def session_temp_roots(umo: str) -> tuple[Path, ...]:
+    """Per-session temp directories that other callers cannot read or write."""
+    key = normalize_umo_for_workspace(umo)
+    return (
+        (Path(get_astrbot_system_tmp_path()) / key).resolve(strict=False),
+        (Path(get_astrbot_temp_path()) / key).resolve(strict=False),
+    )
+
+
 def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
@@ -59,20 +72,57 @@ def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     return runtime == "local"
 
 
-def _local_permission_role(context: ContextWrapper[AstrAgentContext]) -> str:
-    """Map the caller to the Local permission matrix row.
-
-    Production events no longer expose ``event.role``. Instance operators and
-    above use the administrator policy; everyone else uses the member policy.
-    Tests may still set ``event.role == "admin"``.
-    """
-    event = context.context.event
-    if getattr(event, "role", None) == "admin":
+def _role_from_effective(effective: object) -> str:
+    """Map an authorization role onto a Local permission matrix row."""
+    if effective in INSTANCE_TOOL_ROLES or effective in {
+        Role.INSTANCE_OPERATOR,
+        Role.OPERATOR,
+        Role.ROOT,
+        "instance_operator",
+        "operator",
+        "root",
+    }:
         return "admin"
-    stored = getattr(event, "_computer_permission_role", None)
+    return "member"
+
+
+def _stamp_permission_role(event: object, effective: object) -> str:
+    role = _role_from_effective(effective)
+    setattr(event, "_computer_permission_role", role)
+    return role
+
+
+def _local_permission_role(context: ContextWrapper[AstrAgentContext]) -> str:
+    """Return the cached Local permission matrix row for this event."""
+    stored = getattr(context.context.event, "_computer_permission_role", None)
     if stored in {"admin", "member"}:
         return stored
     return "member"
+
+
+async def resolve_local_permission_role(
+    context: ContextWrapper[AstrAgentContext],
+) -> str:
+    """Resolve the Local matrix row from authorization, not tool-call order."""
+    event = context.context.event
+    stored = getattr(event, "_computer_permission_role", None)
+    if stored in {"admin", "member"}:
+        return stored
+    authorization = getattr(context.context.context, "authorization", None)
+    if authorization is None or event.subject is None or event.auth_context is None:
+        return "member"
+    config_id = (
+        event.resource.config_id
+        if event.resource is not None
+        else event.auth_context.config_id
+    )
+    decision = await authorization.authorize(
+        event.subject,
+        "tool.file_read",
+        Resource.named("tool", "local-permission-role", config_id=config_id),
+        event.auth_context,
+    )
+    return _stamp_permission_role(event, getattr(decision, "effective_role", None))
 
 
 def get_local_permission_policy(
@@ -116,7 +166,7 @@ def get_local_permission_policy(
     )
 
 
-def check_local_file_permission(
+async def check_local_file_permission(
     context: ContextWrapper[AstrAgentContext],
 ) -> str | None:
     """Reject file tools when Local access is disabled for the caller's role.
@@ -127,6 +177,7 @@ def check_local_file_permission(
     Returns:
         A permission error, or None when the file tool may proceed.
     """
+    await resolve_local_permission_role(context)
     if (
         is_local_runtime(context)
         and get_local_permission_policy(context).filesystem_scope == "none"
@@ -145,7 +196,7 @@ async def check_admin_permission(
     """Run the final action check immediately before a sensitive operation."""
 
     event = context.context.event
-    action, resource_id = {
+    mapped = {
         "Shell execution": ("tool.local_exec", "shell-execution"),
         "Shell session management": ("tool.local_exec", "shell-session"),
         "Python execution": ("tool.python_exec", "python-execution"),
@@ -157,7 +208,10 @@ async def check_admin_permission(
         "Using skill lifecycle tools": ("extension.manage", "skill-lifecycle"),
         "Send a poke to another user": ("agent.manage", "send-poke"),
         "Send message to another session": ("agent.manage", "send-message"),
-    }.get(operation_name, ("tool.local_exec", "sensitive-operation"))
+    }.get(operation_name)
+    if mapped is None:
+        raise ValueError(f"Unsupported local permission operation: {operation_name}.")
+    action, resource_id = mapped
     authorization = getattr(context.context.context, "authorization", None)
     if authorization is None or event.subject is None or event.auth_context is None:
         return "error: Permission denied. Authorization context is unavailable."
@@ -172,18 +226,7 @@ async def check_admin_permission(
         Resource.named("tool", resource_id, config_id=config_id),
         event.auth_context,
     )
-    effective = getattr(decision, "effective_role", None)
-    if effective in INSTANCE_TOOL_ROLES or effective in {
-        Role.INSTANCE_OPERATOR,
-        Role.OPERATOR,
-        Role.ROOT,
-        "instance_operator",
-        "operator",
-        "root",
-    }:
-        setattr(event, "_computer_permission_role", "admin")
-    else:
-        setattr(event, "_computer_permission_role", "member")
+    _stamp_permission_role(event, getattr(decision, "effective_role", None))
     if not decision.allowed:
         return (
             f"error: Permission denied. {operation_name} requires an authorized action. "

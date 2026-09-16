@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.auth.models import Role
 from astrbot.core.tools.computer_tools.python import LocalPythonTool, PythonTool
 from tests.fixtures.auth import attach_authorized_tool_context
 
@@ -103,7 +104,12 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
             )
         ),
     )
-    attach_authorized_tool_context(event, runtime, "tool.python_exec")
+    attach_authorized_tool_context(
+        event,
+        runtime,
+        "tool.python_exec",
+        effective_role=Role.INSTANCE_OPERATOR,
+    )
     context = ContextWrapper(
         context=SimpleNamespace(event=event, context=runtime),
         tool_call_timeout=60,
@@ -159,7 +165,12 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
             )
         ),
     )
-    attach_authorized_tool_context(event, runtime, "tool.python_exec")
+    attach_authorized_tool_context(
+        event,
+        runtime,
+        "tool.python_exec",
+        effective_role=Role.INSTANCE_OPERATOR,
+    )
     context = ContextWrapper(
         context=SimpleNamespace(event=event, context=runtime),
         tool_call_timeout=60,
@@ -222,7 +233,12 @@ async def test_local_python_reports_disabled_network_policy(tmp_path, monkeypatc
             )
         ),
     )
-    attach_authorized_tool_context(event, runtime, "tool.python_exec")
+    attach_authorized_tool_context(
+        event,
+        runtime,
+        "tool.python_exec",
+        effective_role=Role.INSTANCE_OPERATOR,
+    )
     context = ContextWrapper(
         context=SimpleNamespace(event=event, context=runtime),
         tool_call_timeout=60,

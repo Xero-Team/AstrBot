@@ -74,10 +74,12 @@ class UnixSandboxProcess:
         Args:
             signal: Unix signal number to send.
         """
+        if self._process.returncode is not None:
+            return
         try:
             os.killpg(self.pid, signal)
-        except ProcessLookupError:
-            pass  # Process group already exited.
+        except ProcessLookupError, PermissionError:
+            pass
 
 
 class UnixProcessSandbox(ProcessSandbox):

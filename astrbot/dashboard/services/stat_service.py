@@ -58,6 +58,7 @@ class StatService:
         html_renderer: HtmlRenderer,
         plugin_catalog: PluginRegistry,
         platform_manager: PlatformManager,
+        runtime: dict | None = None,
     ) -> None:
         self.db_helper = db_helper
         self.core_control = core_control
@@ -68,7 +69,9 @@ class StatService:
         self.plugin_catalog = plugin_catalog
         self.platform_manager = platform_manager
         self.storage_cleaner = StorageCleaner(config)
-        self.runtime = detect_local_runtime_info()
+        self.runtime = (
+            runtime if runtime is not None else detect_local_runtime_info(probe=True)
+        )
 
     async def restart_core(self) -> None:
         if self.demo_mode:

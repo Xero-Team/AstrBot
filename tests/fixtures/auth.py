@@ -94,13 +94,15 @@ class AuthorizationServiceStub:
 
     __test__ = False
 
-    def __init__(self, *allowed_actions: str) -> None:
+    def __init__(self, *allowed_actions: str, effective_role=None) -> None:
         self.allowed_actions = frozenset(allowed_actions)
+        self.effective_role = effective_role
 
     async def authorize(self, _subject, action, _resource, _context):
         return SimpleNamespace(
             allowed=action in self.allowed_actions,
             requires_step_up=False,
+            effective_role=self.effective_role,
         )
 
 
@@ -109,6 +111,7 @@ def attach_authorized_tool_context(
     runtime: object,
     *allowed_actions: str,
     config_id: str = "default",
+    effective_role=None,
 ) -> None:
     """Attach a trusted test principal and an explicit action allow-list."""
 
@@ -133,7 +136,11 @@ def attach_authorized_tool_context(
             authenticated=True,
         ),
     )
-    setattr(runtime, "authorization", AuthorizationServiceStub(*allowed_actions))
+    setattr(
+        runtime,
+        "authorization",
+        AuthorizationServiceStub(*allowed_actions, effective_role=effective_role),
+    )
 
 
 TestAuthorizationService = AuthorizationServiceStub

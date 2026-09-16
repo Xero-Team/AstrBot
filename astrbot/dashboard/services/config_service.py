@@ -802,7 +802,7 @@ async def save_config_async(
                 post_config,
                 CONFIG_METADATA_2,
                 is_core,
-                runtime=detect_local_runtime_info(),
+                runtime=detect_local_runtime_info(probe=False),
                 current_config=current_config,
             )
         else:
@@ -875,7 +875,9 @@ class ConfigProfileService:
         self.db = db
         self.totp_runtime_state = totp_runtime_state
         self.plugin_catalog = plugin_catalog
-        self.runtime = runtime if runtime is not None else detect_local_runtime_info()
+        self.runtime = (
+            runtime if runtime is not None else detect_local_runtime_info(probe=True)
+        )
         self.computer_runtime = computer_runtime
 
     def get_profile_schema(self) -> dict:
@@ -1016,8 +1018,11 @@ class ConfigProfileService:
         if protected_2fa_changed:
             await self.totp_runtime_state.clear_all()
         if self.computer_runtime is not None:
-            booter = self.computer_runtime.get_local_booter()
-            if isinstance(booter.shell, LocalShellComponent):
+            try:
+                booter = self.computer_runtime.get_local_booter()
+            except RuntimeError:
+                booter = None
+            if booter is not None and isinstance(booter.shell, LocalShellComponent):
                 await booter.shell.shutdown_sessions(invalid_only=True)
         await self.core_control.reload_pipeline_scheduler(config_id)
         warning = await _validate_neo_connectivity(config)

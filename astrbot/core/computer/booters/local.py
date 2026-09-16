@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,9 @@ _BLOCKED_COMMAND_PATTERNS = [
     re.compile(r"(^|[;&|() ])killall(?:\s|$)"),
 ]
 _LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+_SEARCH_FALLBACK_TIMEOUT_SECONDS = 30
+_SEARCH_FALLBACK_MAX_FILES = 4000
+_SEARCH_FALLBACK_MAX_FILE_BYTES = 256 * 1024
 
 
 def _is_safe_command(command: str) -> bool:
@@ -156,7 +160,6 @@ class LocalShellComponent(ShellComponent):
     max_sessions: int = 16
     max_output_bytes: int = 4 * 1024 * 1024
     session_ttl_seconds: int = 30 * 60
-    disk_quota_bytes: int = 32 * 1024 * 1024
 
     async def exec(  # noqa: ASYNC109
         self,
@@ -206,7 +209,7 @@ class LocalShellComponent(ShellComponent):
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
-                # Safety relies on `_is_safe_command()` and the allowed-root checks.
+                # UX blocklist plus cwd bounds; the OS sandbox is the safety boundary.
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     popen_command,
                     # Controlled local computer-use command.
@@ -217,7 +220,7 @@ class LocalShellComponent(ShellComponent):
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
             # `command` is intentionally executed through the current shell so
             # local computer-use behavior matches existing tool semantics.
-            # Safety relies on `_is_safe_command()` and the allowed-root checks.
+            # UX blocklist plus cwd bounds; the OS sandbox is the safety boundary.
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 popen_command,
                 # Controlled local computer-use command.
@@ -733,7 +736,7 @@ class LocalShellComponent(ShellComponent):
 
     async def _terminate_process(self, session: _LocalShellSession) -> None:
         process = session.process
-        if process.returncode is not None and not session.sandboxed:
+        if process.returncode is not None:
             return
         if session.sandboxed:
             process.terminate()
@@ -1048,18 +1051,37 @@ class LocalFileSystemComponent(FileSystemComponent):
 
             matcher = re.compile(pattern)
             output_lines: list[str] = []
-            paths = (
-                [search_path]
-                if search_path.is_file()
-                else sorted(
-                    path_ for path_ in search_path.rglob("*") if path_.is_file()
-                )
-            )
+            deadline = time.monotonic() + _SEARCH_FALLBACK_TIMEOUT_SECONDS
+            scanned = 0
+            paths = [search_path] if search_path.is_file() else search_path.rglob("*")
             for file_path in paths:
+                if time.monotonic() >= deadline:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "File search timed out after 30 seconds.",
+                    }
+                scanned += 1
+                if scanned > _SEARCH_FALLBACK_MAX_FILES:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "File search exceeded the fallback file-count limit.",
+                    }
                 if glob and not fnmatch.fnmatch(file_path.name, glob):
                     continue
                 try:
-                    text = file_path.read_text(encoding="utf-8", errors="ignore")
+                    info = file_path.lstat()
+                    if not stat.S_ISREG(info.st_mode):
+                        continue
+                    if info.st_size > _SEARCH_FALLBACK_MAX_FILE_BYTES:
+                        continue
+                    resolved = file_path.resolve(strict=True)
+                    if resolved != search_path and not resolved.is_relative_to(
+                        search_path
+                    ):
+                        continue
+                    text = resolved.read_text(encoding="utf-8", errors="ignore")
                 except OSError:
                     continue
 

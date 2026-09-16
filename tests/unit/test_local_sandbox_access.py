@@ -416,6 +416,14 @@ async def test_local_execution_obeys_file_tool_roots(
     )
     monkeypatch.setattr(fs, "get_astrbot_temp_path", lambda: str(temporary))
     monkeypatch.setattr(fs, "get_astrbot_system_tmp_path", lambda: str(system_temp))
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.util.get_astrbot_temp_path",
+        lambda: str(temporary),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.util.get_astrbot_system_tmp_path",
+        lambda: str(system_temp),
+    )
     monkeypatch.setattr(local, "get_astrbot_system_tmp_path", lambda: str(system_temp))
     monkeypatch.setattr(
         shell, "workspace_root_for_context", AsyncMock(return_value=workspace)

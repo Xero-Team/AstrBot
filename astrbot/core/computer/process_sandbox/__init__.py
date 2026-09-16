@@ -25,21 +25,36 @@ def create_process_sandbox() -> ProcessSandbox:
         Bubblewrap on Linux or Seatbelt on macOS.
 
     Raises:
-        RuntimeError: If the current system has no Local sandbox implementation.
+        RuntimeError: If the current system has no Local sandbox implementation
+            or the required launcher is missing.
     """
     if sys.platform.startswith("linux"):
+        if not shutil.which("bwrap"):
+            raise RuntimeError(
+                "bubblewrap (`bwrap`) is required for restricted Local execution."
+            )
         from .bubblewrap import BubblewrapProcessSandbox
 
         return BubblewrapProcessSandbox()
     if sys.platform == "darwin":
+        if shutil.which("sandbox-exec", path="/usr/bin") != "/usr/bin/sandbox-exec":
+            raise RuntimeError(
+                "Seatbelt (`/usr/bin/sandbox-exec`) is required for restricted "
+                "Local execution."
+            )
         from .seatbelt import SeatbeltProcessSandbox
 
         return SeatbeltProcessSandbox()
     raise RuntimeError("No Local process sandbox backend is available.")
 
 
-def detect_local_runtime_info() -> dict:
+def detect_local_runtime_info(*, probe: bool = False) -> dict:
     """Probe OS, architecture, and Local sandbox availability once.
+
+    Args:
+        probe: When True, launch a 5s sandbox no-op if the backend is present.
+            Config saves should leave this false; the Dashboard version snapshot
+            can afford the extra process.
 
     Returns:
         Runtime snapshot consumed by the Dashboard version API and Local
@@ -63,7 +78,7 @@ def detect_local_runtime_info() -> dict:
                 else "missing"
             ),
         }
-    if sandbox["status"] == "detected":
+    if probe and sandbox["status"] == "detected":
         try:
             temp_root = Path(get_astrbot_temp_path())
             temp_root.mkdir(parents=True, exist_ok=True)

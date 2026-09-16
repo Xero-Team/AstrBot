@@ -25,25 +25,18 @@ from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
     get_local_permission_policy,
     is_local_runtime,
+    resolve_local_permission_role,
+    session_temp_roots,
     workspace_root,
 )
 from astrbot.core.tools.registry import builtin_tool
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_system_tmp_path,
-    get_astrbot_temp_path,
-)
 
 
 def _file_send_allowed_roots(umo: str | None) -> tuple[Path, ...]:
     roots = []
     if umo:
         roots.append(workspace_root(umo))
-    roots.extend(
-        [
-            Path(get_astrbot_temp_path()).resolve(strict=False),
-            Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-        ]
-    )
+        roots.extend(session_temp_roots(umo))
     return tuple(roots)
 
 
@@ -137,6 +130,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         path = str(path).strip()
         if not path:
             raise FileNotFoundError(f"{component_type} path is empty")
+        await resolve_local_permission_role(context)
 
         # Relative host paths are resolved only inside the user's workspace.
         if not os.path.isabs(path):
@@ -182,8 +176,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             result = await sb.shell.exec(f"test -f {quoted_path} && echo '_&exists_'")
             if "_&exists_" in json.dumps(result):
                 name = _remote_basename(path) or os.path.basename(path)
+                session_temp = session_temp_roots(
+                    context.context.event.unified_msg_origin
+                )[1]
+                session_temp.mkdir(parents=True, exist_ok=True)
                 local_path = os.path.join(
-                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                    str(session_temp), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")

@@ -348,14 +348,14 @@ class CoreExecutionContext:
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
         from astrbot.core.agent.request_preparation import (
+            cua_pixel_mode_from_settings,
             image_compress_args_from_settings,
             prepare_provider_request,
         )
 
+        provider_settings = (self.get_config() or {}).get("provider_settings")
         compress_enabled, image_max_size, image_quality = (
-            image_compress_args_from_settings(
-                (self.get_config() or {}).get("provider_settings")
-            )
+            image_compress_args_from_settings(provider_settings)
         )
         request = await prepare_provider_request(
             ProviderRequest(
@@ -373,6 +373,7 @@ class CoreExecutionContext:
             image_compress_enabled=compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
+            warn_unresized_images=cua_pixel_mode_from_settings(provider_settings),
         )
         llm_resp = await prov.text_chat(
             prompt=request.prompt,
@@ -431,6 +432,7 @@ class CoreExecutionContext:
         """
         # Import here to avoid circular imports
         from astrbot.core.agent.request_preparation import (
+            cua_pixel_mode_from_settings,
             image_compress_args_from_settings,
             prepare_provider_request,
         )
@@ -486,6 +488,7 @@ class CoreExecutionContext:
             image_compress_enabled=compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
+            warn_unresized_images=cua_pixel_mode_from_settings(provider_settings),
         )
         if agent_context is None:
             agent_context = AstrAgentContext(

@@ -86,8 +86,9 @@ def _validate_opened_file(file_fd: int, path: str) -> int:
 
 def read_fd_at(file_descriptor: int, size: int, offset: int) -> bytes:
     """Read bytes at an offset without requiring Unix ``os.pread``."""
-    if hasattr(os, "pread"):
-        return os.pread(file_descriptor, size, offset)
+    pread = getattr(os, "pread", None)
+    if pread is not None:
+        return pread(file_descriptor, size, offset)
     current = os.lseek(file_descriptor, 0, os.SEEK_CUR)
     try:
         os.lseek(file_descriptor, offset, os.SEEK_SET)
@@ -118,7 +119,7 @@ def _ensure_compat_directory(path: Path, original: str, *, create: bool) -> None
         try:
             path.mkdir(mode=0o755)
         except FileExistsError:
-            pass
+            pass  # Lost the create race; re-lstat the existing directory.
         info = path.lstat()
     _raise_if_link(path, original)
     if not stat.S_ISDIR(info.st_mode):
@@ -128,10 +129,56 @@ def _ensure_compat_directory(path: Path, original: str, *, create: bool) -> None
         )
 
 
+def _nt_final_path(file_fd: int) -> Path:
+    import ctypes
+    import msvcrt
+
+    handle = msvcrt.get_osfhandle(file_fd)  # type: ignore[attr-defined]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    get_final_path = kernel32.GetFinalPathNameByHandleW
+    get_final_path.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        ctypes.c_uint,
+        ctypes.c_uint,
+    ]
+    get_final_path.restype = ctypes.c_uint
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = get_final_path(handle, buffer, len(buffer), 0)
+    if length == 0 or length >= len(buffer):
+        raise PermissionError("Access denied: unable to resolve opened file path.")
+    final = buffer.value
+    if final.startswith("\\\\?\\"):
+        final = final[4:]
+    return Path(final)
+
+
+def _confirm_opened_path(
+    file_fd: int,
+    allowed_roots: tuple[Path, ...],
+    path: str,
+) -> None:
+    if os.name != "nt":
+        return
+    try:
+        opened = _nt_final_path(file_fd)
+    except OSError as exc:
+        os.close(file_fd)
+        raise PermissionError(
+            f"Access denied: unable to resolve opened file path: {path}."
+        ) from exc
+    try:
+        _match_allowed_root(opened, allowed_roots, path)
+    except PermissionError:
+        os.close(file_fd)
+        raise
+
+
 def _open_file_without_dir_fd(
     path: str,
     root: Path,
     parts: tuple[str, ...],
+    allowed_roots: tuple[Path, ...],
     *,
     access: Literal["read", "write", "edit"],
     create_parents: bool,
@@ -148,7 +195,11 @@ def _open_file_without_dir_fd(
 
     final_path = current / parts[-1]
     file_flags = _access_file_flags(access)
-    file_flags |= getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+    file_flags |= (
+        getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
     try:
         info = final_path.lstat()
     except FileNotFoundError:
@@ -163,6 +214,7 @@ def _open_file_without_dir_fd(
         except FileExistsError:
             _raise_if_link(final_path, path)
             file_fd = os.open(final_path, file_flags)
+        _confirm_opened_path(file_fd, allowed_roots, path)
         return _validate_opened_file(file_fd, path)
 
     _raise_if_link(final_path, path)
@@ -172,7 +224,9 @@ def _open_file_without_dir_fd(
         raise PermissionError(
             f"Access denied: restricted path is not a regular file: {path}."
         )
-    return _validate_opened_file(os.open(final_path, file_flags), path)
+    file_fd = os.open(final_path, file_flags)
+    _confirm_opened_path(file_fd, allowed_roots, path)
+    return _validate_opened_file(file_fd, path)
 
 
 def _raise_if_link_oserror(exc: OSError, path: str) -> NoReturn:
@@ -270,12 +324,16 @@ def open_file_in_allowed_roots(
             path,
             root,
             parts,
+            allowed_roots,
             access=access,
             create_parents=create_parents,
         )
 
     directory_flags = (
-        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
     )
     try:
         directory_fd = os.open(root, directory_flags)
@@ -300,7 +358,9 @@ def open_file_in_allowed_roots(
 
         file_flags = _access_file_flags(access)
         file_flags |= (
-            os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+            getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NONBLOCK", 0)
         )
         file_fd = _open_nofollow_file(
             parts[-1],

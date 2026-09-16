@@ -108,7 +108,7 @@ class ExecuteShellTool(FunctionTool):
     ) -> ToolExecResult:
         command: str = kwargs["command"]
         background: bool = kwargs.get("background", False)
-        timeout_seconds: int | None = kwargs.get("timeout_seconds", None)
+        timeout_seconds: int | None = kwargs.get("timeout")
         env: dict[str, Any] | None = kwargs.get("env", None)
         yield_time_ms: int = kwargs.get("yield_time_ms", 10_000)
         local_policy, permission_error = await check_local_execution_permission(
@@ -149,13 +149,13 @@ class ExecuteShellTool(FunctionTool):
                     or local_policy is not None
                     and local_policy.allow_network
                     and not local_policy.requires_sandbox
-                ) or getattr(context.context.event, "role", None) == "admin"
+                )
                 umo = context.context.event.unified_msg_origin
                 workspace_scope = (
                     local_policy is not None
                     and local_policy.filesystem_scope == "workspace"
                 )
-                requested_timeout = kwargs.get("timeout", timeout_seconds)
+                requested_timeout = timeout_seconds
                 result = await shell_component.exec_managed(
                     command,
                     owner_id=context.context.event.unified_msg_origin,

@@ -7,7 +7,7 @@ from typing import TypeVar, cast
 
 from astrbot import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.db.protocols import WebChatStorageStore
+from astrbot.core.platform.webchat_storage import WebChatStorageStore
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.star.star_handler import EventType, HandlerRegistry
 from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error

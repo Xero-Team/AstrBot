@@ -17,7 +17,7 @@ from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_runtime import CoreControl
 from astrbot.core.db.po import PlatformStat, ProviderStat
-from astrbot.core.db.protocols import StatisticsSessionStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
@@ -48,7 +48,7 @@ class StatServiceError(Exception):
 class StatService:
     def __init__(
         self,
-        db_helper: StatisticsSessionStore,
+        db_helper: SQLiteDatabase,
         core_control: CoreControl,
         config: AstrBotConfig,
         *,

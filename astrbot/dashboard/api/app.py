@@ -11,7 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from astrbot import logger
 from astrbot.core.agent.mcp_client import validate_mcp_server_config
 from astrbot.core.core_runtime import CoreControl, CoreRuntime
-from astrbot.core.db.protocols import DashboardStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.dashboard.responses import ApiError, DashboardValidationError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
@@ -80,7 +80,7 @@ def create_dashboard_asgi_app(
     *,
     runtime: CoreRuntime,
     core_control: CoreControl,
-    db: DashboardStore,
+    db: SQLiteDatabase,
     jwt_secret: str,
     static_folder: str | None = None,
 ) -> FastAPI:

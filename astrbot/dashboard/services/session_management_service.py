@@ -6,7 +6,7 @@ from sqlmodel import col, select
 
 from astrbot import logger
 from astrbot.core.db.po import ConversationV2, Preference
-from astrbot.core.db.protocols import SessionManagementStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.entities import ProviderType
@@ -42,7 +42,7 @@ class SessionManagementServiceError(Exception):
 class SessionManagementService:
     def __init__(
         self,
-        db_helper: SessionManagementStore,
+        db_helper: SQLiteDatabase,
         preferences: SharedPreferences,
         provider_manager: ProviderManager,
         persona_manager: PersonaManager,

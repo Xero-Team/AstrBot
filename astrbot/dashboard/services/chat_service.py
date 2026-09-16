@@ -15,7 +15,7 @@ from starlette.datastructures import UploadFile
 
 from astrbot import logger
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
-from astrbot.core.db.protocols import ChatStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import ActiveEventControl
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -325,7 +325,7 @@ class ChatServiceError(Exception):
 
 
 async def ensure_webchat_platform_session_owner(
-    db: ChatStore,
+    db: SQLiteDatabase,
     *,
     username: str,
     session_id: str,
@@ -404,7 +404,7 @@ class ChatRunState:
 class ChatService:
     def __init__(
         self,
-        db: ChatStore,
+        db: SQLiteDatabase,
         *,
         preferences: SharedPreferences,
         conversation_manager: ConversationManager,

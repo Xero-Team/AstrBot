@@ -7,7 +7,6 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.db.po import PlatformMessageHistory
-from astrbot.core.db.protocols import WebChatStorageStore
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -17,6 +16,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.webchat_storage import WebChatStorageStore
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.webchat.emitter import emit_webchat_response
 from astrbot.core.webchat.message_parts import (

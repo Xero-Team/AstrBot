@@ -12,7 +12,7 @@ from starlette.websockets import WebSocketDisconnect
 from astrbot import logger
 from astrbot.core.agent.mcp_client import MCPInteractionCoordinator, MCPInteractionKey
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
-from astrbot.core.db.protocols import ChatStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.error_redaction import safe_error
@@ -82,7 +82,7 @@ class WebChatSession:
 class WebChatService:
     def __init__(
         self,
-        db: ChatStore,
+        db: SQLiteDatabase,
         *,
         preferences: SharedPreferences,
         config: AstrBotConfig,

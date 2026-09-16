@@ -17,7 +17,8 @@ from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.db.protocols import PluginRuntimeStore, SessionBridgeStore
+from astrbot.core.db.protocols import SessionBridgeStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import ProviderNotFoundError
 from astrbot.core.group_sender_concurrency import GroupOutboundGate
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
@@ -202,7 +203,7 @@ class CoreExecutionContext:
         self,
         event_queue: Queue,
         config: AstrBotConfig,
-        db: PluginRuntimeStore,
+        db: SQLiteDatabase,
         provider_manager: ProviderManager,
         platform_manager: PlatformManagerProtocol,
         conversation_manager: ConversationManager,

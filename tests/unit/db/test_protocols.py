@@ -6,35 +6,28 @@ from typing import Protocol
 
 import pytest
 
-from astrbot.core.db import BaseDatabase
 from astrbot.core.db.protocols import (
     ApiKeyStore,
     AttachmentStore,
-    ChatProjectSessionStore,
     ChatProjectStore,
-    ChatStore,
     CommandStore,
     ConversationStore,
     CronStore,
-    DashboardStore,
     DatabaseSessionStore,
     KnowledgeBaseTaskStore,
     MemoryStore,
     MessageHistoryStore,
-    OpenApiStore,
     PersonaRuntimeStore,
     PersonaStore,
     PlatformSessionStore,
     PreferenceStore,
     SessionBridgeStore,
-    SessionManagementStore,
-    StatisticsSessionStore,
     StatisticsStore,
     UmoAliasStore,
-    WebChatStorageStore,
     WebChatThreadStore,
 )
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.platform.webchat_storage import WebChatStorageStore
 
 DOMAIN_PROTOCOLS: tuple[type[Protocol], ...] = (
     KnowledgeBaseTaskStore,
@@ -59,13 +52,6 @@ DOMAIN_PROTOCOLS: tuple[type[Protocol], ...] = (
 SQLITE_STORE_PROTOCOLS: tuple[type[Protocol], ...] = (
     DatabaseSessionStore,
     *DOMAIN_PROTOCOLS,
-    ChatStore,
-    OpenApiStore,
-    ChatProjectSessionStore,
-    SessionManagementStore,
-    StatisticsSessionStore,
-    DashboardStore,
-    WebChatStorageStore,
 )
 
 
@@ -78,12 +64,11 @@ def _declared_protocol_methods(protocols: Iterable[type[Protocol]]) -> set[str]:
     }
 
 
-def test_base_database_only_declares_lifecycle_methods():
+def test_sqlite_database_lifecycle_is_owned_by_the_facade():
     domain_methods = _declared_protocol_methods(DOMAIN_PROTOCOLS)
 
-    assert BaseDatabase.__abstractmethods__ == frozenset({"initialize"})
-    assert domain_methods.isdisjoint(vars(BaseDatabase))
-    assert {"initialize", "get_db", "close"}.issubset(vars(BaseDatabase))
+    assert domain_methods.isdisjoint(vars(SQLiteDatabase))
+    assert {"initialize", "get_db", "close"}.issubset(vars(SQLiteDatabase))
 
 
 def test_every_sqlite_domain_operation_is_owned_by_a_protocol():
@@ -132,3 +117,7 @@ def test_sqlite_database_satisfies_store_contracts(
     protocol: type[Protocol],
 ):
     assert isinstance(temp_db, protocol)
+
+
+def test_sqlite_database_satisfies_webchat_storage(temp_db: SQLiteDatabase):
+    assert isinstance(temp_db, WebChatStorageStore)

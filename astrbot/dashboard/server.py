@@ -20,7 +20,7 @@ from hypercorn.logging import Logger as HypercornLogger
 from astrbot import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_runtime import CoreControl, CoreRuntime
-from astrbot.core.db.protocols import DashboardStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.dashboard.request_state import DashboardRequestState
 from astrbot.dashboard.responses import error
@@ -238,7 +238,7 @@ class AstrBotDashboard:
         cls,
         runtime: CoreRuntime,
         core_control: CoreControl,
-        db: DashboardStore,
+        db: SQLiteDatabase,
         shutdown_event: asyncio.Event,
         webui_dir: str | None = None,
     ) -> Self:
@@ -257,7 +257,7 @@ class AstrBotDashboard:
         self,
         runtime: CoreRuntime,
         core_control: CoreControl,
-        db: DashboardStore,
+        db: SQLiteDatabase,
         shutdown_event: asyncio.Event,
         webui_dir: str | None = None,
         *,

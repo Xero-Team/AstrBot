@@ -1,19 +1,11 @@
-"""Database engine and session lifecycle ownership."""
+"""Database engine helpers for SQLite."""
 
-import abc
 import asyncio
 import threading
-import typing as T
-from contextlib import asynccontextmanager
 from weakref import WeakSet
 
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
 _AIOSQLITE_JOIN_TIMEOUT_SEC = 1.0
@@ -108,70 +100,3 @@ async def dispose_async_engine(
             if thread.is_alive()
         )
     )
-
-
-class BaseDatabase(abc.ABC):
-    """Own the database engine, session factory, and their lifecycle."""
-
-    DATABASE_URL = ""
-
-    def __init__(self) -> None:
-        # SQLite only supports a single writer at a time. Without a busy
-        # timeout the driver raises "database is locked" instantly when a
-        # second write is attempted. Setting timeout=30 tells SQLite to wait
-        # up to 30 s for the lock, which is enough for brief write bursts.
-        # NullPool is required: QueuePool plus aiosqlite can deadlock on
-        # Windows file locks and block later SQLite engines in-process.
-        is_sqlite = "sqlite" in self.DATABASE_URL
-        if is_sqlite:
-            self.engine = create_async_engine(
-                self.DATABASE_URL,
-                echo=False,
-                future=True,
-                poolclass=NullPool,
-                connect_args={"timeout": _SQLITE_BUSY_TIMEOUT_SEC},
-            )
-        else:
-            self.engine = create_async_engine(
-                self.DATABASE_URL,
-                echo=False,
-                future=True,
-            )
-        self._aiosqlite_workers = track_aiosqlite_workers(self.engine)
-        self.AsyncSessionLocal = async_sessionmaker(
-            self.engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-        self._active_sessions: WeakSet[AsyncSession] = WeakSet()
-        self._init_lock = asyncio.Lock()
-        self.inited = False
-
-    @abc.abstractmethod
-    async def initialize(self) -> None:
-        """Initialize the database schema and connection settings."""
-
-    @asynccontextmanager
-    async def get_db(self) -> T.AsyncGenerator[AsyncSession]:
-        """Yield a tracked database session."""
-        if not self.inited:
-            await self.initialize()
-        session = self.AsyncSessionLocal()
-        self._active_sessions.add(session)
-        try:
-            yield session
-        finally:
-            try:
-                await session.close()
-            finally:
-                self._active_sessions.discard(session)
-
-    async def close(self) -> None:
-        """Close tracked sessions and dispose the database engine."""
-        for session in list(self._active_sessions):
-            try:
-                await session.close()
-            finally:
-                self._active_sessions.discard(session)
-        await dispose_async_engine(self.engine, self._aiosqlite_workers)
-        self.inited = False

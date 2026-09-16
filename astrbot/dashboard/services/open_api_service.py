@@ -7,7 +7,7 @@ from uuid import uuid4
 from astrbot import logger
 from astrbot.core.auth.models import AuthContext, Resource, Subject
 from astrbot.core.auth.service import AuthorizationService
-from astrbot.core.db.protocols import OpenApiStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.error_redaction import safe_error
@@ -67,7 +67,7 @@ class OpenApiWebSocketChatBridge:
 class OpenApiService:
     def __init__(
         self,
-        db: OpenApiStore,
+        db: SQLiteDatabase,
         *,
         platform_manager: PlatformManager,
         astrbot_config_mgr: AstrBotConfigManager,

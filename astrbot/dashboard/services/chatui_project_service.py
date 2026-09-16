@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from astrbot.core.db.protocols import ChatProjectSessionStore
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.project_workspace import (
     WORKSPACE_PREVIEW_MAX_BYTES,
     ProjectWorkspaceError,
@@ -14,7 +14,7 @@ class ChatUIProjectServiceError(Exception):
 
 
 class ChatUIProjectService:
-    def __init__(self, db: ChatProjectSessionStore) -> None:
+    def __init__(self, db: SQLiteDatabase) -> None:
         self.db = db
         self.workspace_resolver = ProjectWorkspaceResolver()
 

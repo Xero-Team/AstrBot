@@ -1054,103 +1054,23 @@ class ChatProjectStore(Protocol):
     ) -> ChatUIProject | None: ...
 
 
-@runtime_checkable
-class ChatStore(
-    AttachmentStore,
-    ChatProjectStore,
-    MessageHistoryStore,
-    PlatformSessionStore,
-    WebChatThreadStore,
-    Protocol,
-):
-    """Compose the stores needed by Chat transport services."""
-
-
-@runtime_checkable
-class OpenApiStore(
-    ApiKeyStore,
-    AttachmentStore,
-    PlatformSessionStore,
-    Protocol,
-):
-    """Compose the stores needed by the OpenAPI transport service."""
-
-
-@runtime_checkable
-class ChatProjectSessionStore(ChatProjectStore, PlatformSessionStore, Protocol):
-    """Compose ChatUI project and platform session operations."""
-
-
-@runtime_checkable
-class SessionManagementStore(UmoAliasStore, DatabaseSessionStore, Protocol):
-    """Compose session metadata and scoped SQL access."""
-
-
-@runtime_checkable
-class StatisticsSessionStore(
-    StatisticsStore, DatabaseSessionStore, UmoAliasStore, Protocol
-):
-    """Compose statistics queries, UMO aliases, and scoped SQL access."""
-
-
-@runtime_checkable
-class PluginRuntimeStore(
-    CommandStore,
-    DatabaseSessionStore,
-    PlatformSessionStore,
-    PreferenceStore,
-    StatisticsStore,
-    UmoAliasStore,
-    Protocol,
-):
-    """Compose the persistence capabilities used by the plugin runtime."""
-
-
-@runtime_checkable
-class WebChatStorageStore(AttachmentStore, MessageHistoryStore, Protocol):
-    """Compose attachment and history persistence for the WebChat adapter."""
-
-
-@runtime_checkable
-class DashboardStore(
-    ApiKeyStore,
-    ChatStore,
-    CommandStore,
-    KnowledgeBaseTaskStore,
-    ConversationStore,
-    DatabaseSessionStore,
-    MemoryStore,
-    StatisticsStore,
-    UmoAliasStore,
-    Protocol,
-):
-    """Compose persistence capabilities at the Dashboard composition root."""
-
-
 __all__ = [
     "ApiKeyStore",
     "AttachmentStore",
     "ChatProjectStore",
-    "ChatProjectSessionStore",
-    "ChatStore",
     "CommandStore",
     "ConversationStore",
     "CronStore",
     "DatabaseSessionStore",
-    "DashboardStore",
+    "KnowledgeBaseTaskStore",
     "MemoryStore",
     "MessageHistoryStore",
-    "OpenApiStore",
     "PersonaRuntimeStore",
     "PersonaStore",
     "PlatformSessionStore",
-    "PluginRuntimeStore",
     "PreferenceStore",
     "SessionBridgeStore",
-    "SessionManagementStore",
     "StatisticsStore",
-    "StatisticsSessionStore",
     "UmoAliasStore",
-    "WebChatStorageStore",
     "WebChatThreadStore",
 ]

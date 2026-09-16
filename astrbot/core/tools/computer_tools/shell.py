@@ -14,7 +14,13 @@ from astrbot.core.computer.booters.local import LocalShellComponent
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
-from .util import check_admin_permission, is_local_runtime, workspace_root
+from .fs import _read_allowed_roots, _write_allowed_roots
+from .util import (
+    check_local_execution_permission,
+    get_local_permission_policy,
+    is_local_runtime,
+    workspace_root,
+)
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
@@ -104,8 +110,13 @@ class ExecuteShellTool(FunctionTool):
         timeout_seconds: int | None = kwargs.get("timeout_seconds", None)
         env: dict[str, Any] | None = kwargs.get("env", None)
         yield_time_ms: int = kwargs.get("yield_time_ms", 10_000)
-        if permission_error := await check_admin_permission(context, "Shell execution"):
+        local_policy, permission_error = await check_local_execution_permission(
+            context,
+            "Shell execution",
+        )
+        if permission_error:
             return permission_error
+        sandboxed = bool(local_policy and local_policy.requires_sandbox)
 
         sb = await context.context.context.computer_runtime.get_booter(
             context.context.context,
@@ -125,19 +136,49 @@ class ExecuteShellTool(FunctionTool):
                     return (
                         "Error executing command: local shell component is unavailable."
                     )
+                creator_id = str(context.context.event.get_sender_id())
+                creator_is_admin = (
+                    get_local_permission_policy(context).filesystem_scope == "host"
+                    or local_policy is not None
+                    and local_policy.allow_network
+                    and not local_policy.requires_sandbox
+                ) or getattr(context.context.event, "role", None) == "admin"
+                sandbox_roots = {}
+                if local_policy and local_policy.filesystem_scope == "workspace":
+                    umo = context.context.event.unified_msg_origin
+                    sandbox_roots = {
+                        "readable_roots": _read_allowed_roots(umo),
+                        "writable_roots": _write_allowed_roots(umo),
+                    }
+                requested_timeout = kwargs.get("timeout", timeout_seconds)
                 return json.dumps(
                     await sb.shell.exec_managed(
                         command,
                         owner_id=context.context.event.unified_msg_origin,
                         runtime_id="local",
-                        sender_id=str(context.context.event.get_sender_id()),
+                        sender_id=creator_id,
+                        creator_is_admin=creator_is_admin,
+                        sandboxed=sandboxed,
+                        permission_check=lambda: (
+                            is_local_runtime(context)
+                            and get_local_permission_policy(context) == local_policy
+                        ),
+                        allow_network=(
+                            local_policy.allow_network if local_policy else True
+                        ),
+                        filesystem_scope=(
+                            local_policy.filesystem_scope if local_policy else "host"
+                        ),
                         cwd=cwd,
                         env=dict(env or {}),
-                        timeout=kwargs.get("timeout", timeout_seconds)
-                        if kwargs.get("timeout", timeout_seconds) is not None
-                        else None,
+                        timeout=(
+                            min(requested_timeout or 300, 300)
+                            if sandboxed
+                            else requested_timeout
+                        ),
                         yield_time_ms=0 if background else yield_time_ms,
                         allowed_root=str(current_workspace_root),
+                        **sandbox_roots,
                     ),
                     ensure_ascii=False,
                 )
@@ -237,11 +278,13 @@ class ShellSessionTool(FunctionTool):
         cursor: int | None = kwargs.get("cursor", None)
         yield_time_ms: int = kwargs.get("yield_time_ms", 5_000)
         max_output_chars: int = kwargs.get("max_output_chars", 10_000)
-        if permission_error := await check_admin_permission(
-            context, "Shell session management"
-        ):
+        _, permission_error = await check_local_execution_permission(
+            context,
+            "Shell session management",
+        )
+        if permission_error and action != "terminate":
             return permission_error
-        if not is_local_runtime(context):
+        if not is_local_runtime(context) and action != "terminate":
             return "Error managing shell session: only local runtime is supported."
         owner_id = context.context.event.unified_msg_origin
         sender_id = str(context.context.event.get_sender_id())

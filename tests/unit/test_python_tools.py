@@ -86,7 +86,16 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
     )
     runtime = SimpleNamespace(
         get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_runtime": "local"}
+            "provider_settings": {
+                "computer_use_runtime": "local",
+                "computer_use_local_permissions": {
+                    "admin": {
+                        "allow_execution": True,
+                        "allow_network": True,
+                        "filesystem_scope": "host",
+                    }
+                },
+            }
         },
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(
@@ -109,6 +118,9 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         timeout_seconds=30,
         silent=False,
         cwd=str(workspace.resolve(strict=False)),
+        sandboxed=False,
+        allow_network=True,
+        filesystem_scope="host",
     )
 
 
@@ -130,7 +142,16 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
     )
     runtime = SimpleNamespace(
         get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_runtime": "local"}
+            "provider_settings": {
+                "computer_use_runtime": "local",
+                "computer_use_local_permissions": {
+                    "admin": {
+                        "allow_execution": True,
+                        "allow_network": True,
+                        "filesystem_scope": "host",
+                    }
+                },
+            }
         },
         computer_runtime=SimpleNamespace(
             get_local_booter=lambda: SimpleNamespace(
@@ -151,4 +172,7 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
         timeout_seconds=12,
         silent=False,
         cwd=str((tmp_path / "onebot_GroupMessage_12345").resolve(strict=False)),
+        sandboxed=False,
+        allow_network=True,
+        filesystem_scope="host",
     )

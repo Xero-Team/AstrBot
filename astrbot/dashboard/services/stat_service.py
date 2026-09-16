@@ -13,6 +13,7 @@ import psutil
 from sqlmodel import col, func, select
 
 from astrbot import logger
+from astrbot.core.computer.process_sandbox import detect_local_runtime_info
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_runtime import CoreControl
@@ -67,6 +68,7 @@ class StatService:
         self.plugin_catalog = plugin_catalog
         self.platform_manager = platform_manager
         self.storage_cleaner = StorageCleaner(config)
+        self.runtime = detect_local_runtime_info()
 
     async def restart_core(self) -> None:
         if self.demo_mode:
@@ -119,6 +121,7 @@ class StatService:
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
+            "runtime": self.runtime,
         }
 
     async def get_public_versions(

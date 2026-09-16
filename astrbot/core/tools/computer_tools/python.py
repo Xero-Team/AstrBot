@@ -10,7 +10,12 @@ from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
-from .util import check_admin_permission, is_local_runtime, workspace_root
+from .fs import _read_allowed_roots, _write_allowed_roots
+from .util import (
+    check_admin_permission,
+    check_local_execution_permission,
+    workspace_root,
+)
 
 _OS_NAME = platform.system()
 _SANDBOX_PYTHON_TOOL_CONFIG = {
@@ -123,7 +128,8 @@ class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"
     description: str = (
         f"Execute codes in a Python environment. Current OS: {_OS_NAME}. "
-        "Use system-compatible commands."
+        "Use system-compatible commands. Restricted Linux and macOS calls run "
+        "inside an operating-system sandbox."
     )
 
     parameters: dict = field(default_factory=lambda: param_schema)
@@ -136,12 +142,15 @@ class LocalPythonTool(FunctionTool):
         code: str = kwargs["code"]
         silent: bool = kwargs.get("silent", False)
         timeout_seconds: int = kwargs.get("timeout_seconds", 30)
-        if permission_error := await check_admin_permission(
-            context, "Python execution"
-        ):
+        local_policy, permission_error = await check_local_execution_permission(
+            context,
+            "Python execution",
+        )
+        if permission_error:
             return permission_error
-        if not is_local_runtime(context):
+        if local_policy is None:
             return "Error executing code: only local runtime is supported."
+        sandboxed = local_policy.requires_sandbox
         sb = context.context.context.computer_runtime.get_local_booter()
         requested_timeout = kwargs.get("timeout")
         if requested_timeout is None:
@@ -151,16 +160,29 @@ class LocalPythonTool(FunctionTool):
             if requested_timeout > 0
             else context.tool_call_timeout
         )
+        if sandboxed:
+            effective_timeout = min(effective_timeout, 300)
         try:
             current_workspace_root = workspace_root(
                 context.context.event.unified_msg_origin
             )
             current_workspace_root.mkdir(parents=True, exist_ok=True)
+            sandbox_roots = {}
+            if sandboxed and local_policy.filesystem_scope == "workspace":
+                umo = context.context.event.unified_msg_origin
+                sandbox_roots = {
+                    "readable_roots": _read_allowed_roots(umo),
+                    "writable_roots": _write_allowed_roots(umo),
+                }
             result = await sb.python.exec(
                 code,
                 timeout_seconds=effective_timeout,
                 silent=silent,
                 cwd=str(current_workspace_root),
+                sandboxed=sandboxed,
+                allow_network=local_policy.allow_network,
+                filesystem_scope=local_policy.filesystem_scope,
+                **sandbox_roots,
             )
             return await handle_result(result, context.context.event)
         except Exception as e:

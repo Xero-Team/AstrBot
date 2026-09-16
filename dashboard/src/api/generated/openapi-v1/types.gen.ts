@@ -4,6 +4,34 @@ export type ClientOptions = {
   baseURL: 'http://localhost:6185' | (string & {});
 };
 
+/**
+ * The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
+ */
+export type RuntimeInfo = {
+  /**
+   * Lowercase platform.system() value, commonly linux, darwin, or windows.
+   */
+  os: string;
+  /**
+   * Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+   */
+  arch: string;
+  /**
+   * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
+   */
+  sandbox: {
+    backend: 'bubblewrap' | 'seatbelt' | null;
+    /**
+     * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+     */
+    status: 'detected' | 'missing' | 'unavailable' | 'unsupported';
+    /**
+     * Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
+     */
+    error?: string;
+  };
+};
+
 export type DataFileContentRequest = {
   content: string;
   expected_etag?: string;
@@ -6296,9 +6324,13 @@ export type GetVersionData = {
 
 export type GetVersionResponses = {
   /**
-   * Standard AstrBot success response
+   * Version information with a backend runtime snapshot
    */
-  200: SuccessEnvelope;
+  200: SuccessEnvelope & {
+    data?: {
+      runtime: RuntimeInfo;
+    };
+  };
 };
 
 export type GetVersionResponse = GetVersionResponses[keyof GetVersionResponses];

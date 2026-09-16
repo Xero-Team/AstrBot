@@ -36,6 +36,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.file_read_utils import read_file_tool_result
+from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
 from astrbot.core.message.components import File, Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import (
@@ -49,6 +50,8 @@ from ..registry import builtin_tool
 from . import util as computer_util
 from .util import (
     check_admin_permission,
+    check_local_file_permission,
+    get_local_permission_policy,
     is_local_runtime,
     normalize_umo_for_workspace,
 )
@@ -144,7 +147,7 @@ def _write_allowed_roots(umo: str) -> tuple[Path, ...]:
 def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     if not is_local_runtime(context):
         return False
-    return True
+    return get_local_permission_policy(context).filesystem_scope != "host"
 
 
 def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
@@ -293,6 +296,8 @@ class FileReadTool(FunctionTool):
         path: str = kwargs["path"]
         offset: int | None = kwargs.get("offset", None)
         limit: int | None = kwargs.get("limit", None)
+        if permission_error := check_local_file_permission(context):
+            return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
@@ -318,18 +323,30 @@ class FileReadTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            return await read_file_tool_result(
-                sb,
-                local_mode=local_env,
-                path=normalized_path,
-                offset=offset,
-                limit=limit,
-                workspace_dir=(
-                    str(_workspace_root(context.context.event.unified_msg_origin))
-                    if local_env
-                    else None
-                ),
-            )
+            file_descriptor = None
+            if restricted:
+                file_descriptor = open_file_in_allowed_roots(
+                    normalized_path,
+                    _read_allowed_roots(context.context.event.unified_msg_origin),
+                    access="read",
+                )
+            try:
+                return await read_file_tool_result(
+                    sb,
+                    local_mode=local_env,
+                    path=normalized_path,
+                    offset=offset,
+                    limit=limit,
+                    workspace_dir=(
+                        str(_workspace_root(context.context.event.unified_msg_origin))
+                        if local_env
+                        else None
+                    ),
+                    local_file_descriptor=file_descriptor,
+                )
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
         except PermissionError as exc:
             return f"Error: {exc}"
         except Exception as exc:
@@ -368,6 +385,8 @@ class FileWriteTool(FunctionTool):
     ) -> ToolExecResult:
         path: str = kwargs["path"]
         content: str = kwargs["content"]
+        if permission_error := check_local_file_permission(context):
+            return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
@@ -388,12 +407,25 @@ class FileWriteTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            result = await sb.fs.write_file(
-                path=normalized_path,
-                content=content,
-                mode="w",
-                encoding="utf-8",
-            )
+            file_descriptor = None
+            if restricted:
+                file_descriptor = open_file_in_allowed_roots(
+                    normalized_path,
+                    _write_allowed_roots(context.context.event.unified_msg_origin),
+                    access="write",
+                    create_parents=True,
+                )
+            try:
+                result = await sb.fs.write_file(
+                    path=normalized_path,
+                    content=content,
+                    mode="w",
+                    encoding="utf-8",
+                    file_descriptor=file_descriptor,
+                )
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
             if not result.get("success", False):
                 error_detail = str(result.get("error", "") or "").strip()
                 return (
@@ -449,6 +481,8 @@ class FileEditTool(FunctionTool):
         old: str = kwargs["old"]
         new: str = kwargs["new"]
         replace_all: bool = kwargs.get("replace_all", False)
+        if permission_error := check_local_file_permission(context):
+            return permission_error
         umo = str(context.context.event.unified_msg_origin)
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
@@ -472,13 +506,25 @@ class FileEditTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            result = await sb.fs.edit_file(
-                path=normalized_path,
-                old_string=normalized_old,
-                new_string=normalized_new,
-                replace_all=replace_all,
-                encoding="utf-8",
-            )
+            file_descriptor = None
+            if restricted:
+                file_descriptor = open_file_in_allowed_roots(
+                    normalized_path,
+                    _write_allowed_roots(umo),
+                    access="edit",
+                )
+            try:
+                result = await sb.fs.edit_file(
+                    path=normalized_path,
+                    old_string=normalized_old,
+                    new_string=normalized_new,
+                    replace_all=replace_all,
+                    encoding="utf-8",
+                    file_descriptor=file_descriptor,
+                )
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
             if not result.get("success", False):
                 error_detail = str(result.get("error", "") or "").strip()
                 return (
@@ -658,6 +704,8 @@ class GrepTool(FunctionTool):
         normalized_pattern = pattern.strip()
         if not normalized_pattern:
             return "Error: `pattern` must be a non-empty string."
+        if permission_error := check_local_file_permission(context):
+            return permission_error
 
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)

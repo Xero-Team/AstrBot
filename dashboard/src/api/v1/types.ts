@@ -50,12 +50,23 @@ export interface ProviderEmbeddingDimensionData {
   [key: string]: unknown;
 }
 
+export interface RuntimeInfo {
+  os: string;
+  arch: string;
+  sandbox: {
+    backend: 'bubblewrap' | 'seatbelt' | null;
+    status: 'detected' | 'missing' | 'unavailable' | 'unsupported';
+    error?: string;
+  };
+}
+
 export interface VersionData {
   version?: string;
   dashboard_version?: string;
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
+  runtime?: RuntimeInfo;
   [key: string]: unknown;
 }
 

@@ -502,7 +502,7 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
         ],
     )
 
-    assert "error: failed to build messages[1] component: sandbox unavailable" in result
+    assert "error: image path does not exist:" in result
     ctx.context.context.send_message.assert_not_called()
 
 

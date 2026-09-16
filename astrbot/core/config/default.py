@@ -1,12 +1,39 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent_runner import get_agent_runner_config_default
+
+
+def get_local_permission_defaults(system: str | None = None) -> dict:
+    """Return fresh Local permission defaults for the operating system.
+
+    Args:
+        system: Operating system name, or None to use the current system.
+
+    Returns:
+        Per-role policies. Windows disables member access and gives admins
+        unrestricted access because workspace isolation is unavailable.
+    """
+    windows = (system or platform.system()).lower() == "windows"
+    return {
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "none" if windows else "workspace",
+        },
+        "admin": {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host" if windows else "workspace",
+        },
+    }
+
 
 VERSION = __version__
 
@@ -150,6 +177,7 @@ DEFAULT_CONFIG = {
             "add_cron_tools": True,
         },
         "computer_use_runtime": "none",
+        "computer_use_local_permissions": get_local_permission_defaults(),
         "sandbox": {
             "booter": "shipyard_neo",
             "shipyard_neo_endpoint": "",
@@ -3899,8 +3927,45 @@ CONFIG_METADATA_3 = {
                         "description": "Computer Use Runtime",
                         "type": "string",
                         "options": ["none", "local", "sandbox"],
-                        "labels": ["无", "本地", "沙箱"],
+                        "labels": [
+                            "不允许任何环境",
+                            "本机环境",
+                            "第三方沙箱环境",
+                        ],
                         "hint": "选择 Computer Use 运行环境。",
+                    },
+                    "provider_settings.computer_use_local_permissions": {
+                        "description": "本地权限策略",
+                        "type": "object",
+                        "_special": "local_permission_matrix",
+                        "full_width": True,
+                        "items": {
+                            "member": {
+                                "type": "object",
+                                "items": {
+                                    "allow_execution": {"type": "bool"},
+                                    "allow_network": {"type": "bool"},
+                                    "filesystem_scope": {
+                                        "type": "string",
+                                        "options": ["none", "workspace", "host"],
+                                    },
+                                },
+                            },
+                            "admin": {
+                                "type": "object",
+                                "items": {
+                                    "allow_execution": {"type": "bool"},
+                                    "allow_network": {"type": "bool"},
+                                    "filesystem_scope": {
+                                        "type": "string",
+                                        "options": ["none", "workspace", "host"],
+                                    },
+                                },
+                            },
+                        },
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "local",
+                        },
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",

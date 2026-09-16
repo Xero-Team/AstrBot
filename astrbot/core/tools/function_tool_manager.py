@@ -957,12 +957,18 @@ class FunctionToolManager:
             )
             self._timeout_mismatch_warned = True
 
-    def openai_chat_completions_schema(self, omit_empty_parameter_field=False) -> list:
+    def openai_chat_completions_schema(
+        self,
+        omit_empty_parameter_field=False,
+        *,
+        flatten_null_unions=False,
+    ) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.openai_chat_completions_schema(
             omit_empty_parameter_field=omit_empty_parameter_field,
+            flatten_null_unions=flatten_null_unions,
         )
 
     def openai_responses_schema(self) -> list:

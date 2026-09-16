@@ -686,9 +686,10 @@ class ProviderOpenAIChatCompletions(Provider):
     ) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
+            is_gemini = "gemini" in model
             tool_list = tools.openai_chat_completions_schema(
-                omit_empty_parameter_field=omit_empty_param_field,
+                omit_empty_parameter_field=is_gemini,
+                flatten_null_unions=is_gemini,
             )
             if tool_list:
                 payloads["tools"] = tool_list
@@ -735,9 +736,10 @@ class ProviderOpenAIChatCompletions(Provider):
         """流式查询API，逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
+            is_gemini = "gemini" in model
             tool_list = tools.openai_chat_completions_schema(
-                omit_empty_parameter_field=omit_empty_param_field,
+                omit_empty_parameter_field=is_gemini,
+                flatten_null_unions=is_gemini,
             )
             if tool_list:
                 payloads["tools"] = tool_list

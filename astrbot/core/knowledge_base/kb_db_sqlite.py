@@ -25,7 +25,7 @@ from astrbot.core.knowledge_base.models import (
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+    from astrbot.core.db.vec_db.faiss import FaissVecDB
 
 _FILE_IDENTITY_POSIX_MAX = 700
 _IDENTITY_COLUMNS: tuple[tuple[str, str], ...] = (

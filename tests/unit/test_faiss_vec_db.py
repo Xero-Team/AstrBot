@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
-from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+from astrbot.core.db.vec_db.embedding_storage import EmbeddingStorage
+from astrbot.core.db.vec_db.faiss import FaissVecDB
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 
 

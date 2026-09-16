@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db import Result
 from astrbot.core.knowledge_base.retrieval.manager import RetrievalManager
 from astrbot.core.knowledge_base.retrieval.rank_fusion import FusedResult
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult

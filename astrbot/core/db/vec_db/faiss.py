@@ -7,14 +7,12 @@ from astrbot import logger
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
-from ..base import BaseVecDB, Result
 from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
+from .result import Result
 
 
-class FaissVecDB(BaseVecDB):
-    """A class to represent a vector database."""
-
+class FaissVecDB:
     def __init__(
         self,
         doc_store_path: str,

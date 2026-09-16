@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, Literal
 import aiofiles
 
 from astrbot import logger
-from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
@@ -53,7 +52,7 @@ from .models import KBDocument, KBMedia, KnowledgeBase
 from .parsers.util import select_parser
 
 if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+    from astrbot.core.db.vec_db.faiss import FaissVecDB
 
 KB_SOURCE_MAX_BYTES = 128 * 1024 * 1024
 KB_URL_RESPONSE_MAX_BYTES = KB_SOURCE_MAX_BYTES + 8 * 1024 * 1024
@@ -100,7 +99,7 @@ def _compact_chunks(chunks: list[str]) -> list[str]:
 
 
 class KBHelper:
-    vec_db: BaseVecDB
+    vec_db: FaissVecDB
     kb: KnowledgeBase
     init_error: str | None
 
@@ -173,7 +172,7 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> FaissVecDB:
-        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+        from astrbot.core.db.vec_db.faiss import FaissVecDB
 
         existing = getattr(self, "vec_db", None)
         if isinstance(existing, FaissVecDB):

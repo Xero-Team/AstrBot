@@ -226,7 +226,7 @@ class DocumentStorage:
     def stopwords(self) -> set[str]:
         if self._stopwords is None:
             stopwords_path = (
-                Path(__file__).parents[3]
+                Path(__file__).parents[2]
                 / "knowledge_base"
                 / "retrieval"
                 / "hit_stopwords.txt"

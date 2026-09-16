@@ -15,7 +15,7 @@ from astrbot.core.knowledge_base.retrieval.tokenizer import (
 )
 
 if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+    from astrbot.core.db.vec_db.faiss import FaissVecDB
 
 _BM25Index = tuple[Any, list[dict[str, Any]]]
 

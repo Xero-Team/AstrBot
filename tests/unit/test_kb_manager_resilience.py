@@ -300,7 +300,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
             return mock_vec_db
 
     with patch(
-        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        "astrbot.core.db.vec_db.faiss.FaissVecDB",
         FakeFaissVecDB,
     ):
         await helper._ensure_vec_db()

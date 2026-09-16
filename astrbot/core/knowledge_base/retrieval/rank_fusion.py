@@ -6,7 +6,7 @@
 import json
 from dataclasses import dataclass
 
-from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db import Result
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult
 

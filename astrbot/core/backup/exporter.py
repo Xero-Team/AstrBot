@@ -334,7 +334,7 @@ class AstrBotExporter:
     async def _export_kb_documents(self, kb_helper: Any) -> dict[str, Any]:
         """导出知识库的文档块数据"""
         try:
-            from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+            from astrbot.core.db.vec_db.faiss import FaissVecDB
 
             vec_db: FaissVecDB = kb_helper.vec_db
             if not vec_db or not vec_db.document_storage:

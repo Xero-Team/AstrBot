@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db import Result
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult
 

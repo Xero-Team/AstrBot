@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from astrbot import logger
-from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db import Result
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 from astrbot.core.provider.provider import RerankProvider
 
 if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+    from astrbot.core.db.vec_db.faiss import FaissVecDB
 
     from ..kb_helper import KBHelper
 
@@ -51,7 +51,6 @@ class RetrievalManager:
         """初始化检索管理器
 
         Args:
-            vec_db_factory: 向量数据库工厂
             sparse_retriever: 稀疏检索器
             rank_fusion: 结果融合器
             kb_db: 知识库数据库实例

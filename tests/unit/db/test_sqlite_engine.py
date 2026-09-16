@@ -4,7 +4,7 @@ from sqlalchemy.pool import NullPool
 
 from astrbot.core.db import create_sqlite_async_engine, sqlite_async_url
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.db.vec_db.faiss_impl.document_storage import DocumentStorage
+from astrbot.core.db.vec_db.document_storage import DocumentStorage
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 
 

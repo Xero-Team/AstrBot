@@ -737,7 +737,7 @@ class AstrBotImporter:
 
     async def _import_kb_documents(self, kb_id: str, doc_data: dict) -> None:
         """导入知识库文档到向量数据库"""
-        from astrbot.core.db.vec_db.faiss_impl.document_storage import DocumentStorage
+        from astrbot.core.db.vec_db.document_storage import DocumentStorage
 
         kb_dir = Path(self.kb_root_dir) / kb_id
         doc_db_path = kb_dir / "doc.db"

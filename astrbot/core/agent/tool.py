@@ -66,6 +66,93 @@ def get_parallel_blocked_reason(tool: Any) -> str | None:
     return None
 
 
+_JSON_SCHEMA_INSTANCE_KEYS = frozenset(
+    {"const", "default", "enum", "example", "examples"}
+)
+
+
+def _is_json_schema_null_node(node: Any) -> bool:
+    """Return whether a JSON Schema node is a dedicated null type."""
+    if not isinstance(node, dict):
+        return False
+    node_type = node.get("type")
+    if node_type == "null":
+        return True
+    return (
+        isinstance(node_type, list)
+        and bool(node_type)
+        and all(item == "null" for item in node_type)
+    )
+
+
+def _collapse_null_union_key(schema: dict[str, Any], union_key: str) -> None:
+    """Flatten ``anyOf``/``oneOf`` null unions onto a sibling ``type`` when possible."""
+    branches = schema.get(union_key)
+    if not isinstance(branches, list):
+        return
+    non_null = [branch for branch in branches if not _is_json_schema_null_node(branch)]
+    # Gemini rejects sibling fields next to anyOf/oneOf. Only Optional[T] can
+    # become {type: T, nullable: true}; leave remaining unions untouched.
+    if (
+        len(non_null) != 1
+        or len(non_null) == len(branches)
+        or not isinstance(non_null[0], dict)
+    ):
+        return
+    remaining = non_null[0]
+    remaining_type = remaining.get("type")
+    if (
+        not isinstance(remaining_type, str)
+        or remaining_type == "null"
+        or "anyOf" in remaining
+        or "oneOf" in remaining
+    ):
+        return
+    del schema[union_key]
+    schema.update(remaining)
+    schema["nullable"] = True
+
+
+def _flatten_json_schema_null_unions(schema: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy whose Optional[T] nodes have a sibling type for Gemini.
+
+    Gemini FunctionDeclaration Schema is an OpenAPI 3.0 subset: each node
+    needs ``type``, and ``type: "null"`` is not allowed. Pydantic/FastMCP emit
+    ``Optional[T]`` as ``anyOf``/``oneOf``/type-list null unions. Collapse
+    those to ``{type: T, nullable: true}`` when exactly one non-null branch
+    remains. Leave remaining non-null unions unchanged.
+
+    Args:
+        schema: A JSON Schema object, typically a tool ``parameters`` dict.
+
+    Returns:
+        A new schema tree. The input is not mutated.
+    """
+
+    def flatten(node: Any) -> Any:
+        if isinstance(node, list):
+            return [flatten(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        result = {}
+        for key, value in node.items():
+            if key in _JSON_SCHEMA_INSTANCE_KEYS:
+                result[key] = copy.deepcopy(value)
+            else:
+                result[key] = flatten(value)
+        for union_key in ("anyOf", "oneOf"):
+            _collapse_null_union_key(result, union_key)
+        origin_type = result.get("type")
+        if isinstance(origin_type, list) and "null" in origin_type:
+            non_null = [item for item in origin_type if item != "null"]
+            if len(non_null) == 1:
+                result["type"] = non_null[0]
+                result["nullable"] = True
+        return result
+
+    return flatten(schema)
+
+
 @dataclass
 class ToolSchema:
     """A class representing the schema of a tool for function calling."""
@@ -237,7 +324,10 @@ class ToolSet:
         return self.tools
 
     def openai_chat_completions_schema(
-        self, omit_empty_parameter_field: bool = False
+        self,
+        omit_empty_parameter_field: bool = False,
+        *,
+        flatten_null_unions: bool = False,
     ) -> list[dict]:
         """Convert tools to the Chat Completions function-tool format."""
         result = []
@@ -251,7 +341,10 @@ class ToolSet:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
+                    parameters = tool.parameters
+                    if flatten_null_unions:
+                        parameters = _flatten_json_schema_null_unions(parameters)
+                    func_def["function"]["parameters"] = parameters
 
             result.append(func_def)
         return result
@@ -379,7 +472,9 @@ class ToolSet:
             if tool.description:
                 d["description"] = tool.description
             if tool.parameters:
-                d["parameters"] = convert_schema(tool.parameters)
+                d["parameters"] = convert_schema(
+                    _flatten_json_schema_null_unions(tool.parameters)
+                )
             tools.append(d)
 
         declarations = {}

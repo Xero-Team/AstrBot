@@ -19,6 +19,7 @@ from astrbot.core.agent.message import (
     ToolCall,
     ToolCallMessageSegment,
 )
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_chat_completions_source import (
@@ -2296,6 +2297,148 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "hi"}
         assert messages[1] == {"role": "user", "content": "again"}
+    finally:
+        await provider.terminate()
+
+
+def _optional_browse_toolset() -> ToolSet:
+    return ToolSet(
+        [
+            FunctionTool(
+                name="browse",
+                description="Browse.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "anyOf": [{"type": "string"}, {"type": "null"}],
+                            "default": None,
+                        }
+                    },
+                },
+            )
+        ]
+    )
+
+
+def _fake_chat_completion(model: str) -> ChatCompletion:
+    return ChatCompletion.model_validate(
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "created": 0,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 1,
+                "completion_tokens": 1,
+                "total_tokens": 2,
+            },
+        }
+    )
+
+
+async def _fake_chat_completion_stream(model: str):
+    yield ChatCompletionChunk.model_validate(
+        {
+            "id": "chatcmpl-stream",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+    )
+
+
+def _tool_category_schema(captured_kwargs: dict) -> dict:
+    return captured_kwargs["tools"][0]["function"]["parameters"]["properties"][
+        "category"
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_query_flattens_null_unions_for_gemini_models(monkeypatch, stream):
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+        model = "gemini-2.5-flash"
+        toolset = _optional_browse_toolset()
+        original = toolset.tools[0].parameters["properties"]["category"]
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            if stream:
+                return _fake_chat_completion_stream(model)
+            return _fake_chat_completion(model)
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        payloads = {
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+        }
+        if stream:
+            async for _ in provider._query_stream(payloads=payloads, tools=toolset):
+                pass
+        else:
+            await provider._query(payloads=payloads, tools=toolset)
+
+        category = _tool_category_schema(captured_kwargs)
+        assert category["type"] == "string"
+        assert category["nullable"] is True
+        assert "anyOf" not in category
+        assert original == {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "default": None,
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_query_keeps_json_schema_null_unions_for_non_gemini_models(
+    monkeypatch, stream
+):
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+        model = "gpt-4o-mini"
+        toolset = _optional_browse_toolset()
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            if stream:
+                return _fake_chat_completion_stream(model)
+            return _fake_chat_completion(model)
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        payloads = {
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+        }
+        if stream:
+            async for _ in provider._query_stream(payloads=payloads, tools=toolset):
+                pass
+        else:
+            await provider._query(payloads=payloads, tools=toolset)
+
+        assert _tool_category_schema(captured_kwargs) == {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "default": None,
+        }
     finally:
         await provider.terminate()
 

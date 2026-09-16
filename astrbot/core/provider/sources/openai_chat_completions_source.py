@@ -685,18 +685,17 @@ class ProviderOpenAIChatCompletions(Provider):
         request_max_retries: int | None = None,
     ) -> LLMResponse:
         if tools:
-            model = payloads.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
+            model = str(payloads.get("model", "")).lower()
+            is_gemini = "gemini" in model
             tool_list = tools.openai_chat_completions_schema(
-                omit_empty_parameter_field=omit_empty_param_field,
+                omit_empty_parameter_field=is_gemini,
+                flatten_null_unions=is_gemini,
             )
             if tool_list:
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body = self._normalize_request_payload(payloads)
-
-        model = payloads.get("model", "").lower()
 
         self._sanitize_assistant_messages(payloads)
 
@@ -734,10 +733,11 @@ class ProviderOpenAIChatCompletions(Provider):
     ) -> AsyncGenerator[LLMResponse]:
         """流式查询API，逐步返回结果"""
         if tools:
-            model = payloads.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
+            model = str(payloads.get("model", "")).lower()
+            is_gemini = "gemini" in model
             tool_list = tools.openai_chat_completions_schema(
-                omit_empty_parameter_field=omit_empty_param_field,
+                omit_empty_parameter_field=is_gemini,
+                flatten_null_unions=is_gemini,
             )
             if tool_list:
                 payloads["tools"] = tool_list
@@ -1143,7 +1143,7 @@ class ProviderOpenAIChatCompletions(Provider):
 
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
-        model = payloads.get("model", "").lower()
+        model = str(payloads.get("model", "")).lower()
         is_gemini = "gemini" in model
         _deepseek_v4_markers = ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4")
         is_deepseek_v4_reasoning = (

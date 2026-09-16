@@ -133,6 +133,25 @@ class TestMCPToolSchemaNormalization:
         assert "required" not in tool.parameters["properties"]["stock_code"]
         assert "required" not in tool.parameters["properties"]["market"]
 
+    def test_mcp_tool_preserves_anyof_null_unions_in_parameters(self):
+        category = {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "default": None,
+        }
+        mcp_tool = Tool(
+            name="browse",
+            description="Browse",
+            inputSchema={
+                "type": "object",
+                "properties": {"category": category},
+            },
+        )
+
+        tool = MCPTool(mcp_tool, MagicMock(), "browser")
+
+        assert tool.parameters["properties"]["category"] == category
+        assert tool.input_schema["properties"]["category"] == category
+
     def test_mcp_tool_keeps_sdk2_metadata_separate_from_input_schema(self):
         mcp_tool = Tool(
             name="report",

@@ -473,7 +473,7 @@ class ProviderOpenAIChatCompletions(Provider):
                 api_key=self.chosen_api_key,
                 api_version=provider_config.get("api_version", None),
                 default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
+                base_url=provider_config.get("api_base") or None,
                 timeout=self.timeout,
                 http_client=self._create_http_client(provider_config),
             )
@@ -481,7 +481,7 @@ class ProviderOpenAIChatCompletions(Provider):
             # Using OpenAI Official API
             self.client = AsyncOpenAI(
                 api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
+                base_url=provider_config.get("api_base") or None,
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
                 http_client=self._create_http_client(provider_config),

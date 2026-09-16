@@ -115,6 +115,31 @@ def test_null_api_version_uses_regular_openai_client(monkeypatch):
     assert created[0]["base_url"] is None
 
 
+def test_empty_api_base_uses_sdk_default_endpoint(monkeypatch):
+    created = []
+
+    def regular_client(**kwargs):
+        created.append(kwargs)
+
+        async def create(**_kwargs):
+            return None
+
+        return SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        )
+
+    monkeypatch.setattr(openai_chat_completions_module, "AsyncOpenAI", regular_client)
+    monkeypatch.setattr(
+        ProviderOpenAIChatCompletions,
+        "_create_http_client",
+        lambda _self, _config: SimpleNamespace(),
+    )
+
+    _make_provider({"api_base": ""})
+
+    assert created[0]["base_url"] is None
+
+
 @pytest.mark.asyncio
 async def test_prepare_chat_payload_removes_internal_state_from_tool_messages():
     provider = _make_provider()

@@ -421,7 +421,7 @@ async def test_save_config_async_restores_redacted_sensitive_values(
     monkeypatch.setattr(
         config_service,
         "validate_config",
-        lambda post_config, _schema, _is_core: ([], post_config),
+        lambda post_config, _schema, _is_core, **_kwargs: ([], post_config),
     )
 
     class FakeConfig(dict):
@@ -510,7 +510,7 @@ async def test_save_config_async_uses_plain_dict_snapshot_for_live_config(
     monkeypatch.setattr(
         config_service,
         "validate_config",
-        lambda post_config, _schema, _is_core: ([], post_config),
+        lambda post_config, _schema, _is_core, **_kwargs: ([], post_config),
     )
 
     config_path = tmp_path / "cmd_config.json"

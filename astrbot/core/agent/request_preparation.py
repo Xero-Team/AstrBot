@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 
 _MAX_PREPARED_MEDIA_BYTES = 20 * 1024 * 1024
+_CUA_IMAGE_WARN_BYTES = 5 * 1024 * 1024
 
 
 def clone_provider_request(request: ProviderRequest) -> ProviderRequest:
@@ -70,6 +71,27 @@ def _safe_media_ref(ref: object) -> str | None:
     return value
 
 
+def cua_pixel_mode_from_settings(
+    provider_settings: dict[str, object] | None,
+) -> bool:
+    """Return whether CUA sandbox stills must keep 1:1 pixel coordinates.
+
+    Args:
+        provider_settings: ``provider_settings`` mapping, or ``None``.
+
+    Returns:
+        True when Computer Use is the CUA sandbox runtime.
+    """
+    if not isinstance(provider_settings, dict):
+        return False
+    sandbox_cfg = provider_settings.get("sandbox")
+    return (
+        provider_settings.get("computer_use_runtime") == "sandbox"
+        and isinstance(sandbox_cfg, dict)
+        and sandbox_cfg.get("booter") == "cua"
+    )
+
+
 def image_compress_args_from_settings(
     provider_settings: dict[str, object] | None,
 ) -> tuple[bool, int, int]:
@@ -81,6 +103,7 @@ def image_compress_args_from_settings(
     Returns:
         ``(enabled, max_size, quality)``. ``enabled`` controls long-edge
         resize only; JPEG conversion always runs at the choke point.
+        CUA sandbox stills skip resize so pixel tools stay 1:1.
     """
     if not isinstance(provider_settings, dict):
         return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
@@ -88,6 +111,8 @@ def image_compress_args_from_settings(
     enabled = provider_settings.get("image_compress_enabled", True)
     if not isinstance(enabled, bool):
         enabled = True
+    if cua_pixel_mode_from_settings(provider_settings):
+        enabled = False
 
     raw_options = provider_settings.get("image_compress_options", {})
     options = raw_options if isinstance(raw_options, dict) else {}
@@ -123,6 +148,7 @@ async def _prepare_media(
     image_compress_enabled: bool = True,
     image_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     image_quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    warn_unresized_images: bool = False,
 ) -> tuple[list[str], list[ProviderContentBlock], bool]:
     """Resolve allowed media to data URLs and report whether anything was dropped."""
     prepared_refs: list[str] = []
@@ -139,6 +165,7 @@ async def _prepare_media(
             image_compress_enabled=image_compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
+            warn_unresized_images=warn_unresized_images,
         )
 
     for ref in refs:
@@ -191,6 +218,7 @@ async def _prepare_image_refs(
     image_compress_enabled: bool = True,
     image_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     image_quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    warn_unresized_images: bool = False,
 ) -> tuple[list[str], list[ProviderContentBlock], bool]:
     prepared_refs: list[str] = []
     blocks: list[ProviderContentBlock] = []
@@ -223,6 +251,15 @@ async def _prepare_image_refs(
                 try:
                     for jpeg_path in jpeg_paths:
                         jpeg_bytes = Path(jpeg_path).read_bytes()
+                        if (
+                            warn_unresized_images
+                            and _CUA_IMAGE_WARN_BYTES < len(jpeg_bytes) <= max_bytes
+                        ):
+                            logger.warning(
+                                "Prepared image is %.1f MB without resize; "
+                                "this may exceed provider image upload limits.",
+                                len(jpeg_bytes) / 1048576,
+                            )
                         if len(jpeg_bytes) > max_bytes:
                             logger.warning(
                                 "Drop invalid or oversized image provider media."
@@ -272,6 +309,7 @@ async def prepare_provider_request(
     image_compress_enabled: bool = True,
     image_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     image_quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    warn_unresized_images: bool = False,
 ) -> ProviderRequest:
     """Return a sanitized, normalized copy suitable for a provider request.
 
@@ -301,6 +339,7 @@ async def prepare_provider_request(
         image_compress_enabled=image_compress_enabled,
         image_max_size=image_max_size,
         image_quality=image_quality,
+        warn_unresized_images=warn_unresized_images,
     )
     audio_refs, audio_blocks, audio_dropped = await _prepare_media(
         prepared_request.audio_urls,

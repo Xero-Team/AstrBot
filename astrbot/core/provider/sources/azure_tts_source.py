@@ -11,7 +11,7 @@ from xml.sax.saxutils import escape
 from httpx import AsyncClient, Timeout
 
 from astrbot import logger
-from astrbot.core.config.default import VERSION
+from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 
@@ -35,6 +35,7 @@ def _remove_incomplete_audio(file_path: Path) -> None:
 
 class OTTSProvider:
     def __init__(self, config: dict) -> None:
+        self.request_headers = build_provider_headers(config.get("custom_headers"))
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -60,7 +61,9 @@ class OTTSProvider:
         if self._client is not None:
             await self.__aexit__(None, None, None)
         self._client = AsyncClient(
-            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+            headers=self.request_headers,
+            timeout=self.timeout,
+            proxy=self.proxy if self.proxy else None,
         )
         return self
 
@@ -121,7 +124,7 @@ class OTTSProvider:
                             "volume": voice_params["volume"],
                         },
                         headers={
-                            "User-Agent": f"AstrBot/{VERSION}",
+                            **self.request_headers,
                             "UAK": "AstrBot/AzureTTS",
                         },
                     )
@@ -207,7 +210,7 @@ class AzureNativeProvider(TTSProvider):
             await self.__aexit__(None, None, None)
         self._client = AsyncClient(
             headers={
-                "User-Agent": f"AstrBot/{VERSION}",
+                **self.request_headers,
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
@@ -274,7 +277,7 @@ class AzureNativeProvider(TTSProvider):
                 content=ssml,
                 headers={
                     "Authorization": f"Bearer {self.token}",
-                    "User-Agent": f"AstrBot/{VERSION}",
+                    **self.request_headers,
                 },
             )
             response.raise_for_status()
@@ -323,6 +326,7 @@ class AzureTTSProvider(TTSProvider):
                 otts_config = json.loads(json_str)
                 if not isinstance(otts_config, dict):
                     raise ValueError("OTTS配置必须是JSON对象")
+                otts_config.setdefault("custom_headers", config.get("custom_headers"))
                 required = {"OTTS_SKEY", "OTTS_URL", "OTTS_AUTH_TIME"}
                 if missing := required - otts_config.keys():
                     raise ValueError(f"缺少OTTS参数: {', '.join(sorted(missing))}")

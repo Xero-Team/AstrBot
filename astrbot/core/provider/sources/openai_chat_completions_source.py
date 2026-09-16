@@ -463,31 +463,29 @@ class ProviderOpenAIChatCompletions(Provider):
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
-        self.custom_headers = provider_config.get("custom_headers", {})
+        self.custom_headers = self.request_headers
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
-        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
-            self.custom_headers = None
-        else:
-            for key in self.custom_headers:
-                self.custom_headers[key] = str(self.custom_headers[key])
-
+        api_base = provider_config.get("api_base") or None
         if provider_config.get("api_version"):
             # Using Azure OpenAI API
-            self.client = AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
-                api_version=provider_config.get("api_version", None),
-                default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
+            azure_kwargs = {
+                "api_key": self.chosen_api_key,
+                "api_version": provider_config.get("api_version", None),
+                "default_headers": self.custom_headers,
+                "timeout": self.timeout,
+                "http_client": self._create_http_client(provider_config),
+            }
+            if isinstance(api_base, str):
+                self.client = AsyncAzureOpenAI(base_url=api_base, **azure_kwargs)
+            else:
+                self.client = AsyncAzureOpenAI(**azure_kwargs)
         else:
             # Using OpenAI Official API
             self.client = AsyncOpenAI(
                 api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
+                base_url=api_base if isinstance(api_base, str) else None,
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
                 http_client=self._create_http_client(provider_config),

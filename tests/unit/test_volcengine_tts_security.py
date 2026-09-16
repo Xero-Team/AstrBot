@@ -81,7 +81,9 @@ async def test_volcengine_tts_hides_http_error_details_and_closes_resources(
 ) -> None:
     response = _Response(500, _SENSITIVE_ERROR)
     session = _Session(response)
-    monkeypatch.setattr(volcengine_tts.aiohttp, "ClientSession", lambda: session)
+    monkeypatch.setattr(
+        volcengine_tts.aiohttp, "ClientSession", lambda **_kwargs: session
+    )
     monkeypatch.setattr(volcengine_tts, "get_astrbot_temp_path", lambda: tmp_path)
 
     with caplog.at_level(logging.DEBUG, logger="astrbot"):
@@ -109,7 +111,9 @@ async def test_volcengine_tts_writes_nonempty_audio_without_an_executor(
         json.dumps({"data": base64.b64encode(b"audio-data").decode()}),
     )
     session = _Session(response)
-    monkeypatch.setattr(volcengine_tts.aiohttp, "ClientSession", lambda: session)
+    monkeypatch.setattr(
+        volcengine_tts.aiohttp, "ClientSession", lambda **_kwargs: session
+    )
     monkeypatch.setattr(volcengine_tts, "get_astrbot_temp_path", lambda: tmp_path)
 
     output_path = Path(await _provider().get_audio("hello"))

@@ -9,6 +9,7 @@ from astrbot import logger
 from astrbot.core.utils.error_redaction import safe_error
 
 from ..entities import ProviderType
+from ..headers import drop_sdk_user_agent
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
 
@@ -30,7 +31,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
 
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+        http_options = types.HttpOptions(
+            timeout=timeout * 1000, headers=self.request_headers
+        )
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
@@ -43,6 +46,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         http_options.async_client_args = httpx_client_kwargs(route)
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        drop_sdk_user_agent(self.client)
 
         self.model = provider_config.get(
             "embedding_model",

@@ -11,6 +11,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 
 from ..entities import ProviderType
+from ..headers import drop_sdk_user_agent
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
@@ -32,7 +33,9 @@ class ProviderGeminiTTSAPI(TTSProvider):
         api_key: str = provider_config.get("gemini_tts_api_key", "")
         api_base: str | None = provider_config.get("gemini_tts_api_base")
         timeout: int = int(provider_config.get("gemini_tts_timeout", 20))
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+        http_options = types.HttpOptions(
+            timeout=timeout * 1000, headers=self.request_headers
+        )
 
         if api_base:
             api_base = api_base.removesuffix("/")
@@ -46,6 +49,7 @@ class ProviderGeminiTTSAPI(TTSProvider):
         http_options.async_client_args = httpx_client_kwargs(route)
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        drop_sdk_user_agent(self.client)
         self.model: str = provider_config.get(
             "gemini_tts_model",
             "gemini-2.5-flash-preview-tts",

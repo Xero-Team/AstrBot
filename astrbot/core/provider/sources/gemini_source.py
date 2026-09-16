@@ -18,6 +18,7 @@ from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, 
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider.headers import drop_sdk_user_agent
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
@@ -84,6 +85,7 @@ class ProviderGoogleGenAI(Provider):
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
         http_options = types.HttpOptions(
+            headers=self.request_headers,
             base_url=self.api_base,
             timeout=self.timeout * 1000,  # 毫秒
         )
@@ -112,6 +114,7 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
+        drop_sdk_user_agent(self.client)
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""

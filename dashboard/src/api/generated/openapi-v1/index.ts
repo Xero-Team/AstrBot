@@ -1182,6 +1182,7 @@ export type {
   RunCronJobData,
   RunCronJobResponse,
   RunCronJobResponses,
+  RuntimeInfo,
   SearchDataFilesData,
   SearchDataFilesResponse,
   SearchDataFilesResponses,

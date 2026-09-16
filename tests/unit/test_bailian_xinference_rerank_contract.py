@@ -97,6 +97,7 @@ class _XinferenceModel:
 class _XinferenceClient:
     def __init__(self, list_models_result: object | BaseException) -> None:
         self.list_models_result = list_models_result
+        self._headers: dict[str, str] = {}
         self.closed = False
         self.close_error: BaseException | None = None
 

@@ -5,17 +5,18 @@ upstream:
   branch: master
 
 last_synced:
-  commit: bd046ed29914ee559e9bf47676ccb71a84f747ba
-  synced_at_utc: 2026-09-14T11:01:17Z
+  commit: 763a5ee9714b5863f063ee40e976a6644dd1938c
+  synced_at_utc: 2026-09-16T08:12:29Z
   sync_method: adapt
-  source_pr: '10028,10042,9667,10050,10004,10053,10065,9703'
+  source_pr: '9472,10096,10088,10093,10104'
   note: >-
-    Reviewed 8b5f38885e381176f4bdc7fffd245336337a0e3c..bd046ed29914ee559e9bf47676ccb71a84f747ba
-    (8 commits): adapted #10042, #9667, #10053, #10065, and #9703; skipped
-    #10028 because local_agent_runtime_from_profile already supplies
-    fallback_provider_ids, #10050 because this fork has no desktop app
-    updater bridge, and #10004 because conversation.reset and
-    conversation.create stay distinct under session.manage. Adaptations keep
-    request_preparation always-JPEG conversion, MessageHistoryStoreMixin
-    pagination, plugin_package_installer staging, and MDI Chat UI. Focused
-    pytest, Dashboard vitest, vue-tsc, and i18n:check passed.
+    Reviewed ab42c0d9b726d82ad0f9563e04c53a4460c00d61..763a5ee9714b5863f063ee40e976a6644dd1938c
+    (5 commits): adapted #9472, #10096, #10088, #10093, and #10104.
+    Local computer permissions keep ComputerRuntime ownership, async
+    authorization, and Python 3.14 search fallbacks; map
+    instance_operator+ to the admin policy row; do not restore
+    computer_use_require_admin. Action pins use peeled SHAs and skip
+    missing release.yml. Docs add old-to-new WebUI mappings without
+    docs.astrbot.app or deleted provider pages. Cron ownership replies
+    land on extracted edit/delete/list methods. Focused pytest, vue-tsc,
+    and i18n:check passed.

@@ -89,7 +89,7 @@ class ProviderMiMoSTTAPI(STTProvider):
         try:
             response = await self.client.post(
                 build_api_url(self.api_base),
-                headers=build_headers(self.chosen_api_key),
+                headers={**self.request_headers, **build_headers(self.chosen_api_key)},
                 json=payload,
             )
             try:

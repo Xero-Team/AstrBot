@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.process_sandbox import detect_local_runtime_info
 from astrbot.core.config.agent_runner import (
     get_agent_runner_config_default,
     normalize_agent_runner,
@@ -21,6 +23,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3_SYSTEM,
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
+    get_local_permission_defaults,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_runtime import CoreControl
@@ -419,7 +422,14 @@ def sanitize_filename(name: str) -> str:
     return _sanitize_filename(name)
 
 
-def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
+def validate_config(
+    data,
+    schema: dict,
+    is_core: bool,
+    *,
+    runtime: dict | None = None,
+    current_config: dict | None = None,
+) -> tuple[list[str], dict]:
     errors = []
 
     def validate(data: dict, metadata: dict = schema, path="") -> None:
@@ -520,10 +530,103 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
         validate(data, meta_all)
         if isinstance(data, dict):
             AstrBotConfig._strip_unknown_config_keys(DEFAULT_CONFIG, data)
+        _validate_local_permissions(
+            data,
+            errors,
+            runtime=runtime,
+            current_config=current_config,
+        )
     else:
         validate(data, schema)
 
     return errors, data
+
+
+def _validate_local_permissions(
+    data: dict,
+    errors: list[str],
+    *,
+    runtime: dict | None,
+    current_config: dict | None,
+) -> None:
+    provider_settings = data.get("provider_settings", {})
+    defaults = get_local_permission_defaults(runtime.get("os") if runtime else None)
+    permissions = (
+        provider_settings.get("computer_use_local_permissions", {})
+        if isinstance(provider_settings, dict)
+        else {}
+    )
+    submitted_permissions = copy.deepcopy(permissions)
+    if not isinstance(permissions, dict):
+        errors.append("Local computer permissions must be an object.")
+        return
+    for role in ("member", "admin"):
+        if role not in permissions:
+            continue
+        policy = permissions[role]
+        if not isinstance(policy, dict):
+            errors.append(f"Local computer permissions for {role} must be an object.")
+            continue
+        for key in ("allow_execution", "allow_network"):
+            if key in policy and not isinstance(policy[key], bool):
+                errors.append(f"Local permission {role}.{key} must be a boolean.")
+        scope = policy.get("filesystem_scope", defaults[role]["filesystem_scope"])
+        if scope not in ("none", "workspace", "host"):
+            errors.append(f"Invalid local filesystem scope for {role}: {scope}.")
+        if scope == "none":
+            policy["allow_execution"] = False
+            policy["allow_network"] = False
+        elif policy.get("allow_execution", defaults[role]["allow_execution"]) is False:
+            policy["allow_network"] = False
+
+    if (
+        errors
+        or runtime is None
+        or not isinstance(provider_settings, dict)
+        or provider_settings.get("computer_use_runtime") != "local"
+        or runtime["sandbox"]["status"] == "detected"
+    ):
+        return
+    old_settings = (current_config or {}).get("provider_settings", {})
+    old_permissions = old_settings.get("computer_use_local_permissions", {})
+    was_local = old_settings.get("computer_use_runtime") == "local"
+    for role in ("member", "admin"):
+        if was_local and submitted_permissions.get(role, {}) == old_permissions.get(
+            role, {}
+        ):
+            continue
+        policy = {**defaults[role], **permissions.get(role, {})}
+        scope = policy["filesystem_scope"]
+        if scope == "none":
+            continue
+        unsupported = runtime["sandbox"]["status"] == "unsupported"
+        if not (
+            (unsupported and scope == "workspace")
+            or (
+                policy["allow_execution"]
+                and (scope == "workspace" or not policy["allow_network"])
+            )
+        ):
+            continue
+        if unsupported:
+            reason = f"Local isolation is not supported on {runtime['os']}."
+        else:
+            dependency = (
+                "Seatbelt (/usr/bin/sandbox-exec)"
+                if runtime["sandbox"]["backend"] == "seatbelt"
+                else "bubblewrap (bwrap)"
+            )
+            if runtime["sandbox"]["status"] == "unavailable":
+                detail = runtime["sandbox"].get("error", "Sandbox startup failed.")
+                reason = (
+                    f"{dependency} is installed but cannot start a sandbox: "
+                    f"{detail} Restricted Local execution is unavailable."
+                )
+            else:
+                reason = (
+                    f"Missing {dependency}; restricted Local execution is unavailable."
+                )
+        errors.append(f"Local permission {role}: {reason}")
 
 
 def _log_computer_config_changes(
@@ -544,6 +647,23 @@ def _log_computer_config_changes(
             old_runtime,
             new_runtime,
         )
+
+    old_permissions = old_ps.get("computer_use_local_permissions", {})
+    new_permissions = new_ps.get("computer_use_local_permissions", {})
+    for role in ("member", "admin"):
+        old_role = old_permissions.get(role, {})
+        new_role = new_permissions.get(role, {})
+        for key in ("allow_execution", "allow_network", "filesystem_scope"):
+            old_value = old_role.get(key)
+            new_value = new_role.get(key)
+            if old_value != new_value:
+                log_info(
+                    "[Computer] Config changed: local_permissions.%s.%s %s -> %s",
+                    role,
+                    key,
+                    old_value,
+                    new_value,
+                )
 
     old_sandbox = old_ps.get("sandbox", {})
     new_sandbox = new_ps.get("sandbox", {})
@@ -682,6 +802,8 @@ async def save_config_async(
                 post_config,
                 CONFIG_METADATA_2,
                 is_core,
+                runtime=detect_local_runtime_info(probe=False),
+                current_config=current_config,
             )
         else:
             errors, post_config = validate_config(
@@ -744,6 +866,8 @@ class ConfigProfileService:
         totp_runtime_state: TotpRuntimeState,
         db: DatabaseSessionStore | None = None,
         plugin_catalog=None,
+        runtime: dict | None = None,
+        computer_runtime=None,
     ) -> None:
         self.core_control = core_control
         self.acm = config_manager
@@ -751,6 +875,10 @@ class ConfigProfileService:
         self.db = db
         self.totp_runtime_state = totp_runtime_state
         self.plugin_catalog = plugin_catalog
+        self.runtime = (
+            runtime if runtime is not None else detect_local_runtime_info(probe=True)
+        )
+        self.computer_runtime = computer_runtime
 
     def get_profile_schema(self) -> dict:
         return {
@@ -806,6 +934,14 @@ class ConfigProfileService:
                 )
             except ValueError as exc:
                 raise DashboardValidationError(str(exc)) from exc
+        errors, profile_config = validate_config(
+            profile_config,
+            CONFIG_METADATA_2,
+            is_core=True,
+            runtime=self.runtime,
+        )
+        if errors:
+            raise DashboardValidationError(f"格式校验未通过: {errors}")
         conf_id = await self.acm.create_conf(name=name, config=profile_config)
         await self.core_control.reload_pipeline_scheduler(conf_id)
         return {"conf_id": conf_id}
@@ -881,6 +1017,13 @@ class ConfigProfileService:
             )
         if protected_2fa_changed:
             await self.totp_runtime_state.clear_all()
+        if self.computer_runtime is not None:
+            try:
+                booter = self.computer_runtime.get_local_booter()
+            except RuntimeError:
+                booter = None
+            if booter is not None and isinstance(booter.shell, LocalShellComponent):
+                await booter.shell.shutdown_sessions(invalid_only=True)
         await self.core_control.reload_pipeline_scheduler(config_id)
         warning = await _validate_neo_connectivity(config)
         if warning:

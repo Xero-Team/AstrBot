@@ -868,6 +868,7 @@ def fake_core_lifecycle(fake_db: FakeDb):
             pip_installer=SimpleNamespace(install=lambda *_args, **_kwargs: None),
             computer_runtime=SimpleNamespace(
                 sync_skills_to_active_sandboxes=AsyncMock(),
+                get_local_booter=lambda: SimpleNamespace(shell=None),
             ),
             html_renderer=SimpleNamespace(),
             llm_metadata_catalog=LLMMetadataCatalog(),

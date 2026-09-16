@@ -12,6 +12,7 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.tools.computer_tools.util import session_temp_roots
 from astrbot.core.tools.message_tools import SendMessageToUserTool, SendPokeToUserTool
 
 
@@ -502,7 +503,7 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
         ],
     )
 
-    assert "error: failed to build messages[1] component: sandbox unavailable" in result
+    assert "error: image path does not exist:" in result
     ctx.context.context.send_message.assert_not_called()
 
 
@@ -558,12 +559,14 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch):
     ctx = _make_context(role="member", require_admin=True)
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
-    output_path = temp_root / "output.txt"
-    output_path.write_text("output", encoding="utf-8")
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.tools.computer_tools.util.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
+    session_dir = session_temp_roots(ctx.context.event.unified_msg_origin)[1]
+    session_dir.mkdir(parents=True, exist_ok=True)
+    output_path = session_dir / "output.txt"
+    output_path.write_text("output", encoding="utf-8")
 
     result = await tool.call(
         ctx,
@@ -584,7 +587,7 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.tools.computer_tools.util.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -632,7 +635,7 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.tools.computer_tools.util.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 

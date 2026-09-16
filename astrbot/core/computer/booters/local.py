@@ -1,23 +1,36 @@
+from __future__ import annotations
+
 import asyncio
 import fnmatch
-import hashlib
 import locale
 import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import uuid
+from _thread import LockType
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, cast
 
 from astrbot import logger
 from astrbot.core.computer.file_read_utils import (
     detect_text_encoding,
     read_local_text_range_sync,
+)
+from astrbot.core.computer.local_file_security import read_fd_at
+from astrbot.core.computer.process_sandbox import (
+    SandboxProcess,
+    SandboxSpec,
+    SandboxTimeoutError,
+    create_process_sandbox,
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
@@ -37,9 +50,18 @@ _BLOCKED_COMMAND_PATTERNS = [
     re.compile(r"(^|[;&|() ])kill\s+-9(?:\s|$)"),
     re.compile(r"(^|[;&|() ])killall(?:\s|$)"),
 ]
+_LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+_SEARCH_FALLBACK_TIMEOUT_SECONDS = 30
+_SEARCH_FALLBACK_MAX_FILES = 4000
+_SEARCH_FALLBACK_MAX_FILE_BYTES = 256 * 1024
 
 
 def _is_safe_command(command: str) -> bool:
+    """Return whether the command passes the unsandboxed UX blocklist.
+
+    This is not a security boundary. Host isolation comes from the OS sandbox
+    when ``sandboxed=True``.
+    """
     normalized_command = re.sub(r"\s+", " ", command.strip().lower())
     if ":(){:|:&};:" in normalized_command:
         return False
@@ -143,7 +165,6 @@ class LocalShellComponent(ShellComponent):
     max_sessions: int = 16
     max_output_bytes: int = 4 * 1024 * 1024
     session_ttl_seconds: int = 30 * 60
-    disk_quota_bytes: int = 32 * 1024 * 1024
 
     async def exec(  # noqa: ASYNC109
         self,
@@ -193,7 +214,7 @@ class LocalShellComponent(ShellComponent):
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
-                # Safety relies on `_is_safe_command()` and the allowed-root checks.
+                # UX blocklist plus cwd bounds; the OS sandbox is the safety boundary.
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     popen_command,
                     # Controlled local computer-use command.
@@ -204,7 +225,7 @@ class LocalShellComponent(ShellComponent):
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
             # `command` is intentionally executed through the current shell so
             # local computer-use behavior matches existing tool semantics.
-            # Safety relies on `_is_safe_command()` and the allowed-root checks.
+            # UX blocklist plus cwd bounds; the OS sandbox is the safety boundary.
             proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 popen_command,
                 # Controlled local computer-use command.
@@ -265,19 +286,22 @@ class LocalShellComponent(ShellComponent):
         runtime_id: str = "local",
         sender_id: str = "",
         allowed_root: str | None = None,
+        creator_is_admin: bool = False,
+        sandboxed: bool = False,
+        permission_check: Callable[[], bool] | None = None,
+        allow_network: bool = False,
+        filesystem_scope: str = "workspace",
+        readable_roots: tuple[Path, ...] = (),
+        writable_roots: tuple[Path, ...] = (),
     ) -> dict[str, Any]:  # noqa: ASYNC109
         """Start a runtime-owned interactive shell session."""
-        if not _is_safe_command(command):
+        if not sandboxed and not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
         if not 0 <= yield_time_ms <= 30_000:
             raise ValueError("yield_time_ms must be between 0 and 30000")
         if timeout is not None and timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         max_output_chars = max(1, min(max_output_chars, 100_000))
-        async with self._sessions_lock:
-            if len(self._sessions) >= self.max_sessions:
-                raise ValueError("Managed shell session limit reached")
-
         working_dir = Path(cwd or get_astrbot_root()).resolve(strict=False)
         boundary = Path(allowed_root or get_astrbot_root()).resolve(strict=False)
         if not working_dir.is_relative_to(boundary):
@@ -286,122 +310,129 @@ class LocalShellComponent(ShellComponent):
         owner_runtime_id = str(runtime_id or "local")
         owner_sender_id = str(sender_id or "")
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
-        owner_digest = hashlib.sha256(
-            f"{owner_runtime_id}\0{owner_id}\0{owner_sender_id}".encode()
-        ).hexdigest()[:16]
-        output_dir = Path(get_astrbot_system_tmp_path()) / "shell" / owner_digest
+        output_dir = Path(get_astrbot_system_tmp_path())
         output_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            current_usage = sum(
-                path.stat().st_size
-                for path in output_dir.parent.rglob("*.log")
-                if path.is_file()
-            )
-        except OSError:
-            current_usage = self.disk_quota_bytes
-        if current_usage >= self.disk_quota_bytes:
-            raise ValueError("Managed shell disk quota exceeded")
-        output_path = output_dir / f"{session_id}.log"
-        output_path.touch()
 
-        run_env = {
-            **os.environ,
-            **{str(k): str(v) for k, v in (env or {}).items()},
-        }
-        if sys.platform == "win32":
-            # Keep managed-session child output UTF-8 (see LocalShellComponent.exec).
-            run_env.setdefault("PYTHONIOENCODING", "utf-8")
-        process_kwargs: dict[str, Any] = {
-            "stdin": asyncio.subprocess.PIPE,
-            "stdout": asyncio.subprocess.PIPE,
-            "stderr": asyncio.subprocess.STDOUT,
-            "cwd": str(working_dir),
-            "env": run_env,
-        }
-        if sys.platform == "win32":
-            process_kwargs["creationflags"] = getattr(
-                subprocess, "CREATE_NEW_PROCESS_GROUP", 0
-            )
-        else:
-            process_kwargs["start_new_session"] = True
-        try:
-            if sys.platform == "win32":
-                process = await asyncio.create_subprocess_exec(
-                    resolve_windows_shell(),
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    command,
-                    **process_kwargs,
+        async with self._sessions_lock:
+            if len(self._sessions) >= self.max_sessions:
+                raise ValueError("Managed shell session limit reached")
+            if permission_check is not None and not permission_check():
+                raise PermissionError(
+                    "Local shell permissions changed; retry the command."
                 )
-            else:
-                process = await asyncio.create_subprocess_shell(
-                    command, **process_kwargs
-                )
-        except BaseException:
-            output_path.unlink(missing_ok=True)
-            raise
-
-        output_event = asyncio.Event()
-
-        async def capture_output() -> None:
-            if process.stdout is None:
-                return
+            output_file = tempfile.TemporaryFile(mode="w+b", dir=output_dir)
+            output_lock = threading.Lock()
             try:
-                with output_path.open("ab") as output_file:
-                    while chunk := await process.stdout.read(8192):
-                        if output_path.stat().st_size >= self.max_output_bytes:
-                            await self._terminate_process(process)
-                            break
-                        try:
-                            total_usage = sum(
-                                path.stat().st_size
-                                for path in output_path.parent.parent.rglob("*.log")
-                                if path.is_file()
-                            )
-                        except OSError:
-                            total_usage = self.disk_quota_bytes
-                        if total_usage >= self.disk_quota_bytes:
-                            await self._terminate_process(process)
-                            break
-                        remaining = self.max_output_bytes - output_path.stat().st_size
-                        remaining = min(
-                            remaining,
-                            self.disk_quota_bytes - total_usage,
+                if sandboxed:
+                    process = await create_process_sandbox().spawn_shell(
+                        command,
+                        SandboxSpec(
+                            workspace=working_dir,
+                            allow_network=allow_network,
+                            filesystem_scope=filesystem_scope,
+                            readable_roots=readable_roots,
+                            writable_roots=writable_roots,
+                        ),
+                        env={str(k): str(v) for k, v in (env or {}).items()},
+                    )
+                else:
+                    run_env = {
+                        **os.environ,
+                        **{str(k): str(v) for k, v in (env or {}).items()},
+                    }
+                    process_kwargs: dict[str, Any] = {
+                        "stdin": asyncio.subprocess.PIPE,
+                        "stdout": asyncio.subprocess.PIPE,
+                        "stderr": asyncio.subprocess.STDOUT,
+                        "cwd": str(working_dir),
+                        "env": run_env,
+                    }
+                    if sys.platform == "win32":
+                        run_env.setdefault("PYTHONIOENCODING", "utf-8")
+                        process_kwargs["creationflags"] = getattr(
+                            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
                         )
-                        output_file.write(chunk[:remaining])
-                        output_file.flush()
-                        output_event.set()
-            except asyncio.CancelledError:
+                        process = await asyncio.create_subprocess_exec(
+                            resolve_windows_shell(),
+                            "-NoLogo",
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            command,
+                            **process_kwargs,
+                        )
+                    else:
+                        process_kwargs["start_new_session"] = True
+                        process = await asyncio.create_subprocess_shell(
+                            command, **process_kwargs
+                        )
+            except BaseException:
+                output_file.close()
                 raise
 
-        reader_task = asyncio.create_task(
-            capture_output(), name=f"shell-reader-{session_id}"
-        )
-        wait_task = asyncio.create_task(process.wait(), name=f"shell-wait-{session_id}")
-        wait_task.add_done_callback(lambda _: output_event.set())
-        session = _LocalShellSession(
-            session_id=session_id,
-            runtime_id=owner_runtime_id,
-            umo=owner_id,
-            sender_id=owner_sender_id,
-            process=process,
-            output_path=output_path,
-            started_at=time.monotonic(),
-            last_activity=time.monotonic(),
-            output_event=output_event,
-            reader_task=reader_task,
-            wait_task=wait_task,
-        )
+            output_event = asyncio.Event()
+
+            async def capture_output() -> None:
+                if process.stdout is None:
+                    return
+                output_size = 0
+                try:
+                    while chunk := await process.stdout.read(8192):
+                        remaining = self.max_output_bytes - output_size
+                        if remaining <= 0:
+                            session.output_limited = True
+                            await self._terminate_process(session)
+                            return
+                        if len(chunk) > remaining:
+                            chunk = chunk[:remaining]
+                            session.output_limited = True
+                        with output_lock:
+                            output_file.seek(0, os.SEEK_END)
+                            output_file.write(chunk)
+                            output_file.flush()
+                        output_size += len(chunk)
+                        output_event.set()
+                        if session.output_limited:
+                            await self._terminate_process(session)
+                            return
+                except asyncio.CancelledError:
+                    raise
+
+            reader_task = asyncio.create_task(
+                capture_output(), name=f"shell-reader-{session_id}"
+            )
+            wait_task = asyncio.create_task(
+                process.wait(), name=f"shell-wait-{session_id}"
+            )
+            wait_task.add_done_callback(lambda _: output_event.set())
+            session = _LocalShellSession(
+                session_id=session_id,
+                runtime_id=owner_runtime_id,
+                umo=owner_id,
+                sender_id=owner_sender_id,
+                creator_is_admin=creator_is_admin,
+                sandboxed=sandboxed,
+                process=process,
+                output_file=output_file,
+                output_lock=output_lock,
+                started_at=time.monotonic(),
+                last_activity=time.monotonic(),
+                output_event=output_event,
+                reader_task=reader_task,
+                wait_task=wait_task,
+                permission_check=permission_check,
+            )
+            self._sessions[session_id] = session
+
+        if permission_check is not None and not permission_check():
+            await self.shutdown_sessions(invalid_only=True)
+            raise PermissionError("Local shell permissions changed; retry the command.")
         effective_ttl = timeout if timeout is not None else self.session_ttl_seconds
         if effective_ttl > 0:
             session.timeout_task = asyncio.create_task(
                 self._timeout_session(session, effective_ttl),
                 name=f"shell-timeout-{session_id}",
             )
-        async with self._sessions_lock:
-            self._sessions[session_id] = session
         if yield_time_ms:
             try:
                 await asyncio.wait_for(asyncio.shield(wait_task), yield_time_ms / 1000)
@@ -447,14 +478,16 @@ class LocalShellComponent(ShellComponent):
 
         async def read_output() -> tuple[bytes, int, int]:
             def _read() -> tuple[bytes, int, int]:
-                try:
-                    size = session.output_path.stat().st_size
-                except OSError:
-                    return b"", read_cursor, read_cursor
-                start = min(read_cursor, size)
-                with session.output_path.open("rb") as output_file:
-                    output_file.seek(start)
-                    data = output_file.read(max_output_chars)
+                with session.output_lock:
+                    if session.output_file.closed:
+                        return b"", read_cursor, read_cursor
+                    try:
+                        size = os.fstat(session.output_file.fileno()).st_size
+                    except OSError, ValueError:
+                        return b"", read_cursor, read_cursor
+                    start = min(read_cursor, size)
+                    session.output_file.seek(start)
+                    data = session.output_file.read(max_output_chars)
                 return data, start + len(data), size
 
             return await asyncio.to_thread(_read)
@@ -537,14 +570,17 @@ class LocalShellComponent(ShellComponent):
             session_id, owner_id, runtime_id, sender_id
         )
         if session.process.returncode is None:
-            if sys.platform == "win32":
-                session.process.send_signal(
-                    getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
-                )
+            if session.sandboxed:
+                cast(SandboxProcess, session.process).interrupt()
             else:
-                if not _signal_posix_process_group(session.process.pid, signal.SIGINT):
+                native_process = cast(asyncio.subprocess.Process, session.process)
+                if sys.platform == "win32":
+                    native_process.send_signal(
+                        getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
+                    )
+                elif not _signal_posix_process_group(native_process.pid, signal.SIGINT):
                     try:
-                        session.process.send_signal(signal.SIGINT)
+                        native_process.send_signal(signal.SIGINT)
                     except ProcessLookupError:
                         pass
         return await self.poll_session(
@@ -569,7 +605,7 @@ class LocalShellComponent(ShellComponent):
             session_id, owner_id, runtime_id, sender_id
         )
         session.terminated = True
-        await self._terminate_process(session.process)
+        await self._terminate_process(session)
         return await self.poll_session(
             owner_id=owner_id,
             session_id=session_id,
@@ -578,14 +614,34 @@ class LocalShellComponent(ShellComponent):
             sender_id=sender_id,
         )
 
-    async def shutdown_sessions(self) -> None:
+    async def shutdown_sessions(self, *, invalid_only: bool = False) -> None:
         async with self._sessions_lock:
-            sessions = list(self._sessions.values())
-        for session in sessions:
-            session.terminated = True
-        for session in sessions:
-            await self._terminate_process(session.process)
-        await asyncio.gather(*(session.reader_task for session in sessions))
+            sessions = []
+            for session in self._sessions.values():
+                permission_check = session.permission_check
+                if (
+                    not invalid_only
+                    or permission_check is None
+                    or not permission_check()
+                ):
+                    sessions.append(session)
+            for session in sessions:
+                session.terminated = True
+        termination_results = await asyncio.gather(
+            *(self._terminate_process(session) for session in sessions),
+            return_exceptions=True,
+        )
+        for session, result in zip(sessions, termination_results, strict=True):
+            if isinstance(result, BaseException):
+                logger.warning(
+                    "Failed to terminate managed local shell session %s: %s",
+                    session.session_id,
+                    result,
+                )
+        await asyncio.gather(
+            *(session.reader_task for session in sessions),
+            return_exceptions=True,
+        )
         for session in sessions:
             await self._remove_session(session)
 
@@ -599,7 +655,7 @@ class LocalShellComponent(ShellComponent):
                 remaining = timeout - (time.monotonic() - session.last_activity)
                 if remaining <= 0:
                     session.timed_out = True
-                    await self._terminate_process(session.process)
+                    await self._terminate_process(session)
                     return
                 try:
                     await asyncio.wait_for(asyncio.shield(session.wait_task), remaining)
@@ -631,6 +687,13 @@ class LocalShellComponent(ShellComponent):
             sender_id,
         ):
             raise ValueError("Shell session was not found")
+        permission_check = session.permission_check
+        if permission_check is not None and not permission_check():
+            await self.shutdown_sessions(invalid_only=True)
+            raise ValueError(
+                "Shell session expired after a permission change. "
+                "Start a new shell session."
+            )
         return session
 
     def _session_status(self, session: _LocalShellSession) -> str:
@@ -638,14 +701,16 @@ class LocalShellComponent(ShellComponent):
             return "running"
         if session.timed_out:
             return "timed_out"
+        if session.output_limited:
+            return "output_limited"
         if session.terminated:
             return "terminated"
         return "completed" if session.process.returncode == 0 else "failed"
 
     def _session_summary(self, session: _LocalShellSession) -> dict[str, Any]:
         try:
-            size = session.output_path.stat().st_size
-        except OSError:
+            size = os.fstat(session.output_file.fileno()).st_size
+        except OSError, ValueError:
             size = session.cursor
         return {
             "session_id": session.session_id,
@@ -653,12 +718,14 @@ class LocalShellComponent(ShellComponent):
             "status": self._session_status(session),
             "exit_code": session.process.returncode,
             "started_at": session.started_at,
+            "sandboxed": session.sandboxed,
             "unread_output_bytes": max(0, size - session.cursor),
         }
 
     async def _remove_session(self, session: _LocalShellSession) -> None:
         async with self._sessions_lock:
-            self._sessions.pop(session.session_id, None)
+            if self._sessions.get(session.session_id) is session:
+                self._sessions.pop(session.session_id, None)
         if (
             session.timeout_task
             and not session.timeout_task.done()
@@ -669,41 +736,47 @@ class LocalShellComponent(ShellComponent):
                 await session.timeout_task
             except asyncio.CancelledError:
                 pass
-        session.output_path.unlink(missing_ok=True)
-        try:
-            session.output_path.parent.rmdir()
-        except OSError:
-            pass
+        with session.output_lock:
+            session.output_file.close()
 
-    async def _terminate_process(self, process: asyncio.subprocess.Process) -> None:
+    async def _terminate_process(self, session: _LocalShellSession) -> None:
+        process = session.process
         if process.returncode is not None:
             return
-        if sys.platform == "win32":
-            try:
-                result = await asyncio.to_thread(
-                    subprocess.run,
-                    ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=5,
-                )
-                if result.returncode != 0:
-                    _signal_asyncio_process(process, terminate=True)
-            except Exception:
-                _signal_asyncio_process(process, terminate=True)
+        if session.sandboxed:
+            process.terminate()
         else:
-            if not _signal_posix_process_group(process.pid, signal.SIGTERM):
-                _signal_asyncio_process(process, terminate=True)
-        try:
-            await asyncio.wait_for(process.wait(), 5)
-        except TimeoutError:
+            native_process = cast(asyncio.subprocess.Process, process)
             if sys.platform == "win32":
-                _signal_asyncio_process(process, terminate=False)
+                try:
+                    result = await asyncio.to_thread(
+                        subprocess.run,
+                        ["taskkill", "/F", "/T", "/PID", str(native_process.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=5,
+                    )
+                    if result.returncode != 0:
+                        _signal_asyncio_process(native_process, terminate=True)
+                except Exception:
+                    _signal_asyncio_process(native_process, terminate=True)
+            elif not _signal_posix_process_group(native_process.pid, signal.SIGTERM):
+                _signal_asyncio_process(native_process, terminate=True)
+        try:
+            await asyncio.wait_for(asyncio.shield(session.wait_task), 5)
+        except TimeoutError:
+            if session.sandboxed:
+                process.kill()
             else:
-                if not _signal_posix_process_group(process.pid, signal.SIGKILL):
-                    _signal_asyncio_process(process, terminate=False)
+                native_process = cast(asyncio.subprocess.Process, process)
+                if sys.platform == "win32":
+                    _signal_asyncio_process(native_process, terminate=False)
+                elif not _signal_posix_process_group(
+                    native_process.pid, signal.SIGKILL
+                ):
+                    _signal_asyncio_process(native_process, terminate=False)
             try:
-                await process.wait()
+                await session.wait_task
             except ProcessLookupError:
                 return
         except ProcessLookupError:
@@ -716,17 +789,22 @@ class _LocalShellSession:
     runtime_id: str
     umo: str
     sender_id: str
-    process: asyncio.subprocess.Process
-    output_path: Path
+    creator_is_admin: bool
+    sandboxed: bool
+    process: SandboxProcess | asyncio.subprocess.Process
+    output_file: BinaryIO
+    output_lock: LockType
     started_at: float
     output_event: asyncio.Event
     reader_task: asyncio.Task
     wait_task: asyncio.Task
     last_activity: float
+    permission_check: Callable[[], bool] | None = None
     timeout_task: asyncio.Task | None = None
     cursor: int = 0
     timed_out: bool = False
     terminated: bool = False
+    output_limited: bool = False
 
 
 @dataclass
@@ -738,34 +816,65 @@ class LocalPythonComponent(PythonComponent):
         timeout_seconds: int = 30,
         silent: bool = False,
         cwd: str | None = None,
+        sandboxed: bool = False,
+        allow_network: bool = False,
+        filesystem_scope: str = "workspace",
+        readable_roots: tuple[Path, ...] = (),
+        writable_roots: tuple[Path, ...] = (),
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             try:
-                working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
-                child_env = os.environ.copy()
-                if sys.platform == "win32":
-                    # Keep python tool output UTF-8 (see LocalShellComponent.exec).
-                    child_env.setdefault("PYTHONIOENCODING", "utf-8")
-                result = subprocess.run(
-                    [os.environ.get("PYTHON", sys.executable), "-c", code],
-                    timeout=timeout_seconds,
-                    capture_output=True,
-                    cwd=working_dir,
-                    env=child_env,
-                )
-                stdout = "" if silent else _decode_shell_output(result.stdout)
-                stderr = (
-                    _decode_shell_output(result.stderr)
-                    if result.returncode != 0
+                working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root())
+                if sandboxed:
+                    result = create_process_sandbox().run(
+                        [sys.executable, "-c", code],
+                        SandboxSpec(
+                            workspace=working_dir,
+                            allow_network=allow_network,
+                            filesystem_scope=filesystem_scope,
+                            readable_roots=readable_roots,
+                            writable_roots=writable_roots,
+                        ),
+                        timeout=timeout_seconds,
+                        output_limit=_LOCAL_SANDBOX_MAX_OUTPUT_BYTES,
+                        discard_stdout=silent,
+                    )
+                    stdout = _decode_shell_output(result.stdout)
+                    stderr = _decode_shell_output(result.stderr)
+                    stdout_limited = result.stdout_limited
+                    stderr_limited = result.stderr_limited
+                else:
+                    child_env = os.environ.copy()
+                    if sys.platform == "win32":
+                        child_env.setdefault("PYTHONIOENCODING", "utf-8")
+                    result = subprocess.run(
+                        [os.environ.get("PYTHON", sys.executable), "-c", code],
+                        timeout=timeout_seconds,
+                        capture_output=True,
+                        cwd=working_dir,
+                        env=child_env,
+                    )
+                    stdout = "" if silent else _decode_shell_output(result.stdout)
+                    stderr = _decode_shell_output(result.stderr)
+                    stdout_limited = False
+                    stderr_limited = False
+                if stdout_limited or stderr_limited:
+                    stderr = (
+                        f"{stderr}\nExecution output exceeded "
+                        f"{_LOCAL_SANDBOX_MAX_OUTPUT_BYTES} bytes."
+                    ).strip()
+                execution_error = (
+                    stderr
+                    if result.returncode != 0 or stdout_limited or stderr_limited
                     else ""
                 )
                 return {
                     "data": {
                         "output": {"text": stdout, "images": []},
-                        "error": stderr,
+                        "error": execution_error,
                     }
                 }
-            except subprocess.TimeoutExpired:
+            except SandboxTimeoutError, subprocess.TimeoutExpired:
                 return {
                     "data": {
                         "output": {"text": "", "images": []},
@@ -797,13 +906,17 @@ class LocalFileSystemComponent(FileSystemComponent):
         encoding: str = "utf-8",
         offset: int | None = None,
         limit: int | None = None,
+        file_descriptor: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
             detected_encoding = encoding
             if encoding == "utf-8":
-                with open(abs_path, "rb") as f:
-                    raw_sample = f.read(8192)
+                if file_descriptor is None:
+                    with open(abs_path, "rb") as f:
+                        raw_sample = f.read(8192)
+                else:
+                    raw_sample = read_fd_at(file_descriptor, 8192, 0)
                 detected_encoding = detect_text_encoding(raw_sample) or encoding
             return {
                 "success": True,
@@ -812,6 +925,7 @@ class LocalFileSystemComponent(FileSystemComponent):
                     encoding=detected_encoding,
                     offset=offset,
                     limit=limit,
+                    file_descriptor=file_descriptor,
                 ),
             }
 
@@ -824,9 +938,75 @@ class LocalFileSystemComponent(FileSystemComponent):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
+        sandboxed: bool = False,
+        sandbox_root: str | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             search_path = Path(path or get_astrbot_root()).resolve(strict=False)
+            if sandboxed:
+                if not sandbox_root:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "A sandbox root is required for restricted Local search.",
+                    }
+                rg_path = shutil.which("rg")
+                if not rg_path:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "The ripgrep (rg) executable is required for sandboxed file search.",
+                    }
+                command = [
+                    str(Path(rg_path).resolve()),
+                    "--color=never",
+                    "-n",
+                    "--max-columns",
+                    "1000",
+                    "-e",
+                    pattern,
+                ]
+                if glob:
+                    command.extend(["-g", glob])
+                if after_context is not None:
+                    command.extend(["-A", str(after_context)])
+                if before_context is not None:
+                    command.extend(["-B", str(before_context)])
+                command.extend(["--", str(search_path)])
+                try:
+                    result = create_process_sandbox().run(
+                        command,
+                        SandboxSpec(
+                            workspace=Path(sandbox_root),
+                            workspace_writable=False,
+                        ),
+                        timeout=30,
+                    )
+                except (SandboxTimeoutError, OSError) as exc:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": (
+                            "File search timed out after 30 seconds."
+                            if isinstance(exc, SandboxTimeoutError)
+                            else f"Unable to start ripgrep: {exc}"
+                        ),
+                    }
+                stdout = _decode_shell_output(result.stdout)
+                if result.returncode in (0, 1):
+                    return {
+                        "success": True,
+                        "content": _truncate_long_lines(
+                            stdout if result.returncode == 0 else ""
+                        ),
+                    }
+                return {
+                    "success": False,
+                    "content": "",
+                    "error": _decode_shell_output(result.stderr)
+                    or f"ripgrep exited with code {result.returncode}",
+                    "exit_code": result.returncode,
+                }
             rg_path = shutil.which("rg")
             if rg_path:
                 command = [
@@ -846,11 +1026,19 @@ class LocalFileSystemComponent(FileSystemComponent):
                     command.extend(["-B", str(before_context)])
                 command.extend(["--", str(search_path)])
 
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    cwd=get_astrbot_root(),
-                )
+                try:
+                    result = subprocess.run(
+                        command,
+                        capture_output=True,
+                        cwd=get_astrbot_root(),
+                        timeout=30,
+                    )
+                except subprocess.TimeoutExpired:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "File search timed out after 30 seconds.",
+                    }
                 if result.returncode in (0, 1):
                     return {
                         "success": True,
@@ -868,18 +1056,37 @@ class LocalFileSystemComponent(FileSystemComponent):
 
             matcher = re.compile(pattern)
             output_lines: list[str] = []
-            paths = (
-                [search_path]
-                if search_path.is_file()
-                else sorted(
-                    path_ for path_ in search_path.rglob("*") if path_.is_file()
-                )
-            )
+            deadline = time.monotonic() + _SEARCH_FALLBACK_TIMEOUT_SECONDS
+            scanned = 0
+            paths = [search_path] if search_path.is_file() else search_path.rglob("*")
             for file_path in paths:
+                if time.monotonic() >= deadline:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "File search timed out after 30 seconds.",
+                    }
+                scanned += 1
+                if scanned > _SEARCH_FALLBACK_MAX_FILES:
+                    return {
+                        "success": False,
+                        "content": "",
+                        "error": "File search exceeded the fallback file-count limit.",
+                    }
                 if glob and not fnmatch.fnmatch(file_path.name, glob):
                     continue
                 try:
-                    text = file_path.read_text(encoding="utf-8", errors="ignore")
+                    info = file_path.lstat()
+                    if not stat.S_ISREG(info.st_mode):
+                        continue
+                    if info.st_size > _SEARCH_FALLBACK_MAX_FILE_BYTES:
+                        continue
+                    resolved = file_path.resolve(strict=True)
+                    if resolved != search_path and not resolved.is_relative_to(
+                        search_path
+                    ):
+                        continue
+                    text = resolved.read_text(encoding="utf-8", errors="ignore")
                 except OSError:
                     continue
 
@@ -929,24 +1136,43 @@ class LocalFileSystemComponent(FileSystemComponent):
         new_string: str,
         replace_all: bool = False,
         encoding: str = "utf-8",
+        file_descriptor: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
-            with open(abs_path, encoding=encoding) as f:
-                content = f.read()
-            occurrences = content.count(old_string)
-            if occurrences == 0:
-                return {
-                    "success": False,
-                    "error": "old string not found in file",
-                    "replacements": 0,
-                }
-            if replace_all:
-                updated = content.replace(old_string, new_string)
-                replacements = occurrences
+            if file_descriptor is None:
+                file_obj = open(abs_path, encoding=encoding)
             else:
-                updated = content.replace(old_string, new_string, 1)
-                replacements = 1
+                file_obj = os.fdopen(
+                    os.dup(file_descriptor),
+                    mode="r+",
+                    encoding=encoding,
+                )
+                file_obj.seek(0)
+            with file_obj as f:
+                content = f.read()
+                occurrences = content.count(old_string)
+                if occurrences == 0:
+                    return {
+                        "success": False,
+                        "error": "old string not found in file",
+                        "replacements": 0,
+                    }
+                if replace_all:
+                    updated = content.replace(old_string, new_string)
+                    replacements = occurrences
+                else:
+                    updated = content.replace(old_string, new_string, 1)
+                    replacements = 1
+                if file_descriptor is not None:
+                    f.seek(0)
+                    f.truncate()
+                    f.write(updated)
+                    return {
+                        "success": True,
+                        "path": abs_path,
+                        "replacements": replacements,
+                    }
             with open(abs_path, "w", encoding=encoding) as f:
                 f.write(updated)
             return {
@@ -958,12 +1184,30 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+        file_descriptor: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            with open(abs_path, mode, encoding=encoding) as f:
+            if file_descriptor is None:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                file_obj = open(abs_path, mode, encoding=encoding)
+            else:
+                file_obj = os.fdopen(
+                    os.dup(file_descriptor),
+                    mode=mode,
+                    encoding=encoding,
+                )
+                if mode == "w":
+                    file_obj.seek(0)
+                    file_obj.truncate()
+                elif mode == "a":
+                    file_obj.seek(0, os.SEEK_END)
+            with file_obj as f:
                 f.write(content)
             return {"success": True, "path": abs_path}
 

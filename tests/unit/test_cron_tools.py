@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.cron_tools import FutureTaskTool
 
 
@@ -25,6 +26,7 @@ def _context(
             event=SimpleNamespace(
                 unified_msg_origin=umo,
                 get_sender_id=lambda: sender_id,
+                get_message_type=lambda: MessageType.GROUP_MESSAGE,
             ),
         )
     )
@@ -183,7 +185,7 @@ async def test_future_task_edit_rejects_same_umo_different_sender():
         note="attacker note",
     )
 
-    assert result == "error: you can only edit your own future tasks."
+    assert "created by another member of this group chat" in result
     cron_mgr.update_job.assert_not_awaited()
 
 
@@ -203,7 +205,7 @@ async def test_future_task_delete_rejects_same_umo_different_sender():
         job_id="job-1",
     )
 
-    assert result == "error: you can only delete your own future tasks."
+    assert "created by another member of this group chat" in result
     cron_mgr.delete_job.assert_not_awaited()
 
 
@@ -232,6 +234,27 @@ async def test_future_task_list_filters_by_umo_and_sender():
     assert "own-job" in result
     assert "other-sender-job" not in result
     assert "other-umo-job" not in result
+    assert "tasks in this chat that were not created by you" in result
+
+
+@pytest.mark.asyncio
+async def test_future_task_delete_explains_dashboard_jobs_without_sender():
+    tool = FutureTaskTool()
+    existing_job = _job("job-1")
+    existing_job.payload.pop("sender_id")
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
+        delete_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="user-1"),
+        action="delete",
+        job_id="job-1",
+    )
+
+    assert "has no chat member as its creator" in result
+    cron_mgr.delete_job.assert_not_awaited()
 
 
 @pytest.mark.asyncio

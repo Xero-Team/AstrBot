@@ -23,6 +23,7 @@ from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
+    cua_pixel_mode_from_settings,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
@@ -2175,6 +2176,9 @@ async def build_main_agent(
             image_compress_enabled=compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
+            warn_unresized_images=cua_pixel_mode_from_settings(
+                config.provider_settings
+            ),
         )
     event.set_extra("provider_request", req)
 

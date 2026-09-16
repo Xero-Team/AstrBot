@@ -10,6 +10,7 @@ import pytest
 from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest
 from astrbot.core.agent.request_preparation import (
     _safe_media_ref,
+    cua_pixel_mode_from_settings,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
@@ -256,6 +257,15 @@ def test_image_compress_args_from_settings_defaults_and_clamps():
     assert enabled is False
     assert max_size == 1
     assert quality == 100
+    cua_settings = {
+        "image_compress_enabled": True,
+        "computer_use_runtime": "sandbox",
+        "sandbox": {"booter": "cua"},
+        "image_compress_options": {"max_size": 1024, "quality": 85},
+    }
+    assert cua_pixel_mode_from_settings(cua_settings) is True
+    assert image_compress_args_from_settings(cua_settings)[0] is False
+    assert cua_pixel_mode_from_settings({"computer_use_runtime": "local"}) is False
 
 
 @pytest.mark.asyncio
@@ -310,6 +320,42 @@ async def test_prepare_provider_request_keeps_long_edge_when_compress_off(
     with PILImage.open(BytesIO(jpeg_bytes)) as jpeg:
         assert jpeg.format == "JPEG"
         assert jpeg.size == (2048, 32)
+
+
+@pytest.mark.asyncio
+async def test_prepare_provider_request_warns_when_unresized_image_exceeds_5mb(
+    tmp_path, monkeypatch, caplog
+):
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "small.png"
+    PILImage.new("RGB", (8, 8), (1, 2, 3)).save(image_path)
+    fat = tmp_path / "fat.jpg"
+    fat.write_bytes(b"\xff\xd8\xff" + b"a" * (6 * 1024 * 1024))
+
+    async def fake_prepare(*_args, **_kwargs):
+        return [str(fat)]
+
+    monkeypatch.setattr(
+        "astrbot.core.agent.request_preparation.prepare_images_for_provider",
+        fake_prepare,
+    )
+    request = ProviderRequest(prompt="look", image_urls=[str(image_path)])
+    with caplog.at_level("WARNING"):
+        prepared = await prepare_provider_request(
+            request,
+            image_compress_enabled=False,
+            warn_unresized_images=True,
+        )
+
+    assert prepared.image_urls
+    assert "without resize" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        await prepare_provider_request(request, image_compress_enabled=False)
+
+    assert "without resize" not in caplog.text
 
 
 @pytest.mark.asyncio

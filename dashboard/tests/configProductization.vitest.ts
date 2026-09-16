@@ -1,7 +1,42 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import ConfigProfileMenu from '@/components/config/ConfigProfileMenu.vue';
 import ProviderSelectMenu from '@/components/shared/ProviderSelectMenu.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
+
+vi.mock('@/utils/toast', () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+}));
+
+vi.mock('@/api/v1', () => ({
+  providerApi: {
+    listByProviderType: vi.fn(async () => ({
+      data: {
+        status: 'ok',
+        model_metadata: {},
+        data: [
+          {
+            id: 'openai-gpt',
+            type: 'openai_chat_completion',
+            provider_source_id: 'openai',
+            model: 'gpt-4o',
+            api_base: 'https://api.openai.com/v1',
+            enable: true,
+          },
+          {
+            id: 'claude',
+            type: 'anthropic_chat_completion',
+            provider_source_id: 'anthropic',
+            model: 'claude-sonnet',
+            api_base: 'https://api.anthropic.com',
+            enable: true,
+          },
+        ],
+      },
+    })),
+    test: vi.fn(),
+  },
+}));
 
 describe('configuration productization controls', () => {
   it('shows the configured profile name and emits profile selection', async () => {
@@ -52,5 +87,28 @@ describe('configuration productization controls', () => {
     expect(wrapper.find('.provider-trigger-title').text()).toBe(
       'Select provider pool',
     );
+  });
+
+  it('groups models by source and shows a source filter', async () => {
+    const wrapper = mountWithVuetify(ProviderSelectMenu, {
+      props: {
+        modelValue: 'openai-gpt',
+        variant: 'header',
+      },
+    });
+
+    await wrapper.find('.provider-trigger').trigger('click');
+    await flushPromises();
+
+    expect(
+      document.body.querySelector('.provider-source-trigger'),
+    ).not.toBeNull();
+    const headers = [
+      ...document.body.querySelectorAll('.provider-source-header'),
+    ].map((node) => node.textContent?.trim());
+    expect(headers).toEqual(expect.arrayContaining(['openai', 'anthropic']));
+    expect(
+      document.body.querySelectorAll('.provider-menu-item').length,
+    ).toBeGreaterThan(1);
   });
 });

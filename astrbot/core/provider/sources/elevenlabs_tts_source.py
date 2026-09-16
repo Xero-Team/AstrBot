@@ -125,6 +125,7 @@ class ProviderElevenLabsTTSAPI(TTSProvider):
             client = create_proxy_client(
                 "ElevenLabs TTS",
                 provider_config,
+                headers=self.request_headers,
             )
             client.timeout = timeout
             self.client: httpx.AsyncClient | None = client

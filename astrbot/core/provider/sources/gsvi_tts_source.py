@@ -57,7 +57,7 @@ class ProviderGSVITTS(TTSProvider):
         completed = False
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(headers=self.request_headers) as session:
                 async with session.post(url, json=data, headers=headers) as response:
                     if response.status != 200:
                         logger.error(

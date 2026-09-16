@@ -94,6 +94,7 @@ class _Session:
 
 def _provider() -> ProviderGSVITTS:
     provider = ProviderGSVITTS.__new__(ProviderGSVITTS)
+    provider.request_headers = {}
     provider.api_key = "test-key"
     provider.api_base = "https://gsvi.example.test"
     provider.version = "v4"
@@ -113,7 +114,7 @@ def _patch_session(
     monkeypatch.setattr(
         gsvi_tts_source.aiohttp,
         "ClientSession",
-        lambda: _Session(post_response, get_response),
+        lambda **_kwargs: _Session(post_response, get_response),
     )
     monkeypatch.setattr(gsvi_tts_source, "get_astrbot_temp_path", lambda: str(tmp_path))
 

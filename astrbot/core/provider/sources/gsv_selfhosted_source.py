@@ -47,6 +47,7 @@ class ProviderGSVTTS(TTSProvider):
     async def initialize(self) -> None:
         """异步初始化：在 ProviderManager 中被调用"""
         session = aiohttp.ClientSession(
+            headers=self.request_headers,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
         )
         self._session = session

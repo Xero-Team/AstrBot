@@ -17,6 +17,7 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.request_preparation import (
+    cua_pixel_mode_from_settings,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
@@ -240,6 +241,9 @@ class InternalAgentSubStage:
             image_compress_enabled=enabled,
             image_max_size=max_size,
             image_quality=quality,
+            warn_unresized_images=cua_pixel_mode_from_settings(
+                settings if isinstance(settings, dict) else None
+            ),
         )
         req.image_urls = prepared.image_urls
         req.audio_urls = prepared.audio_urls

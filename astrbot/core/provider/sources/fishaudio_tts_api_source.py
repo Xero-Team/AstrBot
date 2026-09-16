@@ -70,6 +70,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self._route = resolve_proxy_route(local_config=provider_config)
         self.proxy = self._route.proxy_url or ""
         self.headers = {
+            **self.request_headers,
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
         self.set_model(provider_config.get("model") or "s2-pro")

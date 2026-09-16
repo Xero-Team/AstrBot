@@ -92,6 +92,7 @@ class _Session:
 
 def _provider(session: _Session | None = None) -> ProviderGSVTTS:
     provider = ProviderGSVTTS.__new__(ProviderGSVTTS)
+    provider.request_headers = {}
     provider.api_base = "https://gsv.example.test"
     provider.gpt_weights_path = ""
     provider.sovits_weights_path = ""

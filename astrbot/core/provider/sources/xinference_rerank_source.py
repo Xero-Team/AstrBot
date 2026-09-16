@@ -49,6 +49,7 @@ class XinferenceRerankProvider(RerankProvider):
             else:
                 logger.info("Xinference rerank does not use API authentication")
                 self.client = Client(self.base_url)
+            self.client._headers.update(self.request_headers)
 
             running_models = await self.client.list_models()
             if not isinstance(running_models, Mapping):

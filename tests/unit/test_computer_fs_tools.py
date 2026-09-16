@@ -11,7 +11,8 @@ from mcp.types import CallToolResult, ImageContent
 from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer import file_read_utils
+from astrbot.core.auth.models import Role
+from astrbot.core.computer import file_read_utils, local_file_security
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
@@ -30,14 +31,33 @@ def _make_context(
         get_config=lambda umo=None: {
             "provider_settings": {
                 "computer_use_runtime": runtime,
+                "computer_use_local_permissions": {
+                    "member": {
+                        "allow_execution": False,
+                        "allow_network": False,
+                        "filesystem_scope": "workspace",
+                    },
+                    "admin": {
+                        "allow_execution": True,
+                        "allow_network": True,
+                        "filesystem_scope": "workspace",
+                    },
+                },
             }
         },
         computer_runtime=computer_runtime or ComputerRuntime(),
     )
     event = SimpleNamespace(
-        role=role,
         unified_msg_origin=umo,
         get_sender_id=lambda: "user-1",
+    )
+    attach_authorized_tool_context(
+        event,
+        config_holder,
+        "tool.file_read",
+        "tool.file_write",
+        "tool.local_exec",
+        effective_role=(Role.INSTANCE_OPERATOR if role == "admin" else Role.MEMBER),
     )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
     return ContextWrapper(context=astr_ctx)
@@ -173,6 +193,11 @@ def _setup_local_fs_tools(
     )
     monkeypatch.setattr(
         fs_tools,
+        "get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+    monkeypatch.setattr(
+        computer_util,
         "get_astrbot_temp_path",
         lambda: str(temp_root),
     )
@@ -515,6 +540,25 @@ def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
 
 
 @pytest.mark.asyncio
+async def test_file_read_tool_reads_text_without_dir_fd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        local_file_security,
+        "_descriptor_relative_access_available",
+        lambda: False,
+    )
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    target = workspace / "note.txt"
+    target.write_text("hello\n", encoding="utf-8", newline="")
+
+    result = await fs_tools.FileReadTool().call(_make_context(), path="note.txt")
+
+    assert result == "hello\n"
+
+
+@pytest.mark.asyncio
 async def test_file_read_tool_rejects_large_full_text_read_before_local_stream_read(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -747,3 +791,19 @@ async def test_file_read_tool_rejects_directory_with_clear_message(
     assert "is a directory, not a file" in result
     assert "my-directory" in result
     assert "'astrbot_execute_shell'" in result
+
+
+def test_session_temp_roots_are_isolated(tmp_path, monkeypatch):
+    temp_root = tmp_path / "temp"
+    system_temp = tmp_path / "system"
+    temp_root.mkdir()
+    system_temp.mkdir()
+    monkeypatch.setattr(computer_util, "get_astrbot_temp_path", lambda: str(temp_root))
+    monkeypatch.setattr(
+        computer_util, "get_astrbot_system_tmp_path", lambda: str(system_temp)
+    )
+    first = computer_util.session_temp_roots("webchat:FriendMessage:alice")
+    second = computer_util.session_temp_roots("webchat:FriendMessage:bob")
+    assert first
+    assert second
+    assert set(first).isdisjoint(second)

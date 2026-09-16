@@ -48,6 +48,7 @@ Shared locks live under `.agents/shared/`:
 | `archify`               | Checkout-only diagram renderer; not shipped in sdist, wheel, or image |
 | `audit-product`         | Baseline or module product audit; Chinese Markdown report + diagrams  |
 | `plan-issue`            | Issue or pasted request → research, clarify, file-path plan           |
+| `simplifier`            | Smallest current change; YAGNI ladder; over-engineering delete-list   |
 
 Do not add a skill that only restates `AGENTS.md`. Split a skill when a
 second, independently loadable workflow appears.
@@ -98,3 +99,10 @@ those trees or their default `docs/superpowers/`, `tasks/`, `.specify/`,
 or `dev/plans/` directories. The plan checker in
 `plan-issue/references/verification.md` is the agent judgment pass;
 `scripts/issue_plan.py validate` owns mechanical bars.
+
+`simplifier` is an AstrBot overlay of the
+[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) YAGNI
+ladder (MIT). Invoke it as `simplifier` (`$simplifier` in Codex). Keep the
+overlay in `simplifier/SKILL.md` and the pin in `simplifier/VENDOR.json`. Do
+not install the upstream plugin, hooks, intensity levels, or companion
+skills, and do not copy this skill into `.opencode/` or `.codex/`.

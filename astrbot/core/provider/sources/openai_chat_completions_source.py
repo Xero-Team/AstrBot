@@ -697,8 +697,6 @@ class ProviderOpenAIChatCompletions(Provider):
 
         extra_body = self._normalize_request_payload(payloads)
 
-        model = str(payloads.get("model", "")).lower()
-
         self._sanitize_assistant_messages(payloads)
 
         client = self._request_client()

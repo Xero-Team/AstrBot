@@ -191,6 +191,52 @@ def test_openai_schema_flattens_null_unions_when_requested_without_mutating_para
     assert tool.parameters == original
 
 
+def test_flatten_null_unions_leaves_ref_and_nested_union_optionals_unmodified():
+    parameters = {
+        "type": "object",
+        "properties": {
+            "item": {
+                "anyOf": [{"$ref": "#/$defs/Item"}, {"type": "null"}],
+            },
+            "nested_union": {
+                "anyOf": [
+                    {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+                    {"type": "null"},
+                ],
+            },
+            "one_of_union": {
+                "oneOf": [
+                    {"oneOf": [{"type": "string"}, {"type": "integer"}]},
+                    {"type": "null"},
+                ],
+            },
+        },
+        "$defs": {
+            "Item": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+            }
+        },
+    }
+    tool = FunctionTool(
+        name="browse",
+        description="Browse.",
+        parameters=deepcopy(parameters),
+    )
+
+    properties = ToolSet([tool]).openai_chat_completions_schema(
+        flatten_null_unions=True
+    )[0]["function"]["parameters"]["properties"]
+
+    assert properties["item"] == parameters["properties"]["item"]
+    assert properties["nested_union"] == parameters["properties"]["nested_union"]
+    assert properties["one_of_union"] == parameters["properties"]["one_of_union"]
+    assert "nullable" not in properties["item"]
+    assert "nullable" not in properties["nested_union"]
+    assert "nullable" not in properties["one_of_union"]
+    assert tool.parameters == parameters
+
+
 def test_function_tool_manager_forwards_flatten_null_unions():
     tool = _optional_string_tool()
     manager = FunctionToolManager()

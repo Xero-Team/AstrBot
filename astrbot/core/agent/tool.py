@@ -99,8 +99,17 @@ def _collapse_null_union_key(schema: dict[str, Any], union_key: str) -> None:
         or not isinstance(non_null[0], dict)
     ):
         return
+    remaining = non_null[0]
+    remaining_type = remaining.get("type")
+    if (
+        not isinstance(remaining_type, str)
+        or remaining_type == "null"
+        or "anyOf" in remaining
+        or "oneOf" in remaining
+    ):
+        return
     del schema[union_key]
-    schema.update(non_null[0])
+    schema.update(remaining)
     schema["nullable"] = True
 
 

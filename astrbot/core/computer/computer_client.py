@@ -43,88 +43,6 @@ def _get_cua_idle_timeout(config: dict) -> float:
     return max(timeout, 0.0)
 
 
-class _ComputerRuntimeState:
-    """Internal mutable state shared by the computer runtime operations.
-
-    The public :class:`ComputerRuntime` below owns this state for one
-    :class:`RuntimeServices` value.  It deliberately has no process-global
-    fallback, so independent AstrBot runtimes cannot share sandboxes, locks,
-    or CUA idle tasks.
-    """
-
-    def __init__(self) -> None:
-        self._session_booters: dict[str, ComputerBooter] = {}
-        self._session_booter_types: dict[str, str] = {}
-        self._session_booter_locks: dict[str, asyncio.Lock] = {}
-        self._cua_idle_states: dict[str, _CUAIdleState] = {}
-        self._local_booter: ComputerBooter | None = None
-        self._terminated = False
-
-    def get_session_booter(self, session_id: str) -> ComputerBooter | None:
-        """Return the existing session booter without creating one."""
-        return self._session_booters.get(session_id)
-
-    def _ensure_active(self) -> None:
-        if self._terminated:
-            raise RuntimeError("Computer runtime has been terminated.")
-
-    def _clear_cua_idle_state(self, session_id: str) -> None:
-        state = self._cua_idle_states.pop(session_id, None)
-        if state is not None and not state.task.done():
-            state.task.cancel()
-
-    def _schedule_cua_idle_cleanup(self, session_id: str, timeout: float) -> None:
-        self._clear_cua_idle_state(session_id)
-        if timeout <= 0:
-            return
-        expires_at = time.monotonic() + timeout
-
-        async def _expire_when_idle() -> None:
-            try:
-                remaining = expires_at - time.monotonic()
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
-
-                state = self._cua_idle_states.get(session_id)
-                if state is None or state.expires_at != expires_at:
-                    return
-
-                booter = self._session_booters.get(session_id)
-                if booter is not None:
-                    try:
-                        await booter.shutdown()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as shutdown_err:  # noqa: BLE001
-                        logger.warning(
-                            "[Computer] Failed to shutdown idle CUA sandbox for session %s: %s",
-                            session_id,
-                            shutdown_err,
-                        )
-                    finally:
-                        self._session_booters.pop(session_id, None)
-                        self._session_booter_types.pop(session_id, None)
-            except asyncio.CancelledError:
-                raise
-            finally:
-                state = self._cua_idle_states.get(session_id)
-                if state is not None and state.expires_at == expires_at:
-                    self._cua_idle_states.pop(session_id, None)
-
-        task = asyncio.create_task(_expire_when_idle())
-        self._cua_idle_states[session_id] = _CUAIdleState(
-            expires_at=expires_at,
-            task=task,
-        )
-
-    @staticmethod
-    async def _shutdown_booter(booter: ComputerBooter, booter_type: str) -> None:
-        if booter_type == "shipyard_neo":
-            await booter.shutdown(delete_sandbox=True)
-        else:
-            await booter.shutdown()
-
-
 def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     skills: list[Path] = []
     for entry in sorted(skills_root.iterdir()):
@@ -604,13 +522,82 @@ async def _sync_skills_to_sandbox(
                 logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
 
-class ComputerRuntime(_ComputerRuntimeState):
+class ComputerRuntime:
     """Runtime-owned computer sandbox capability."""
 
     def __init__(self) -> None:
-        super().__init__()
+        self._session_booters: dict[str, ComputerBooter] = {}
+        self._session_booter_types: dict[str, str] = {}
+        self._session_booter_locks: dict[str, asyncio.Lock] = {}
+        self._cua_idle_states: dict[str, _CUAIdleState] = {}
+        self._local_booter: ComputerBooter | None = None
+        self._terminated = False
         self._skill_manager: SkillManager | None = None
         self._plugins: PluginRegistry | None = None
+
+    def get_session_booter(self, session_id: str) -> ComputerBooter | None:
+        """Return the existing session booter without creating one."""
+        return self._session_booters.get(session_id)
+
+    def _ensure_active(self) -> None:
+        if self._terminated:
+            raise RuntimeError("Computer runtime has been terminated.")
+
+    def _clear_cua_idle_state(self, session_id: str) -> None:
+        state = self._cua_idle_states.pop(session_id, None)
+        if state is not None and not state.task.done():
+            state.task.cancel()
+
+    def _schedule_cua_idle_cleanup(self, session_id: str, timeout: float) -> None:
+        self._clear_cua_idle_state(session_id)
+        if timeout <= 0:
+            return
+        expires_at = time.monotonic() + timeout
+
+        async def _expire_when_idle() -> None:
+            try:
+                remaining = expires_at - time.monotonic()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+
+                state = self._cua_idle_states.get(session_id)
+                if state is None or state.expires_at != expires_at:
+                    return
+
+                booter = self._session_booters.get(session_id)
+                if booter is not None:
+                    try:
+                        await booter.shutdown()
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as shutdown_err:  # noqa: BLE001
+                        logger.warning(
+                            "[Computer] Failed to shutdown idle CUA sandbox for session %s: %s",
+                            session_id,
+                            shutdown_err,
+                        )
+                    finally:
+                        self._session_booters.pop(session_id, None)
+                        self._session_booter_types.pop(session_id, None)
+            except asyncio.CancelledError:
+                raise
+            finally:
+                state = self._cua_idle_states.get(session_id)
+                if state is not None and state.expires_at == expires_at:
+                    self._cua_idle_states.pop(session_id, None)
+
+        task = asyncio.create_task(_expire_when_idle())
+        self._cua_idle_states[session_id] = _CUAIdleState(
+            expires_at=expires_at,
+            task=task,
+        )
+
+    @staticmethod
+    async def _shutdown_booter(booter: ComputerBooter, booter_type: str) -> None:
+        if booter_type == "shipyard_neo":
+            await booter.shutdown(delete_sandbox=True)
+        else:
+            await booter.shutdown()
 
     def bind_skill_manager(
         self,

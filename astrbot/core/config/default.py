@@ -1354,7 +1354,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy_mode": "inherit",
                         "proxy_url": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "OpenCode Go Chat Completions": {
@@ -1446,7 +1446,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy_mode": "inherit",
                         "proxy_url": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Xiaomi": {
@@ -1473,7 +1473,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy_mode": "inherit",
                         "proxy_url": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "xAI": {

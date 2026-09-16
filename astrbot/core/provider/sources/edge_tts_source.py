@@ -175,6 +175,13 @@ class ProviderEdgeTTS(TTSProvider):
             if self.pitch:
                 kwargs["pitch"] = self.pitch
 
+            from astrbot.core.provider.headers import DEFAULT_USER_AGENT
+
+            try:
+                edge_tts_constants = importlib.import_module("edge_tts.constants")
+                edge_tts_constants.WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
+            except ImportError:
+                pass
             communicate = edge_tts_module.Communicate(proxy=self.proxy, **kwargs)
             await asyncio.wait_for(
                 communicate.save(str(mp3_path)), timeout=self.timeout

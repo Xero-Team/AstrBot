@@ -84,6 +84,7 @@ class ProviderGoogleGenAI(Provider):
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
         http_options = types.HttpOptions(
+            headers=self.request_headers,
             base_url=self.api_base,
             timeout=self.timeout * 1000,  # 毫秒
         )
@@ -112,6 +113,8 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
+        # The SDK adds its own lower-case UA alongside our explicit header.
+        self.client._api_client._http_options.headers.pop("user-agent", None)
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""

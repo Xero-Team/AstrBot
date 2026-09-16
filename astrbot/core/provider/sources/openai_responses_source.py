@@ -174,12 +174,7 @@ class ProviderOpenAIResponses(Provider):
         self.api_keys = list(self.get_keys())
         self.chosen_api_key = self.api_keys[0] if self.api_keys else ""
         self.timeout = int(provider_config.get("timeout", 120))
-        headers = provider_config.get("custom_headers")
-        self.custom_headers = (
-            {str(key): str(value) for key, value in headers.items()}
-            if isinstance(headers, dict)
-            else None
-        )
+        self.custom_headers = self.request_headers
         client_options = {
             "api_key": self.chosen_api_key,
             "default_headers": self.custom_headers,

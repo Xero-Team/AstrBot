@@ -39,6 +39,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
             "OpenAI TTS", provider_config, httpx_module=httpx2
         )
         self.client = AsyncOpenAI(
+            default_headers=self.request_headers,
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=timeout,

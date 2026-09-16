@@ -13,8 +13,6 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 
-from .stage_order import STAGES_ORDER
-
 if TYPE_CHECKING:
     from .content_safety_check.stage import ContentSafetyCheckStage
     from .group_message_history.stage import GroupMessageHistoryStage
@@ -88,6 +86,12 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
+    if name == "STAGES_ORDER":
+        from .bootstrap import builtin_stage_order
+
+        value = builtin_stage_order()
+        globals()[name] = value
+        return value
     if name not in _LAZY_EXPORTS:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     module_path, attr_name = _LAZY_EXPORTS[name]

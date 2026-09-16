@@ -4,14 +4,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from astrbot.core.pipeline.bootstrap import builtin_stage_classes
+from astrbot.core.pipeline.bootstrap import builtin_stage_classes, builtin_stage_order
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     InternalAgentSubStage,
 )
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party import (
     ThirdPartyAgentSubStage,
 )
-from astrbot.core.pipeline.stage_order import STAGES_ORDER
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -47,7 +46,7 @@ def test_smoke_critical_imports_in_fresh_interpreter() -> None:
 def test_smoke_pipeline_stage_classes_match_fixed_order() -> None:
     stages = builtin_stage_classes()
 
-    assert tuple(stage.__name__ for stage in stages) == STAGES_ORDER
+    assert tuple(stage.__name__ for stage in stages) == builtin_stage_order()
     assert len({stage.__name__ for stage in stages}) == len(stages)
 
 

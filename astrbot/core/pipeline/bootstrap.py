@@ -41,4 +41,9 @@ def builtin_stage_classes() -> Sequence[type[Stage]]:
     )
 
 
-__all__ = ["builtin_stage_classes"]
+def builtin_stage_order() -> tuple[str, ...]:
+    """Return the built-in stage class names in execution order."""
+    return tuple(cls.__name__ for cls in builtin_stage_classes())
+
+
+__all__ = ["builtin_stage_classes", "builtin_stage_order"]

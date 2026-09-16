@@ -6,7 +6,6 @@ import pytest
 
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.stage import Stage
-from astrbot.core.pipeline.stage_order import STAGES_ORDER
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 
 
@@ -93,10 +92,15 @@ def _scheduler(stages: list[Stage]) -> PipelineScheduler:
     return scheduler
 
 
-def test_builtin_stage_order_matches_stage_order_constant():
-    from astrbot.core.pipeline.bootstrap import builtin_stage_classes
+def test_builtin_stage_order_matches_stage_classes():
+    from astrbot.core.pipeline.bootstrap import (
+        builtin_stage_classes,
+        builtin_stage_order,
+    )
 
-    assert tuple(cls.__name__ for cls in builtin_stage_classes()) == STAGES_ORDER
+    assert (
+        tuple(cls.__name__ for cls in builtin_stage_classes()) == builtin_stage_order()
+    )
 
 
 @pytest.mark.asyncio

@@ -27,7 +27,7 @@ Ask:
 
 AstrBot prompts:
 
-- Pipeline stage order and stop-propagation vs `stage_order.py`
+- Pipeline stage order and stop-propagation vs `bootstrap.py`
 - Wake reasons vs `llm_access.*` (never `group_wake_policy`)
 - Command `command_id` identity vs fossil names
 - Provider type vs third-party **Agent runner** (`dify`/`coze`/…)

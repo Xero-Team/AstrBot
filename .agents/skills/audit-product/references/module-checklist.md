@@ -88,7 +88,7 @@ doubt; cite `--standard` / `--standard-clause` on findings.
 
 ## `pipeline`
 
-- `stage_order.py` sequence unchanged unless the finding is that it is
+- `bootstrap.py` stage sequence unchanged unless the finding is that it is
   wrong.
 - Wake routing writes `wake_reasons`; command beats LLM; unknown
   subcommand does not fall through to LLM.

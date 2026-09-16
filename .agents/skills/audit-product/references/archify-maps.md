@@ -24,7 +24,7 @@ Playwright cannot run; say so in the appendix.
 | ------------------- | -------------- | ----------------------------------------------------------------- |
 | `product-overview`  | `architecture` | Adapters, EventBus, pipeline, agent/stars, Dashboard, data stores |
 | `runtime-ownership` | `architecture` | `RuntimeServices` vs `AstrBotCoreLifecycle` vs Dashboard process  |
-| `pipeline-stages`   | `workflow`     | `stage_order.py` exact sequence                                   |
+| `pipeline-stages`   | `workflow`     | `bootstrap.py` exact sequence                                     |
 | `inbound-sequence`  | `sequence`     | Adapter → EventBus → scheduler → Process → Respond                |
 | `authz-decision`    | `sequence`     | subject → `authorize()` → audit / step-up                         |
 | `kb-upload`         | `dataflow`     | media, metadata, chunks, FAISS, compensating cleanup              |

@@ -69,13 +69,13 @@ facts. New workflows use `schema_version: 2`.
 
 Suggested maps (inspect code; do not copy example facts):
 
-| Type           | Typical scope                                             |
-| -------------- | --------------------------------------------------------- |
-| `architecture` | Runtime owners, adapters, pipeline, Dashboard, providers  |
-| `workflow`     | Pipeline stages in `astrbot/core/pipeline/stage_order.py` |
-| `sequence`     | Adapter → EventBus → scheduler → Process → Respond        |
-| `dataflow`     | Knowledge-base upload, vectors, compensating cleanup      |
-| `lifecycle`    | Session, conversation, or agent-run states                |
+| Type           | Typical scope                                            |
+| -------------- | -------------------------------------------------------- |
+| `architecture` | Runtime owners, adapters, pipeline, Dashboard, providers |
+| `workflow`     | Pipeline stages in `astrbot/core/pipeline/bootstrap.py`  |
+| `sequence`     | Adapter → EventBus → scheduler → Process → Respond       |
+| `dataflow`     | Knowledge-base upload, vectors, compensating cleanup     |
+| `lifecycle`    | Session, conversation, or agent-run states               |
 
 Group wake is explicit (`llm_access.group`, `llm_access.reply_to_bot`,
 continuation). Mentions are message-chain markers, not a wake policy.

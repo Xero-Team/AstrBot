@@ -69,10 +69,10 @@ The main database file is `data/data_v4.db` under the runtime root. SQLModel tab
 
 ```text
 astrbot/core/db/
-  __init__.py              # BaseDatabase and engine lifecycle
-  protocols.py             # Domain and composite protocols
+  __init__.py              # SQLite engine helpers
+  protocols.py             # Domain store protocols
   schema.py                # registry + create_all + PRAGMA
-  sqlite.py                # SQLiteDatabase facade
+  sqlite.py                # SQLiteDatabase facade and session lifecycle
   po/
     __init__.py            # Re-export table=True models
     registry.py            # Explicitly import every table model
@@ -117,7 +117,7 @@ Mixins obtain sessions through the typed `store_session(self)` helper and must n
 | `ChatProjectStore`     | `chatui_projects`, `session_project_relations`                                                                                                                                   | `stores/projects.py`                                            |
 | (no SQLite methods)    | `dashboard_accounts`, `auth_role_bindings`, `auth_platform_membership_facts`, `auth_step_up_credentials`, `auth_policy_overrides`, `auth_audit_log`, `dashboard_trusted_devices` | `po/auth.py` tables only; authorization service owns operations |
 
-Composite protocols (`ChatStore`, `DashboardStore`, `PluginRuntimeStore`, and similar) add no methods. `tests/unit/db/test_protocols.py` requires every public coroutine to belong to a domain protocol.
+Callers annotate domain protocols; the Dashboard composition root uses `SQLiteDatabase`. The WebChat adapter injects attachment and history access through `astrbot/core/platform/webchat_storage.py` and does not depend on the concrete database class. `tests/unit/db/test_protocols.py` requires every public coroutine to belong to a domain protocol.
 
 `get_session_conversations()` is owned by `ConversationStore`. It is an explicitly documented cross-domain read exception that joins `Preference`, `ConversationV2`, and `Persona`; do not add a projection protocol for it.
 
@@ -150,7 +150,7 @@ Tests are split by protocol under `tests/unit/db/`. `test_schema.py` locks only 
 
 Platform adapters normalize inbound messages into `AstrMessageEvent` and enqueue them in a shared queue capped at 1024 items. `EventBus` selects the `PipelineScheduler` for the message's config profile and executes it under a concurrency semaphore.
 
-The order in `astrbot/core/pipeline/stage_order.py` is:
+The order in `astrbot/core/pipeline/bootstrap.py` (`builtin_stage_classes()`) is:
 
 1. `WakingCheckStage`
 2. `WhitelistCheckStage`

@@ -69,10 +69,10 @@ outline: deep
 
 ```text
 astrbot/core/db/
-  __init__.py              # BaseDatabase 与引擎生命周期
-  protocols.py             # 域协议与组合协议
+  __init__.py              # SQLite 引擎辅助函数
+  protocols.py             # 域存储协议
   schema.py                # registry + create_all + PRAGMA
-  sqlite.py                # SQLiteDatabase 门面
+  sqlite.py                # SQLiteDatabase 门面与会话生命周期
   po/
     __init__.py            # 再导出 table=True 的模型
     registry.py            # 显式导入全部表模型
@@ -117,7 +117,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 | `ChatProjectStore`     | `chatui_projects`、`session_project_relations`                                                                                                                                   | `stores/projects.py`              |
 | （无 SQLite 方法）     | `dashboard_accounts`、`auth_role_bindings`、`auth_platform_membership_facts`、`auth_step_up_credentials`、`auth_policy_overrides`、`auth_audit_log`、`dashboard_trusted_devices` | `po/auth.py` 仅建表；授权服务操作 |
 
-组合协议（`ChatStore`、`DashboardStore`、`PluginRuntimeStore` 等）不增加新方法。`tests/unit/db/test_protocols.py` 要求每个公开协程都挂在域协议上。
+调用方按域协议标注；Dashboard 组合根使用 `SQLiteDatabase`。WebChat 适配器通过 `astrbot/core/platform/webchat_storage.py` 注入附件与历史端口，不依赖具体数据库类。`tests/unit/db/test_protocols.py` 要求每个公开协程都挂在域协议上。
 
 `get_session_conversations()` 由 `ConversationStore` 所有。它是明确记录的跨域只读例外，会 join `Preference`、`ConversationV2` 和 `Persona`；不要为此新增 projection 协议。
 
@@ -150,7 +150,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 平台适配器将消息规范化为 `AstrMessageEvent`，写入最大长度为 1024 的共享事件队列。`EventBus` 根据消息命中的配置文件选择对应的 `PipelineScheduler`，并在并发信号量保护下执行完整流水线。
 
-流水线顺序由 `astrbot/core/pipeline/stage_order.py` 定义：
+流水线顺序由 `astrbot/core/pipeline/bootstrap.py` 的 `builtin_stage_classes()` 定义：
 
 1. `WakingCheckStage`
 2. `WhitelistCheckStage`

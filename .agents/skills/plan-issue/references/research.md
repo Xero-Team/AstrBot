@@ -86,7 +86,7 @@ behavior. Report the queries and the paths inspected.
 
 Typical seams:
 
-- Pipeline stages: `astrbot/core/pipeline/stage_order.py`
+- Pipeline stages: `astrbot/core/pipeline/bootstrap.py`
 - Commands: command database / Orbit handlers, not fossil short names
 - Providers: `astrbot/core/provider/provider_modules.py`
 - Dashboard HTTP: `openspec/openapi-v1.yaml` then `astrbot/dashboard/`

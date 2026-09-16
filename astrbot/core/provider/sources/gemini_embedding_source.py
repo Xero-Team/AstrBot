@@ -9,6 +9,7 @@ from astrbot import logger
 from astrbot.core.utils.error_redaction import safe_error
 
 from ..entities import ProviderType
+from ..headers import drop_sdk_user_agent
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
 
@@ -45,8 +46,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         http_options.async_client_args = httpx_client_kwargs(route)
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
-        # The SDK adds its own lower-case UA alongside our explicit header.
-        self.client._api_client._http_options.headers.pop("user-agent", None)
+        drop_sdk_user_agent(self.client)
 
         self.model = provider_config.get(
             "embedding_model",

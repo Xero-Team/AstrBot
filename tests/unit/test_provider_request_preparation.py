@@ -328,8 +328,6 @@ async def test_prepare_provider_request_warns_when_unresized_image_exceeds_5mb(
 ):
     from PIL import Image as PILImage
 
-    import astrbot.core.agent.request_preparation as request_preparation
-
     image_path = tmp_path / "small.png"
     PILImage.new("RGB", (8, 8), (1, 2, 3)).save(image_path)
     fat = tmp_path / "fat.jpg"
@@ -339,7 +337,8 @@ async def test_prepare_provider_request_warns_when_unresized_image_exceeds_5mb(
         return [str(fat)]
 
     monkeypatch.setattr(
-        request_preparation, "prepare_images_for_provider", fake_prepare
+        "astrbot.core.agent.request_preparation.prepare_images_for_provider",
+        fake_prepare,
     )
     request = ProviderRequest(prompt="look", image_urls=[str(image_path)])
     with caplog.at_level("WARNING"):

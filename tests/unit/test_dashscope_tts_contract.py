@@ -40,6 +40,7 @@ def _assert_no_sensitive_values(*texts: object) -> None:
 
 def _provider(model: str = "qwen3-tts-flash") -> ProviderDashscopeTTSAPI:
     provider = ProviderDashscopeTTSAPI.__new__(ProviderDashscopeTTSAPI)
+    provider.request_headers = {"User-Agent": "astrbot/test"}
     provider.model_name = model
     provider.voice = "test-voice"
     provider.chosen_api_key = "test-key"
@@ -137,6 +138,9 @@ async def test_dashscope_tts_sanitizes_download_failure(caplog, monkeypatch) -> 
             return None
 
     class _Session:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
         async def __aenter__(self) -> _Session:
             return self
 

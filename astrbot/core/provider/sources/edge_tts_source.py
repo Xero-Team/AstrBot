@@ -181,6 +181,7 @@ class ProviderEdgeTTS(TTSProvider):
                 edge_tts_constants = importlib.import_module("edge_tts.constants")
                 edge_tts_constants.WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
             except ImportError:
+                # Older edge-tts builds do not expose constants.WSS_HEADERS.
                 pass
             communicate = edge_tts_module.Communicate(proxy=self.proxy, **kwargs)
             await asyncio.wait_for(

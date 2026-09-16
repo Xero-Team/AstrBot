@@ -1,12 +1,17 @@
 import copy
 import socket
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 from aiohttp import web
 
 from astrbot import __version__
-from astrbot.core.provider.headers import DEFAULT_USER_AGENT, build_provider_headers
+from astrbot.core.provider.headers import (
+    DEFAULT_USER_AGENT,
+    build_provider_headers,
+    drop_sdk_user_agent,
+)
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 from astrbot.core.provider.sources.bailian_rerank_source import BailianRerankProvider
 from astrbot.core.provider.sources.gemini_embedding_source import (
@@ -54,6 +59,20 @@ def test_provider_headers_preserve_custom_values_without_mutation(name):
         "X-Trace-Id": "123",
     }
     assert custom == original
+
+
+def test_drop_sdk_user_agent_ignores_incomplete_clients_and_pops_lowercase_header():
+    drop_sdk_user_agent(object())
+    drop_sdk_user_agent(
+        SimpleNamespace(_api_client=SimpleNamespace(_http_options=SimpleNamespace()))
+    )
+
+    headers = {"user-agent": "sdk/1.0", "User-Agent": DEFAULT_USER_AGENT}
+    client = SimpleNamespace(
+        _api_client=SimpleNamespace(_http_options=SimpleNamespace(headers=headers))
+    )
+    drop_sdk_user_agent(client)
+    assert headers == {"User-Agent": DEFAULT_USER_AGENT}
 
 
 @pytest.fixture

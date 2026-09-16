@@ -18,6 +18,7 @@ from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, 
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider.headers import drop_sdk_user_agent
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
@@ -113,8 +114,7 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
-        # The SDK adds its own lower-case UA alongside our explicit header.
-        self.client._api_client._http_options.headers.pop("user-agent", None)
+        drop_sdk_user_agent(self.client)
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""

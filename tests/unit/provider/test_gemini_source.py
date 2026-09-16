@@ -742,6 +742,7 @@ def test_gemini_key_accessors_and_set_key_reinitialize_client(monkeypatch):
 def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = {}
+    provider.request_headers = {}
     provider.timeout = 30
     provider.api_base = "https://gemini.example"
     provider.chosen_api_key = "key-a"

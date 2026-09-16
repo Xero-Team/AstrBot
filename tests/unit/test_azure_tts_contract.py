@@ -107,6 +107,7 @@ def _otts_provider(client: _Client) -> OTTSProvider:
 
 def _native_provider(client: _Client) -> AzureNativeProvider:
     provider = AzureNativeProvider.__new__(AzureNativeProvider)
+    provider.request_headers = {}
     provider._client = client
     provider.token = "token"
     provider.token_expire = time.time() + 60

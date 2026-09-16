@@ -57,6 +57,7 @@ class _MiMoResponse:
 
 def _mimo_provider(response: _MiMoResponse) -> ProviderMiMoTTSAPI:
     provider = ProviderMiMoTTSAPI.__new__(ProviderMiMoTTSAPI)
+    provider.request_headers = {}
     provider.chosen_api_key = "test-key"
     provider.api_base = "https://mimo.example.test/v1"
     provider.audio_format = "wav"
@@ -194,6 +195,7 @@ class _MiniMaxSession:
 
 def _minimax_provider() -> ProviderMiniMaxTTSAPI:
     provider = ProviderMiniMaxTTSAPI.__new__(ProviderMiniMaxTTSAPI)
+    provider.request_headers = {}
     provider.concat_base_url = "https://minimax.example.test/v1/t2a"
     provider.headers = {}
     provider._build_tts_stream_body = lambda _text: "{}"
@@ -208,7 +210,7 @@ async def test_minimax_tts_hides_http_exception(monkeypatch, caplog) -> None:
     session = _MiniMaxSession(request)
     provider = _minimax_provider()
     monkeypatch.setattr(
-        minimax_tts_api_source.aiohttp, "ClientSession", lambda: session
+        minimax_tts_api_source.aiohttp, "ClientSession", lambda **_kwargs: session
     )
 
     with caplog.at_level(logging.WARNING, logger="astrbot"):
@@ -229,7 +231,7 @@ async def test_minimax_tts_ignores_malformed_sse_message(monkeypatch, caplog) ->
     session = _MiniMaxSession(request)
     provider = _minimax_provider()
     monkeypatch.setattr(
-        minimax_tts_api_source.aiohttp, "ClientSession", lambda: session
+        minimax_tts_api_source.aiohttp, "ClientSession", lambda **_kwargs: session
     )
 
     with caplog.at_level(logging.WARNING, logger="astrbot"):

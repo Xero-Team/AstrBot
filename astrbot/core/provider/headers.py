@@ -22,3 +22,18 @@ def build_provider_headers(custom_headers: object = None) -> dict[str, str]:
             else:
                 headers[name] = value
     return headers
+
+
+def drop_sdk_user_agent(client: object) -> None:
+    """Drop the SDK's extra lowercase User-Agent when the client exposes it.
+
+    Args:
+        client: A Gemini SDK client or test double. Missing private attributes
+            are ignored so constructor tests can stub the client.
+    """
+    api_client = getattr(client, "_api_client", None)
+    http_options = getattr(api_client, "_http_options", None)
+    headers = getattr(http_options, "headers", None)
+    pop = getattr(headers, "pop", None)
+    if callable(pop):
+        pop("user-agent", None)

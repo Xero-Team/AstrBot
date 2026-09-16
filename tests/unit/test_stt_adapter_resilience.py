@@ -50,6 +50,7 @@ class _MiMoResponse:
 
 def _mimo_provider(response: _MiMoResponse) -> ProviderMiMoSTTAPI:
     provider = ProviderMiMoSTTAPI.__new__(ProviderMiMoSTTAPI)
+    provider.request_headers = {}
     provider.chosen_api_key = "test-key"
     provider.api_base = "https://mimo.example.test/v1"
     provider.model_name = "mimo-v2.5-asr"

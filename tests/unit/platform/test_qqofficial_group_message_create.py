@@ -1127,6 +1127,134 @@ async def test_send_streaming_c2c_keeps_reused_delta_before_final_flush(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_c2c_stream_closes_with_state10_when_tail_buffer_empty(monkeypatch):
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    frames: list[tuple[int | None, str]] = []
+
+    async def fake_post_send(stream=None):
+        parts = []
+        if event.send_buffer:
+            for component in event.send_buffer.chain:
+                if isinstance(component, Plain) and component.text:
+                    parts.append(component.text)
+        frames.append((stream.get("state") if stream else None, "".join(parts)))
+        event.send_buffer = None
+        return {"id": "stream-1"}
+
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+    times = iter([0.5, 2.0, 2.0, 2.0])
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "time", lambda: next(times, 9.0))
+
+    async def generator():
+        yield MessageChain().message("不")
+        yield MessageChain().message("稀")
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+
+    assert (1, "不稀") in frames
+    assert frames[-1] == (10, "\n")
+
+
+@pytest.mark.asyncio
+async def test_c2c_stream_break_closes_open_segment_with_empty_buffer(monkeypatch):
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    frames: list[tuple[int | None, str]] = []
+
+    async def fake_post_send(stream=None):
+        parts = []
+        if event.send_buffer:
+            for component in event.send_buffer.chain:
+                if isinstance(component, Plain) and component.text:
+                    parts.append(component.text)
+        frames.append((stream.get("state") if stream else None, "".join(parts)))
+        event.send_buffer = None
+        return {"id": "stream-1"}
+
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+    times = iter([2.0, 2.0, 2.0, 2.0])
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "time", lambda: next(times, 9.0))
+
+    async def generator():
+        yield MessageChain().message("首段文本")
+        yield MessageChain(type="break")
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+
+    assert frames[0] == (1, "首段文本")
+    assert frames[1] == (10, "\n")
+    assert len(frames) == 2
+
+
+@pytest.mark.asyncio
+async def test_c2c_stream_closes_when_tail_is_empty_plain(monkeypatch):
+    source = botpy.message.C2CMessage(
+        None,
+        "evt-1",
+        {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "hello"},
+    )
+    event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
+    event.message_obj = SimpleNamespace(raw_message=source)
+    event.send_buffer = None
+    frames: list[tuple[int | None, str]] = []
+
+    async def fake_post_send(stream=None):
+        parts = []
+        if event.send_buffer:
+            for component in event.send_buffer.chain:
+                if isinstance(component, Plain) and component.text:
+                    parts.append(component.text)
+        frames.append((stream.get("state") if stream else None, "".join(parts)))
+        event.send_buffer = None
+        return {"id": "stream-1"}
+
+    event._post_send = AsyncMock(side_effect=fake_post_send)
+    times = iter([0.5, 2.0, 2.0, 2.0])
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "time", lambda: next(times, 9.0))
+
+    async def generator():
+        yield MessageChain().message("不")
+        yield MessageChain().message("稀")
+        yield MessageChain(chain=[Plain("")])
+
+    with patch.object(
+        AstrMessageEvent,
+        "send_streaming",
+        AsyncMock(return_value=None),
+    ):
+        await event.send_streaming(generator())
+
+    assert frames[0] == (1, "不稀")
+    assert frames[-1] == (10, "\n")
+
+
+@pytest.mark.asyncio
 async def test_send_streaming_clears_buffer_when_post_send_raises():
     source = botpy.message.C2CMessage(
         None,

@@ -582,3 +582,28 @@ async def test_managed_shell_poll_propagates_cancellation_and_shutdowns(tmp_path
     assert (await shell.list_sessions("owner", runtime_id="runtime-a"))[
         "sessions"
     ] == []
+
+
+@pytest.mark.asyncio
+async def test_exec_managed_skips_blocklist_inside_sandbox(tmp_path, monkeypatch):
+    class FakeSandbox:
+        async def spawn_shell(self, command, spec, *, env=None):
+            raise RuntimeError(f"sandbox-reached:{command}")
+
+    monkeypatch.setattr(local_booter, "create_process_sandbox", lambda: FakeSandbox())
+    shell = LocalShellComponent()
+    with pytest.raises(PermissionError, match="Blocked unsafe shell command"):
+        await shell.exec_managed(
+            "rm -rf workspace-file",
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+        )
+    with pytest.raises(RuntimeError, match="sandbox-reached:rm -rf workspace-file"):
+        await shell.exec_managed(
+            "rm -rf workspace-file",
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            sandboxed=True,
+        )

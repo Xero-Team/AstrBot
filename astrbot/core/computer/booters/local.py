@@ -57,6 +57,11 @@ _SEARCH_FALLBACK_MAX_FILE_BYTES = 256 * 1024
 
 
 def _is_safe_command(command: str) -> bool:
+    """Return whether the command passes the unsandboxed UX blocklist.
+
+    This is not a security boundary. Host isolation comes from the OS sandbox
+    when ``sandboxed=True``.
+    """
     normalized_command = re.sub(r"\s+", " ", command.strip().lower())
     if ":(){:|:&};:" in normalized_command:
         return False
@@ -290,7 +295,7 @@ class LocalShellComponent(ShellComponent):
         writable_roots: tuple[Path, ...] = (),
     ) -> dict[str, Any]:  # noqa: ASYNC109
         """Start a runtime-owned interactive shell session."""
-        if not _is_safe_command(command):
+        if not sandboxed and not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
         if not 0 <= yield_time_ms <= 30_000:
             raise ValueError("yield_time_ms must be between 0 and 30000")

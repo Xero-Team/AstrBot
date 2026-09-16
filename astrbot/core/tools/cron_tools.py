@@ -10,6 +10,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.cron.manager import CronJobSchedulingError
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.registry import builtin_tool
 
 _CRON_TOOL_CONFIG = {
@@ -188,7 +189,12 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
     async def _delete_future_task(
-        self, cron_mgr, job_id: object, current_umo: str, current_sender_id: str
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        cron_mgr,
+        job_id: object,
+        current_umo: str,
+        current_sender_id: str,
     ) -> ToolExecResult:
         if not job_id:
             return "error: job_id is required when action=delete."
@@ -196,7 +202,27 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         if not job:
             return f"error: cron job {job_id} not found."
         if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-            return "error: you can only delete your own future tasks."
+            same_session = _extract_job_session(job) == current_umo
+            if same_session and not _extract_job_sender(job):
+                return (
+                    f"error: cron job {job_id} has no chat member as its creator "
+                    "(it was created outside this chat, e.g. from the dashboard), "
+                    "so you cannot delete it here."
+                )
+            if (
+                same_session
+                and context.context.event.get_message_type()
+                == MessageType.GROUP_MESSAGE
+            ):
+                return (
+                    f"error: cron job {job_id} was created by another member of "
+                    "this group chat, so you cannot delete it. Only the member who "
+                    "created it can delete it; tell the user to ask that member."
+                )
+            return (
+                f"error: cron job {job_id} was not created by you, so you cannot "
+                "delete it. Only whoever created it can delete it."
+            )
         await cron_mgr.delete_job(str(job_id))
         return f"Deleted cron job {job_id}."
 
@@ -207,23 +233,40 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         current_umo: str,
         current_sender_id: str,
     ) -> ToolExecResult:
+        all_jobs = await cron_mgr.list_jobs()
         jobs = [
             job
-            for job in await cron_mgr.list_jobs()
+            for job in all_jobs
             if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
         ]
+        hidden_note = ""
+        for job in all_jobs:
+            if _extract_job_session(job) != current_umo:
+                continue
+            if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                continue
+            hidden_note = (
+                "\n\nNote: tasks in this chat that were not created by you "
+                "are not listed here, and can only be edited or deleted by "
+                "whoever created them."
+            )
+            break
         if not jobs:
-            return "No cron jobs found."
+            return "No cron jobs found." + hidden_note
         _, timezone_info = _get_configured_timezone(context)
-        return "\n".join(
-            f"{job.job_id} | {job.name} | {job.job_type} | "
-            f"run_once={getattr(job, 'run_once', False)} | enabled={job.enabled} | "
-            f"next={_display_next_run_time(job.next_run_time, timezone_info)}"
-            for job in jobs
+        return (
+            "\n".join(
+                f"{job.job_id} | {job.name} | {job.job_type} | "
+                f"run_once={getattr(job, 'run_once', False)} | enabled={job.enabled} | "
+                f"next={_display_next_run_time(job.next_run_time, timezone_info)}"
+                for job in jobs
+            )
+            + hidden_note
         )
 
     async def _edit_future_task(
         self,
+        context: ContextWrapper[AstrAgentContext],
         cron_mgr,
         kwargs: dict[str, Any],
         current_umo: str,
@@ -241,7 +284,27 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         if not job:
             return f"error: cron job {job_id} not found."
         if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-            return "error: you can only edit your own future tasks."
+            same_session = _extract_job_session(job) == current_umo
+            if same_session and not _extract_job_sender(job):
+                return (
+                    f"error: cron job {job_id} has no chat member as its creator "
+                    "(it was created outside this chat, e.g. from the dashboard), "
+                    "so you cannot edit it here."
+                )
+            if (
+                same_session
+                and context.context.event.get_message_type()
+                == MessageType.GROUP_MESSAGE
+            ):
+                return (
+                    f"error: cron job {job_id} was created by another member of "
+                    "this group chat, so you cannot edit it. Only the member who "
+                    "created it can edit it; tell the user to ask that member."
+                )
+            return (
+                f"error: cron job {job_id} was not created by you, so you cannot "
+                "edit it. Only whoever created it can edit it."
+            )
 
         payload = dict(job.payload) if isinstance(job.payload, dict) else {}
         updates: dict[str, Any] = {}
@@ -313,11 +376,12 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         current_sender_id = str(context.context.event.get_sender_id())
         if action == "edit":
             return await self._edit_future_task(
-                cron_mgr, kwargs, current_umo, current_sender_id
+                context, cron_mgr, kwargs, current_umo, current_sender_id
             )
 
         if action == "delete":
             return await self._delete_future_task(
+                context,
                 cron_mgr,
                 kwargs.get("job_id"),
                 current_umo,

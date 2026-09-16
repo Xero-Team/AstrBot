@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 274 icons */
+/* Auto-generated MDI subset – 278 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -306,6 +306,10 @@
 
 .mdi-content-save-outline::before {
   content: "\F0818";
+}
+
+.mdi-cpu-64-bit::before {
+  content: "\F0EE0";
 }
 
 .mdi-creation::before {
@@ -728,6 +732,10 @@
   content: "\F0375";
 }
 
+.mdi-monitor::before {
+  content: "\F0379";
+}
+
 .mdi-music-note-outline::before {
   content: "\F0F74";
 }
@@ -924,6 +932,10 @@
   content: "\F0A12";
 }
 
+.mdi-shield-alert-outline::before {
+  content: "\F0ECD";
+}
+
 .mdi-shield-check::before {
   content: "\F0565";
 }
@@ -942,6 +954,10 @@
 
 .mdi-shield-lock-outline::before {
   content: "\F0CCC";
+}
+
+.mdi-shield-off-outline::before {
+  content: "\F099C";
 }
 
 .mdi-shield-outline::before {

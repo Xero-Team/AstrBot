@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any
 
 import aiohttp
 
@@ -28,6 +28,7 @@ from astrbot.core.agent.mcp_client import (
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.service import AuthorizationService
+from astrbot.core.tool_catalog import PluginLookup
 from astrbot.core.tools.registry import (
     BUILTIN_TOOL_DECLARATION_ATTR,
     BUILTIN_TOOL_MODULES,
@@ -46,12 +47,6 @@ DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 180.0
 MCP_INIT_TIMEOUT_ENV = "ASTRBOT_MCP_INIT_TIMEOUT"
 ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_ENABLE_TIMEOUT"
 MAX_MCP_TIMEOUT_SECONDS = 300.0
-
-
-class PluginLookup(Protocol):
-    """The narrow plugin capability required for tool activation."""
-
-    def get_by_module(self, module_path: str | None) -> Any: ...
 
 
 class MCPInitError(Exception):

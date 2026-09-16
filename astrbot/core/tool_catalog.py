@@ -1,6 +1,6 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from astrbot import logger
 from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
@@ -115,7 +115,7 @@ WEB_SEARCH_PROVIDER_TOOLS: Mapping[str, tuple[str, ...]] = {
 class PluginLookup(Protocol):
     """The narrow plugin capability required for tool activation."""
 
-    def get_by_module(self, module_path: str | None) -> object | None:
+    def get_by_module(self, module_path: str | None) -> Any:
         """Return the plugin registered for ``module_path``."""
 
 

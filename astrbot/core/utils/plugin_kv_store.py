@@ -19,12 +19,6 @@ class PluginKVStorage(Protocol):
     async def remove(self, plugin_id: str, key: str) -> None: ...
 
 
-class PluginKVContext(Protocol):
-    """A plugin context exposing only plugin-scoped key-value storage."""
-
-    storage: PluginKVStorage
-
-
 class PluginKVStoreMixin:
     """为插件提供键值存储功能的 Mixin 类"""
 

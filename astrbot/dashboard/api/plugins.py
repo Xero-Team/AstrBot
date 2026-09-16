@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
 from astrbot import logger
+from astrbot.core.star.plugin_catalog import PluginCatalog
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
@@ -22,7 +23,6 @@ from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
 )
-from astrbot.dashboard.services.plugin_log_level_service import PluginLogLevelService
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_OPERATION_FAILED_MESSAGE,
     PluginService,
@@ -59,8 +59,8 @@ def get_config_file_service(request: Request) -> ConfigFileService:
     return request.app.state.services.config_files
 
 
-def get_plugin_log_level_service(request: Request) -> PluginLogLevelService:
-    return request.app.state.services.plugin_log_levels
+def get_plugin_catalog(request: Request) -> PluginCatalog:
+    return request.app.state.runtime.plugin_manager.catalog
 
 
 async def require_plugin_id_scope(
@@ -337,7 +337,7 @@ async def get_plugin_config(
     plugin_id: str,
     _auth: AuthContext = Depends(require_plugin_id_scope),
     service: ConfigDisplayService = Depends(get_config_display_service),
-    log_levels: PluginLogLevelService = Depends(get_plugin_log_level_service),
+    log_levels: PluginCatalog = Depends(get_plugin_catalog),
 ):
     return ok(
         {
@@ -353,7 +353,7 @@ async def update_plugin_log_level(
     plugin_id: str,
     payload: PluginLogLevelPayload,
     _auth: AuthContext = Depends(require_plugin_id_scope),
-    service: PluginLogLevelService = Depends(get_plugin_log_level_service),
+    service: PluginCatalog = Depends(get_plugin_catalog),
 ):
     try:
         level = service.set_plugin_log_level(plugin_id, payload.level)

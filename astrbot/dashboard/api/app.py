@@ -48,7 +48,6 @@ from astrbot.dashboard.services.plugin_dashboard_service import PluginDashboardS
 from astrbot.dashboard.services.plugin_file_ticket_service import (
     PluginFileTicketService,
 )
-from astrbot.dashboard.services.plugin_log_level_service import PluginLogLevelService
 from astrbot.dashboard.services.plugin_page_session_service import (
     PluginPageSessionService,
 )
@@ -311,7 +310,6 @@ def create_dashboard_asgi_app(
         plugin_dashboard=plugin_dashboard,
         plugin_page_sessions=plugin_page_sessions,
         plugin_file_tickets=plugin_file_tickets,
-        plugin_log_levels=PluginLogLevelService(runtime.plugin_manager.catalog),
         plugins=PluginService(
             runtime.plugin_manager.lifecycle,
             runtime.plugin_manager.loader,

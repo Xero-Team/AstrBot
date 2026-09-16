@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -43,16 +44,17 @@ def test_open_file_in_allowed_roots_reads_regular_file(tmp_path: Path) -> None:
     allowed.mkdir()
     target = allowed / "note.txt"
     target.write_text("safe", encoding="utf-8")
+    fd: int | None = None
     try:
         fd = open_file_in_allowed_roots(str(target), (allowed,), access="read")
     except RuntimeError:
         pytest.skip("Race-resistant file access is unavailable on this platform.")
     try:
-        import os
-
+        assert fd is not None
         assert os.read(fd, 16) == b"safe"
     finally:
-        os.close(fd)
+        if fd is not None:
+            os.close(fd)
 
 
 def test_open_file_in_allowed_roots_rejects_escape(tmp_path: Path) -> None:
@@ -60,11 +62,16 @@ def test_open_file_in_allowed_roots_rejects_escape(tmp_path: Path) -> None:
     allowed.mkdir()
     outside = tmp_path / "secret.txt"
     outside.write_text("nope", encoding="utf-8")
+    fd: int | None = None
     try:
-        with pytest.raises(PermissionError):
-            open_file_in_allowed_roots(str(outside), (allowed,), access="read")
+        fd = open_file_in_allowed_roots(str(outside), (allowed,), access="read")
     except RuntimeError:
         pytest.skip("Race-resistant file access is unavailable on this platform.")
+    except PermissionError:
+        return
+    else:
+        os.close(fd)
+        pytest.fail("expected PermissionError")
 
 
 def test_sandbox_prepare_command_rejects_empty_argv(tmp_path: Path) -> None:

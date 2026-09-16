@@ -138,7 +138,8 @@ class ExecuteShellTool(FunctionTool):
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
 
-                if not isinstance(sb.shell, LocalShellComponent):
+                shell_component = sb.shell
+                if not isinstance(shell_component, LocalShellComponent):
                     return (
                         "Error executing command: local shell component is unavailable."
                     )
@@ -149,15 +150,13 @@ class ExecuteShellTool(FunctionTool):
                     and local_policy.allow_network
                     and not local_policy.requires_sandbox
                 ) or getattr(context.context.event, "role", None) == "admin"
-                sandbox_roots = {}
-                if local_policy and local_policy.filesystem_scope == "workspace":
-                    umo = context.context.event.unified_msg_origin
-                    sandbox_roots = {
-                        "readable_roots": _read_allowed_roots(umo),
-                        "writable_roots": _write_allowed_roots(umo),
-                    }
+                umo = context.context.event.unified_msg_origin
+                workspace_scope = (
+                    local_policy is not None
+                    and local_policy.filesystem_scope == "workspace"
+                )
                 requested_timeout = kwargs.get("timeout", timeout_seconds)
-                result = await sb.shell.exec_managed(
+                result = await shell_component.exec_managed(
                     command,
                     owner_id=context.context.event.unified_msg_origin,
                     runtime_id="local",
@@ -183,7 +182,8 @@ class ExecuteShellTool(FunctionTool):
                     ),
                     yield_time_ms=0 if background else yield_time_ms,
                     allowed_root=str(current_workspace_root),
-                    **sandbox_roots,
+                    readable_roots=_read_allowed_roots(umo) if workspace_scope else (),
+                    writable_roots=_write_allowed_roots(umo) if workspace_scope else (),
                 )
                 if policy_notice:
                     result["policy_notice"] = LOCAL_NETWORK_POLICY_NOTICE

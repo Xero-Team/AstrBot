@@ -563,14 +563,15 @@ class LocalShellComponent(ShellComponent):
         if session.process.returncode is None:
             if session.sandboxed:
                 cast(SandboxProcess, session.process).interrupt()
-            elif sys.platform == "win32":
-                session.process.send_signal(
-                    getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
-                )
             else:
-                if not _signal_posix_process_group(session.process.pid, signal.SIGINT):
+                native_process = cast(asyncio.subprocess.Process, session.process)
+                if sys.platform == "win32":
+                    native_process.send_signal(
+                        getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
+                    )
+                elif not _signal_posix_process_group(native_process.pid, signal.SIGINT):
                     try:
-                        session.process.send_signal(signal.SIGINT)
+                        native_process.send_signal(signal.SIGINT)
                     except ProcessLookupError:
                         pass
         return await self.poll_session(
@@ -606,13 +607,15 @@ class LocalShellComponent(ShellComponent):
 
     async def shutdown_sessions(self, *, invalid_only: bool = False) -> None:
         async with self._sessions_lock:
-            sessions = [
-                session
-                for session in self._sessions.values()
-                if not invalid_only
-                or getattr(session, "permission_check", None) is None
-                or not session.permission_check()
-            ]
+            sessions = []
+            for session in self._sessions.values():
+                permission_check = session.permission_check
+                if (
+                    not invalid_only
+                    or permission_check is None
+                    or not permission_check()
+                ):
+                    sessions.append(session)
             for session in sessions:
                 session.terminated = True
         termination_results = await asyncio.gather(
@@ -675,10 +678,8 @@ class LocalShellComponent(ShellComponent):
             sender_id,
         ):
             raise ValueError("Shell session was not found")
-        if (
-            getattr(session, "permission_check", None) is not None
-            and not session.permission_check()
-        ):
+        permission_check = session.permission_check
+        if permission_check is not None and not permission_check():
             await self.shutdown_sessions(invalid_only=True)
             raise ValueError(
                 "Shell session expired after a permission change. "
@@ -735,32 +736,36 @@ class LocalShellComponent(ShellComponent):
             return
         if session.sandboxed:
             process.terminate()
-        elif sys.platform == "win32":
-            try:
-                result = await asyncio.to_thread(
-                    subprocess.run,
-                    ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=5,
-                )
-                if result.returncode != 0:
-                    _signal_asyncio_process(process, terminate=True)
-            except Exception:
-                _signal_asyncio_process(process, terminate=True)
         else:
-            if not _signal_posix_process_group(process.pid, signal.SIGTERM):
-                _signal_asyncio_process(process, terminate=True)
+            native_process = cast(asyncio.subprocess.Process, process)
+            if sys.platform == "win32":
+                try:
+                    result = await asyncio.to_thread(
+                        subprocess.run,
+                        ["taskkill", "/F", "/T", "/PID", str(native_process.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=5,
+                    )
+                    if result.returncode != 0:
+                        _signal_asyncio_process(native_process, terminate=True)
+                except Exception:
+                    _signal_asyncio_process(native_process, terminate=True)
+            elif not _signal_posix_process_group(native_process.pid, signal.SIGTERM):
+                _signal_asyncio_process(native_process, terminate=True)
         try:
             await asyncio.wait_for(asyncio.shield(session.wait_task), 5)
         except TimeoutError:
             if session.sandboxed:
                 process.kill()
-            elif sys.platform == "win32":
-                _signal_asyncio_process(process, terminate=False)
             else:
-                if not _signal_posix_process_group(process.pid, signal.SIGKILL):
-                    _signal_asyncio_process(process, terminate=False)
+                native_process = cast(asyncio.subprocess.Process, process)
+                if sys.platform == "win32":
+                    _signal_asyncio_process(native_process, terminate=False)
+                elif not _signal_posix_process_group(
+                    native_process.pid, signal.SIGKILL
+                ):
+                    _signal_asyncio_process(native_process, terminate=False)
             try:
                 await session.wait_task
             except ProcessLookupError:

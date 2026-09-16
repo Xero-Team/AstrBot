@@ -242,9 +242,7 @@ def test_local_sandbox_resolves_dns_with_network_enabled(tmp_path, filesystem_sc
         [
             sys.executable,
             "-c",
-            "import socket; "
-            "assert socket.getaddrinfo('example.com', 443, type=socket.SOCK_STREAM); "
-            "print('DNS resolution succeeded')",
+            "import socket; assert socket.getaddrinfo('example.com', 443, type=socket.SOCK_STREAM); print('DNS resolution succeeded')",
         ],
         SandboxSpec(
             workspace=tmp_path,
@@ -439,7 +437,7 @@ async def test_local_execution_obeys_file_tool_roots(
                     "allow_network": False,
                 }
             },
-        }
+        },
     }
     event = SimpleNamespace(
         role=role,
@@ -452,10 +450,8 @@ async def test_local_execution_obeys_file_tool_roots(
         ),
         tool_call_timeout=20,
     )
-    readable = fs._read_allowed_roots(event.unified_msg_origin, workspace)
-    writable = fs._write_allowed_roots(
-        event.unified_msg_origin, workspace, include_installed_skills=role == "admin"
-    )
+    readable = fs._read_allowed_roots(event.unified_msg_origin)
+    writable = fs._write_allowed_roots(event.unified_msg_origin)
     code = f"""
 import runpy
 from pathlib import Path

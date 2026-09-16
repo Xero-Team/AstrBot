@@ -77,7 +77,7 @@ class UnixSandboxProcess:
         try:
             os.killpg(self.pid, signal)
         except ProcessLookupError:
-            pass
+            pass  # Process group already exited.
 
 
 class UnixProcessSandbox(ProcessSandbox):

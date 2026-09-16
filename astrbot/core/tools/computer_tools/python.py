@@ -1,6 +1,6 @@
 import platform
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import mcp
 
@@ -170,6 +170,7 @@ class LocalPythonTool(FunctionTool):
                 context.context.event.unified_msg_origin
             )
             current_workspace_root.mkdir(parents=True, exist_ok=True)
+            python_component = cast(Any, sb.python)
             sandbox_roots = {}
             if sandboxed and local_policy.filesystem_scope == "workspace":
                 umo = context.context.event.unified_msg_origin
@@ -177,7 +178,7 @@ class LocalPythonTool(FunctionTool):
                     "readable_roots": _read_allowed_roots(umo),
                     "writable_roots": _write_allowed_roots(umo),
                 }
-            result = await sb.python.exec(
+            result = await python_component.exec(
                 code,
                 timeout_seconds=effective_timeout,
                 silent=silent,

@@ -4,6 +4,7 @@ import shlex
 import signal
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -199,7 +200,16 @@ def test_terminate_process_ignores_windows_process_lookup(monkeypatch):
         lambda *_args, **_kwargs: _FakeTaskkillResult(returncode=1),
     )
 
-    asyncio.run(LocalShellComponent()._terminate_process(DeadProcess()))
+    async def scenario() -> None:
+        process = DeadProcess()
+        session = SimpleNamespace(
+            process=process,
+            sandboxed=False,
+            wait_task=asyncio.create_task(process.wait()),
+        )
+        await LocalShellComponent()._terminate_process(session)
+
+    asyncio.run(scenario())
 
 
 def test_terminate_process_ignores_posix_killpg_permission(monkeypatch):
@@ -223,7 +233,16 @@ def test_terminate_process_ignores_posix_killpg_permission(monkeypatch):
     monkeypatch.setattr(local_booter.sys, "platform", "darwin")
     monkeypatch.setattr(local_booter.os, "killpg", fake_killpg, raising=False)
 
-    asyncio.run(LocalShellComponent()._terminate_process(DeadProcess()))
+    async def scenario() -> None:
+        process = DeadProcess()
+        session = SimpleNamespace(
+            process=process,
+            sandboxed=False,
+            wait_task=asyncio.create_task(process.wait()),
+        )
+        await LocalShellComponent()._terminate_process(session)
+
+    asyncio.run(scenario())
 
 
 def test_local_shell_component_kills_posix_process_group_on_timeout(monkeypatch):
@@ -522,7 +541,12 @@ def test_managed_shell_output_is_bounded(tmp_path):
         # The reader can terminate the process at the quota boundary, but a
         # short-lived command may win the race and exit normally.  The quota
         # invariant is the bounded output, not one particular exit status.
-        assert result["status"] in {"completed", "terminated", "failed"}
+        assert result["status"] in {
+            "completed",
+            "terminated",
+            "failed",
+            "output_limited",
+        }
         await shell.shutdown_sessions()
 
     asyncio.run(scenario())

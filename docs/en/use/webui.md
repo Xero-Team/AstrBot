@@ -8,17 +8,17 @@ The AstrBot admin panel features plugin management, log viewing, visual configur
 
 These entries match the default WebUI sidebar. If you customized the sidebar, check or restore the default layout under `Settings → Appearance` in the lower-left corner.
 
-| Previous entry point | Current entry point |
-| --- | --- |
+| Previous entry point                    | Current entry point                                                                 |
+| --------------------------------------- | ----------------------------------------------------------------------------------- |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` next to the AI heading → Change execution mode |
-| Data / Dashboard | More → Data → Statistics |
-| Conversation Management / Conversations | More → Data → Conversations |
-| Logs / Console | More → Data → Logs |
-| Trace | More → Data → Trace |
-| Config → Normal Config | Config → Select a profile |
-| Config → System Config | Settings → General, Appearance, Network, or Security |
-| Command Management | Plugins → Manage behavior → Commands |
-| Standalone MCP / Skills entries | Plugins → MCP / Skills |
+| Data / Dashboard                        | More → Data → Statistics                                                            |
+| Conversation Management / Conversations | More → Data → Conversations                                                         |
+| Logs / Console                          | More → Data → Logs                                                                  |
+| Trace                                   | More → Data → Trace                                                                 |
+| Config → Normal Config                  | Config → Select a profile                                                           |
+| Config → System Config                  | Settings → General, Appearance, Network, or Security                                |
+| Command Management                      | Plugins → Manage behavior → Commands                                                |
+| Standalone MCP / Skills entries         | Plugins → MCP / Skills                                                              |
 
 Legacy log, trace, conversation, and statistics URLs still redirect to the matching tabs. Agent runners are now saved with each profile instead of being created as a provider; see [Agent Runner](./agent-runner.md).
 

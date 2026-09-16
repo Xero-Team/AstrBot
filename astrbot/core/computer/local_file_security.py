@@ -96,7 +96,7 @@ def open_file_in_allowed_roots(
                 try:
                     os.mkdir(component, mode=0o755, dir_fd=directory_fd)
                 except FileExistsError:
-                    pass
+                    pass  # Lost the create race; reopen the existing directory.
                 try:
                     next_directory_fd = os.open(
                         component,
@@ -142,7 +142,7 @@ def open_file_in_allowed_roots(
                 file_fd = os.open(
                     final_name,
                     file_flags | os.O_CREAT | os.O_EXCL,
-                    0o666,
+                    0o600,
                     dir_fd=directory_fd,
                 )
             except FileExistsError:

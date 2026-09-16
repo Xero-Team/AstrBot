@@ -29,7 +29,7 @@ import stat
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
@@ -407,6 +407,7 @@ class FileWriteTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
+            filesystem = cast(Any, sb.fs)
             file_descriptor = None
             if restricted:
                 file_descriptor = open_file_in_allowed_roots(
@@ -416,12 +417,16 @@ class FileWriteTool(FunctionTool):
                     create_parents=True,
                 )
             try:
-                result = await sb.fs.write_file(
+                result = await filesystem.write_file(
                     path=normalized_path,
                     content=content,
                     mode="w",
                     encoding="utf-8",
-                    file_descriptor=file_descriptor,
+                    **(
+                        {"file_descriptor": file_descriptor}
+                        if file_descriptor is not None
+                        else {}
+                    ),
                 )
             finally:
                 if file_descriptor is not None:
@@ -506,6 +511,7 @@ class FileEditTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
+            filesystem = cast(Any, sb.fs)
             file_descriptor = None
             if restricted:
                 file_descriptor = open_file_in_allowed_roots(
@@ -514,13 +520,17 @@ class FileEditTool(FunctionTool):
                     access="edit",
                 )
             try:
-                result = await sb.fs.edit_file(
+                result = await filesystem.edit_file(
                     path=normalized_path,
                     old_string=normalized_old,
                     new_string=normalized_new,
                     replace_all=replace_all,
                     encoding="utf-8",
-                    file_descriptor=file_descriptor,
+                    **(
+                        {"file_descriptor": file_descriptor}
+                        if file_descriptor is not None
+                        else {}
+                    ),
                 )
             finally:
                 if file_descriptor is not None:

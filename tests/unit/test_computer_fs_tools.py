@@ -30,6 +30,18 @@ def _make_context(
         get_config=lambda umo=None: {
             "provider_settings": {
                 "computer_use_runtime": runtime,
+                "computer_use_local_permissions": {
+                    "member": {
+                        "allow_execution": False,
+                        "allow_network": False,
+                        "filesystem_scope": "workspace",
+                    },
+                    "admin": {
+                        "allow_execution": True,
+                        "allow_network": True,
+                        "filesystem_scope": "workspace",
+                    },
+                },
             }
         },
         computer_runtime=computer_runtime or ComputerRuntime(),

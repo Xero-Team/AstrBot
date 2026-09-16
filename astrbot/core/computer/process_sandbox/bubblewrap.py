@@ -67,7 +67,14 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
             )
         else:
             command.extend(
-                ("--dir", "/tmp", "--size", str(_TMP_BYTES), "--tmpfs", "/tmp")
+                (
+                    "--dir",
+                    "/tmp",  # nosec B108
+                    "--size",
+                    str(_TMP_BYTES),
+                    "--tmpfs",
+                    "/tmp",  # nosec B108
+                )
             )
 
         readonly_paths = {
@@ -118,7 +125,10 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                         readonly_paths.add(link)
             readonly_paths = {path for path in readonly_paths if path.exists()}
 
-            required_directories = {Path("/tmp"), Path("/tmp/home")}
+            required_directories = {
+                Path("/tmp"),  # nosec B108
+                Path("/tmp/home"),  # nosec B108
+            }
             for path in (*readonly_paths, *writable_paths):
                 required_directories.update(
                     parent
@@ -129,7 +139,7 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                 required_directories,
                 key=lambda path: len(path.parts),
             ):
-                if directory != Path("/tmp"):
+                if directory != Path("/tmp"):  # nosec B108
                     command.extend(("--dir", str(directory)))
             command.extend(("--proc", "/proc", "--dev", "/dev"))
 
@@ -164,10 +174,10 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                 f"{Path(sys.executable).parent}:/usr/local/bin:/usr/bin:/bin",
                 "--setenv",
                 "HOME",
-                str(workspace) if spec.filesystem_scope == "host" else "/tmp/home",
+                str(workspace) if spec.filesystem_scope == "host" else "/tmp/home",  # nosec B108
                 "--setenv",
                 "TMPDIR",
-                "/tmp",
+                "/tmp",  # nosec B108
                 "--setenv",
                 "LANG",
                 "C.UTF-8",

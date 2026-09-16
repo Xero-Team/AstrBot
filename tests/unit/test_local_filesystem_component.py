@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 from pathlib import Path
 
@@ -172,9 +173,7 @@ def test_local_file_system_component_truncates_rg_long_lines_after_search(
     assert result["content"] == long_line.decode()[:1000] + "\n"
 
 
-def test_local_file_system_component_falls_back_without_rg(
-    monkeypatch, tmp_path: Path
-):
+def test_local_file_system_component_falls_back_without_rg(monkeypatch, tmp_path: Path):
     _allow_tmp_root(monkeypatch, tmp_path)
     target = tmp_path / "target.txt"
     target.write_text("needle in haystack\n", encoding="utf-8")
@@ -212,7 +211,8 @@ def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox
                 stderr=b"",
             )
 
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/rg")
+    rg_executable = r"C:\tools\rg.exe" if os.name == "nt" else "/usr/bin/rg"
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: rg_executable)
     monkeypatch.setattr(
         local_booter,
         "create_process_sandbox",
@@ -229,7 +229,7 @@ def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox
     )
 
     expected_search_command = [
-        "/usr/bin/rg",
+        str(Path(rg_executable).resolve()),
         "--color=never",
         "-n",
         "--max-columns",

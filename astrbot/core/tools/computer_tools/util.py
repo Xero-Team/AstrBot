@@ -15,6 +15,7 @@ def normalize_umo_for_workspace(umo: str) -> str:
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip())
     return normalized or "unknown"
 
+
 LOCAL_NETWORK_POLICY_NOTICE = (
     "Sandbox policy: Network access is disabled for local Shell/Python execution. "
     "Do not retry the same network operation with another command, Python, "
@@ -180,9 +181,9 @@ async def check_admin_permission(
         "operator",
         "root",
     }:
-        event._computer_permission_role = "admin"
+        setattr(event, "_computer_permission_role", "admin")
     else:
-        event._computer_permission_role = "member"
+        setattr(event, "_computer_permission_role", "member")
     if not decision.allowed:
         return (
             f"error: Permission denied. {operation_name} requires an authorized action. "

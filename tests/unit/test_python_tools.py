@@ -196,7 +196,7 @@ async def test_local_python_reports_disabled_network_policy(tmp_path, monkeypatc
     )
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.util.create_process_sandbox",
-        lambda: object(),
+        object,
     )
     event = SimpleNamespace(
         unified_msg_origin="onebot:GroupMessage:12345",

@@ -5,17 +5,17 @@ upstream:
   branch: master
 
 last_synced:
-  commit: bd046ed29914ee559e9bf47676ccb71a84f747ba
-  synced_at_utc: 2026-09-14T11:01:17Z
+  commit: ab42c0d9b726d82ad0f9563e04c53a4460c00d61
+  synced_at_utc: 2026-09-16T07:04:24Z
   sync_method: adapt
-  source_pr: '10028,10042,9667,10050,10004,10053,10065,9703'
+  source_pr: '10082,10069,10084,10079,10046,10071,10085'
   note: >-
-    Reviewed 8b5f38885e381176f4bdc7fffd245336337a0e3c..bd046ed29914ee559e9bf47676ccb71a84f747ba
-    (8 commits): adapted #10042, #9667, #10053, #10065, and #9703; skipped
-    #10028 because local_agent_runtime_from_profile already supplies
-    fallback_provider_ids, #10050 because this fork has no desktop app
-    updater bridge, and #10004 because conversation.reset and
-    conversation.create stay distinct under session.manage. Adaptations keep
-    request_preparation always-JPEG conversion, MessageHistoryStoreMixin
-    pagination, plugin_package_installer staging, and MDI Chat UI. Focused
-    pytest, Dashboard vitest, vue-tsc, and i18n:check passed.
+    Reviewed bd046ed29914ee559e9bf47676ccb71a84f747ba..ab42c0d9b726d82ad0f9563e04c53a4460c00d61
+    (7 commits): adapted #10082, #10069, #10084, #10079, and #10071;
+    cherry-picked #10046; skipped #10085 because the fork already ships
+    4.28.1 and does not copy upstream changelog text. Adaptations keep
+    always-JPEG request_preparation, OpenAI chat-completions source names,
+    MDI ProviderSelectMenu drawers, and C2C _append_stream_delta. Left
+    later commits #9472, #10096, #10088, #10093, and #10104 for a later
+    window. Focused pytest, Dashboard vitest, vue-tsc, and i18n:check
+    passed.

@@ -6,18 +6,17 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from astrbot.core.auth.admission import (
-    SESSION_SERVICE_CONFIG_KEY,
+    ADMISSION_LISTED_SESSIONS_KEY,
     ConversationKind,
     UnlistedPolicy,
     session_admission_key,
+    session_admission_key_from_umo,
 )
-from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
@@ -51,7 +50,7 @@ def pending_session_allows_from_whitelist(
 
     Bare IDs expand to one group key per configured platform instance. UMO
     entries mint a key from the platform instance and message type. Unique-
-    session UMOs are not rewritten into per-person allows.
+    session group UMOs unwrap to the group id.
 
     Args:
         entries: Raw ``id_whitelist`` values.
@@ -80,8 +79,9 @@ def migrate_admission_on_load(config: dict[str, Any], config_path: Path) -> bool
     """Replace ID-whitelist fields with ``admission.unlisted_sessions``.
 
     A non-empty enabled list becomes ``deny`` plus pending listed-session keys
-    written to a data sidecar. Empty or disabled lists become ``allow``. The
-    sidecar is applied later, after shared preferences exist.
+    written to a data sidecar keyed by this config path. Empty or disabled
+    lists become ``allow``. The sidecar is applied later, after shared
+    preferences exist.
 
     Args:
         config: Mutable configuration loaded from disk.
@@ -119,7 +119,7 @@ def migrate_admission_on_load(config: dict[str, Any], config_path: Path) -> bool
             _platform_ids(config),
         )
         if keys:
-            _append_pending_session_allows(keys)
+            _append_pending_session_allows(config_path, keys)
             logger.info(
                 "Migrated %s ID-whitelist entries from %s into listed "
                 "session overlays.",
@@ -139,33 +139,47 @@ def migrate_admission_on_load(config: dict[str, Any], config_path: Path) -> bool
     return True
 
 
-async def apply_pending_session_allows(preferences: Any) -> int:
-    """Merge pending listed-session overlays into shared preferences.
+async def apply_pending_session_allows(
+    preferences: Any,
+    configs: Mapping[str, Any] | None = None,
+) -> int:
+    """Store pending listed-session keys per configuration profile.
 
-    Each pending canonical key receives ``session_enabled=true`` unless that
-    field is already a bool. Existing ``llm_enabled``, TTS, persona, and
-    ``session_enabled`` values on that key are kept. The sidecar is cleared
-    after a successful pass.
+    Keys stay scoped to the config file that produced them. They are not
+    written as ``session_enabled`` overlays, so a later session-status stage
+    still owns that field on UMO rows.
 
     Args:
-        preferences: Shared preference store exposing ``session_get`` /
-            ``session_put``.
+        preferences: Shared preference store exposing ``global_get`` /
+            ``global_put``.
+        configs: ``config_id`` to config objects with ``config_path``. Missing
+            mappings attach leftover sidecar paths to ``default``.
 
     Returns:
         Number of pending keys processed.
     """
 
-    keys = _load_pending_session_allows()
-    if not keys:
+    pending = _load_pending_session_allows()
+    if not pending:
         return 0
-    for key in keys:
-        raw = await preferences.session_get(key, SESSION_SERVICE_CONFIG_KEY, {})
-        config = dict(raw) if isinstance(raw, dict) else {}
-        if not isinstance(config.get("session_enabled"), bool):
-            config["session_enabled"] = True
-            await preferences.session_put(key, SESSION_SERVICE_CONFIG_KEY, config)
+    listed = await _listed_sessions_map(preferences)
+    applied = 0
+    for raw_path, keys in pending.items():
+        if not keys:
+            continue
+        config_id = _config_id_for_path(configs, Path(raw_path))
+        merged = list(listed.get(config_id, []))
+        seen = set(merged)
+        for key in keys:
+            applied += 1
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(key)
+        listed[config_id] = merged
+    await preferences.global_put(ADMISSION_LISTED_SESSIONS_KEY, listed)
     _clear_pending_session_allows()
-    return len(keys)
+    return applied
 
 
 def _platform_ids(config: dict[str, Any]) -> list[str]:
@@ -191,24 +205,9 @@ def _platform_ids(config: dict[str, Any]) -> list[str]:
 def _keys_for_whitelist_entry(entry: str, platform_ids: Sequence[str]) -> list[str]:
     if entry.startswith("session:"):
         return [entry]
-    if ":" in entry:
-        try:
-            session = MessageSession.from_str(entry)
-        except TypeError, ValueError:
-            session = None
-        if session is not None:
-            kind = (
-                ConversationKind.GROUP
-                if session.message_type is MessageType.GROUP_MESSAGE
-                else ConversationKind.PRIVATE
-            )
-            return [
-                session_admission_key(
-                    platform_instance=session.platform_id,
-                    conversation_kind=kind,
-                    conversation_id=session.session_id,
-                )
-            ]
+    from_umo = session_admission_key_from_umo(entry)
+    if from_umo is not None:
+        return [from_umo]
     if not platform_ids:
         logger.warning(
             "Skipping bare whitelist ID %s: this profile has no platform instances.",
@@ -225,28 +224,81 @@ def _keys_for_whitelist_entry(entry: str, platform_ids: Sequence[str]) -> list[s
     ]
 
 
-def _load_pending_session_allows() -> list[str]:
+def _config_id_for_path(configs: Mapping[str, Any] | None, path: Path) -> str:
+    if not configs:
+        return "default"
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    for config_id, conf in configs.items():
+        conf_path = getattr(conf, "config_path", None)
+        if not conf_path:
+            continue
+        try:
+            other = Path(conf_path).resolve()
+        except OSError:
+            other = Path(conf_path)
+        if other == resolved:
+            return str(config_id)
+    return "default"
+
+
+async def _listed_sessions_map(preferences: Any) -> dict[str, list[str]]:
+    raw = await preferences.global_get(ADMISSION_LISTED_SESSIONS_KEY, {})
+    if not isinstance(raw, dict):
+        return {}
+    listed: dict[str, list[str]] = {}
+    for config_id, values in raw.items():
+        if not isinstance(config_id, str) or not isinstance(values, list):
+            continue
+        keys: list[str] = []
+        seen: set[str] = set()
+        for item in values:
+            if not isinstance(item, str):
+                continue
+            key = item.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+        listed[config_id] = keys
+    return listed
+
+
+def _load_pending_session_allows() -> dict[str, list[str]]:
     path = pending_session_allows_sidecar_path()
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return []
+        return {}
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning(
             "Failed to read pending session-allow sidecar %s: %s",
             path,
             exc,
         )
-        return []
+        return {}
+    return _pending_from_raw(raw)
+
+
+def _pending_from_raw(raw: object) -> dict[str, list[str]]:
     if isinstance(raw, list):
-        values = raw
-    elif isinstance(raw, dict):
-        values = []
-        for item in raw.values():
-            if isinstance(item, list):
-                values.extend(item)
-    else:
-        return []
+        keys = _dedupe_keys(raw)
+        return {"default": keys} if keys else {}
+    if not isinstance(raw, dict):
+        return {}
+    pending: dict[str, list[str]] = {}
+    for config_path, values in raw.items():
+        if not isinstance(config_path, str):
+            continue
+        keys = _dedupe_keys(values if isinstance(values, list) else [])
+        if keys:
+            pending[config_path] = keys
+    return pending
+
+
+def _dedupe_keys(values: Sequence[object]) -> list[str]:
     keys: list[str] = []
     seen: set[str] = set()
     for item in values:
@@ -260,15 +312,18 @@ def _load_pending_session_allows() -> list[str]:
     return keys
 
 
-def _append_pending_session_allows(keys: Sequence[str]) -> None:
-    merged = _load_pending_session_allows()
+def _append_pending_session_allows(config_path: Path, keys: Sequence[str]) -> None:
+    pending = _load_pending_session_allows()
+    path_key = str(config_path.resolve())
+    merged = list(pending.get(path_key, []))
     seen = set(merged)
     for key in keys:
         if key in seen:
             continue
         seen.add(key)
         merged.append(key)
-    _write_pending_session_allows(merged)
+    pending[path_key] = merged
+    _write_pending_session_allows(pending)
 
 
 def _clear_pending_session_allows() -> None:
@@ -283,13 +338,17 @@ def _clear_pending_session_allows() -> None:
             path,
             exc,
         )
-        _write_pending_session_allows([])
+        _write_pending_session_allows({})
 
 
-def _write_pending_session_allows(keys: Sequence[str]) -> None:
+def _write_pending_session_allows(pending: Mapping[str, Sequence[str]]) -> None:
     path = pending_session_allows_sidecar_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(list(keys), ensure_ascii=False, indent=2)
+    payload = json.dumps(
+        {key: list(value) for key, value in pending.items()},
+        ensure_ascii=False,
+        indent=2,
+    )
     fd, tmp_name = tempfile.mkstemp(
         dir=path.parent,
         prefix=f".{path.name}.",
@@ -305,5 +364,6 @@ def _write_pending_session_allows(keys: Sequence[str]) -> None:
         try:
             os.unlink(tmp_name)
         except OSError:
+            # Best-effort cleanup of the unreplaced tempfile.
             pass
         raise

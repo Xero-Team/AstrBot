@@ -10,11 +10,11 @@
 | ----------------------------- | ------- | --------------------------------------------------------------- |
 | `admission.unlisted_sessions` | `allow` | `allow` 放行没有覆盖的会话；`deny` 只放行已有会话覆盖的群或私聊 |
 
-默认 `allow`：新群和新私聊都会进入后续流水线。改成 `deny` 后，只有规范会话键上已有覆盖的会话会被响应。覆盖来自升级时从旧 ID 白名单迁出的 `session_enabled=true`，或 IM 里写入规范会话键的 `/llm disable`（会同时关掉该群 LLM）。Dashboard [自定义规则](./custom-rules)目前仍按 UMO 保存，不会把群列入这一关。
+默认 `allow`：新群和新私聊都会进入后续流水线。改成 `deny` 后，只有规范会话键上已有覆盖、或本配置档升级列入集里的会话会被响应。覆盖来自 IM `/llm`、Dashboard [自定义规则](./custom-rules) 写入的 `llm_enabled` / `session_enabled` / `session_blocked`。升级时旧白名单按配置档记入列入集，不会把 `session_enabled` 写到偏好里。
 
 群准入用的是规范会话键（`session:{平台实例}:group:{群 ID}`），不是隔离会话改写后的 UMO。私聊用 `session:{平台实例}:private:{对方 ID}`。WebChat、OneBot 的 `notice` / `request`，以及当前实例上拥有 `provider.manage` 的发送者，会跳过这一关。按人拒绝属于后续切片，现在未列入发送者一律放行。
 
-旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除，Dashboard 写入这些字段会失败。升级时：空列表或关闭的白名单变成 `allow`；非空且开启的列表变成 `deny`，并把条目写成会话覆盖。裸 ID 会按该配置档里每个 `platform[].id` 展开成群会话键。
+旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除，Dashboard 写入这些字段会失败。升级时：空列表或关闭的白名单变成 `allow`；非空且开启的列表变成 `deny`，并把条目列入该配置档。裸 ID 会按该配置档里每个 `platform[].id` 展开成群会话键。隔离会话 UMO 会按 `sender_id_group_id` / `sender_id%group_id` 解开成群 ID。
 
 ## 速率限制
 

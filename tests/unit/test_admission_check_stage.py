@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.auth.admission import (
+    ADMISSION_LISTED_SESSIONS_KEY,
     SESSION_SERVICE_CONFIG_KEY,
     sender_admission_key_from_event,
     session_admission_key_from_event,
@@ -18,9 +19,13 @@ from tests.unit.test_waking_check_stage import make_real_event
 class _Preferences:
     def __init__(self) -> None:
         self.values: dict[tuple[str, str], Any] = {}
+        self.global_values: dict[str, Any] = {}
 
     async def session_get(self, umo: str, key: str, default: Any = None) -> Any:
         return self.values.get((umo, key), default)
+
+    async def global_get(self, key: str, default: Any = None) -> Any:
+        return self.global_values.get(key, default)
 
 
 async def _stage(
@@ -33,6 +38,7 @@ async def _stage(
     await stage.initialize(
         SimpleNamespace(
             astrbot_config={"admission": {"unlisted_sessions": unlisted_sessions}},
+            astrbot_config_id="default",
             preferences=preferences or _Preferences(),
             authorization=authorization,
         )
@@ -183,6 +189,55 @@ async def test_initialize_requires_preferences():
         await stage.initialize(
             SimpleNamespace(
                 astrbot_config={"admission": {"unlisted_sessions": "allow"}},
+                astrbot_config_id="default",
                 preferences=None,
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_profile_listed_sessions_admit_without_overlays():
+    preferences = _Preferences()
+    event = make_real_event(message_type=MessageType.GROUP_MESSAGE)
+    preferences.global_values[ADMISSION_LISTED_SESSIONS_KEY] = {
+        "default": [session_admission_key_from_event(event)]
+    }
+    stage = await _stage(unlisted_sessions="deny", preferences=preferences)
+
+    await stage.process(event)
+
+    assert event.is_stopped() is False
+
+
+@pytest.mark.asyncio
+async def test_listed_sessions_from_another_profile_do_not_admit():
+    preferences = _Preferences()
+    event = make_real_event(message_type=MessageType.GROUP_MESSAGE)
+    preferences.global_values[ADMISSION_LISTED_SESSIONS_KEY] = {
+        "other": [session_admission_key_from_event(event)]
+    }
+    stage = await _stage(unlisted_sessions="deny", preferences=preferences)
+
+    await stage.process(event)
+
+    assert event.is_stopped() is True
+
+
+@pytest.mark.asyncio
+async def test_invalid_unlisted_sessions_defaults_to_allow(caplog):
+    caplog.set_level("WARNING", logger="astrbot")
+    stage = AdmissionCheckStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config={"admission": {"unlisted_sessions": "nope"}},
+            astrbot_config_id="default",
+            preferences=_Preferences(),
+            authorization=None,
+        )
+    )
+    event = make_real_event(message_type=MessageType.GROUP_MESSAGE)
+
+    await stage.process(event)
+
+    assert event.is_stopped() is False
+    assert "Invalid unlisted_sessions" in caplog.text

@@ -66,7 +66,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 路由顺序是先匹配指令，再判断 LLM 访问。命中指令时只执行指令；裸指令组输出帮助；未知子指令输出 Orbit 诊断且不会回落到 LLM。否则事件通过 LLM 门禁或被丢弃。通知和请求属于透传事件。启用合并后，私聊窗口中的后续片段不再要求重复 LLM 前缀；收到指令会丢弃缓冲回合。NapCat 的 `input_status` 只暂停或恢复回合窗口，不会进入消息 Pipeline。
 
-未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖的群或私聊；WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
+未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖、或该配置档升级列入集里的群或私聊；WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
 
 ## `platform_settings`
 

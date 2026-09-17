@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from astrbot.core.auth.admission import SESSION_SERVICE_CONFIG_KEY
+from astrbot.core.auth.admission import ADMISSION_LISTED_SESSIONS_KEY
 from astrbot.core.config.admission_migration import (
     apply_pending_session_allows,
     migrate_admission_on_load,
@@ -20,13 +21,13 @@ from astrbot.core.config.default import DEFAULT_CONFIG
 
 class _Preferences:
     def __init__(self) -> None:
-        self.values: dict[tuple[str, str], Any] = {}
+        self.global_values: dict[str, Any] = {}
 
-    async def session_get(self, umo: str, key: str, default: Any = None) -> Any:
-        return self.values.get((umo, key), default)
+    async def global_get(self, key: str, default: Any = None) -> Any:
+        return self.global_values.get(key, default)
 
-    async def session_put(self, umo: str, key: str, value: Any) -> None:
-        self.values[(umo, key)] = value
+    async def global_put(self, key: str, value: Any) -> None:
+        self.global_values[key] = value
 
 
 def test_bare_whitelist_ids_expand_to_group_keys_per_platform():
@@ -58,13 +59,16 @@ def test_umo_whitelist_entries_mint_canonical_session_keys():
     ]
 
 
-def test_unique_session_umo_entries_are_not_rewritten_to_group_id():
+def test_unique_session_umo_entries_unwrap_to_group_id():
     keys = pending_session_allows_from_whitelist(
-        ["napcat:GroupMessage:user-1_room-a"],
+        ["napcat:GroupMessage:user-1_room-a", "lark:GroupMessage:user-1%room-a"],
         ["napcat"],
     )
 
-    assert keys == ["session:napcat:group:user-1_room-a"]
+    assert keys == [
+        "session:napcat:group:room-a",
+        "session:lark:group:room-a",
+    ]
 
 
 def test_bare_ids_are_skipped_when_the_profile_has_no_platforms():
@@ -99,6 +103,7 @@ def test_enabled_nonempty_whitelist_becomes_deny_and_pending_keys(
         "astrbot.core.config.admission_migration.get_astrbot_data_path",
         lambda: str(tmp_path),
     )
+    config_path = tmp_path / "cmd_config.json"
     config = {
         "platform_settings": {
             "enable_id_white_list": True,
@@ -110,7 +115,7 @@ def test_enabled_nonempty_whitelist_becomes_deny_and_pending_keys(
         "platform": [{"id": "napcat"}, {"id": "telegram"}],
     }
 
-    assert migrate_admission_on_load(config, tmp_path / "cmd_config.json") is True
+    assert migrate_admission_on_load(config, config_path) is True
     assert config["admission"]["unlisted_sessions"] == "deny"
     for key in (
         "enable_id_white_list",
@@ -121,11 +126,13 @@ def test_enabled_nonempty_whitelist_becomes_deny_and_pending_keys(
     ):
         assert key not in config["platform_settings"]
     pending = json.loads(pending_session_allows_sidecar_path().read_text())
-    assert pending == [
-        "session:napcat:group:room-a",
-        "session:telegram:group:room-a",
-        "session:napcat:private:42",
-    ]
+    assert pending == {
+        str(config_path.resolve()): [
+            "session:napcat:group:room-a",
+            "session:telegram:group:room-a",
+            "session:napcat:private:42",
+        ]
+    }
 
 
 def test_missing_whitelist_fields_do_not_rewrite_admission(tmp_path):
@@ -136,49 +143,55 @@ def test_missing_whitelist_fields_do_not_rewrite_admission(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_apply_pending_session_allows_merges_and_clears_sidecar(
+async def test_apply_pending_session_allows_scopes_keys_per_config(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(
         "astrbot.core.config.admission_migration.get_astrbot_data_path",
         lambda: str(tmp_path),
     )
+    default_path = tmp_path / "cmd_config.json"
+    other_path = tmp_path / "abconf.json"
     sidecar = pending_session_allows_sidecar_path()
     sidecar.write_text(
         json.dumps(
-            [
-                "session:napcat:group:room-a",
-                "session:napcat:private:42",
-            ]
+            {
+                str(default_path.resolve()): [
+                    "session:napcat:group:room-a",
+                    "session:napcat:private:42",
+                ],
+                str(other_path.resolve()): ["session:napcat:group:room-b"],
+            }
         ),
         encoding="utf-8",
     )
     preferences = _Preferences()
-    preferences.values[("session:napcat:private:42", SESSION_SERVICE_CONFIG_KEY)] = {
-        "llm_enabled": False,
-        "tts_enabled": True,
-        "persona_id": "cool",
+    preferences.global_values[ADMISSION_LISTED_SESSIONS_KEY] = {
+        "default": ["session:napcat:group:already"]
     }
 
-    applied = await apply_pending_session_allows(preferences)
+    applied = await apply_pending_session_allows(
+        preferences,
+        {
+            "default": SimpleNamespace(config_path=str(default_path)),
+            "other": SimpleNamespace(config_path=str(other_path)),
+        },
+    )
 
-    assert applied == 2
-    assert preferences.values[
-        ("session:napcat:group:room-a", SESSION_SERVICE_CONFIG_KEY)
-    ] == {"session_enabled": True}
-    assert preferences.values[
-        ("session:napcat:private:42", SESSION_SERVICE_CONFIG_KEY)
-    ] == {
-        "llm_enabled": False,
-        "tts_enabled": True,
-        "persona_id": "cool",
-        "session_enabled": True,
+    assert applied == 3
+    assert preferences.global_values[ADMISSION_LISTED_SESSIONS_KEY] == {
+        "default": [
+            "session:napcat:group:already",
+            "session:napcat:group:room-a",
+            "session:napcat:private:42",
+        ],
+        "other": ["session:napcat:group:room-b"],
     }
     assert not sidecar.exists()
 
 
 @pytest.mark.asyncio
-async def test_apply_pending_keeps_existing_session_enabled_bool(tmp_path, monkeypatch):
+async def test_apply_pending_list_sidecar_attaches_to_default(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "astrbot.core.config.admission_migration.get_astrbot_data_path",
         lambda: str(tmp_path),
@@ -189,19 +202,12 @@ async def test_apply_pending_keeps_existing_session_enabled_bool(tmp_path, monke
         encoding="utf-8",
     )
     preferences = _Preferences()
-    preferences.values[("session:napcat:group:room-a", SESSION_SERVICE_CONFIG_KEY)] = {
-        "session_enabled": False,
-        "llm_enabled": False,
-    }
 
     applied = await apply_pending_session_allows(preferences)
 
     assert applied == 1
-    assert preferences.values[
-        ("session:napcat:group:room-a", SESSION_SERVICE_CONFIG_KEY)
-    ] == {
-        "session_enabled": False,
-        "llm_enabled": False,
+    assert preferences.global_values[ADMISSION_LISTED_SESSIONS_KEY] == {
+        "default": ["session:napcat:group:room-a"]
     }
     assert not sidecar.exists()
 
@@ -233,4 +239,5 @@ def test_astrbot_config_load_migrates_whitelist_before_integrity_strip(
     assert loaded["admission"]["unlisted_sessions"] == "deny"
     assert "id_whitelist" not in loaded["platform_settings"]
     pending = json.loads(pending_session_allows_sidecar_path().read_text())
-    assert "session:napcat:group:room-a" in pending
+    listed = [key for keys in pending.values() for key in keys]
+    assert "session:napcat:group:room-a" in listed

@@ -1188,7 +1188,7 @@
       "admission": {
         "unlisted_sessions": {
           "description": "未列入会话策略",
-          "hint": "allow 放行没有覆盖的会话。deny 只放行规范会话键上已有覆盖的会话。升级迁移和 IM 的 /llm disable 会写入该覆盖。",
+          "hint": "allow 放行没有覆盖的会话。deny 只放行规范会话键上已有覆盖的会话。升级迁移按配置档列入；Dashboard 自定义规则和 IM /llm 会写入该覆盖。",
           "labels": ["允许", "拒绝"]
         }
       }

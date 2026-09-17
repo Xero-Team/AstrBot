@@ -199,7 +199,7 @@ async def test_tts_non_dict_and_invalid_values_default_enabled():
         "llm_enabled": False,
     }
     assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is True
-    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is False
+    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is True
 
     await manager.set_tts_status_for_session(event.unified_msg_origin, False)
     assert preferences.values[
@@ -225,7 +225,7 @@ async def test_umo_llm_overlay_is_inert_for_event_admission():
     manager = _manager(preferences)
 
     assert await manager.should_process_llm_request(event) is True
-    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is False
+    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is True
 
 
 @pytest.mark.asyncio
@@ -255,3 +255,23 @@ async def test_canonical_session_llm_disable_applies_to_unique_session_members()
     )
     assert await manager.should_process_llm_request(first) is False
     assert await manager.should_process_llm_request(second) is False
+
+
+@pytest.mark.asyncio
+async def test_llm_session_setters_write_canonical_key():
+    event = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="user-1_room-a",
+    )
+    preferences = _Preferences()
+    manager = _manager(preferences)
+
+    await manager.set_llm_status_for_session(event.unified_msg_origin, False)
+
+    canonical = session_admission_key_from_event(event)
+    assert preferences.values[("umo", canonical, "session_service_config")] == {
+        "llm_enabled": False
+    }
+    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is False
+    assert await manager.should_process_llm_request(event) is False

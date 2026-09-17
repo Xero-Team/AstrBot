@@ -66,7 +66,7 @@ User-facing steps are in [When the bot replies in groups](../use/group-wake). `c
 
 Routing checks commands before LLM access. A matched command wins; a bare command group emits help; an unknown subcommand emits the Orbit diagnostic and never falls through to the LLM. Otherwise the event either passes the LLM gate or is dropped. Notices and requests are passthrough events. When coalescing is enabled, later private fragments continue an open turn without repeating the LLM prefix, while a command discards the buffered turn. NapCat `input_status` notices stay out of the message pipeline and only pause or resume the turn window.
 
-Unlisted sessions are controlled by top-level `admission.unlisted_sessions`, default `allow`. `deny` admits only groups or DMs that already have an overlay on the canonical session key. WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this gate. `id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone.
+Unlisted sessions are controlled by top-level `admission.unlisted_sessions`, default `allow`. `deny` admits groups or DMs that already have an overlay on the canonical session key, or that this profile listed during upgrade. WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this gate. `id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone.
 
 ## `platform_settings`
 

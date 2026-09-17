@@ -135,7 +135,7 @@ These commands require `provider.use`. Cross-session assignment also requires `s
 - `/llm enable`: Enable LLM chat for the current session.
 - `/llm disable`: Disable LLM chat for the current session.
 
-These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode. IM writes the canonical session key, so isolated sessions disable LLM for the whole group. The Dashboard custom-rule LLM toggle still saves against the UMO.
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode. IM writes the canonical session key, so isolated sessions disable LLM for the whole group. Dashboard custom rules dual-write the LLM switch onto the same canonical key.
 
 ### TTS state
 

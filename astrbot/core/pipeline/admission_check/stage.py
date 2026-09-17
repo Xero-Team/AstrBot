@@ -1,5 +1,8 @@
+from dataclasses import replace
+
 from astrbot import logger
 from astrbot.core.auth.admission import (
+    ADMISSION_LISTED_SESSIONS_KEY,
     SESSION_SERVICE_CONFIG_KEY,
     SenderAdmissionOverlay,
     UnlistedPolicy,
@@ -33,7 +36,13 @@ class AdmissionCheckStage(Stage):
         try:
             self.unlisted_sessions = UnlistedPolicy(raw_policy)
         except ValueError:
+            logger.warning(
+                "Invalid unlisted_sessions %r; defaulting to allow",
+                raw_policy,
+            )
             self.unlisted_sessions = UnlistedPolicy.ALLOW
+        self.config_id = ctx.astrbot_config_id
+        self.listed_sessions = await self._listed_sessions()
 
     async def process(self, event: AstrMessageEvent) -> None:
         if event.get_platform_name() == "webchat":
@@ -51,6 +60,8 @@ class AdmissionCheckStage(Stage):
                 {},
             )
         )
+        if not session_overlay.listed and session_key in self.listed_sessions:
+            session_overlay = replace(session_overlay, listed=True)
         decision = compose_admission(
             session_overlay,
             SenderAdmissionOverlay(),
@@ -82,3 +93,14 @@ class AdmissionCheckStage(Stage):
                 event.auth_context,
             )
         ).allowed
+
+    async def _listed_sessions(self) -> frozenset[str]:
+        raw = await self.preferences.global_get(ADMISSION_LISTED_SESSIONS_KEY, {})
+        if not isinstance(raw, dict):
+            return frozenset()
+        values = raw.get(self.config_id, [])
+        if not isinstance(values, list):
+            return frozenset()
+        return frozenset(
+            key.strip() for key in values if isinstance(key, str) and key.strip()
+        )

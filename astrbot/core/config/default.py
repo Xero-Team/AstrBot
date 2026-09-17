@@ -4495,7 +4495,7 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "options": ["allow", "deny"],
                         "labels": ["允许", "拒绝"],
-                        "hint": "allow 放行没有覆盖的会话。deny 只放行规范会话键上已有覆盖的会话。升级迁移和 IM 的 /llm disable 会写入该覆盖。",
+                        "hint": "allow 放行没有覆盖的会话。deny 只放行规范会话键上已有覆盖的会话。升级迁移按配置档列入；Dashboard 自定义规则和 IM /llm 会写入该覆盖。",
                     },
                 },
             },

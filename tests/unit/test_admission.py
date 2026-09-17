@@ -17,6 +17,7 @@ from astrbot.core.auth.admission import (
     sender_overlay_from_config,
     session_admission_key,
     session_admission_key_from_event,
+    session_admission_key_from_umo,
     session_overlay_from_config,
 )
 from astrbot.core.auth.models import Subject
@@ -88,6 +89,28 @@ def test_unique_session_on_or_off_yields_the_same_group_session_key():
         off_event
     ) == session_admission_key_from_event(on_event)
     assert session_admission_key_from_event(on_event) == "session:napcat:group:room-a"
+
+
+def test_session_admission_key_from_umo_unwraps_unique_session_and_group_id():
+    assert (
+        session_admission_key_from_umo("napcat:GroupMessage:user-1_room-a")
+        == "session:napcat:group:room-a"
+    )
+    assert (
+        session_admission_key_from_umo(
+            "napcat:GroupMessage:user-1_room-a",
+            group_id="room-b",
+        )
+        == "session:napcat:group:room-b"
+    )
+    assert (
+        session_admission_key_from_umo("napcat:FriendMessage:42")
+        == "session:napcat:private:42"
+    )
+    assert session_admission_key_from_umo("session:qq:group:already") == (
+        "session:qq:group:already"
+    )
+    assert session_admission_key_from_umo("not-a-umo") is None
 
 
 def test_private_session_key_matches_subject_im_peer():

@@ -7,6 +7,7 @@ from astrbot.core.auth.admission import (
     sender_admission_key_from_event,
     sender_overlay_from_config,
     session_admission_key_from_event,
+    session_admission_key_from_umo,
     session_overlay_from_config,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -28,6 +29,9 @@ class SessionServiceManager:
         )
         return config if isinstance(config, dict) else {}
 
+    def _llm_scope_id(self, session_id: str) -> str:
+        return session_admission_key_from_umo(session_id) or session_id
+
     async def is_llm_enabled_for_session(self, session_id: str) -> bool:
         """检查LLM是否在指定会话中启用
 
@@ -39,7 +43,7 @@ class SessionServiceManager:
 
         """
         overlay = session_overlay_from_config(
-            await self._service_config("umo", session_id)
+            await self._service_config("umo", self._llm_scope_id(session_id))
         )
         return True if overlay.llm_enabled is None else overlay.llm_enabled
 
@@ -51,11 +55,12 @@ class SessionServiceManager:
             enabled: True表示启用，False表示禁用
 
         """
-        session_config = await self._service_config("umo", session_id)
+        scope_id = self._llm_scope_id(session_id)
+        session_config = await self._service_config("umo", scope_id)
         session_config["llm_enabled"] = enabled
         await self.preferences.put_async(
             scope="umo",
-            scope_id=session_id,
+            scope_id=scope_id,
             key=SESSION_SERVICE_CONFIG_KEY,
             value=session_config,
         )

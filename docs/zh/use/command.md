@@ -135,7 +135,7 @@ LINE 等需要公网媒体 URL 的目标要求配置可访问的 HTTPS `callback
 - `/llm enable`：启用当前会话的 LLM 聊天。
 - `/llm disable`：停用当前会话的 LLM 聊天。
 
-这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。IM 里写入的是规范会话键，因此隔离会话开启时会关掉整个群的 LLM；Dashboard 自定义规则页的 LLM 开关目前仍按 UMO 保存。
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。IM 里写入的是规范会话键，因此隔离会话开启时会关掉整个群的 LLM。Dashboard 自定义规则会把 LLM 开关双写到同一把规范键。
 
 ### TTS 状态
 

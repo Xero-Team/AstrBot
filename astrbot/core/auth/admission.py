@@ -15,6 +15,9 @@ from astrbot.core.auth.models import Subject, normalize_subject_component
 from astrbot.core.platform.message_type import MessageType
 
 SESSION_SERVICE_CONFIG_KEY = "session_service_config"
+ADMISSION_LISTED_SESSIONS_KEY = "admission_listed_sessions"
+_SESSION_LISTED_FIELDS = ("session_enabled", "session_blocked", "llm_enabled")
+_UNIQUE_SESSION_GROUP_SEPARATORS = ("%", "_")
 
 
 class UnlistedPolicy(StrEnum):
@@ -179,6 +182,80 @@ def session_admission_key_from_event(event: AdmissionEvent) -> str:
     )
 
 
+def group_conversation_id_from_session_id(session_id: str) -> str:
+    """Return the group id encoded in a unique-session ``session_id``.
+
+    Unique-session builders use ``sender_id_group_id`` or ``sender_id%group_id``.
+    An explicit group id is preferred by callers; this helper only unwraps the
+    stored session fragment.
+
+    Args:
+        session_id: UMO session fragment, possibly unique-session rewritten.
+
+    Returns:
+        Suffix after the last unique-session separator, or ``session_id``.
+    """
+
+    value = str(session_id or "").strip()
+    if not value:
+        return value
+    for separator in _UNIQUE_SESSION_GROUP_SEPARATORS:
+        if separator not in value:
+            continue
+        suffix = value.rsplit(separator, 1)[-1].strip()
+        if suffix:
+            return suffix
+    return value
+
+
+def session_admission_key_from_umo(
+    umo: str,
+    *,
+    group_id: str | None = None,
+) -> str | None:
+    """Mint a canonical session key from a UMO or existing session key.
+
+    Group UMOs use ``group_id`` when provided, otherwise unwrap a
+    unique-session ``session_id``. Private UMOs use the peer session id.
+
+    Args:
+        umo: Unified message origin or canonical ``session:`` key.
+        group_id: Explicit group id from Dashboard or an inbound event.
+
+    Returns:
+        Canonical session key, or ``None`` when ``umo`` cannot be parsed.
+    """
+
+    entry = str(umo or "").strip()
+    if not entry:
+        return None
+    if entry.startswith("session:"):
+        return entry
+    parts = entry.split(":", 2)
+    if len(parts) != 3 or not parts[0] or not parts[1] or not parts[2]:
+        return None
+    platform_id, message_type, session_id = parts
+    try:
+        parsed_type = MessageType(message_type)
+    except ValueError:
+        return None
+    if parsed_type is MessageType.GROUP_MESSAGE:
+        conversation_id = str(
+            group_id or ""
+        ).strip() or group_conversation_id_from_session_id(session_id)
+        kind = ConversationKind.GROUP
+    else:
+        conversation_id = session_id
+        kind = ConversationKind.PRIVATE
+    if not str(conversation_id or "").strip():
+        return None
+    return session_admission_key(
+        platform_instance=platform_id,
+        conversation_kind=kind,
+        conversation_id=conversation_id,
+    )
+
+
 def sender_admission_key_from_event(event: AdmissionEvent) -> str:
     """Return the sender key, reusing ``Subject.im`` when possible.
 
@@ -214,10 +291,7 @@ def session_overlay_from_config(config: object) -> SessionAdmissionOverlay:
     session_enabled = config.get("session_enabled")
     session_blocked = config.get("session_blocked")
     llm_enabled = config.get("llm_enabled")
-    listed = any(
-        isinstance(config.get(key), bool)
-        for key in ("session_enabled", "session_blocked", "llm_enabled")
-    )
+    listed = any(isinstance(config.get(key), bool) for key in _SESSION_LISTED_FIELDS)
     return SessionAdmissionOverlay(
         session_enabled=session_enabled if isinstance(session_enabled, bool) else None,
         session_blocked=session_blocked if isinstance(session_blocked, bool) else False,

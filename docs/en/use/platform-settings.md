@@ -10,11 +10,11 @@ Open **Config → Platform**. Segmented replies live under **Ext.** Fields belon
 | ----------------------------- | ------- | -------------------------------------------------------------------------------- |
 | `admission.unlisted_sessions` | `allow` | `allow` admits sessions with no overlay; `deny` admits only listed groups or DMs |
 
-The default is `allow`: new groups and DMs continue into later stages. After you switch to `deny`, only sessions that already have an overlay on the canonical session key are answered. Overlays come from `session_enabled=true` rows migrated from an old ID allowlist, or IM `/llm disable` writing the canonical session key (which also turns off LLM for that group). Dashboard [custom rules](./custom-rules) still save against the UMO and do not list a group for this gate.
+The default is `allow`: new groups and DMs continue into later stages. After you switch to `deny`, only sessions that already have an overlay on the canonical session key, or that this profile listed during upgrade, are answered. Overlays come from IM `/llm` and Dashboard [custom rules](./custom-rules) writing `llm_enabled` / `session_enabled` / `session_blocked`. Upgrade allowlists are stored per profile; they do not write `session_enabled` into preferences.
 
 Group admission uses the canonical session key (`session:{platform instance}:group:{group id}`), not a unique-session rewritten UMO. Direct messages use `session:{platform instance}:private:{peer id}`. WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this stage. Per-person refusal is a later slice; unlisted senders are allowed for now.
 
-`id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone. Dashboard writes that include them fail. On upgrade, an empty or disabled list becomes `allow`. A non-empty enabled list becomes `deny` and each entry becomes a session overlay. Bare IDs expand to one group key per `platform[].id` on that profile.
+`id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone. Dashboard writes that include them fail. On upgrade, an empty or disabled list becomes `allow`. A non-empty enabled list becomes `deny` and each entry is listed on that profile. Bare IDs expand to one group key per `platform[].id` on that profile. Unique-session UMOs unwrap to the group id from `sender_id_group_id` / `sender_id%group_id`.
 
 ## Rate limit
 

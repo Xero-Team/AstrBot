@@ -60,7 +60,7 @@ class AstrBotConfigManager:
             committed = await self.confs["default"].save_config_async()
             if committed:
                 logger.info("Agent Runner configuration migration completed")
-        applied = await apply_pending_session_allows(self.sp)
+        applied = await apply_pending_session_allows(self.sp, self.confs)
         if applied:
             logger.info(
                 "Migrated %s listed session overlays from ID whitelist",

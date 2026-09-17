@@ -5,6 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from astrbot import logger
+from astrbot.core.auth.admission import (
+    SESSION_SERVICE_CONFIG_KEY,
+    session_admission_key_from_umo,
+)
 from astrbot.core.db.po import ConversationV2, Preference
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
@@ -33,6 +37,7 @@ AVAILABLE_SESSION_RULE_KEYS = [
 _SESSION_CONFIG_RULE_KEYS = frozenset(
     {"session_service_config", "session_plugin_config", "kb_config"}
 )
+_ADMISSION_OVERLAY_FIELDS = ("session_enabled", "session_blocked", "llm_enabled")
 
 
 class SessionManagementServiceError(Exception):
@@ -151,6 +156,49 @@ class SessionManagementService:
             user_alias=user_alias,
         )
         return stored
+
+    @staticmethod
+    def _canonical_session_key(umo: str, *, group_id: str | None = None) -> str | None:
+        key = session_admission_key_from_umo(umo, group_id=group_id)
+        if key and key != umo:
+            return key
+        return None
+
+    async def _put_session_service_config(
+        self,
+        umo: str,
+        config: dict[str, Any],
+        *,
+        group_id: str | None = None,
+    ) -> None:
+        await self.preferences.session_put(umo, SESSION_SERVICE_CONFIG_KEY, config)
+        canonical = self._canonical_session_key(umo, group_id=group_id)
+        if canonical is None:
+            return
+        raw = await self.preferences.session_get(
+            canonical, SESSION_SERVICE_CONFIG_KEY, {}
+        )
+        listed = dict(raw) if isinstance(raw, dict) else {}
+        for field in _ADMISSION_OVERLAY_FIELDS:
+            if field in config and isinstance(config[field], bool):
+                listed[field] = config[field]
+        await self.preferences.session_put(
+            canonical, SESSION_SERVICE_CONFIG_KEY, listed
+        )
+
+    async def _remove_session_service_config(
+        self, umo: str, *, group_id: str | None = None
+    ) -> None:
+        await self.preferences.session_remove(umo, SESSION_SERVICE_CONFIG_KEY)
+        canonical = self._canonical_session_key(umo, group_id=group_id)
+        if canonical is not None:
+            await self.preferences.session_remove(canonical, SESSION_SERVICE_CONFIG_KEY)
+
+    async def _clear_session_rules(self, umo: str) -> None:
+        await self.preferences.clear_async("umo", umo)
+        canonical = self._canonical_session_key(umo)
+        if canonical is not None:
+            await self.preferences.session_remove(canonical, SESSION_SERVICE_CONFIG_KEY)
 
     @staticmethod
     def _session_config_enabled(config: dict, key: str) -> bool:
@@ -404,6 +452,8 @@ class SessionManagementService:
                 provider_type=provider_type,
                 umo=umo,
             )
+        elif rule_key == SESSION_SERVICE_CONFIG_KEY:
+            await self._put_session_service_config(umo, rule_value)
         else:
             await self.preferences.session_put(umo, rule_key, rule_value)
         return {"message": f"规则 {rule_key} 已更新", "umo": umo}
@@ -425,12 +475,14 @@ class SessionManagementService:
                     umo,
                     provider_type,
                 )
+            elif rule_key == SESSION_SERVICE_CONFIG_KEY:
+                await self._remove_session_service_config(umo)
             else:
                 await self.preferences.session_remove(umo, rule_key)
             return {"message": f"规则 {rule_key} 已删除", "umo": umo}
 
         await self.provider_manager.clear_all_provider_overrides(umo)
-        await self.preferences.clear_async("umo", umo)
+        await self._clear_session_rules(umo)
         return {"message": "所有规则已删除", "umo": umo}
 
     async def delete_session_rules(self, data: object) -> dict:
@@ -468,11 +520,15 @@ class SessionManagementService:
                             umo,
                             provider_type,
                         )
+                    elif rule_key == SESSION_SERVICE_CONFIG_KEY:
+                        await self._remove_session_service_config(
+                            umo, group_id=group_id or None
+                        )
                     else:
                         await self.preferences.session_remove(umo, rule_key)
                 else:
                     await self.provider_manager.clear_all_provider_overrides(umo)
-                    await self.preferences.clear_async("umo", umo)
+                    await self._clear_session_rules(umo)
                 success_count += 1
             except Exception as exc:
                 logger.error("删除会话规则失败: %s", safe_error("", exc))
@@ -648,8 +704,8 @@ class SessionManagementService:
                 if session_blocked is not None:
                     session_config["session_blocked"] = session_blocked
 
-                await self.preferences.session_put(
-                    umo, "session_service_config", session_config
+                await self._put_session_service_config(
+                    umo, session_config, group_id=group_id or None
                 )
                 success_count += 1
             except Exception as exc:

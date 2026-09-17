@@ -18,6 +18,7 @@ from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCom
 from astrbot.builtin_stars.builtin_commands.commands.tts import TtsCommands
 from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
 from astrbot.builtin_stars.builtin_commands.main import Main
+from astrbot.core.auth.admission import session_admission_key_from_event
 from astrbot.core.command import (
     CommandEngine,
     CommandError,
@@ -25,6 +26,7 @@ from astrbot.core.command import (
     build_command_catalog,
 )
 from astrbot.core.command.schema import compile_command_schema
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
@@ -91,6 +93,17 @@ class DummyEvent:
 
     def get_sender_id(self) -> str:
         return self._sender_id
+
+    def get_self_id(self) -> str:
+        return "bot"
+
+    def get_session_id(self) -> str:
+        return self.unified_msg_origin.rsplit(":", 1)[-1]
+
+    def get_message_type(self) -> MessageType:
+        if self._group_id:
+            return MessageType.GROUP_MESSAGE
+        return MessageType.FRIEND_MESSAGE
 
     def set_extra(self, key: str, value: object) -> None:
         self.extras[key] = value
@@ -781,17 +794,20 @@ async def test_plugin_show_lists_command_signatures_and_aliases():
 async def test_chat_commands_report_and_set_session_service_status():
     calls: list[tuple[str, dict[str, bool]]] = []
     settings = {"llm_enabled": True}
+    session_key = session_admission_key_from_event(
+        DummyEvent(message_str="chat status")
+    )
 
     async def session_get(
         umo: str, key: str, default: dict[str, bool]
     ) -> dict[str, bool]:
-        assert umo == "napcat:FriendMessage:42"
+        assert umo == session_key
         assert key == "session_service_config"
         assert default == {}
         return dict(settings)
 
     async def session_put(umo: str, key: str, value: dict[str, bool]) -> None:
-        assert umo == "napcat:FriendMessage:42"
+        assert umo == session_key
         assert key == "session_service_config"
         calls.append((umo, dict(value)))
         settings.update(value)
@@ -814,12 +830,43 @@ async def test_chat_commands_report_and_set_session_service_status():
     enable_event = DummyEvent(message_str="chat enable")
     await command.set_enabled(enable_event, True)
 
+    assert session_key == "session:napcat:private:42"
     assert calls == [
-        ("napcat:FriendMessage:42", {"llm_enabled": False}),
-        ("napcat:FriendMessage:42", {"llm_enabled": True}),
+        (session_key, {"llm_enabled": False}),
+        (session_key, {"llm_enabled": True}),
     ]
     assert "disabled" in _plain_text(disable_event.result)
     assert "enabled" in _plain_text(enable_event.result)
+
+
+@pytest.mark.asyncio
+async def test_chat_commands_disable_unique_session_group_on_canonical_key():
+    calls: list[str] = []
+
+    async def session_get(umo: str, key: str, default: dict) -> dict:
+        return {}
+
+    async def session_put(umo: str, key: str, value: dict) -> None:
+        calls.append(umo)
+
+    command = ChatCommands(
+        SimpleNamespace(
+            preferences=SimpleNamespace(
+                session_get=session_get,
+                session_put=session_put,
+            ),
+            i18n=FakeI18n(),
+        )
+    )
+    event = DummyEvent(
+        message_str="chat disable",
+        unified_msg_origin="napcat:GroupMessage:user-1_room-a",
+        group_id="room-a",
+        sender_id="user-1",
+    )
+    await command.set_enabled(event, False)
+
+    assert calls == ["session:napcat:group:room-a"]
 
 
 @pytest.mark.asyncio

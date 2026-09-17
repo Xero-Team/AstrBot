@@ -4,7 +4,10 @@ from typing import Any
 
 import pytest
 
-from astrbot.core.auth.admission import sender_admission_key_from_event
+from astrbot.core.auth.admission import (
+    sender_admission_key_from_event,
+    session_admission_key_from_event,
+)
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from tests.unit.test_waking_check_stage import make_real_event
@@ -64,6 +67,13 @@ async def test_empty_uid_matches_current_session_switches(
         preferences.values[
             ("umo", event.unified_msg_origin, "session_service_config")
         ] = umo_config
+        preferences.values[
+            (
+                "umo",
+                session_admission_key_from_event(event),
+                "session_service_config",
+            )
+        ] = umo_config
     manager = _manager(preferences)
 
     assert await manager.is_session_enabled(event.unified_msg_origin) is enabled
@@ -86,8 +96,12 @@ async def test_sender_scope_is_readable_and_vip_overrides_session_llm():
         session_id="room-a",
     )
     sender_key = sender_admission_key_from_event(event)
+    session_key = session_admission_key_from_event(event)
     preferences = _Preferences()
     preferences.values[("umo", event.unified_msg_origin, "session_service_config")] = {
+        "llm_enabled": False
+    }
+    preferences.values[("umo", session_key, "session_service_config")] = {
         "llm_enabled": False
     }
     preferences.values[("sender", sender_key, "session_service_config")] = {
@@ -195,3 +209,49 @@ async def test_tts_non_dict_and_invalid_values_default_enabled():
         "llm_enabled": False,
     }
     assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is False
+
+
+@pytest.mark.asyncio
+async def test_umo_llm_overlay_is_inert_for_event_admission():
+    event = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="user-1_room-a",
+    )
+    preferences = _Preferences()
+    preferences.values[("umo", event.unified_msg_origin, "session_service_config")] = {
+        "llm_enabled": False
+    }
+    manager = _manager(preferences)
+
+    assert await manager.should_process_llm_request(event) is True
+    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is False
+
+
+@pytest.mark.asyncio
+async def test_canonical_session_llm_disable_applies_to_unique_session_members():
+    first = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="user-1_room-a",
+    )
+    second = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="user-2_room-a",
+    )
+    preferences = _Preferences()
+    preferences.values[
+        (
+            "umo",
+            session_admission_key_from_event(first),
+            "session_service_config",
+        )
+    ] = {"llm_enabled": False}
+    manager = _manager(preferences)
+
+    assert session_admission_key_from_event(first) == session_admission_key_from_event(
+        second
+    )
+    assert await manager.should_process_llm_request(first) is False
+    assert await manager.should_process_llm_request(second) is False

@@ -6,6 +6,7 @@ from astrbot.core.auth.admission import (
     composed_llm_enabled,
     sender_admission_key_from_event,
     sender_overlay_from_config,
+    session_admission_key_from_event,
     session_overlay_from_config,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -62,8 +63,9 @@ class SessionServiceManager:
     async def should_process_llm_request(self, event: AstrMessageEvent) -> bool:
         """检查是否应该处理LLM请求
 
-        Empty sender overlays follow the current UMO ``llm_enabled`` switch.
-        A written sender overlay is more specific, including VIP enable.
+        Empty sender overlays follow the canonical session ``llm_enabled``
+        switch. A written sender overlay is more specific, including VIP
+        enable. Unique-session UMO rows are not read.
 
         Args:
             event: 消息事件
@@ -73,7 +75,7 @@ class SessionServiceManager:
 
         """
         session_overlay = session_overlay_from_config(
-            await self._service_config("umo", event.unified_msg_origin)
+            await self._service_config("umo", session_admission_key_from_event(event))
         )
         sender_overlay = sender_overlay_from_config(
             await self._service_config("sender", sender_admission_key_from_event(event))

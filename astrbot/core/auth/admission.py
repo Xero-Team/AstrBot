@@ -34,17 +34,23 @@ class ConversationKind(StrEnum):
 class AdmissionEvent(Protocol):
     """Inbound facts needed to mint admission keys without importing events."""
 
-    def get_platform_name(self) -> str: ...
+    def get_platform_name(self) -> str:
+        raise NotImplementedError
 
-    def get_sender_id(self) -> str: ...
+    def get_sender_id(self) -> str:
+        raise NotImplementedError
 
-    def get_self_id(self) -> str: ...
+    def get_self_id(self) -> str:
+        raise NotImplementedError
 
-    def get_group_id(self) -> str: ...
+    def get_group_id(self) -> str:
+        raise NotImplementedError
 
-    def get_session_id(self) -> str: ...
+    def get_session_id(self) -> str:
+        raise NotImplementedError
 
-    def get_message_type(self) -> MessageType | str: ...
+    def get_message_type(self) -> MessageType | str:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,15 +306,13 @@ def compose_admission(
     session_blocked = session.session_blocked
     sender_blocked = sender.blocked
     session_denied = session_policy is UnlistedPolicy.DENY and not session.listed
-    sender_has_allow = sender.listed and not sender.blocked
-    sender_denied = sender_policy is UnlistedPolicy.DENY and not sender_has_allow
-    admit_event = not (
-        session_blocked or sender_blocked or session_denied or sender_denied
+    sender_denied = sender_policy is UnlistedPolicy.DENY and not (
+        sender.listed and not sender.blocked
     )
-    admit_llm = bool(admit_event and composed_llm_enabled(session, sender))
+    refused = session_blocked or sender_blocked or session_denied or sender_denied
     return AdmissionDecision(
-        admit_event=admit_event,
-        admit_llm=admit_llm,
+        admit_event=not refused,
+        admit_llm=not refused and composed_llm_enabled(session, sender),
         session_enabled=session_enabled,
         session_blocked=session_blocked,
         sender_blocked=sender_blocked,

@@ -1,6 +1,13 @@
 """会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态"""
 
 from astrbot import logger
+from astrbot.core.auth.admission import (
+    SESSION_SERVICE_CONFIG_KEY,
+    composed_llm_enabled,
+    sender_admission_key_from_event,
+    sender_overlay_from_config,
+    session_overlay_from_config,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -10,6 +17,15 @@ class SessionServiceManager:
 
     def __init__(self, preferences: SharedPreferences) -> None:
         self.preferences = preferences
+
+    async def _service_config(self, scope: str, scope_id: str) -> dict:
+        config = await self.preferences.get_async(
+            scope=scope,
+            scope_id=scope_id,
+            key=SESSION_SERVICE_CONFIG_KEY,
+            default={},
+        )
+        return config if isinstance(config, dict) else {}
 
     async def is_llm_enabled_for_session(self, session_id: str) -> bool:
         """检查LLM是否在指定会话中启用
@@ -21,21 +37,10 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话服务配置
-        session_services = await self.preferences.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
+        overlay = session_overlay_from_config(
+            await self._service_config("umo", session_id)
         )
-
-        # 如果配置了该会话的LLM状态，返回该状态
-        llm_enabled = session_services.get("llm_enabled")
-        if llm_enabled is not None:
-            return llm_enabled
-
-        # 如果没有配置，默认为启用（兼容性考虑）
-        return True
+        return True if overlay.llm_enabled is None else overlay.llm_enabled
 
     async def set_llm_status_for_session(self, session_id: str, enabled: bool) -> None:
         """设置LLM在指定会话中的启停状态
@@ -45,25 +50,20 @@ class SessionServiceManager:
             enabled: True表示启用，False表示禁用
 
         """
-        session_config = (
-            await self.preferences.get_async(
-                scope="umo",
-                scope_id=session_id,
-                key="session_service_config",
-                default={},
-            )
-            or {}
-        )
+        session_config = await self._service_config("umo", session_id)
         session_config["llm_enabled"] = enabled
         await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
-            key="session_service_config",
+            key=SESSION_SERVICE_CONFIG_KEY,
             value=session_config,
         )
 
     async def should_process_llm_request(self, event: AstrMessageEvent) -> bool:
         """检查是否应该处理LLM请求
+
+        Empty sender overlays follow the current UMO ``llm_enabled`` switch.
+        A written sender overlay is more specific, including VIP enable.
 
         Args:
             event: 消息事件
@@ -72,8 +72,13 @@ class SessionServiceManager:
             bool: True表示应该处理，False表示跳过
 
         """
-        session_id = event.unified_msg_origin
-        return await self.is_llm_enabled_for_session(session_id)
+        session_overlay = session_overlay_from_config(
+            await self._service_config("umo", event.unified_msg_origin)
+        )
+        sender_overlay = sender_overlay_from_config(
+            await self._service_config("sender", sender_admission_key_from_event(event))
+        )
+        return composed_llm_enabled(session_overlay, sender_overlay)
 
     # =============================================================================
     # TTS 相关方法
@@ -89,21 +94,8 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话服务配置
-        session_services = await self.preferences.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
-        )
-
-        # 如果配置了该会话的TTS状态，返回该状态
-        tts_enabled = session_services.get("tts_enabled")
-        if tts_enabled is not None:
-            return tts_enabled
-
-        # 如果没有配置，默认为启用（兼容性考虑）
-        return True
+        tts_enabled = (await self._service_config("umo", session_id)).get("tts_enabled")
+        return tts_enabled if isinstance(tts_enabled, bool) else True
 
     async def set_tts_status_for_session(self, session_id: str, enabled: bool) -> None:
         """设置TTS在指定会话中的启停状态
@@ -113,20 +105,12 @@ class SessionServiceManager:
             enabled: True表示启用，False表示禁用
 
         """
-        session_config = (
-            await self.preferences.get_async(
-                scope="umo",
-                scope_id=session_id,
-                key="session_service_config",
-                default={},
-            )
-            or {}
-        )
+        session_config = await self._service_config("umo", session_id)
         session_config["tts_enabled"] = enabled
         await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
-            key="session_service_config",
+            key=SESSION_SERVICE_CONFIG_KEY,
             value=session_config,
         )
 
@@ -161,48 +145,41 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话服务配置
-        session_services = await self.preferences.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
+        overlay = session_overlay_from_config(
+            await self._service_config("umo", session_id)
         )
-
-        # 如果配置了该会话的整体状态，返回该状态
-        session_enabled = session_services.get("session_enabled")
-        if session_enabled is not None:
-            return session_enabled
-
-        # 如果没有配置，默认为启用（兼容性考虑）
-        return True
+        return True if overlay.session_enabled is None else overlay.session_enabled
 
     async def is_session_blocked(self, session_id: str) -> bool:
         """Check whether all functionality is blocked for a session."""
-        session_services = await self.preferences.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
+        overlay = session_overlay_from_config(
+            await self._service_config("umo", session_id)
         )
-        blocked = session_services.get("session_blocked")
-        return blocked if isinstance(blocked, bool) else False
+        return overlay.session_blocked
+
+    async def is_sender_blocked(self, event: AstrMessageEvent) -> bool:
+        """Check whether the inbound sender has a UID ``blocked`` overlay.
+
+        ``scope=sender`` is readable in this slice; missing rows are unblocked.
+
+        Args:
+            event: Inbound event used to mint the sender key.
+
+        Returns:
+            True when the sender overlay sets ``blocked``.
+        """
+        overlay = sender_overlay_from_config(
+            await self._service_config("sender", sender_admission_key_from_event(event))
+        )
+        return overlay.blocked
 
     async def set_session_blocked(self, session_id: str, blocked: bool) -> None:
         """Block or unblock all functionality for a session."""
-        session_config = (
-            await self.preferences.get_async(
-                scope="umo",
-                scope_id=session_id,
-                key="session_service_config",
-                default={},
-            )
-            or {}
-        )
+        session_config = await self._service_config("umo", session_id)
         session_config["session_blocked"] = blocked
         await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
-            key="session_service_config",
+            key=SESSION_SERVICE_CONFIG_KEY,
             value=session_config,
         )

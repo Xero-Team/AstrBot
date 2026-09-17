@@ -6,29 +6,9 @@ export async function copyToClipboard(
   text: string,
   options: CopyToClipboardOptions = {},
 ): Promise<boolean> {
-  const container = options.container;
-  const debugInfo = {
-    length: text?.length ?? 0,
-    trimmedLength: text?.trim().length ?? 0,
-    isSecureContext:
-      typeof window !== 'undefined' ? window.isSecureContext : false,
-    hasClipboardApi:
-      typeof navigator !== 'undefined' &&
-      Boolean(navigator.clipboard?.writeText),
-    containerTag: container?.tagName ?? null,
-    containerInBody:
-      typeof document !== 'undefined' &&
-      container !== null &&
-      container !== undefined &&
-      document.body.contains(container),
-  };
-
   if (!text) {
-    console.debug('[clipboard] empty text payload', debugInfo);
     return false;
   }
-
-  console.debug('[clipboard] copy request', debugInfo);
 
   if (
     typeof navigator !== 'undefined' &&
@@ -37,30 +17,13 @@ export async function copyToClipboard(
   ) {
     try {
       await navigator.clipboard.writeText(text);
-      console.info('[clipboard] copied via Clipboard API', debugInfo);
       return true;
-    } catch (err) {
-      console.warn(
-        '[clipboard] Clipboard API failed, falling back:',
-        err,
-        debugInfo,
-      );
+    } catch {
+      // Fall through to execCommand.
     }
   }
 
-  const fallbackOk = fallbackCopy(text, container);
-  if (fallbackOk) {
-    console.info(
-      "[clipboard] fallback succeeded via document.execCommand('copy')",
-      debugInfo,
-    );
-  } else {
-    console.warn(
-      "[clipboard] fallback failed via document.execCommand('copy')",
-      debugInfo,
-    );
-  }
-  return fallbackOk;
+  return fallbackCopy(text, options.container);
 }
 
 function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
@@ -97,8 +60,7 @@ function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
 
   try {
     return document.execCommand('copy');
-  } catch (err) {
-    console.error('Fallback copy failed:', err);
+  } catch {
     return false;
   } finally {
     if (textArea.parentNode) {

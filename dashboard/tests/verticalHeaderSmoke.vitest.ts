@@ -65,10 +65,6 @@ vi.mock('@/utils/desktopRuntime', () => ({
   })),
 }));
 
-vi.mock('@/utils/githubProxyStorage', () => ({
-  readSelectedGitHubProxy: () => '',
-}));
-
 vi.mock('@/api/v1', () => ({
   authApi: {
     updateAccount: vi.fn(async () => ({

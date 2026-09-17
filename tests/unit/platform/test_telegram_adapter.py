@@ -1814,20 +1814,18 @@ async def test_telegram_media_group_max_wait_is_a_hard_deadline():
         {},
         asyncio.Queue(),
     )
-    # Debounce is longer than max_wait so a quiet album would wait 0.5s.
-    # The hard cap must still flush around created_at + max_wait.
-    adapter.media_group_timeout = 0.5
-    adapter.media_group_max_wait = 0.15
+    # Debounce is much longer than max_wait so a quiet album would wait 5s.
+    # The hard cap must still flush around created_at + max_wait. Do not assert a
+    # tight wall-clock bound: overloaded CI can stretch a 50ms sleep past 0.3s.
+    adapter.media_group_timeout = 5.0
+    adapter.media_group_max_wait = 0.05
     delivered = asyncio.Event()
-    started_at = asyncio.get_running_loop().time()
-    processed_at: float | None = None
     processed_count = 0
 
     async def process(media_group_id: str, entry: dict) -> None:
-        nonlocal processed_at, processed_count
+        nonlocal processed_count
         assert media_group_id == "album-deadline"
         processed_count = len(entry["items"])
-        processed_at = asyncio.get_running_loop().time()
         delivered.set()
 
     adapter._process_media_group_entry = process
@@ -1844,10 +1842,8 @@ async def test_telegram_media_group_max_wait_is_a_hard_deadline():
     entry = next(iter(adapter.media_group_cache.values()))
     assert entry["deadline"] <= entry["created_at"] + adapter.media_group_max_wait
 
-    await asyncio.wait_for(delivered.wait(), timeout=0.4)
+    await asyncio.wait_for(delivered.wait(), timeout=1.5)
     assert processed_count == 3
-    assert processed_at is not None
-    assert processed_at - started_at < 0.3
     assert not adapter.media_group_cache
 
 

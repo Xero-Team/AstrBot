@@ -1143,3 +1143,31 @@ def test_qq_official_unique_session_keeps_group_id():
     )
 
     assert waking.build_unique_session_id(event) == "user-1_group-1"
+
+
+def test_unique_session_does_not_change_session_admission_key():
+    from astrbot.core.auth.admission import session_admission_key_from_event
+
+    off_event = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="room-a",
+    )
+    on_event = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="room-a",
+    )
+    off_stage = waking.WakingCheckStage()
+    on_stage = waking.WakingCheckStage()
+    off_stage.unique_session = False
+    on_stage.unique_session = True
+    off_stage._apply_unique_session(off_event)
+    on_stage._apply_unique_session(on_event)
+
+    assert off_event.session_id == "room-a"
+    assert on_event.session_id == "user-1_room-a"
+    assert session_admission_key_from_event(off_event) == (
+        session_admission_key_from_event(on_event)
+    )
+    assert session_admission_key_from_event(on_event) == "session:napcat:group:room-a"

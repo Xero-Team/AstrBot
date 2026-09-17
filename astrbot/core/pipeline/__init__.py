@@ -14,6 +14,7 @@ from astrbot.core.message.message_event_result import (
 )
 
 if TYPE_CHECKING:
+    from .admission_check.stage import AdmissionCheckStage
     from .content_safety_check.stage import ContentSafetyCheckStage
     from .group_message_history.stage import GroupMessageHistoryStage
     from .preprocess_stage.stage import PreProcessStage
@@ -23,9 +24,12 @@ if TYPE_CHECKING:
     from .result_decorate.stage import ResultDecorateStage
     from .session_status_check.stage import SessionStatusCheckStage
     from .waking_check.stage import WakingCheckStage
-    from .whitelist_check.stage import WhitelistCheckStage
 
 _LAZY_EXPORTS = {
+    "AdmissionCheckStage": (
+        "astrbot.core.pipeline.admission_check.stage",
+        "AdmissionCheckStage",
+    ),
     "ContentSafetyCheckStage": (
         "astrbot.core.pipeline.content_safety_check.stage",
         "ContentSafetyCheckStage",
@@ -62,13 +66,10 @@ _LAZY_EXPORTS = {
         "astrbot.core.pipeline.waking_check.stage",
         "WakingCheckStage",
     ),
-    "WhitelistCheckStage": (
-        "astrbot.core.pipeline.whitelist_check.stage",
-        "WhitelistCheckStage",
-    ),
 }
 
 __all__ = [
+    "AdmissionCheckStage",
     "ContentSafetyCheckStage",
     "EventResultType",
     "GroupMessageHistoryStage",
@@ -81,7 +82,6 @@ __all__ = [
     "SessionStatusCheckStage",
     "STAGES_ORDER",
     "WakingCheckStage",
-    "WhitelistCheckStage",
 ]
 
 

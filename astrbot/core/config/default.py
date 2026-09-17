@@ -101,11 +101,6 @@ DEFAULT_CONFIG = {
         },
         "reply_prefix": "",
         "forward_threshold": 1500,
-        "enable_id_white_list": True,
-        "id_whitelist": [],
-        "id_whitelist_log": True,
-        "wl_ignore_admin_on_group": True,
-        "wl_ignore_admin_on_friend": True,
         "reply_with_mention": False,
         "reply_with_quote": False,
         "path_mapping": [],
@@ -314,6 +309,9 @@ DEFAULT_CONFIG = {
         "private": "prefix",
         "group": "prefix",
         "reply_to_bot": False,
+    },
+    "admission": {
+        "unlisted_sessions": "allow",
     },
     "inbound_coalesce": {
         "enable": False,
@@ -1262,24 +1260,6 @@ CONFIG_METADATA_2 = {
                     "forward_threshold": {
                         "type": "int",
                         "hint": "超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。目前仅 QQ 平台适配器适用。",
-                    },
-                    "enable_id_white_list": {
-                        "type": "bool",
-                    },
-                    "id_whitelist": {
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /session info 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的平台设置中管理白名单",
-                    },
-                    "id_whitelist_log": {
-                        "type": "bool",
-                        "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
-                    },
-                    "wl_ignore_admin_on_group": {
-                        "type": "bool",
-                    },
-                    "wl_ignore_admin_on_friend": {
-                        "type": "bool",
                     },
                     "reply_with_mention": {
                         "type": "bool",
@@ -3319,6 +3299,15 @@ CONFIG_METADATA_2 = {
                     "reply_to_bot": {"type": "bool"},
                 },
             },
+            "admission": {
+                "type": "object",
+                "items": {
+                    "unlisted_sessions": {
+                        "type": "string",
+                        "options": ["allow", "deny"],
+                    },
+                },
+            },
             "inbound_coalesce": {
                 "type": "object",
                 "items": {
@@ -4496,34 +4485,17 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
-            "whitelist": {
-                "description": "白名单",
+            "admission": {
+                "description": "未列入会话",
                 "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
-                    "platform_settings.enable_id_white_list": {
-                        "description": "启用白名单",
-                        "type": "bool",
-                        "hint": "启用后，只有在白名单内的会话会被响应。",
-                    },
-                    "platform_settings.id_whitelist": {
-                        "description": "白名单 ID 列表",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "使用 /session info 获取 ID。当白名单列表为空时，代表不启用白名单（即所有 ID 都在白名单内）。",
-                    },
-                    "platform_settings.id_whitelist_log": {
-                        "description": "输出日志",
-                        "type": "bool",
-                        "hint": "启用后，当一条消息没通过白名单时，会输出 INFO 级别的日志。",
-                    },
-                    "platform_settings.wl_ignore_admin_on_group": {
-                        "description": "管理员群组消息无视 ID 白名单",
-                        "type": "bool",
-                    },
-                    "platform_settings.wl_ignore_admin_on_friend": {
-                        "description": "管理员私聊消息无视 ID 白名单",
-                        "type": "bool",
+                    "admission.unlisted_sessions": {
+                        "description": "未列入会话策略",
+                        "type": "string",
+                        "options": ["allow", "deny"],
+                        "labels": ["允许", "拒绝"],
+                        "hint": "allow 放行没有覆盖的会话。deny 只放行规范会话键上已有覆盖的会话。升级迁移和 IM 的 /llm disable 会写入该覆盖。",
                     },
                 },
             },

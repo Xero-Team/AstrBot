@@ -1189,26 +1189,13 @@
         }
       }
     },
-    "whitelist": {
-      "description": "Whitelist",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
-        },
-        "id_whitelist": {
-          "description": "Whitelist ID List",
-          "hint": "Use /session info to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
-        },
-        "id_whitelist_log": {
-          "description": "Output Logs",
-          "hint": "When enabled, INFO level logs will be output when a message doesn't pass the whitelist."
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "Administrator Group Messages Bypass ID Whitelist"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "Administrator Private Messages Bypass ID Whitelist"
+    "admission": {
+      "description": "Unlisted sessions",
+      "admission": {
+        "unlisted_sessions": {
+          "description": "Unlisted session policy",
+          "hint": "allow admits sessions with no overlay. deny admits only sessions that already have an overlay on the canonical session key. Upgrades and IM /llm disable write that overlay.",
+          "labels": ["Allow", "Deny"]
         }
       }
     },

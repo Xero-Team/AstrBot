@@ -164,7 +164,7 @@ def test_builtin_pipeline_stage_order_is_a_fixed_tuple() -> None:
     assert isinstance(stages, tuple)
     assert tuple(stage.__name__ for stage in stages) == (
         "WakingCheckStage",
-        "WhitelistCheckStage",
+        "AdmissionCheckStage",
         "SessionStatusCheckStage",
         "TurnCoalesceStage",
         "RateLimitStage",

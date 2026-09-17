@@ -81,6 +81,19 @@ def test_default_config_omits_group_active_reply():
     assert "active_reply" not in DEFAULT_CONFIG["provider_ltm_settings"]
 
 
+def test_default_config_uses_unlisted_session_admission():
+    assert DEFAULT_CONFIG["admission"]["unlisted_sessions"] == "allow"
+    platform_settings = DEFAULT_CONFIG["platform_settings"]
+    for key in (
+        "enable_id_white_list",
+        "id_whitelist",
+        "id_whitelist_log",
+        "wl_ignore_admin_on_group",
+        "wl_ignore_admin_on_friend",
+    ):
+        assert key not in platform_settings
+
+
 def test_btw_conversation_entry_defaults_off():
     assert DEFAULT_CONFIG["btw"]["enabled"] is False
 

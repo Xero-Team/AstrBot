@@ -122,6 +122,10 @@ def test_reject_removed_config_fields_walks_nested_dicts_and_lists():
         )
     with pytest.raises(ValueError, match="admins_id"):
         _reject_removed_config_fields({"platform": [{"id": "bot", "admins_id": []}]})
+    with pytest.raises(ValueError, match="id_whitelist"):
+        _reject_removed_config_fields(
+            {"platform_settings": {"id_whitelist": ["room-a"]}}
+        )
     accepted = {"platform_settings": {"unique_session": False}}
     assert _reject_removed_config_fields(accepted) == accepted
 
@@ -136,6 +140,20 @@ def test_config_content_request_rejects_nested_group_wake_policy():
             {
                 "name": "wake-profile",
                 "config": {"platform_settings": {"group_wake_policy": "mention"}},
+            }
+        )
+
+
+def test_config_content_request_rejects_id_whitelist():
+    with pytest.raises(ValidationError, match="id_whitelist"):
+        ConfigContentRequest.model_validate(
+            {"platform_settings": {"id_whitelist": ["room-a"]}}
+        )
+    with pytest.raises(ValidationError, match="enable_id_white_list"):
+        ConfigProfileCreateRequest.model_validate(
+            {
+                "name": "whitelist-profile",
+                "config": {"platform_settings": {"enable_id_white_list": True}},
             }
         )
 

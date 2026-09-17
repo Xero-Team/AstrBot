@@ -197,7 +197,7 @@ def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
     assert converted["platform_group"]["metadata"]["general"]["docs"] == (
         "use/group-wake.html"
     )
-    assert converted["platform_group"]["metadata"]["whitelist"]["docs"] == (
+    assert converted["platform_group"]["metadata"]["admission"]["docs"] == (
         "use/platform-settings.html"
     )
     assert converted["ext_group"]["metadata"]["segmented_reply"]["docs"] == (

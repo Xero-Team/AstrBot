@@ -59,12 +59,6 @@ import {
 import { copyToClipboard } from '@/utils/clipboard';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 import {
-  readGitHubProxyState,
-  writeGitHubProxyControl,
-  writeGitHubProxyRadioValue,
-  writeSelectedGitHubProxy,
-} from '@/utils/githubProxyStorage';
-import {
   getStoredDashboardUsername,
   getStoredSelectedChatConfigId,
   setStoredSelectedChatConfigId,
@@ -72,8 +66,10 @@ import {
 import { generateMissingKeys } from '@/i18n/tools';
 import { formatTokenCount } from '@/utils/providerMetadata';
 import { collectDroppedKnowledgeBaseFiles } from '@/utils/knowledgeBaseUploadFiles';
-import { runProviderMutationWithStepUp } from '@/utils/providerStepUp';
-import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
+import {
+  runConfigMutationWithStepUp,
+  runProviderMutationWithStepUp,
+} from '@/utils/stepUp';
 import { isDashboardStepUpRequired } from '@/composables/useDashboardStepUp';
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver';
 import { useCommandFilters } from '@/components/extension/componentPanel/composables/useCommandFilters';
@@ -344,7 +340,6 @@ describe('ts gap coverage', () => {
     expect(desktop.hasDesktopRuntimeProbe).toBe(true);
     delete window.astrbotDesktop;
 
-    expect(readGitHubProxyState().radioValue).toBe('0');
     expect(getStoredDashboardUsername()).toBe('guest');
     expect(getStoredSelectedChatConfigId()).toBe('default');
 
@@ -715,14 +710,6 @@ describe('ts gap coverage', () => {
       },
     });
     try {
-      expect(readGitHubProxyState()).toEqual({
-        radioValue: '0',
-        control: '0',
-        selectedProxy: '',
-      });
-      writeSelectedGitHubProxy('https://ghproxy');
-      writeGitHubProxyRadioValue('1');
-      writeGitHubProxyControl('1');
       expect(getStoredDashboardUsername()).toBe('guest');
       expect(getStoredSelectedChatConfigId()).toBe('default');
       setStoredSelectedChatConfigId('profile-1');

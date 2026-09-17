@@ -182,7 +182,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import {
   runBotMutationWithStepUp,
   type RequestDashboardStepUp,
-} from '@/utils/botStepUp';
+} from '@/utils/stepUp';
 import { copyToClipboard } from '@/utils/clipboard';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 

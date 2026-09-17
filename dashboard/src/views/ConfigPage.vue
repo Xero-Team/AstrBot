@@ -376,7 +376,7 @@ import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
-import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
+import { runConfigMutationWithStepUp } from '@/utils/stepUp';
 import { stepUpHeaders } from '@/utils/stepUp';
 import { normalizeTextInput } from '@/utils/inputValue';
 

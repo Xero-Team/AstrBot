@@ -49,8 +49,7 @@ import { ref, watch } from 'vue';
 import { configProfileApi } from '@/api/v1';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
-import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
-import { stepUpHeaders } from '@/utils/stepUp';
+import { runConfigMutationWithStepUp, stepUpHeaders } from '@/utils/stepUp';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
 interface ProviderSettings {

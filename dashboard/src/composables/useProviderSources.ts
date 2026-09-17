@@ -14,7 +14,7 @@ import {
   isDashboardStepUpRequired,
   type DashboardStepUpTarget,
 } from '@/composables/useDashboardStepUp';
-import { runProviderMutationWithStepUp } from '@/utils/providerStepUp';
+import { runProviderMutationWithStepUp } from '@/utils/stepUp';
 
 type GenericObject = Record<string, unknown>;
 

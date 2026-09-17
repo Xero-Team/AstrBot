@@ -838,10 +838,10 @@ import PlatformRegistrationAction from '@/components/platform/PlatformRegistrati
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import {
   runBotMutationWithStepUp,
+  runConfigMutationWithStepUp,
+  stepUpHeaders,
   type RequestDashboardStepUp,
-} from '@/utils/botStepUp';
-import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
-import { stepUpHeaders } from '@/utils/stepUp';
+} from '@/utils/stepUp';
 
 defineOptions({
   name: 'AddNewPlatform',

@@ -353,7 +353,7 @@ import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { mergeDynamicTranslations, useModuleI18n } from '@/i18n/composables';
 import { copyToClipboard } from '@/utils/clipboard';
 import { resolveErrorMessage } from '@/utils/errorUtils';
-import { runBotMutationWithStepUp } from '@/utils/botStepUp';
+import { runBotMutationWithStepUp } from '@/utils/stepUp';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,

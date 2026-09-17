@@ -269,6 +269,7 @@ def test_cpu_mode_records_flamegraph(
     assert f"--pid {proc.pid}" in recorded
     assert "--idle" not in recorded
     assert "--rate" not in recorded
+    assert "--nonblocking" not in recorded
 
 
 def test_cpu_mode_walks_pid_file_to_python_child(perf_home: Path) -> None:
@@ -383,6 +384,7 @@ def test_zero_duration_cpu_sidecar_until_stop(
     assert "py-spy" in recorded
     assert "--duration" not in recorded
     assert "--rate 10" in recorded
+    assert "--nonblocking" in recorded
     stop = _run_perf(env, "stop", extra_path=perf_home / "bin")
     assert stop.returncode == 0, stop.stderr
     outputs = list((perf_home / "out").glob("cpu-*.svg"))

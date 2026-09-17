@@ -95,9 +95,11 @@ Unlimited `MODE=mem` is much heavier and omits `--native`. Stop the sampler
 with `make stop-perf` before stopping the backend so the flame graph is
 written. `make stop` stops the sidecar first.
 
-`py-spy` defaults to 100Hz. Background captures (`DURATION=0`) use 10Hz so
-the sampler is less likely to fall `behind in sampling`. If it still lags,
-lower `RATE` to 5 or 1.
+`py-spy` defaults to 100Hz. Background captures (`DURATION=0`) use 10Hz and
+`--nonblocking` so ptrace does not leave the backend in tracing stop (WebUI /
+API would time out). If it still falls `behind in sampling`, lower `RATE` to 5
+or 1. Do not use `MODE=idle DURATION=0` as a production sidecar: idle walks
+sleeping threads and stays heavier even with non-blocking samples.
 
 `MODE=cpu` and `MODE=idle` call `py-spy` through `uvx` and do not add it to the
 project lockfile. `MODE=mem` requires `import memray` to succeed in the backend
@@ -108,6 +110,7 @@ it once with `uv sync --group perf --locked`. The `perf` group is not part of
 Attaching to a running process usually needs ptrace. If permission is denied,
 the script prints how to relax `/proc/sys/kernel/yama/ptrace_scope`. Containers
 may also need `cap_add: SYS_PTRACE`. Do not rerun `make perf` with `sudo`. The
+
 target fails immediately on Windows and macOS.
 
 `make check-all-platforms` additionally validates the PowerShell scripts. It

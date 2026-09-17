@@ -106,7 +106,7 @@ Dashboard or documentation build. `make perf` is a Linux-only sidecar: it
 attaches to the already-running backend (`MODE=cpu|idle|mem`, default 30s) and
 writes under `.tmp/perf/`; it does not start or wrap `make dev` / `make run`.
 `DURATION=0` starts a background sampler until `make stop-perf` / `make stop`.
-`RATE` is samples/sec for cpu/idle (`DURATION=0` defaults to 10; otherwise py-spy 100).
+`RATE` is samples/sec for cpu/idle (`DURATION=0` defaults to 10 and `--nonblocking`; otherwise py-spy 100).
 `MODE=mem` needs `uv sync --group perf --locked` once; that group is not part
 of bootstrap.
 `make run` first syncs the locked runtime

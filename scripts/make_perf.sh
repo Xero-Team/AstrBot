@@ -306,6 +306,9 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
 if [[ "$DURATION" == "0" ]]; then
   echo "Profiling backend PID $backend_pid (MODE=$MODE RATE=${RATE:-default} until make stop-perf / make stop)"
+  if [[ "$MODE" == "idle" ]]; then
+    echo "MODE=idle still walks sleeping threads. Prefer MODE=cpu for a long-running sidecar."
+  fi
 else
   echo "Profiling backend PID $backend_pid (MODE=$MODE DURATION=${DURATION}s RATE=${RATE:-default})"
 fi
@@ -325,6 +328,7 @@ case "$MODE" in
       record_args+=(--idle)
     fi
     if [[ "$DURATION" == "0" ]]; then
+      record_args+=(--nonblocking)
       start_sidecar uvx --from "$PYSPY_FROM" py-spy "${record_args[@]}"
       write_meta "$MODE" "$outfile" "" "" "$backend_pid"
       echo "Sampler PID $(<"$sidecar_pid_file")"

@@ -87,8 +87,11 @@ make perf MODE=mem DURATION=60
 I/O 等待算进去。生产环境用 CPU 采样；无限时长的 `MODE=mem` 开销明显更大，且不会加
 `--native`。先 `make stop-perf` 再停后端，火焰图才会写完。`make stop` 会先停采样侧车。
 
-`py-spy` 默认 100Hz。常驻采样（`DURATION=0`）改成 10Hz，避免跟不上时出现
-`behind in sampling`。若仍落后，再把 `RATE` 降到 5 或 1。
+`py-spy` 默认 100Hz。常驻采样（`DURATION=0`）改成 10Hz，并加上 `--nonblocking`，避免
+ptrace 把后端停在 tracing stop（WebUI / API 会超时）。若仍出现并加上 `--nonblocking`，避免
+ptrace 把后端停在 tracing stop（WebUI / API 会超时）。若仍出现
+`behind in sampling`，再把 `RATE` 降到 5 或 1。不要用 `MODE=idle DURATION=0`
+当生产常驻：idle 会扫睡眠线程，即使用非阻塞采样也更重。
 
 `MODE=cpu` 和 `MODE=idle` 通过 `uvx` 调用 `py-spy`，不写进项目锁文件。`MODE=mem`
 需要后端虚拟环境里能 `import memray`（附加时会在目标进程里 import），先执行一次

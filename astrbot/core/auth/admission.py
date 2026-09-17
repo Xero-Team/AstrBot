@@ -44,7 +44,7 @@ class AdmissionEvent(Protocol):
 
     def get_session_id(self) -> str: ...
 
-    def get_message_type(self) -> MessageType | object: ...
+    def get_message_type(self) -> MessageType | str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,7 +209,8 @@ def session_overlay_from_config(config: object) -> SessionAdmissionOverlay:
     session_blocked = config.get("session_blocked")
     llm_enabled = config.get("llm_enabled")
     listed = any(
-        key in config for key in ("session_enabled", "session_blocked", "llm_enabled")
+        isinstance(config.get(key), bool)
+        for key in ("session_enabled", "session_blocked", "llm_enabled")
     )
     return SessionAdmissionOverlay(
         session_enabled=session_enabled if isinstance(session_enabled, bool) else None,
@@ -233,7 +234,9 @@ def sender_overlay_from_config(config: object) -> SenderAdmissionOverlay:
         return SenderAdmissionOverlay()
     blocked = config.get("blocked")
     llm_enabled = config.get("llm_enabled")
-    listed = any(key in config for key in ("blocked", "llm_enabled"))
+    listed = any(
+        isinstance(config.get(key), bool) for key in ("blocked", "llm_enabled")
+    )
     return SenderAdmissionOverlay(
         blocked=blocked if isinstance(blocked, bool) else False,
         llm_enabled=llm_enabled if isinstance(llm_enabled, bool) else None,

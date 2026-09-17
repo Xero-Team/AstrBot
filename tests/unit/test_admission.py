@@ -60,8 +60,7 @@ def test_group_session_key_ignores_unique_session_session_id():
     assert "user-1" not in after
 
 
-@pytest.mark.asyncio
-async def test_unique_session_on_or_off_yields_the_same_group_session_key():
+def test_unique_session_on_or_off_yields_the_same_group_session_key():
     off_event = make_real_event(
         message_type=MessageType.GROUP_MESSAGE,
         group_id="room-a",
@@ -183,7 +182,8 @@ def test_platform_and_conversation_fallbacks():
             ),
         ),
         ("bad", SessionAdmissionOverlay()),
-        ({"session_blocked": "yes"}, SessionAdmissionOverlay(listed=True)),
+        ({"session_blocked": "yes"}, SessionAdmissionOverlay()),
+        ({"session_enabled": None, "tts_enabled": True}, SessionAdmissionOverlay()),
     ],
 )
 def test_session_overlay_from_config(config, expected):
@@ -198,7 +198,7 @@ def test_session_overlay_from_config(config, expected):
             {"blocked": True, "llm_enabled": False},
             SenderAdmissionOverlay(blocked=True, llm_enabled=False, listed=True),
         ),
-        ({"blocked": "yes"}, SenderAdmissionOverlay(listed=True)),
+        ({"blocked": "yes"}, SenderAdmissionOverlay()),
         (None, SenderAdmissionOverlay()),
     ],
 )
@@ -334,6 +334,24 @@ def test_sender_overlay_from_config(config, expected):
             True,
             False,
         ),
+        (
+            "session_disabled_still_admits_event",
+            {"session_enabled": False},
+            {},
+            UnlistedPolicy.ALLOW,
+            UnlistedPolicy.ALLOW,
+            True,
+            True,
+        ),
+        (
+            "invalid_overlay_values_are_unlisted",
+            {"session_blocked": "yes"},
+            {"blocked": "yes"},
+            UnlistedPolicy.DENY,
+            UnlistedPolicy.DENY,
+            False,
+            False,
+        ),
     ],
 )
 def test_compose_admission_parent_table(
@@ -366,3 +384,12 @@ def test_composed_llm_enabled_ignores_event_drop_flags():
     assert decision.admit_event is False
     assert decision.admit_llm is False
     assert decision.session_blocked is True
+
+
+def test_compose_admission_exposes_session_enabled_without_dropping_event():
+    decision = compose_admission(
+        session_overlay_from_config({"session_enabled": False}),
+        sender_overlay_from_config({}),
+    )
+    assert decision.admit_event is True
+    assert decision.session_enabled is False

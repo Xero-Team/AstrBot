@@ -50,20 +50,12 @@ class SessionServiceManager:
             enabled: True表示启用，False表示禁用
 
         """
-        session_config = (
-            await self.preferences.get_async(
-                scope="umo",
-                scope_id=session_id,
-                key="session_service_config",
-                default={},
-            )
-            or {}
-        )
+        session_config = await self._service_config("umo", session_id)
         session_config["llm_enabled"] = enabled
         await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
-            key="session_service_config",
+            key=SESSION_SERVICE_CONFIG_KEY,
             value=session_config,
         )
 
@@ -204,19 +196,11 @@ class SessionServiceManager:
 
     async def set_session_blocked(self, session_id: str, blocked: bool) -> None:
         """Block or unblock all functionality for a session."""
-        session_config = (
-            await self.preferences.get_async(
-                scope="umo",
-                scope_id=session_id,
-                key="session_service_config",
-                default={},
-            )
-            or {}
-        )
+        session_config = await self._service_config("umo", session_id)
         session_config["session_blocked"] = blocked
         await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
-            key="session_service_config",
+            key=SESSION_SERVICE_CONFIG_KEY,
             value=session_config,
         )

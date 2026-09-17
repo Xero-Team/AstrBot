@@ -138,3 +138,21 @@ async def test_non_dict_service_config_is_treated_as_empty():
     assert await manager.is_session_blocked(event.unified_msg_origin) is False
     assert await manager.should_process_llm_request(event) is True
     assert await manager.is_sender_blocked(event) is False
+
+
+@pytest.mark.asyncio
+async def test_setters_replace_non_dict_service_config():
+    preferences = _Preferences()
+    preferences.values[("umo", "sid", "session_service_config")] = "bad"
+    manager = _manager(preferences)
+
+    await manager.set_llm_status_for_session("sid", False)
+    assert preferences.values[("umo", "sid", "session_service_config")] == {
+        "llm_enabled": False
+    }
+
+    preferences.values[("umo", "sid", "session_service_config")] = ["blocked"]
+    await manager.set_session_blocked("sid", True)
+    assert preferences.values[("umo", "sid", "session_service_config")] == {
+        "session_blocked": True
+    }

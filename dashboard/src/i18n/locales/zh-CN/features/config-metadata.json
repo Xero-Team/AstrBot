@@ -659,6 +659,14 @@
         "description": "appid",
         "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。"
       },
+      "app_id": {
+        "description": "App ID",
+        "hint": "飞书应用的 App ID。可在飞书开放平台的凭证与基础信息中获取。"
+      },
+      "api_base_url": {
+        "description": "API 基础 URL",
+        "hint": "向消息平台发起出站 API 请求时使用的基础地址。仅在使用可信 API 网关或代理时修改。不要填入回调 URL。"
+      },
       "app_secret": {
         "description": "应用密钥"
       },
@@ -677,8 +685,16 @@
       "client_secret": {
         "description": "客户端密钥"
       },
+      "client_id": {
+        "description": "Client ID",
+        "hint": "钉钉应用的 Client ID。可在钉钉开放平台的凭证与基础信息中获取。"
+      },
       "encoding_aes_key": {
         "description": "消息加密密钥"
+      },
+      "corpid": {
+        "description": "企业 ID",
+        "hint": "企业微信的企业 ID（Corpid）。可在企业微信管理后台的企业信息中获取。"
       },
       "signing_secret": {
         "description": "Slack Signing Secret"
@@ -722,6 +738,14 @@
         "description": "启用频道私聊",
         "hint": "启用后，机器人可以接收到频道的私聊消息。"
       },
+      "forward_message_max_retries": {
+        "description": "转发消息最大重试次数",
+        "hint": "OneBot 合并转发因体积过大失败时，拆分重试的最大次数，默认 3 次。"
+      },
+      "forward_message_fallback_enabled": {
+        "description": "转发失败时回退为普通消息",
+        "hint": "启用后，合并转发因体积过大多次拆分仍失败时，会回退为普通文本发送。"
+      },
       "id": {
         "description": "机器人名称",
         "hint": "机器人名称"
@@ -744,6 +768,10 @@
       "lark_verification_token": {
         "description": "Verification Token",
         "hint": "用于验证飞书回调请求的令牌"
+      },
+      "domain": {
+        "description": "开放平台域名",
+        "hint": "国内版飞书保持默认 https://open.feishu.cn；国际版请使用 https://open.larksuite.com；自建飞书填写实例域名。"
       },
       "line": {
         "channel_access_token": {
@@ -931,7 +959,7 @@
       },
       "telegram_token": {
         "description": "Bot Token",
-        "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+        "hint": "如果你的网络环境为中国大陆，请设置代理或更改 Telegram API 基础 URL。"
       },
       "mattermost_url": {
         "description": "Mattermost URL",
@@ -959,6 +987,9 @@
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "统一 Webhook 模式下的唯一标识符，创建平台时自动生成。"
+      },
+      "wecom_ai_bot": {
+        "hint": "如果发现字段有异常，请重新创建"
       },
       "wecom_ai_bot_name": {
         "description": "企业微信智能机器人的名字",

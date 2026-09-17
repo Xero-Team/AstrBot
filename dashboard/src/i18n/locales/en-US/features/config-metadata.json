@@ -665,6 +665,14 @@
         "description": "App ID",
         "hint": "Required. App ID for the current messaging platform. See the platform integration docs for how to obtain it."
       },
+      "app_id": {
+        "description": "App ID",
+        "hint": "Lark app App ID. Get it from Credentials & Basic Info in the Lark developer console."
+      },
+      "api_base_url": {
+        "description": "API Base URL",
+        "hint": "Base URL for outbound API requests to the messaging platform. Change it only when using a trusted API gateway or proxy. Do not enter a callback URL."
+      },
       "app_secret": {
         "description": "Application Secret"
       },
@@ -683,8 +691,16 @@
       "client_secret": {
         "description": "Client Secret"
       },
+      "client_id": {
+        "description": "Client ID",
+        "hint": "DingTalk app Client ID. Get it from Credentials & Basic Info in the DingTalk developer console."
+      },
       "encoding_aes_key": {
         "description": "Message Encryption Key"
+      },
+      "corpid": {
+        "description": "Corp ID",
+        "hint": "WeCom Corp ID (Corpid). Get it from Enterprise Info in the WeCom admin console."
       },
       "signing_secret": {
         "description": "Slack Signing Secret"
@@ -728,6 +744,14 @@
         "description": "Enable Guild Direct Messages",
         "hint": "When enabled, the bot can receive guild direct messages."
       },
+      "forward_message_max_retries": {
+        "description": "Forward Message Max Retries",
+        "hint": "Maximum split retries when a OneBot merged forward fails because it is too large. Defaults to 3."
+      },
+      "forward_message_fallback_enabled": {
+        "description": "Fall Back to Plain Messages on Forward Failure",
+        "hint": "When enabled, a merged forward that is still too large after split retries is sent as ordinary text."
+      },
       "id": {
         "description": "Bot Name",
         "hint": "Bot name"
@@ -750,6 +774,10 @@
       "lark_verification_token": {
         "description": "Verification Token",
         "hint": "Token for verifying Lark callback requests."
+      },
+      "domain": {
+        "description": "Open Platform Domain",
+        "hint": "Keep the default https://open.feishu.cn for Lark China; use https://open.larksuite.com for Lark International; enter the instance domain for self-hosted Lark."
       },
       "line": {
         "channel_access_token": {
@@ -937,7 +965,7 @@
       },
       "telegram_token": {
         "description": "Bot Token",
-        "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
+        "hint": "If you are in mainland China, set a proxy or change the Telegram API base URL."
       },
       "mattermost_url": {
         "description": "Mattermost URL",
@@ -965,6 +993,9 @@
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "Unique identifier for unified webhook mode; generated when creating the platform."
+      },
+      "wecom_ai_bot": {
+        "hint": "If any fields look wrong, recreate this adapter."
       },
       "wecom_ai_bot_name": {
         "description": "WeCom AI Bot Name",

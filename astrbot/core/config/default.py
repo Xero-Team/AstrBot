@@ -420,7 +420,7 @@ CONFIG_METADATA_2 = {
                     "企业微信智能机器人": {
                         "id": "wecom_ai_bot",
                         "type": "wecom_ai_bot",
-                        "hint": "如果发现字段有异常，请重新创建",
+                        "hint": "platform_group.platform.wecom_ai_bot.hint",
                         "enable": True,
                         "wecom_ai_bot_connection_mode": "long_connection",  # long_connection, webhook
                         "wecom_ai_bot_name": "",
@@ -614,10 +614,20 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "secret": True,
                     },
+                    "corpid": {
+                        "description": "企业 ID",
+                        "type": "string",
+                        "hint": "企业微信的企业 ID（Corpid）。可在企业微信管理后台的企业信息中获取。",
+                    },
                     "client_secret": {
                         "description": "客户端密钥",
                         "type": "string",
                         "secret": True,
+                    },
+                    "client_id": {
+                        "description": "Client ID",
+                        "type": "string",
+                        "hint": "钉钉应用的 Client ID。可在钉钉开放平台的凭证与基础信息中获取。",
                     },
                     "bot_token": {
                         "description": "Slack Bot Token",
@@ -673,6 +683,16 @@ CONFIG_METADATA_2 = {
                         "condition": {
                             "lark_connection_mode": "webhook",
                         },
+                    },
+                    "app_id": {
+                        "description": "App ID",
+                        "type": "string",
+                        "hint": "飞书应用的 App ID。可在飞书开放平台的凭证与基础信息中获取。",
+                    },
+                    "domain": {
+                        "description": "开放平台域名",
+                        "type": "string",
+                        "hint": "国内版飞书保持默认 https://open.feishu.cn；国际版请使用 https://open.larksuite.com；自建飞书填写实例域名。",
                     },
                     "is_sandbox": {
                         "description": "沙箱模式",
@@ -762,11 +782,31 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取",
                     },
+                    "api_base_url": {
+                        "description": "API 基础 URL",
+                        "type": "string",
+                        "hint": "向消息平台发起出站 API 请求时使用的基础地址。仅在使用可信 API 网关或代理时修改。不要填入回调 URL。",
+                    },
                     "telegram_token": {
                         "description": "Bot Token",
                         "type": "string",
                         "secret": True,
-                        "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                        "hint": "如果你的网络环境为中国大陆，请设置代理或更改 Telegram API 基础 URL。",
+                    },
+                    "start_message": {
+                        "description": "启动消息",
+                        "type": "string",
+                        "hint": "Telegram 机器人启动时发送的消息。",
+                    },
+                    "telegram_api_base_url": {
+                        "description": "Telegram API 基础 URL",
+                        "type": "string",
+                        "hint": "Telegram Bot API 请求地址前缀，例如 https://api.telegram.org/bot。",
+                    },
+                    "telegram_file_base_url": {
+                        "description": "Telegram 文件 API 基础 URL",
+                        "type": "string",
+                        "hint": "Telegram 文件下载地址前缀，例如 https://api.telegram.org/file/bot。",
                     },
                     "mattermost_url": {
                         "description": "Mattermost URL",
@@ -946,6 +986,16 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "secret": True,
                         "hint": "反向 Websocket Token。未设置则不启用 Token 验证。",
+                    },
+                    "forward_message_max_retries": {
+                        "description": "转发消息最大重试次数",
+                        "type": "int",
+                        "hint": "OneBot 合并转发因体积过大失败时，拆分重试的最大次数，默认 3 次。",
+                    },
+                    "forward_message_fallback_enabled": {
+                        "description": "转发失败时回退为普通消息",
+                        "type": "bool",
+                        "hint": "启用后，合并转发因体积过大多次拆分仍失败时，会回退为普通文本发送。",
                     },
                     "wecom_ai_bot_name": {
                         "description": "企业微信智能机器人的名字",

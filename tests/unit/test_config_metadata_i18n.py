@@ -78,16 +78,15 @@ def _adapter_i18n_keys(name: str, metadata: dict[str, Any]) -> set[str]:
     return keys
 
 
-def _provider_template_hint_keys() -> set[str]:
-    templates = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
-        "config_template"
-    ]
+def _template_hint_keys(group: str, section: str) -> set[str]:
+    templates = CONFIG_METADATA_2[group]["metadata"][section]["config_template"]
+    prefix = f"{group}.{section}."
     keys: set[str] = set()
     for template in templates.values():
         if not isinstance(template, dict):
             continue
         hint = template.get("hint")
-        if isinstance(hint, str) and hint.startswith("provider_group.provider."):
+        if isinstance(hint, str) and hint.startswith(prefix):
             keys.add(hint)
     return keys
 
@@ -111,7 +110,8 @@ def _required_config_metadata_keys() -> set[str]:
     )
     keys.update(_adapter_i18n_keys("line", LINE_CONFIG_METADATA))
     keys.update(_adapter_i18n_keys("napcat", NAPCAT_CONFIG_METADATA))
-    keys.update(_provider_template_hint_keys())
+    keys.update(_template_hint_keys("provider_group", "provider"))
+    keys.update(_template_hint_keys("platform_group", "platform"))
     return keys
 
 
@@ -124,6 +124,17 @@ def test_config_metadata_i18n_covers_runtime_keys() -> None:
         if locale_missing:
             missing[locale] = locale_missing
     assert missing == {}, missing
+
+
+def test_platform_config_template_fields_have_item_metadata() -> None:
+    platform = CONFIG_METADATA_2["platform_group"]["metadata"]["platform"]
+    items = platform["items"]
+    missing: dict[str, list[str]] = {}
+    for name, tmpl in platform["config_template"].items():
+        absent = sorted(key for key in tmpl if key != "hint" and key not in items)
+        if absent:
+            missing[name] = absent
+    assert missing == {}
 
 
 def test_config_metadata_locale_trees_match() -> None:

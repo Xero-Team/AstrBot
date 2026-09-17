@@ -138,15 +138,15 @@ class SessionManagementService:
         blocked = config.get("session_blocked")
         return blocked if isinstance(blocked, bool) else False
 
-    async def _sync_display_alias(self, umo: str, config: object) -> dict:
+    async def _sync_display_alias(self, umo: str, config: object) -> dict[str, Any]:
         """Move a Dashboard display name onto the UMO alias store."""
         if not isinstance(config, dict):
             raise SessionManagementServiceError(
                 "规则 session_service_config 需要对象类型的 rule_value"
             )
-        if "custom_name" not in config:
-            return config
-        stored = dict(config)
+        stored: dict[str, Any] = dict(config)
+        if "custom_name" not in stored:
+            return stored
         user_alias = normalize_umo_name(stored.pop("custom_name")) or None
         existing = await self.db_helper.get_umo_alias(umo)
         await self.db_helper.upsert_umo_alias(
@@ -437,25 +437,26 @@ class SessionManagementService:
             )
 
         if rule_key == "session_plugin_config":
-            rule_value = {umo: rule_value}
-        elif rule_key == "session_service_config":
-            rule_value = await self._sync_display_alias(umo, rule_value)
-
-        provider_type = self._provider_type_from_rule_key(rule_key)
-        if provider_type is not None:
-            if not isinstance(rule_value, str) or not rule_value:
-                raise SessionManagementServiceError(
-                    f"规则 {rule_key} 需要非空 provider_id"
-                )
-            await self.provider_manager.set_provider(
-                provider_id=rule_value,
-                provider_type=provider_type,
-                umo=umo,
-            )
+            await self.preferences.session_put(umo, rule_key, {umo: rule_value})
         elif rule_key == SESSION_SERVICE_CONFIG_KEY:
-            await self._put_session_service_config(umo, rule_value)
+            await self._put_session_service_config(
+                umo,
+                await self._sync_display_alias(umo, rule_value),
+            )
         else:
-            await self.preferences.session_put(umo, rule_key, rule_value)
+            provider_type = self._provider_type_from_rule_key(rule_key)
+            if provider_type is not None:
+                if not isinstance(rule_value, str) or not rule_value:
+                    raise SessionManagementServiceError(
+                        f"规则 {rule_key} 需要非空 provider_id"
+                    )
+                await self.provider_manager.set_provider(
+                    provider_id=rule_value,
+                    provider_type=provider_type,
+                    umo=umo,
+                )
+            else:
+                await self.preferences.session_put(umo, rule_key, rule_value)
         return {"message": f"规则 {rule_key} 已更新", "umo": umo}
 
     async def delete_session_rule(self, data: object) -> dict:

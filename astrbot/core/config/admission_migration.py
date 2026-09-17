@@ -363,7 +363,10 @@ def _write_pending_session_allows(pending: Mapping[str, Sequence[str]]) -> None:
     except OSError:
         try:
             os.unlink(tmp_name)
-        except OSError:
-            # Best-effort cleanup of the unreplaced tempfile.
-            pass
+        except OSError as exc:
+            logger.warning(
+                "Failed to remove unreplaced tempfile %s: %s",
+                tmp_name,
+                exc,
+            )
         raise

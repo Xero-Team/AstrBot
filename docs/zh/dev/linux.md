@@ -54,6 +54,7 @@ shell 中安装或启用 Node 26，确认 `node --version` 可用后再执行。
 make dev             # 后端 6185，Vite Dashboard 3000
 make status          # 检查两个进程
 make stop            # 停止两个进程组
+make perf            # 对已运行的后端做短时采样（仅 Linux）
 make check           # 严格执行 Linux/macOS 源码检查
 make test            # 执行全量 pytest
 make test-blocking   # 执行 blocking pytest
@@ -64,6 +65,26 @@ make pr-test-full    # lint、测试、启动 smoke test 与 Dashboard 构建
 `frontend_run.log`、`frontend_run.err.log`。PID 文件放在 `.make/`。
 `make clean` 会停止开发进程并清理生成的本地状态，但不会删除 `data/config` 与
 `data/plugins`。
+
+## 性能采样 {#performance-sampling}
+
+`make perf` 只在 Linux 上附加到已经在跑的后端，不会启动或包装 `make dev` /
+`make run`。默认采 30 秒 CPU 火焰图，产物写在 `.tmp/perf/`。
+
+```bash
+make dev
+make perf                  # CPU 火焰图
+make perf MODE=idle        # 把 await / I/O 等待也算进去
+make perf MODE=mem DURATION=60
+```
+
+`MODE=cpu` 和 `MODE=idle` 通过 `uvx` 调用 `py-spy`，不写进项目锁文件。`MODE=mem`
+需要后端虚拟环境里能 `import memray`（附加时会在目标进程里 import），先执行一次
+`uv sync --group perf --locked`。`perf` 组不进入 `make bootstrap`。
+
+附加已有进程通常需要 ptrace。权限被拒绝时，脚本会提示如何放宽
+`/proc/sys/kernel/yama/ptrace_scope`。不要用 `sudo` 跑 `make perf`。Windows 与
+macOS 上该目标会直接失败。
 
 `make check-all-platforms` 会额外检查 PowerShell 脚本。只有修改 PS 脚本时才需要；
 该目标要求安装 `pwsh` 和 PSScriptAnalyzer，CI 会单独验证它们。

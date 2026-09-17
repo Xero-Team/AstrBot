@@ -115,6 +115,8 @@ dev = [
   "hypothesis>=6.165.10",
 ]
 
+perf = ["memray>=1.18.0; sys_platform == 'linux'"]
+
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
 

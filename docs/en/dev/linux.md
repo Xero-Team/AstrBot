@@ -57,6 +57,7 @@ the `node` executable on `PATH` because their launchers use `/usr/bin/env node`.
 make dev             # backend on 6185 and Vite dashboard on 3000
 make status           # health check both processes
 make stop             # stop both process groups
+make perf             # sample a running backend (Linux only)
 make check            # strict Linux/macOS source checks
 make test             # full pytest suite
 make test-blocking    # blocking pytest profile
@@ -68,6 +69,30 @@ Dashboard output is written to `frontend_run.log` and
 `frontend_run.err.log`. PID files live in `.make/`. `make clean` stops the
 development servers and removes generated local state; it does not remove
 `data/config` or `data/plugins`.
+
+## Performance sampling {#performance-sampling}
+
+`make perf` is Linux-only. It attaches to an already-running backend and does
+not start or wrap `make dev` / `make run`. The default capture is a 30-second
+CPU flame graph under `.tmp/perf/`.
+
+```bash
+make dev
+make perf                  # CPU flame graph
+make perf MODE=idle        # include await / I/O waits
+make perf MODE=mem DURATION=60
+```
+
+`MODE=cpu` and `MODE=idle` call `py-spy` through `uvx` and do not add it to the
+project lockfile. `MODE=mem` requires `import memray` to succeed in the backend
+virtualenv, because attach injects that import into the target process. Install
+it once with `uv sync --group perf --locked`. The `perf` group is not part of
+`make bootstrap`.
+
+Attaching to a running process usually needs ptrace. If permission is denied,
+the script prints how to relax `/proc/sys/kernel/yama/ptrace_scope`. Do not
+rerun `make perf` with `sudo`. The target fails immediately on Windows and
+macOS.
 
 `make check-all-platforms` additionally validates the PowerShell scripts. It
 is only needed when changing those scripts and requires `pwsh` plus

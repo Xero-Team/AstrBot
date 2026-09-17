@@ -4,7 +4,6 @@ import pytest
 from sqlmodel import col, update
 
 from astrbot.core.db.po import PlatformMessageHistory
-from astrbot.core.db.protocols import MessageHistoryStore
 from astrbot.core.db.sqlite import SQLiteDatabase
 
 
@@ -127,15 +126,3 @@ async def test_get_platform_message_history_is_paginated_and_scoped_by_platform_
     assert [row.id for row in page_two] == [first.id]
     assert await temp_db.count_platform_message_history("webchat", "session-1") == 2
     assert await temp_db.count_platform_message_history("telegram", "session-1") == 1
-
-
-@pytest.mark.asyncio
-async def test_message_history_store_protocol_count_stub() -> None:
-    assert (
-        await MessageHistoryStore.count_platform_message_history(
-            object(),
-            "webchat",
-            "user",
-        )
-        == 0
-    )

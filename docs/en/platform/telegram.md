@@ -63,6 +63,8 @@ Whenever polling starts or its client is rebuilt, AstrBot explicitly subscribes 
 
 The handler accepts only the three supported message variants even if unacknowledged updates from an older subscription still arrive. Each adapter retains the latest 4096 admitted Update IDs, so repeated delivery does not execute a command or agent again while its ID remains cached. The cache survives polling-client rebuilds but is not persisted across process restarts. Edited updates are always ignored.
 
+On an adapter instance's first polling start, AstrBot drops unacknowledged pending updates on Telegram's servers so offline history is not flushed into the pipeline and the per-session rate limiter. After an in-process client rebuild, later polling keeps updates from that gap. Pending updates after a process restart are still dropped and are not replayed.
+
 ### Business Sessions and Replies
 
 A Business chat is independent of an ordinary Bot chat with the same chat ID. AstrBot uses `business:<percent-encoded connection ID>:<chat_id>` as its Business route, appending `#<message_thread_id>` for topics. Save the complete session target for proactive sends: the connection, chat, and topic are restored, and albums are isolated by that route too.

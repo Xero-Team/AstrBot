@@ -209,6 +209,7 @@ class TelegramPlatformAdapter(Platform):
         self._polling_restart_delay = delay
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
+        self._drop_pending_updates = True
         self._application_started = False
         self._seen_update_ids: OrderedDict[int, None] = OrderedDict()
         self._callback_bindings: OrderedDict[str, _TelegramCallbackBinding] = (
@@ -837,11 +838,17 @@ class TelegramPlatformAdapter(Platform):
                     self._application_started = False
                     await asyncio.sleep(self._polling_restart_delay)
                     continue
-                logger.info("Starting Telegram polling...")
+                drop_pending_updates = self._drop_pending_updates
+                logger.info(
+                    "Starting Telegram polling%s...",
+                    " (dropping pending updates)" if drop_pending_updates else "",
+                )
                 await updater.start_polling(
                     allowed_updates=TELEGRAM_ALLOWED_UPDATES,
+                    drop_pending_updates=drop_pending_updates,
                     error_callback=self._on_polling_error,
                 )
+                self._drop_pending_updates = False
                 logger.info("Telegram Platform Adapter is running.")
                 while updater.running and not self._terminating:  # noqa: ASYNC110
                     if self._polling_recovery_requested.is_set():

@@ -11,6 +11,7 @@ from .plugin import PluginCommands
 from .provider import ProviderCommands
 from .session import SessionCommands
 from .tts import TtsCommands
+from .user import UserCommands
 from .variable import VariableCommands
 from .work import WorkCommands
 
@@ -26,6 +27,7 @@ __all__ = [
     "ProviderCommands",
     "SessionCommands",
     "TtsCommands",
+    "UserCommands",
     "VariableCommands",
     "WorkCommands",
 ]

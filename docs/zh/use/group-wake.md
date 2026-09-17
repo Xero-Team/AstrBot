@@ -87,7 +87,7 @@ Discord 的用户提及或机器人角色提及**不会**打这个标记，仍�
 
 - 和实验性「群发送者并发」互斥；开启隔离会话时并发开关无效。
 - 群的 notice / request 事件仍走群会话，不会拆到个人。
-- `/session info` 在开启隔离会话时，还会给出群 ID；群准入和 `/llm disable` 用的是这个群会话，不是改写后的个人 UMO。按人拒绝属于后续切片。
+- `/session info` 在开启隔离会话时，还会给出群 ID；群准入和 `/llm disable` 用的是这个群会话，不是改写后的个人 UMO。按人拒绝写在发送者覆盖上（`scope=sender` / `Subject.im.id`），对本机器人实例全局生效，不是按群拆开的 `UMO×UID`。会话被完全禁用时，发送者 `llm_enabled=true` 不能救活事件。
 
 隔离会话改变的是**上下文归属**，不会放宽 LLM 门禁，也不会把群拆成多个准入对象。群友仍然要满足上面的 `llm_access.group`。
 
@@ -106,3 +106,4 @@ Discord 的用户提及或机器人角色提及**不会**打这个标记，仍�
 5. 以为回复机器人等于 @；需要显式打开 `reply_to_bot`。
 6. `unlisted_sessions=deny`，当前群没有会话覆盖。
 7. 自定义规则或 `/llm disable` 关掉了该会话的 LLM。
+8. 该发送者被 `/user block` 拉黑，或 `unlisted_senders=deny` 且没有发送者覆盖。

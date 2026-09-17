@@ -33,6 +33,8 @@ UMO 唯一指定某个平台下的一个会话。用 `/session info` 查看。�
 
 `unlisted_sessions=deny` 时，准入阶段看规范会话键上的覆盖，以及本配置档升级时的列入集。IM `/llm` 和本页 Dashboard 规则都会列入该键。会话是否启用、是否完全禁用仍由后面的会话状态阶段按 UMO 处理。
 
+发送者覆盖写在 `scope=sender`、`scope_id=Subject.im.id`（`im:{平台实例}:{机器人账号}:{发送者 ID}`）上，只认 `blocked` 和 `llm_enabled`。它对这个机器人实例上的所有会话生效，包括未开启隔离会话的共享群，不是 `UMO×UID`。本页 Dashboard 仍只编辑会话规则；发送者列表选择器不在本切片。用 `/user block`、`/user unblock`、`/user llm on|off` 写入这些字段，见 [内置指令](./command)。
+
 ### 插件规则（`session_plugin_config`）
 
 为这个 UMO 单独禁用插件。未列入禁用列表的插件保持启用状态。三层同时存在时：

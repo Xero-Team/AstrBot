@@ -33,6 +33,8 @@ Each rule binds to one UMO and may include several overlays:
 
 When `unlisted_sessions=deny`, the admission stage looks at overlays on the canonical session key and this profile's upgrade listed set. IM `/llm` and Dashboard rules on this page both list that key. Session on/off and full block still belong to the later session-status stage, which still reads the UMO.
 
+Sender overlays live on `scope=sender` with `scope_id=Subject.im.id` (`im:{platform instance}:{bot account}:{sender id}`). Only `blocked` and `llm_enabled` are honored. They apply to every session on this bot instance, including shared groups with isolated sessions off; they are not a `UMO×UID` selector. This Dashboard page still edits session rules only; the sender list picker is not in this slice. Write those fields with `/user block`, `/user unblock`, and `/user llm on|off`. See [Built-in commands](./command).
+
 ### Plugin rules (`session_plugin_config`)
 
 Disable selected plugins for this UMO. Plugins not listed remain enabled. When all three layers exist:

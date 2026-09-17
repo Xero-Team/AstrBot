@@ -137,6 +137,15 @@ These commands require `provider.use`. Cross-session assignment also requires `s
 
 These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode. IM writes the canonical session key, so isolated sessions disable LLM for the whole group. Dashboard custom rules dual-write the LLM switch onto the same canonical key.
 
+### Sender admission
+
+- `/user block <sender_id>`: Block that sender in every session of this bot instance.
+- `/user unblock <sender_id>`: Remove the sender block.
+- `/user llm on <sender_id>`: Enable built-in LLM for that sender (can override a session-level off).
+- `/user llm off <sender_id>`: Disable built-in LLM for that sender; matched commands still run.
+
+`sender_id` is required: a platform user id (minted with the current `get_platform_id()` / `get_self_id()` into `Subject.im`), or a full `im:` subject id. An omitted or empty token prints usage and writes nothing; it does not target self. These commands require `session.manage`. They are not `/black` and they do not register an LLM tool. A blocked sender is dropped at admission except for `/user unblock` and `/bot status`. A sender `llm_enabled=true` overlay cannot revive a fully blocked session.
+
 ### TTS state
 
 - `/tts status`: Show whether TTS is enabled for the current session.

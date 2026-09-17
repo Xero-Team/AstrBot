@@ -925,7 +925,7 @@ export const useExtensionPage = () => {
     loadingDialog.show = true;
     try {
       const stepUp = await requestPluginInstallStepUp();
-      const res = await pluginApi.update(extensionName, undefined, stepUp);
+      const res = await pluginApi.update(extensionName, {}, stepUp);
 
       if (res.data.status === 'error') {
         onLoadingDialogResult(2, res.data.message, -1);

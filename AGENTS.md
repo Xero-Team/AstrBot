@@ -96,12 +96,20 @@ For the integrated development servers:
 make dev       # backend on 127.0.0.1:6185, Vite dev server on port 3000
 make status
 make stop
+make perf      # Linux-only: attach a sampler to the running backend
 ```
 
 Windows uses `scripts/make_dev.ps1`; POSIX uses `scripts/make_dev.sh`. PID files
 live in `.make/`, with backend logs in `backend_run*.log` and Dashboard logs in
 `frontend_run*.log`. `make dev` starts source-mode servers without a production
-Dashboard or documentation build. `make run` first syncs the locked runtime
+Dashboard or documentation build. `make perf` is a Linux-only sidecar: it
+attaches to the already-running backend (`MODE=cpu|idle|mem`, default 30s) and
+writes under `.tmp/perf/`; it does not start or wrap `make dev` / `make run`.
+`DURATION=0` starts a background sampler until `make stop-perf` / `make stop`.
+`RATE` is samples/sec for cpu/idle (`DURATION=0` defaults to 10 and `--nonblocking`; otherwise py-spy 100).
+`MODE=mem` needs `uv sync --group perf --locked` once; that group is not part
+of bootstrap.
+`make run` first syncs the locked runtime
 environment, builds the Dashboard and documentation, and copies `dashboard/dist`
 (including `help/`) into `data/dist`; it does not build a Python wheel or sdist.
 `make build-docs` is the focused documentation target. `make docs` starts a
@@ -139,14 +147,16 @@ Keep each dependency surface with its actual installer:
 | Surface                 | Manifests / policy                                        | Authoritative install input                          |
 | ----------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
 | Python runtime/dev      | `pyproject.toml`, `requirements.txt`                      | `uv.lock`; use `uv sync --locked`                    |
+| Python optional perf    | `pyproject.toml` `perf` group; Linux `memray` only        | `uv.lock`; `uv sync --group perf --locked`           |
 | root repository tooling | `package.json`                                            | `package-lock.json`; use `npm ci`                    |
 | Dashboard               | `dashboard/package.json`, `dashboard/pnpm-workspace.yaml` | `dashboard/pnpm-lock.yaml`; use frozen pnpm installs |
 | docs                    | `docs/package.json`, `docs/pnpm-workspace.yaml`           | `docs/pnpm-lock.yaml`; use frozen pnpm installs      |
 
 Runtime Python dependency changes must update `pyproject.toml`,
 `requirements.txt`, and `uv.lock`: local/quality jobs consume the uv lock, while
-the Docker and smoke-test paths still install `requirements.txt`. Do not
-reintroduce a root `pnpm-lock.yaml`; root tooling uses `package-lock.json`.
+the Docker and smoke-test paths still install `requirements.txt`. The optional
+`perf` group is not a runtime dependency; do not add it to `requirements.txt`.
+Do not reintroduce a root `pnpm-lock.yaml`; root tooling uses `package-lock.json`.
 
 ## Tests, checks, and formatting
 

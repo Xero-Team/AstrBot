@@ -1,6 +1,6 @@
 .PHONY: worktree worktree-add worktree-rm bootstrap doctor pr-test-neo pr-test-full pr-test-full-fast \
 	build build-all build-backend build-dashboard build-docs sync-webui-dist dev run run-backend run-dashboard \
-	stop stop-backend stop-dashboard clean status docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
+	stop stop-backend stop-dashboard stop-perf clean status perf docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi \
 	quality-report-all quality-report-pyright quality-report-bandit quality-report-audit quality-report-radon-cc quality-report-radon-mi \
 	check check-all check-all-platforms format format-all test test-all test-blocking \
@@ -18,6 +18,9 @@ BASE ?= master
 RUN_DIR ?= .make
 DASHBOARD_DIR ?= dashboard
 DOCS_DIR ?= docs
+MODE ?= cpu
+DURATION ?= 30
+RATE ?=
 NAPCAT_SCHEMA_OUTPUT_DIR ?= .tmp/napcat-schema
 NAPCAT_NORMALIZED_SCHEMA_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11-all-event.normalized.schema.json
 NAPCAT_MODELS_OUTPUT_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11_event_models.py
@@ -132,7 +135,7 @@ run-backend:
 run-dashboard:
 	@$(DEV_RUNNER) run-dashboard
 
-stop: stop-dashboard stop-backend
+stop: stop-perf stop-dashboard stop-backend
 
 stop-backend:
 	@$(DEV_RUNNER) stop-backend
@@ -140,8 +143,23 @@ stop-backend:
 stop-dashboard:
 	@$(DEV_RUNNER) stop-dashboard
 
+stop-perf:
+ifeq ($(OS),Windows_NT)
+	@true
+else
+	@bash scripts/make_perf.sh stop
+endif
+
 status:
 	@$(DEV_RUNNER) status
+
+perf:
+ifeq ($(OS),Windows_NT)
+	@echo "make perf is Linux-only." >&2
+	@exit 2
+else
+	@MODE="$(MODE)" DURATION="$(DURATION)" RATE="$(RATE)" bash scripts/make_perf.sh
+endif
 
 clean: stop
 	@$(DEV_RUNNER) clean

@@ -56,7 +56,7 @@ It starts the backend and Vite Dashboard without a production build first:
 - backend: `http://127.0.0.1:6185`
 - Dashboard dev server: `http://localhost:3000`
 
-`make run` synchronizes the locked runtime environment, builds the Dashboard and documentation, copies them to `data/dist` (docs under `help/`), and then starts both processes. It does not build a Python wheel or sdist. Use `make status` to inspect the processes and `make stop` to stop them. `make build-docs` only builds and syncs documentation; `make docs` starts a standalone VitePress preview with base `/`.
+`make run` synchronizes the locked runtime environment, builds the Dashboard and documentation, copies them to `data/dist` (docs under `help/`), and then starts both processes. It does not build a Python wheel or sdist. Use `make status` to inspect the processes and `make stop` to stop them. On Linux, `make perf` can sample an already-running backend (`DURATION=0` keeps a background sidecar until `make stop-perf` / `make stop`); see [Linux Development](/en/dev/linux#performance-sampling). `make build-docs` only builds and syncs documentation; `make docs` starts a standalone VitePress preview with base `/`.
 
 `make clean` is not an ordinary process-control command. It stops the processes and broadly removes generated content including `dashboard/dist`, `data/dist`, `.tmp`, build/dist directories, logs, test/format caches, and `__pycache__`. Inspect the worktree and any local artifacts you need before running it.
 

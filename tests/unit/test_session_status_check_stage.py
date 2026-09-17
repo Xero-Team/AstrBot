@@ -171,6 +171,21 @@ async def test_blocked_session_allows_only_unblock_passthrough():
 
 
 @pytest.mark.asyncio
+async def test_blocked_session_does_not_allow_user_unblock():
+    stage = await _make_stage(session_enabled=True)
+    stage.session_services.is_session_blocked = AsyncMock(return_value=True)
+    event = FakeEvent(
+        handlers=[
+            SimpleNamespace(
+                handler_full_name=f"{BUILTIN_COMMANDS_MODULE}_user_unblock",
+            )
+        ]
+    )
+    await stage.process(event)
+    assert event.stopped is True
+
+
+@pytest.mark.asyncio
 async def test_blocked_session_does_not_allow_bot_enable():
     stage = await _make_stage(session_enabled=True)
     stage.session_services.is_session_blocked = AsyncMock(return_value=True)

@@ -72,13 +72,6 @@ import {
 } from '@/utils/chatConfigBinding';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
-import {
-  readGitHubProxyState,
-  readSelectedGitHubProxy,
-  writeGitHubProxyControl,
-  writeGitHubProxyRadioValue,
-  writeSelectedGitHubProxy,
-} from '@/utils/githubProxyStorage';
 import { normalizeTextInput } from '@/utils/inputValue';
 import {
   buildSearchQuery,
@@ -104,7 +97,7 @@ describe('frontend modules', () => {
     localStorage.clear();
   });
 
-  it('covers plugin search and github proxy helpers', () => {
+  it('covers plugin search helpers', () => {
     expect(normalizeStr('  Ab ')).toBe('ab');
     expect(normalizeLoose('a_b-c')).toBe('abc');
     const query = buildSearchQuery('astr');
@@ -120,14 +113,6 @@ describe('frontend modules', () => {
       ),
     ).toBe(true);
     expect(matchesPluginSearch({ name: 'other' }, null)).toBe(true);
-
-    writeSelectedGitHubProxy('https://ghproxy.example');
-    writeGitHubProxyRadioValue('1');
-    writeGitHubProxyControl('1');
-    const state = readGitHubProxyState();
-    expect(state.selectedProxy).toBe('https://ghproxy.example');
-    expect(state.radioValue).toBe('1');
-    expect(readSelectedGitHubProxy()).toBe('');
   });
 
   it('covers chat config, clipboard, and desktop helpers', async () => {

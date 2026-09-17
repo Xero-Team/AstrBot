@@ -235,10 +235,9 @@ import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue
 import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { runConfigMutationWithStepUp } from '@/utils/configStepUp';
 import { docsHref } from '@/utils/docsHref';
 import { resolveErrorMessage } from '@/utils/errorUtils';
-import { stepUpHeaders } from '@/utils/stepUp';
+import { runConfigMutationWithStepUp, stepUpHeaders } from '@/utils/stepUp';
 import { useToast } from '@/utils/toast';
 
 type StepState = 'pending' | 'completed' | 'skipped';

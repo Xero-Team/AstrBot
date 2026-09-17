@@ -371,7 +371,7 @@ import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
-import { runBotMutationWithStepUp } from '@/utils/botStepUp';
+import { runBotMutationWithStepUp } from '@/utils/stepUp';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
 const SYSTEM_DEFAULT_CONFIG = '__astrbot_system_default__';

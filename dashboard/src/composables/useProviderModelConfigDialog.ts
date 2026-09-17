@@ -4,7 +4,7 @@ import { resolveErrorMessage } from '@/utils/errorUtils';
 import {
   runProviderMutationWithStepUp,
   type RequestDashboardStepUp,
-} from '@/utils/providerStepUp';
+} from '@/utils/stepUp';
 
 interface ProviderSourceRef {
   id?: string;

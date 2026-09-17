@@ -96,11 +96,11 @@ class SandboxStdin(Protocol):
 
     def write(self, data: bytes) -> None:
         """Buffer bytes for the process standard input."""
-        raise NotImplementedError
+        ...
 
     async def drain(self) -> None:
         """Flush buffered bytes without blocking the event loop."""
-        raise NotImplementedError
+        ...
 
 
 class SandboxStdout(Protocol):
@@ -108,7 +108,7 @@ class SandboxStdout(Protocol):
 
     async def read(self, n: int = -1) -> bytes:
         """Read up to ``n`` bytes from the process standard output."""
-        raise NotImplementedError
+        ...
 
 
 class SandboxProcess(Protocol):
@@ -117,38 +117,38 @@ class SandboxProcess(Protocol):
     @property
     def pid(self) -> int:
         """Return the process identifier."""
-        raise NotImplementedError
+        ...
 
     @property
     def returncode(self) -> int | None:
         """Return the exit status, or ``None`` while the process is running."""
-        raise NotImplementedError
+        ...
 
     @property
     def stdin(self) -> SandboxStdin | None:
         """Return the process standard-input stream when configured."""
-        raise NotImplementedError
+        ...
 
     @property
     def stdout(self) -> SandboxStdout | None:
         """Return the process standard-output stream when configured."""
-        raise NotImplementedError
+        ...
 
     async def wait(self) -> int:
         """Wait for the process to exit."""
-        raise NotImplementedError
+        ...
 
     def interrupt(self) -> None:
         """Interrupt the sandbox process tree."""
-        raise NotImplementedError
+        ...
 
     def terminate(self) -> None:
         """Request graceful termination of the sandbox process tree."""
-        raise NotImplementedError
+        ...
 
     def kill(self) -> None:
         """Force termination of the sandbox process tree."""
-        raise NotImplementedError
+        ...
 
 
 class ProcessSandbox(ABC):
@@ -227,7 +227,7 @@ class ProcessSandbox(ABC):
         Raises:
             SandboxTimeoutError: If the process exceeds ``timeout``.
         """
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     async def spawn_shell(
@@ -247,4 +247,4 @@ class ProcessSandbox(ABC):
         Returns:
             Running restricted process.
         """
-        raise NotImplementedError
+        ...

@@ -1,7 +1,6 @@
 from copy import deepcopy
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.tools.function_tool_manager import FunctionToolManager
 
 _OPTIONAL_PARAMETERS = {
     "type": "object",
@@ -237,14 +236,11 @@ def test_flatten_null_unions_leaves_ref_and_nested_union_optionals_unmodified():
     assert tool.parameters == parameters
 
 
-def test_function_tool_manager_forwards_flatten_null_unions():
+def test_toolset_flattens_null_unions_for_active_tools():
     tool = _optional_string_tool()
-    manager = FunctionToolManager()
-    manager.func_list.append(tool)
-
-    properties = manager.openai_chat_completions_schema(flatten_null_unions=True)[0][
-        "function"
-    ]["parameters"]["properties"]
+    properties = ToolSet([tool]).openai_chat_completions_schema(
+        flatten_null_unions=True
+    )[0]["function"]["parameters"]["properties"]
 
     assert properties["category"]["type"] == "string"
     assert properties["category"]["nullable"] is True

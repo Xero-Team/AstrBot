@@ -356,7 +356,7 @@ import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useProviderSources } from '@/composables/useProviderSources';
-import { runProviderMutationWithStepUp } from '@/utils/providerStepUp';
+import { runProviderMutationWithStepUp } from '@/utils/stepUp';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
 const props = defineProps({

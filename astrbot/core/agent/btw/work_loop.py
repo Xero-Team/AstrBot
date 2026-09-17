@@ -26,15 +26,8 @@ class AgentRequestExecutor(Protocol):
     """The existing Agent request path required by the work loop."""
 
     def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
-        """Yield pipeline progress markers for one event.
-
-        Protocol stub; concrete implementations are the pipeline's Agent
-        request sub-stage.  The body raises so the statement is effectful
-        (CodeQL py/ineffectual-statement); the unreachable ``yield`` keeps
-        the declared ``AsyncGenerator`` return type type-checkable.
-        """
-        raise NotImplementedError
-        yield  # noqa: B901 -- unreachable marker for the type checker
+        """Yield pipeline progress markers for one event."""
+        ...
 
 
 ResultDispatcher = Callable[[AstrMessageEvent], Awaitable[None]]

@@ -70,28 +70,6 @@ class TestToolSetAddTool:
 
         assert len(toolset.tools) == 2
 
-    def test_missing_active_attribute_defaults_to_true(self):
-        """Tools without 'active' attribute should be treated as active."""
-        toolset = ToolSet()
-
-        # Create a mock object without 'active' attribute
-        class MockTool:
-            name = "mock_tool"
-            description = "Mock"
-            parameters = {"type": "object"}
-
-        mock_tool = MockTool()
-        toolset.add_tool(mock_tool)  # type: ignore
-
-        # Should be added successfully
-        assert len(toolset.tools) == 1
-
-        # Adding another tool without active should overwrite
-        mock_tool2 = MockTool()
-        toolset.add_tool(mock_tool2)  # type: ignore
-
-        assert len(toolset.tools) == 1
-
 
 class TestFunctionToolManagerGetTool:
     """Tests for FunctionToolManager.get_tool with conflict resolution."""

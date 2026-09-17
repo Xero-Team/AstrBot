@@ -9,7 +9,6 @@ import type {
   PluginSourceItem,
 } from '@/types/extensions';
 import { resolveErrorMessage } from '@/utils/errorUtils';
-import { readSelectedGitHubProxy } from '@/utils/githubProxyStorage';
 import { getValidHashTab, replaceTabRoute } from '@/utils/hashRouteTabs';
 import { getPlatformDisplayName } from '@/utils/platformUtils';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
@@ -152,7 +151,6 @@ export const useExtensionPage = () => {
   const { tm, getRaw } = useModuleI18n('features/extension');
   const router = useRouter();
   const route = useRoute();
-  const getSelectedGitHubProxy = readSelectedGitHubProxy;
   const {
     dialogOpen: stepUpDialogOpen,
     loading: stepUpLoading,
@@ -806,11 +804,6 @@ export const useExtensionPage = () => {
     return null;
   };
 
-  const getUpdateDownloadUrl = (
-    extension: InstalledPlugin | null | undefined,
-  ) =>
-    String(findMarketPluginForExtension(extension)?.download_url || '').trim();
-
   const checkUpdate = () => {
     const onlinePluginsMap = new Map();
     const onlinePluginsNameMap = new Map();
@@ -925,7 +918,6 @@ export const useExtensionPage = () => {
       return;
     }
 
-    const downloadUrl = getUpdateDownloadUrl(ext);
     closeUpdateConfirmDialog();
     loadingDialog.title = tm('status.loading');
     loadingDialog.statusCode = 0;
@@ -933,11 +925,7 @@ export const useExtensionPage = () => {
     loadingDialog.show = true;
     try {
       const stepUp = await requestPluginInstallStepUp();
-      const res = await pluginApi.update(
-        extensionName,
-        { proxy: downloadUrl ? '' : getSelectedGitHubProxy() },
-        stepUp,
-      );
+      const res = await pluginApi.update(extensionName, {}, stepUp);
 
       if (res.data.status === 'error') {
         onLoadingDialogResult(2, res.data.message, -1);
@@ -1016,7 +1004,6 @@ export const useExtensionPage = () => {
       const res = await pluginApi.updateMany(
         {
           names: targets,
-          proxy: getSelectedGitHubProxy(),
         },
         stepUp,
       );
@@ -1766,14 +1753,12 @@ export const useExtensionPage = () => {
     const urlPayload: Parameters<typeof pluginApi.installUrl>[0] = {
       url: extension_url.value,
       download_url: selectedInstallDownloadUrl.value,
-      proxy: selectedInstallDownloadUrl.value ? '' : getSelectedGitHubProxy(),
       ignore_version_check: shouldIgnoreVersionCheck,
       ...marketIdFields,
     };
     const githubPayload: Parameters<typeof pluginApi.installGithub>[0] = {
       repository: extension_url.value,
       download_url: selectedInstallDownloadUrl.value,
-      proxy: selectedInstallDownloadUrl.value ? '' : getSelectedGitHubProxy(),
       ignore_version_check: shouldIgnoreVersionCheck,
       ...marketIdFields,
     };
@@ -2065,7 +2050,6 @@ export const useExtensionPage = () => {
     getRaw,
     router,
     route,
-    getSelectedGitHubProxy,
     conflictDialog,
     checkAndPromptConflicts,
     handleConflictConfirm,

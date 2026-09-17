@@ -56,7 +56,7 @@ make dev
 - 后端：`http://127.0.0.1:6185`
 - Dashboard dev server：`http://localhost:3000`
 
-`make run` 会先同步 locked runtime 环境、构建 Dashboard 和文档并复制到 `data/dist`（文档在 `help/`），再启动两个进程；它不会构建 Python wheel/sdist。使用 `make status` 查看状态，`make stop` 只停止进程。Linux 上可以用 `make perf` 对已经在跑的后端做短时采样，详见 [Linux 开发环境](/dev/linux#performance-samplingperformance-sampling)。`make build-docs` 只构建并同步文档；`make docs` 启动独立的 VitePress 预览（base 为 `/`）。
+`make run` 会先同步 locked runtime 环境、构建 Dashboard 和文档并复制到 `data/dist`（文档在 `help/`），再启动两个进程；它不会构建 Python wheel/sdist。使用 `make status` 查看状态，`make stop` 只停止进程。Linux 上可以用 `make perf` 对已经在跑的后端采样（`DURATION=0` 为后台常驻，直到 `make stop-perf` / `make stop`），详见 [Linux 开发环境](/dev/linux#performance-sampling)。`make build-docs` 只构建并同步文档；`make docs` 启动独立的 VitePress 预览（base 为 `/`）。
 
 `make clean` 不是普通进程管理命令：它会先停止进程，然后广泛删除 `dashboard/dist`、`data/dist`、`.tmp`、build/dist、日志、测试/格式缓存和 `__pycache__` 等生成内容。运行前先检查工作树和需要保留的本地产物。
 

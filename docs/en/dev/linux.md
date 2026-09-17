@@ -58,6 +58,7 @@ make dev             # backend on 6185 and Vite dashboard on 3000
 make status           # health check both processes
 make stop             # stop both process groups
 make perf             # sample a running backend (Linux only)
+make stop-perf        # stop DURATION=0 sampling and write the flame graph
 make check            # strict Linux/macOS source checks
 make test             # full pytest suite
 make test-blocking    # blocking pytest profile
@@ -77,11 +78,18 @@ not start or wrap `make dev` / `make run`. The default capture is a 30-second
 CPU flame graph under `.tmp/perf/`.
 
 ```bash
-make dev
-make perf                  # CPU flame graph
+make run                   # or make dev
+make perf                  # 30s CPU flame graph
 make perf MODE=idle        # include await / I/O waits
+make perf DURATION=0       # background sidecar until make stop-perf / make stop
 make perf MODE=mem DURATION=60
 ```
+
+`DURATION=0` returns to the shell like `make run`: CPU/idle keep a background
+`py-spy` sampler, and `MODE=mem` leaves the tracker in the backend process.
+Use CPU sampling in production. Unlimited `MODE=mem` is much heavier and omits
+`--native`. Stop the sampler with `make stop-perf` before stopping the backend
+so the flame graph is written. `make stop` stops the sidecar first.
 
 `MODE=cpu` and `MODE=idle` call `py-spy` through `uvx` and do not add it to the
 project lockfile. `MODE=mem` requires `import memray` to succeed in the backend
@@ -90,9 +98,9 @@ it once with `uv sync --group perf --locked`. The `perf` group is not part of
 `make bootstrap`.
 
 Attaching to a running process usually needs ptrace. If permission is denied,
-the script prints how to relax `/proc/sys/kernel/yama/ptrace_scope`. Do not
-rerun `make perf` with `sudo`. The target fails immediately on Windows and
-macOS.
+the script prints how to relax `/proc/sys/kernel/yama/ptrace_scope`. Containers
+may also need `cap_add: SYS_PTRACE`. Do not rerun `make perf` with `sudo`. The
+target fails immediately on Windows and macOS.
 
 `make check-all-platforms` additionally validates the PowerShell scripts. It
 is only needed when changing those scripts and requires `pwsh` plus

@@ -48,7 +48,7 @@ def _write_executable(path: Path, source: str) -> None:
 
 def _run_perf(
     env: dict[str, str],
-    *,
+    *script_args: str,
     extra_path: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command_env = os.environ.copy()
@@ -56,7 +56,7 @@ def _run_perf(
     if extra_path is not None:
         command_env["PATH"] = f"{extra_path}{os.pathsep}{command_env.get('PATH', '')}"
     return subprocess.run(
-        ["bash", str(SCRIPT)],
+        ["bash", str(SCRIPT), *script_args],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -103,6 +103,9 @@ def _base_env(perf_home: Path, port: int, pid: int) -> dict[str, str]:
         "ASTRBOT_DASHBOARD_PORT": str(port),
         "ASTRBOT_PERF_PID_FILE": str(pid_file),
         "ASTRBOT_PERF_OUTPUT_DIR": str(perf_home / "out"),
+        "ASTRBOT_PERF_SIDECAR_PID_FILE": str(perf_home / "perf.pid"),
+        "ASTRBOT_PERF_META_FILE": str(perf_home / "perf.meta"),
+        "ASTRBOT_PERF_LOG_FILE": str(perf_home / "perf_run.log"),
         "ASTRBOT_PERF_PYSPY_FROM": "py-spy>=0.4.2",
     }
 
@@ -141,6 +144,33 @@ def _fake_uv_script(log_path: Path) -> str:
         "        out.write_text('fake-memray\\n', encoding='utf-8')\n"
         "    raise SystemExit(0)\n"
         "raise SystemExit(2)\n"
+    )
+
+
+def _fake_uvx_wait_script(log_path: Path) -> str:
+    return (
+        "#!/usr/bin/env python3\n"
+        "import pathlib\n"
+        "import signal\n"
+        "import sys\n"
+        "import time\n"
+        "argv = sys.argv[1:]\n"
+        f"pathlib.Path({str(log_path)!r}).write_text(' '.join(argv), encoding='utf-8')\n"
+        "stop = False\n"
+        "def _stop(signum, frame):\n"
+        "    global stop\n"
+        "    stop = True\n"
+        "signal.signal(signal.SIGINT, _stop)\n"
+        "signal.signal(signal.SIGTERM, _stop)\n"
+        "while not stop:\n"
+        "    try:\n"
+        "        time.sleep(0.05)\n"
+        "    except InterruptedError:\n"
+        "        stop = True\n"
+        "if '-o' in argv:\n"
+        "    out = pathlib.Path(argv[argv.index('-o') + 1])\n"
+        "    out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    out.write_text('live-svg\\n', encoding='utf-8')\n"
     )
 
 
@@ -203,20 +233,15 @@ def test_rejects_invalid_duration(
 ) -> None:
     proc, port = python_http_server
     env = _base_env(perf_home, port, proc.pid)
-    env["DURATION"] = "0"
+    env["DURATION"] = "-1"
     result = _run_perf(env)
     assert result.returncode == 2
-    assert "DURATION must be a positive integer" in (result.stderr or "")
+    assert "DURATION must be 0" in (result.stderr or "")
 
 
 def test_rejects_missing_backend(perf_home: Path) -> None:
-    env = {
-        "MODE": "cpu",
-        "DURATION": "1",
-        "ASTRBOT_DASHBOARD_PORT": str(_free_port()),
-        "ASTRBOT_PERF_PID_FILE": str(perf_home / "missing.pid"),
-        "ASTRBOT_PERF_OUTPUT_DIR": str(perf_home / "out"),
-    }
+    env = _base_env(perf_home, _free_port(), 1)
+    env["ASTRBOT_PERF_PID_FILE"] = str(perf_home / "missing.pid")
     result = _run_perf(env)
     assert result.returncode == 2
     assert "Backend is not running" in (result.stderr or "")
@@ -339,3 +364,56 @@ def test_mem_mode_attaches_and_writes_report(
     assert "sys.remote_exec" in recorded
     assert "memray flamegraph" in recorded
     assert f"{proc.pid}" in recorded
+
+
+def test_zero_duration_cpu_sidecar_until_stop(
+    perf_home: Path, python_http_server: tuple[subprocess.Popen[str], int]
+) -> None:
+    proc, port = python_http_server
+    log_path = perf_home / "uvx.log"
+    _write_executable(perf_home / "bin" / "uvx", _fake_uvx_wait_script(log_path))
+    env = _base_env(perf_home, port, proc.pid)
+    env["DURATION"] = "0"
+    result = _run_perf(env, extra_path=perf_home / "bin")
+    assert result.returncode == 0, result.stderr
+    sidecar_pid = int((perf_home / "perf.pid").read_text(encoding="utf-8").strip())
+    os.kill(sidecar_pid, 0)
+    recorded = log_path.read_text(encoding="utf-8")
+    assert "py-spy" in recorded
+    assert "--duration" not in recorded
+    stop = _run_perf(env, "stop", extra_path=perf_home / "bin")
+    assert stop.returncode == 0, stop.stderr
+    outputs = list((perf_home / "out").glob("cpu-*.svg"))
+    assert len(outputs) == 1
+    assert outputs[0].read_text(encoding="utf-8") == "live-svg\n"
+    assert not (perf_home / "perf.pid").exists()
+
+
+def test_zero_duration_mem_attaches_until_stop(
+    perf_home: Path, python_http_server: tuple[subprocess.Popen[str], int]
+) -> None:
+    proc, port = python_http_server
+    log_path = perf_home / "uv.log"
+    _write_executable(perf_home / "bin" / "uv", _fake_uv_script(log_path))
+    env = _base_env(perf_home, port, proc.pid)
+    env["MODE"] = "mem"
+    env["DURATION"] = "0"
+    result = _run_perf(env, extra_path=perf_home / "bin")
+    assert result.returncode == 0, result.stderr
+    recorded = log_path.read_text(encoding="utf-8")
+    assert "memray attach" in recorded
+    assert "--duration" not in recorded
+    assert "--native" not in recorded
+    assert (perf_home / "perf.meta").exists()
+    stop = _run_perf(env, "stop", extra_path=perf_home / "bin")
+    assert stop.returncode == 0, stop.stderr
+    assert "memray detach" in log_path.read_text(encoding="utf-8")
+    assert "memray flamegraph" in log_path.read_text(encoding="utf-8")
+    assert list((perf_home / "out").glob("mem-*.html"))
+    assert not (perf_home / "perf.meta").exists()
+
+
+def test_stop_without_sidecar_is_ok(perf_home: Path) -> None:
+    env = _base_env(perf_home, _free_port(), 1)
+    result = _run_perf(env, "stop")
+    assert result.returncode == 0, result.stderr

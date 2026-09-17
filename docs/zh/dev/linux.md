@@ -54,7 +54,8 @@ shell 中安装或启用 Node 26，确认 `node --version` 可用后再执行。
 make dev             # 后端 6185，Vite Dashboard 3000
 make status          # 检查两个进程
 make stop            # 停止两个进程组
-make perf            # 对已运行的后端做短时采样（仅 Linux）
+make perf            # 对已运行的后端采样（仅 Linux）
+make stop-perf       # 停止 DURATION=0 后台采样并写火焰图
 make check           # 严格执行 Linux/macOS 源码检查
 make test            # 执行全量 pytest
 make test-blocking   # 执行 blocking pytest
@@ -72,19 +73,25 @@ make pr-test-full    # lint、测试、启动 smoke test 与 Dashboard 构建
 `make run`。默认采 30 秒 CPU 火焰图，产物写在 `.tmp/perf/`。
 
 ```bash
-make dev
-make perf                  # CPU 火焰图
+make run                   # 或 make dev
+make perf                  # 30 秒 CPU 火焰图
 make perf MODE=idle        # 把 await / I/O 等待也算进去
+make perf DURATION=0       # 后台常驻，直到 make stop-perf / make stop
 make perf MODE=mem DURATION=60
 ```
+
+`DURATION=0` 和 `make run` 一样启动后回到 shell：CPU/idle 用后台 `py-spy` 采样，
+`MODE=mem` 把 tracker 留在后端进程里。生产环境用 CPU 采样；无限时长的 `MODE=mem`
+开销明显更大，且不会加 `--native`。先 `make stop-perf` 再停后端，火焰图才会写完。
+`make stop` 会先停采样侧车。
 
 `MODE=cpu` 和 `MODE=idle` 通过 `uvx` 调用 `py-spy`，不写进项目锁文件。`MODE=mem`
 需要后端虚拟环境里能 `import memray`（附加时会在目标进程里 import），先执行一次
 `uv sync --group perf --locked`。`perf` 组不进入 `make bootstrap`。
 
 附加已有进程通常需要 ptrace。权限被拒绝时，脚本会提示如何放宽
-`/proc/sys/kernel/yama/ptrace_scope`。不要用 `sudo` 跑 `make perf`。Windows 与
-macOS 上该目标会直接失败。
+`/proc/sys/kernel/yama/ptrace_scope`。容器里还可能需要 `cap_add: SYS_PTRACE`。
+不要用 `sudo` 跑 `make perf`。Windows 与 macOS 上该目标会直接失败。
 
 `make check-all-platforms` 会额外检查 PowerShell 脚本。只有修改 PS 脚本时才需要；
 该目标要求安装 `pwsh` 和 PSScriptAnalyzer，CI 会单独验证它们。

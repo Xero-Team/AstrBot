@@ -105,6 +105,7 @@ live in `.make/`, with backend logs in `backend_run*.log` and Dashboard logs in
 Dashboard or documentation build. `make perf` is a Linux-only sidecar: it
 attaches to the already-running backend (`MODE=cpu|idle|mem`, default 30s) and
 writes under `.tmp/perf/`; it does not start or wrap `make dev` / `make run`.
+`DURATION=0` starts a background sampler until `make stop-perf` / `make stop`.
 `MODE=mem` needs `uv sync --group perf --locked` once; that group is not part
 of bootstrap.
 `make run` first syncs the locked runtime

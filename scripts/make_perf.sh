@@ -6,20 +6,27 @@ MODE="${MODE:-cpu}"
 DURATION="${DURATION:-30}"
 PYSPY_FROM="${ASTRBOT_PERF_PYSPY_FROM:-py-spy>=0.4.2}"
 
-if (($# != 0)); then
-  echo "Usage: MODE=cpu|idle|mem DURATION=<seconds> scripts/make_perf.sh" >&2
-  echo "Do not pass positional arguments; use make perf MODE=... DURATION=..." >&2
+action="start"
+if (($# == 1)) && [[ "$1" == "stop" ]]; then
+  action="stop"
+elif (($# != 0)); then
+  echo "Usage: MODE=cpu|idle|mem DURATION=<seconds|0> scripts/make_perf.sh [stop]" >&2
+  echo "Do not pass other positional arguments; use make perf MODE=... DURATION=..." >&2
   exit 2
 fi
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 pid_file="${ASTRBOT_PERF_PID_FILE:-$repo_root/.make/backend.pid}"
+sidecar_pid_file="${ASTRBOT_PERF_SIDECAR_PID_FILE:-$repo_root/.make/perf.pid}"
+meta_file="${ASTRBOT_PERF_META_FILE:-$repo_root/.make/perf.meta}"
 output_dir="${ASTRBOT_PERF_OUTPUT_DIR:-$repo_root/.tmp/perf}"
+sidecar_log="${ASTRBOT_PERF_LOG_FILE:-$output_dir/perf_run.log}"
 port="${ASTRBOT_DASHBOARD_PORT:-6185}"
 
 usage_error() {
-  echo "Usage: MODE=cpu|idle|mem DURATION=<positive seconds> make perf" >&2
-  echo "Linux-only sidecar: attaches to a running backend started by make dev or make run." >&2
+  echo "Usage: MODE=cpu|idle|mem DURATION=<seconds or 0> make perf" >&2
+  echo "DURATION=0 starts a background sidecar until make stop-perf or make stop." >&2
+  echo "Linux-only: attaches to a running backend started by make dev or make run." >&2
   exit 2
 }
 
@@ -27,6 +34,7 @@ print_ptrace_hint() {
   echo "Permission to inspect the backend process was denied." >&2
   echo "On Linux, attaching usually needs ptrace. Grant it for your user, for example:" >&2
   echo "  echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope" >&2
+  echo "Docker/production may also need cap_add: SYS_PTRACE." >&2
   echo "Do not rerun this script with sudo." >&2
 }
 
@@ -132,9 +140,126 @@ run_checked() {
   return "$status"
 }
 
+pid_is_alive() {
+  local pid="$1"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+stop_perf_pid() {
+  local pid="$1"
+  local pgid
+  pid_is_alive "$pid" || return 0
+
+  pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "$pgid" == "$pid" ]]; then
+    kill -INT -- "-$pid" 2>/dev/null || true
+  else
+    kill -INT "$pid" 2>/dev/null || true
+  fi
+
+  local _
+  for _ in {1..50}; do
+    pid_is_alive "$pid" || return 0
+    sleep 0.2
+  done
+
+  if [[ "$pgid" == "$pid" ]]; then
+    kill -TERM -- "-$pid" 2>/dev/null || true
+  else
+    kill -TERM "$pid" 2>/dev/null || true
+  fi
+  for _ in {1..10}; do
+    pid_is_alive "$pid" || return 0
+    sleep 0.2
+  done
+  if [[ "$pgid" == "$pid" ]]; then
+    kill -KILL -- "-$pid" 2>/dev/null || true
+  else
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+}
+
+write_meta() {
+  mkdir -p "$(dirname "$meta_file")"
+  cat >"$meta_file" <<EOF
+mode=$1
+outfile=${2:-}
+capture=${3:-}
+report=${4:-}
+backend_pid=${5:-}
+EOF
+}
+
+sidecar_is_running() {
+  local pid
+  [[ -f "$sidecar_pid_file" ]] || return 1
+  pid="$(<"$sidecar_pid_file")"
+  pid_is_alive "$pid"
+}
+
+start_sidecar() {
+  mkdir -p "$(dirname "$sidecar_pid_file")" "$output_dir"
+  : >"$sidecar_log"
+  (
+    if command -v setsid >/dev/null 2>&1; then
+      exec setsid "$@"
+    fi
+    exec "$@"
+  ) >>"$sidecar_log" 2>>"$sidecar_log" &
+  local pid=$!
+  printf '%s\n' "$pid" >"$sidecar_pid_file"
+  sleep 0.4
+  if pid_is_alive "$pid"; then
+    return 0
+  fi
+  if [[ -s "$sidecar_log" ]]; then
+    cat "$sidecar_log" >&2
+    if is_permission_error "$(<"$sidecar_log")"; then
+      print_ptrace_hint
+    fi
+  fi
+  rm -f -- "$sidecar_pid_file"
+  return 1
+}
+
+stop_session() {
+  local mode="" outfile="" capture="" report="" backend_pid="" sidecar_pid=""
+  if [[ -f "$meta_file" ]]; then
+    # shellcheck disable=SC1090
+    source "$meta_file"
+  fi
+  if [[ -f "$sidecar_pid_file" ]]; then
+    sidecar_pid="$(<"$sidecar_pid_file")"
+    stop_perf_pid "$sidecar_pid"
+    rm -f -- "$sidecar_pid_file"
+  fi
+  if [[ "$mode" == "mem" ]]; then
+    if [[ -n "$backend_pid" ]] && pid_is_alive "$backend_pid"; then
+      run_checked uv run --no-sync memray detach --method sys.remote_exec "$backend_pid" || true
+    fi
+    if [[ -n "$capture" && -f "$capture" && -n "$report" ]]; then
+      run_checked uv run --no-sync memray flamegraph -o "$report" "$capture"
+      echo "Wrote $capture"
+      echo "Wrote $report"
+    fi
+  elif [[ -n "$outfile" ]]; then
+    echo "Wrote $outfile"
+  fi
+  rm -f -- "$meta_file"
+}
+
 if [[ "$(uname -s)" != "Linux" ]]; then
+  if [[ "$action" == "stop" ]]; then
+    exit 0
+  fi
   echo "make perf is Linux-only." >&2
   exit 2
+fi
+
+if [[ "$action" == "stop" ]]; then
+  stop_session
+  exit 0
 fi
 
 case "$MODE" in
@@ -145,13 +270,18 @@ case "$MODE" in
     ;;
 esac
 
-if [[ ! "$DURATION" =~ ^[1-9][0-9]*$ ]]; then
-  echo "DURATION must be a positive integer of seconds, got: $DURATION" >&2
+if [[ "$DURATION" != "0" && ! "$DURATION" =~ ^[1-9][0-9]*$ ]]; then
+  echo "DURATION must be 0 (until stop) or a positive integer of seconds, got: $DURATION" >&2
   usage_error
 fi
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required." >&2
+  exit 2
+fi
+
+if sidecar_is_running || [[ -f "$meta_file" ]]; then
+  echo "A perf sidecar is already running. Stop it with make stop-perf first." >&2
   exit 2
 fi
 
@@ -164,7 +294,11 @@ backend_pid="$(resolve_backend_python_pid)" || {
 mkdir -p "$output_dir"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
-echo "Profiling backend PID $backend_pid (MODE=$MODE DURATION=${DURATION}s)"
+if [[ "$DURATION" == "0" ]]; then
+  echo "Profiling backend PID $backend_pid (MODE=$MODE until make stop-perf / make stop)"
+else
+  echo "Profiling backend PID $backend_pid (MODE=$MODE DURATION=${DURATION}s)"
+fi
 
 case "$MODE" in
   cpu | idle)
@@ -173,12 +307,20 @@ case "$MODE" in
       exit 2
     fi
     outfile="$output_dir/${MODE}-${stamp}.svg"
-    record_args=(record --duration "$DURATION" --format flamegraph -o "$outfile" --pid "$backend_pid")
+    record_args=(record --format flamegraph -o "$outfile" --pid "$backend_pid")
     if [[ "$MODE" == "idle" ]]; then
       record_args+=(--idle)
     fi
-    run_checked uvx --from "$PYSPY_FROM" py-spy "${record_args[@]}"
-    echo "Wrote $outfile"
+    if [[ "$DURATION" == "0" ]]; then
+      start_sidecar uvx --from "$PYSPY_FROM" py-spy "${record_args[@]}"
+      write_meta "$MODE" "$outfile" "" "" "$backend_pid"
+      echo "Sampler PID $(<"$sidecar_pid_file")"
+      echo "Writing $outfile on make stop-perf / make stop"
+    else
+      record_args+=(--duration "$DURATION")
+      run_checked uvx --from "$PYSPY_FROM" py-spy "${record_args[@]}"
+      echo "Wrote $outfile"
+    fi
     ;;
   mem)
     if ! uv run --no-sync python -c "import memray" >/dev/null 2>&1; then
@@ -189,15 +331,18 @@ case "$MODE" in
     fi
     capture="$output_dir/mem-${stamp}.bin"
     report="$output_dir/mem-${stamp}.html"
-    run_checked uv run --no-sync memray attach \
-      --native \
-      --method sys.remote_exec \
-      --duration "$DURATION" \
-      -o "$capture" \
-      "$backend_pid"
-    sleep "$DURATION"
-    run_checked uv run --no-sync memray flamegraph -o "$report" "$capture"
-    echo "Wrote $capture"
-    echo "Wrote $report"
+    attach_args=(attach --method sys.remote_exec -o "$capture")
+    if [[ "$DURATION" == "0" ]]; then
+      run_checked uv run --no-sync memray "${attach_args[@]}" "$backend_pid"
+      write_meta mem "" "$capture" "$report" "$backend_pid"
+      echo "Memory capture $capture until make stop-perf / make stop"
+    else
+      attach_args+=(--native --duration "$DURATION")
+      run_checked uv run --no-sync memray "${attach_args[@]}" "$backend_pid"
+      sleep "$DURATION"
+      run_checked uv run --no-sync memray flamegraph -o "$report" "$capture"
+      echo "Wrote $capture"
+      echo "Wrote $report"
+    fi
     ;;
 esac

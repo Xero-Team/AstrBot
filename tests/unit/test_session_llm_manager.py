@@ -275,3 +275,89 @@ async def test_llm_session_setters_write_canonical_key():
     }
     assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is False
     assert await manager.should_process_llm_request(event) is False
+
+
+@pytest.mark.asyncio
+async def test_sender_setters_write_subject_im_key_and_preserve_llm():
+    event = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="room-a",
+    )
+    sender_key = sender_admission_key_from_event(event)
+    preferences = _Preferences()
+    preferences.values[("sender", sender_key, "session_service_config")] = {
+        "llm_enabled": True
+    }
+    manager = _manager(preferences)
+
+    await manager.set_sender_blocked(event, True)
+
+    assert preferences.values[("sender", sender_key, "session_service_config")] == {
+        "blocked": True,
+        "llm_enabled": True,
+    }
+    assert await manager.is_sender_blocked(event) is True
+    assert await manager.should_process_llm_request(event) is True
+
+    await manager.set_sender_blocked(sender_key, False)
+    await manager.set_sender_llm_enabled(event, False)
+    assert preferences.values[("sender", sender_key, "session_service_config")] == {
+        "blocked": False,
+        "llm_enabled": False,
+    }
+    assert await manager.should_process_llm_request(event) is False
+
+
+@pytest.mark.asyncio
+async def test_sender_setters_replace_non_dict_and_drop_extra_keys():
+    sender_key = "im:napcat:bot:user-1"
+    preferences = _Preferences()
+    preferences.values[("sender", sender_key, "session_service_config")] = "bad"
+    manager = _manager(preferences)
+
+    await manager.set_sender_blocked(sender_key, True)
+    assert preferences.values[("sender", sender_key, "session_service_config")] == {
+        "blocked": True
+    }
+
+    preferences.values[("sender", sender_key, "session_service_config")] = {
+        "blocked": True,
+        "llm_enabled": True,
+        "session_enabled": False,
+        "tts_enabled": False,
+        "persona_id": "p1",
+        "kb_ids": ["kb-1"],
+        "provider_id": "openai",
+    }
+    await manager.set_sender_llm_enabled(sender_key, False)
+    assert preferences.values[("sender", sender_key, "session_service_config")] == {
+        "blocked": True,
+        "llm_enabled": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_sender_llm_setter_follows_composition_table():
+    event = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="room-a",
+    )
+    session_key = session_admission_key_from_event(event)
+    preferences = _Preferences()
+    preferences.values[("umo", session_key, "session_service_config")] = {
+        "llm_enabled": False
+    }
+    manager = _manager(preferences)
+
+    assert await manager.should_process_llm_request(event) is False
+
+    await manager.set_sender_llm_enabled(event, True)
+    assert await manager.should_process_llm_request(event) is True
+
+    await manager.set_sender_llm_enabled(event, False)
+    preferences.values[("umo", session_key, "session_service_config")] = {
+        "llm_enabled": True
+    }
+    assert await manager.should_process_llm_request(event) is False

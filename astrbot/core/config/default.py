@@ -227,6 +227,7 @@ DEFAULT_CONFIG = {
             "read_only": True,
             "report_via_conversation": True,
             "workspace_root": "",
+            "coding_agents": [],
         },
         "work_session": {"max_age_seconds": 3600},
         "plugin_routes": [],
@@ -4863,6 +4864,16 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
             "description": "编码代理任务目录根路径",
             "type": "string",
             "hint": "每个委派任务在此目录下拥有独立文件夹。留空时使用数据目录下的 btw/workspaces。",
+            "condition": {"btw.work_loop.enabled": True},
+        },
+        "btw.work_loop.coding_agents": {
+            "description": "第三方编码代理",
+            "type": "list",
+            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex）。每项包含 id、type、command、权限模式与 provider 预设；provider 会以该 CLI 原生配置层的形式生效，不改动用户全局配置。权限模式与沙箱是该 CLI 自己执行的策略，不是操作系统级隔离。委派会启动本地进程并写入文件，因此还要求工作循环的 Computer Use 运行时为 local（sandbox 下委派等于绕过沙箱），并通过 tool.local_exec 与 tool.file_write 的授权。Claude Code 以非交互方式（-p）运行，没有终端可以回答权限询问：acceptEdits 只自动放行编辑，需要跑 shell 命令的任务会一直等到超时，这类任务要显式选择 bypassPermissions。",
+            "_special": "select_coding_agents",
+            # The editor is a list of cards holding a nested preset list; half
+            # of a row is not enough to lay one out.
+            "full_width": True,
             "condition": {"btw.work_loop.enabled": True},
         },
         "btw.work_session.max_age_seconds": {

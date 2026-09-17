@@ -493,6 +493,10 @@
           "workspace_root": {
             "description": "Coding-agent task folder root",
             "hint": "Each delegated task gets its own folder under this path. Empty uses btw/workspaces inside the data directory."
+          },
+          "coding_agents": {
+            "description": "Third-party coding agents",
+            "hint": "Local CLI agents that can be handed write tasks (for example Claude Code or Codex). Each entry carries an id, type, command, permission mode, and provider presets. A provider's endpoint and model take effect as that CLI's own config layer; its key is passed only in the child's environment, is never written to disk, and never rewrites the user's global configuration. A delegation starts a local process and writes files, so the work loop's Computer Use runtime must also be local or sandbox, and `tool.local_exec` and `tool.file_write` must both be authorized."
           }
         },
         "work_session": {

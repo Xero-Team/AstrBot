@@ -113,6 +113,11 @@ const sidebarItem: menu[] = [
         to: '/subagent',
       },
       {
+        title: 'core.navigation.btw',
+        icon: 'mdi-swap-horizontal',
+        to: '/btw',
+      },
+      {
         title: 'core.navigation.data',
         icon: 'mdi-database',
         to: '/dashboard',

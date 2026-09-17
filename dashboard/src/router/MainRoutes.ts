@@ -115,6 +115,11 @@ const MainRoutes = {
       component: () => import('@/views/SubAgentPage.vue'),
     },
     {
+      name: 'BtwSettings',
+      path: '/btw',
+      component: () => import('@/views/BtwPage.vue'),
+    },
+    {
       name: 'CronJobs',
       path: '/cron',
       component: () => import('@/views/CronJobPage.vue'),

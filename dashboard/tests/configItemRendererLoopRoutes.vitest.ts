@@ -26,6 +26,9 @@ function mountRenderer(special: string) {
           props: ['kind'],
           template: '<div class="capability-loop-stub">{{ kind }}</div>',
         },
+        CodingAgentsEditor: {
+          template: '<div class="coding-agents-stub"></div>',
+        },
         ListConfigItem: {
           template: '<div class="list-config-stub"></div>',
         },
@@ -52,5 +55,14 @@ describe('ConfigItemRenderer loop-route specials', () => {
     expect(skill.find('.capability-loop-stub').text()).toBe('skill');
     expect(skill.find('.list-config-stub').exists()).toBe(false);
     skill.unmount();
+  });
+
+  it('renders CodingAgentsEditor for a coding-agent profile', () => {
+    // The regression guard: a `_special` with no branch falls through to the
+    // string-list editor, which cannot hold the objects this value is made of.
+    const wrapper = mountRenderer('select_coding_agents');
+    expect(wrapper.find('.coding-agents-stub').exists()).toBe(true);
+    expect(wrapper.find('.list-config-stub').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

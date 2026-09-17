@@ -25,7 +25,7 @@ class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
     @abstractmethod
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         """一个用于重写的自定义Filter"""
-        raise NotImplementedError
+        ...
 
     def __or__(self, other):
         return CustomFilterOr(self, other)

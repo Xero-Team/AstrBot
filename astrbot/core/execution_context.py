@@ -140,13 +140,11 @@ def _resolve_tool_handler_module_path(
 
 
 class PlatformManagerProtocol(Protocol):
-    def loaded_platforms(self) -> tuple[object, ...]:
-        raise NotImplementedError
+    def loaded_platforms(self) -> tuple[object, ...]: ...
 
     def add_envelope_observer(
         self, observer: Callable[[MessageEnvelope], Awaitable[None]]
-    ) -> None:
-        raise NotImplementedError
+    ) -> None: ...
 
     def create_event(
         self,
@@ -154,16 +152,14 @@ class PlatformManagerProtocol(Protocol):
         event_message: object,
         *,
         is_wake: bool = True,
-    ) -> None:
-        raise NotImplementedError
+    ) -> None: ...
 
     async def invoke_action(
         self,
         platform_id: str,
         action_name: str,
         **kwargs,
-    ) -> dict[str, object]:
-        raise NotImplementedError
+    ) -> dict[str, object]: ...
 
     async def invoke_capability(
         self,
@@ -171,29 +167,23 @@ class PlatformManagerProtocol(Protocol):
         capability_name: str,
         action_name: str,
         **kwargs,
-    ) -> object:
-        raise NotImplementedError
+    ) -> object: ...
 
-    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]:
-        raise NotImplementedError
+    def get_platform_capabilities(self, platform_id: str) -> tuple[object, ...]: ...
 
     def get_message_delivery_capabilities(
         self, platform_id: str, session: MessageSession | None = None
-    ) -> MessageDeliveryCapabilities:
-        raise NotImplementedError
+    ) -> MessageDeliveryCapabilities: ...
 
-    def get_adapter_name(self, platform_id: str) -> str:
-        raise NotImplementedError
+    def get_adapter_name(self, platform_id: str) -> str: ...
 
-    async def refresh_registered_commands(self) -> None:
-        raise NotImplementedError
+    async def refresh_registered_commands(self) -> None: ...
 
     async def send_to_session(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> PlatformSendResult:
-        raise NotImplementedError
+    ) -> PlatformSendResult: ...
 
 
 class CoreExecutionContext:

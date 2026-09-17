@@ -57,11 +57,11 @@ class KnowledgeBaseTaskStore(Protocol):
 
     async def create_knowledge_base_task(
         self, *, task_id: str, operation_kind: str, kb_id: str
-    ) -> KnowledgeBaseTask:
-        return T.cast("KnowledgeBaseTask", None)
+    ) -> KnowledgeBaseTask: ...
 
-    async def get_knowledge_base_task(self, task_id: str) -> KnowledgeBaseTask | None:
-        return None
+    async def get_knowledge_base_task(
+        self, task_id: str
+    ) -> KnowledgeBaseTask | None: ...
 
     async def update_knowledge_base_task(
         self,
@@ -71,16 +71,13 @@ class KnowledgeBaseTaskStore(Protocol):
         progress: dict | None = None,
         result: dict | None = None,
         error: str | None = None,
-    ) -> KnowledgeBaseTask | None:
-        return None
+    ) -> KnowledgeBaseTask | None: ...
 
-    async def interrupt_active_knowledge_base_tasks(self) -> int:
-        return 0
+    async def interrupt_active_knowledge_base_tasks(self) -> int: ...
 
     async def prune_knowledge_base_tasks(
         self, *, older_than: datetime.datetime, max_records: int
-    ) -> int:
-        return 0
+    ) -> int: ...
 
 
 @runtime_checkable
@@ -508,8 +505,7 @@ class MessageHistoryStore(Protocol):
         self,
         platform_id: str,
         user_id: str,
-    ) -> int:
-        return 0
+    ) -> int: ...
 
     async def get_group_message_history(
         self,
@@ -931,8 +927,7 @@ class SessionBridgeStore(Protocol):
         match: dict | None = None,
         except_: dict | None = None,
         rule_id: str | None = None,
-    ) -> SessionBridgeRule:
-        return T.cast("SessionBridgeRule", None)
+    ) -> SessionBridgeRule: ...
 
     async def insert_session_bridge_pair(
         self,
@@ -944,37 +939,32 @@ class SessionBridgeStore(Protocol):
         target_config_id: str,
         pair_id: str,
         drop_rule_ids: tuple[str, ...] = (),
-    ) -> tuple[SessionBridgeRule, SessionBridgeRule]:
-        return T.cast("tuple[SessionBridgeRule, SessionBridgeRule]", (None, None))
+    ) -> tuple[SessionBridgeRule, SessionBridgeRule]: ...
 
-    async def get_session_bridge_rule(self, rule_id: str) -> SessionBridgeRule | None:
-        return None
+    async def get_session_bridge_rule(
+        self, rule_id: str
+    ) -> SessionBridgeRule | None: ...
 
     async def get_session_bridge_rule_by_direction(
         self,
         subject_id: str,
         source_umo: str,
         target_umo: str,
-    ) -> SessionBridgeRule | None:
-        return None
+    ) -> SessionBridgeRule | None: ...
 
-    async def list_session_bridge_rules(self) -> list[SessionBridgeRule]:
-        return []
+    async def list_session_bridge_rules(self) -> list[SessionBridgeRule]: ...
 
     async def list_session_bridge_rules_by_subject(
         self, subject_id: str
-    ) -> list[SessionBridgeRule]:
-        return []
+    ) -> list[SessionBridgeRule]: ...
 
     async def list_session_bridge_connects_for_listener(
         self, subject_id: str, source_umo: str
-    ) -> list[SessionBridgeRule]:
-        return []
+    ) -> list[SessionBridgeRule]: ...
 
     async def list_session_bridge_rules_touching_config(
         self, config_id: str
-    ) -> list[SessionBridgeRule]:
-        return []
+    ) -> list[SessionBridgeRule]: ...
 
     async def update_session_bridge_rule(
         self,
@@ -989,16 +979,13 @@ class SessionBridgeStore(Protocol):
         pair_id: str | None = None,
         match: dict | None = None,
         except_: dict | None = None,
-    ) -> SessionBridgeRule | None:
-        return None
+    ) -> SessionBridgeRule | None: ...
 
-    async def delete_session_bridge_rule(self, rule_id: str) -> None:
-        return None
+    async def delete_session_bridge_rule(self, rule_id: str) -> None: ...
 
     async def delete_session_bridge_connects_for_listener(
         self, subject_id: str, source_umo: str
-    ) -> None:
-        return None
+    ) -> None: ...
 
 
 @runtime_checkable

@@ -20,7 +20,7 @@ class Stage(abc.ABC):
             ctx (PipelineContext): 消息管道上下文对象, 包括配置和插件管理器
 
         """
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def process(self, event: AstrMessageEvent) -> StageProcessResult:
@@ -34,4 +34,4 @@ class Stage(abc.ABC):
             control so later stages can run before post-processing resumes.
 
         """
-        raise NotImplementedError
+        ...

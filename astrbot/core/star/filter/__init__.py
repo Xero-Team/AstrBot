@@ -9,7 +9,7 @@ class HandlerFilter(abc.ABC):
     @abc.abstractmethod
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         """是否应当被过滤"""
-        raise NotImplementedError
+        ...
 
 
 __all__ = ["AstrBotConfig", "AstrMessageEvent", "HandlerFilter", "MessageType"]

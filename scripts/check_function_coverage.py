@@ -9,6 +9,27 @@ import json
 from pathlib import Path
 
 
+def _is_stub_body(body: list[ast.stmt]) -> bool:
+    statements = body
+    if (
+        statements
+        and isinstance(statements[0], ast.Expr)
+        and isinstance(statements[0].value, ast.Constant)
+        and isinstance(statements[0].value.value, str)
+    ):
+        statements = statements[1:]
+    if len(statements) != 1:
+        return False
+    statement = statements[0]
+    if isinstance(statement, ast.Pass):
+        return True
+    return (
+        isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Constant)
+        and statement.value.value is Ellipsis
+    )
+
+
 def _functions(path: Path) -> list[ast.AST]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -26,17 +47,8 @@ def _functions(path: Path) -> list[ast.AST]:
                 decorator_names.append(decorator.attr)
         if "overload" in decorator_names:
             continue
-        body = node.body
-        if len(body) == 1:
-            statement = body[0]
-            if isinstance(statement, ast.Pass):
-                continue
-            if (
-                isinstance(statement, ast.Expr)
-                and isinstance(statement.value, ast.Constant)
-                and statement.value.value is Ellipsis
-            ):
-                continue
+        if _is_stub_body(node.body):
+            continue
         functions.append(node)
     return functions
 

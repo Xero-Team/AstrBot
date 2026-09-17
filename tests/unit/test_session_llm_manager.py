@@ -156,3 +156,42 @@ async def test_setters_replace_non_dict_service_config():
     assert preferences.values[("umo", "sid", "session_service_config")] == {
         "session_blocked": True
     }
+
+    preferences.values[("umo", "sid", "session_service_config")] = "bad"
+    await manager.set_tts_status_for_session("sid", False)
+    assert preferences.values[("umo", "sid", "session_service_config")] == {
+        "tts_enabled": False
+    }
+
+
+@pytest.mark.asyncio
+async def test_tts_non_dict_and_invalid_values_default_enabled():
+    event = make_real_event(
+        message_type=MessageType.GROUP_MESSAGE,
+        group_id="room-a",
+        session_id="room-a",
+    )
+    preferences = _Preferences()
+    preferences.values[("umo", event.unified_msg_origin, "session_service_config")] = (
+        "bad"
+    )
+    manager = _manager(preferences)
+
+    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is True
+    assert await manager.should_process_tts_request(event) is True
+
+    preferences.values[("umo", event.unified_msg_origin, "session_service_config")] = {
+        "tts_enabled": "no",
+        "llm_enabled": False,
+    }
+    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is True
+    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is False
+
+    await manager.set_tts_status_for_session(event.unified_msg_origin, False)
+    assert preferences.values[
+        ("umo", event.unified_msg_origin, "session_service_config")
+    ] == {
+        "tts_enabled": False,
+        "llm_enabled": False,
+    }
+    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is False

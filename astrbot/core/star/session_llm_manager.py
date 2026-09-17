@@ -94,21 +94,8 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话服务配置
-        session_services = await self.preferences.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
-        )
-
-        # 如果配置了该会话的TTS状态，返回该状态
-        tts_enabled = session_services.get("tts_enabled")
-        if tts_enabled is not None:
-            return tts_enabled
-
-        # 如果没有配置，默认为启用（兼容性考虑）
-        return True
+        tts_enabled = (await self._service_config("umo", session_id)).get("tts_enabled")
+        return tts_enabled if isinstance(tts_enabled, bool) else True
 
     async def set_tts_status_for_session(self, session_id: str, enabled: bool) -> None:
         """设置TTS在指定会话中的启停状态
@@ -118,20 +105,12 @@ class SessionServiceManager:
             enabled: True表示启用，False表示禁用
 
         """
-        session_config = (
-            await self.preferences.get_async(
-                scope="umo",
-                scope_id=session_id,
-                key="session_service_config",
-                default={},
-            )
-            or {}
-        )
+        session_config = await self._service_config("umo", session_id)
         session_config["tts_enabled"] = enabled
         await self.preferences.put_async(
             scope="umo",
             scope_id=session_id,
-            key="session_service_config",
+            key=SESSION_SERVICE_CONFIG_KEY,
             value=session_config,
         )
 

@@ -1199,7 +1199,7 @@
         },
         "unlisted_senders": {
           "description": "Unlisted sender policy",
-          "hint": "allow admits senders with no overlay. deny admits only senders that already have a blocked or llm_enabled overlay. The sender list picker is not in this slice.",
+          "hint": "allow admits senders with no overlay. deny admits only senders that already have a blocked or llm_enabled overlay. Dashboard custom rules still edit sessions only; write sender overlays with /user block, /user unblock, and /user llm on|off.",
           "labels": ["Allow", "Deny"]
         }
       }

@@ -13,7 +13,7 @@
 
 默认 `allow`：新群和新私聊都会进入后续流水线。改成 `deny` 后，只有规范会话键上已有覆盖、或本配置档升级列入集里的会话会被响应。覆盖来自 IM `/llm`、Dashboard [自定义规则](./custom-rules) 写入的 `llm_enabled` / `session_enabled` / `session_blocked`。升级时旧白名单按配置档记入列入集，不会把 `session_enabled` 写到偏好里。
 
-群准入用的是规范会话键（`session:{平台实例}:group:{群 ID}`），不是隔离会话改写后的 UMO。私聊用 `session:{平台实例}:private:{对方 ID}`。发送者覆盖写在 `im:{平台实例}:{机器人账号}:{发送者 ID}` 上，对本机器人实例全局生效。WebChat、OneBot 的 `notice` / `request`，以及当前实例上拥有 `provider.manage` 的发送者，会跳过这一关。默认 `unlisted_senders=allow`：没有发送者覆盖的人仍然放行。改成 `deny` 后，只有已写入 `blocked` 或 `llm_enabled` 的发送者会被列入；发送者列表选择器不在本切片，可用 `/user llm on` 或写入 `llm_enabled` 来列入。
+群准入用的是规范会话键（`session:{平台实例}:group:{群 ID}`），不是隔离会话改写后的 UMO。私聊用 `session:{平台实例}:private:{对方 ID}`。发送者覆盖写在 `im:{平台实例}:{机器人账号}:{发送者 ID}` 上，对本机器人实例全局生效。WebChat、OneBot 的 `notice` / `request`，以及当前实例上拥有 `provider.manage` 的发送者，会跳过这一关。默认 `unlisted_senders=allow`：没有发送者覆盖的人仍然放行。改成 `deny` 后，只有已写入 `blocked` 或 `llm_enabled` 的发送者会被列入。Dashboard 自定义规则仍只编辑会话覆盖；用 `/user block`、`/user unblock`、`/user llm on|off` 写入发送者覆盖。写入任意 `blocked` 或 `llm_enabled` 都会列入该发送者。
 
 旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除，Dashboard 写入这些字段会失败。升级时：空列表或关闭的白名单变成 `allow`；非空且开启的列表变成 `deny`，并把条目列入该配置档。裸 ID 会按该配置档里每个 `platform[].id` 展开成群会话键。隔离会话 UMO 会按 `sender_id_group_id` / `sender_id%group_id` 解开成群 ID。
 

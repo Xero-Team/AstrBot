@@ -911,11 +911,19 @@ async def test_user_commands_write_sender_overlays():
     assert "Usage:" in _plain_text(empty_event.result)
     assert ("", "session_service_config") not in stored
 
+    invalid_event = DummyEvent(message_str="user block")
+    await command.set_blocked(invalid_event, "im:foo", True)
+    assert "Usage:" in _plain_text(invalid_event.result)
+    assert ("im:foo", "session_service_config") not in stored
+
 
 def test_sender_key_from_token_mints_raw_ids_like_admission():
     event = DummyEvent(message_str="user block", platform_id="", platform_name="napcat")
     assert sender_key_from_token(event, " 99 ") == "im:napcat:bot:99"
     assert sender_key_from_token(event, "im:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_key_from_token(event, "IM:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_key_from_token(event, "im:foo") is None
+    assert sender_key_from_token(event, "im:napcat:bot:") is None
     assert sender_key_from_token(event, "  ") is None
     empty = DummyEvent(message_str="user block", platform_id="", platform_name="")
     assert sender_key_from_token(empty, "99") == "im:unknown:bot:99"
@@ -1410,6 +1418,12 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
     assert missing.resolution.command_path == ("user", "block")
     missing_entry = missing.resolution.entries[0]
     assert dict(engine.bind(missing_entry, missing).values) == {"sender_id": ""}
+
+    extra = engine.resolve("user block 99 extra")
+    extra_entry = extra.resolution.entries[0]
+    with pytest.raises(CommandError) as exc:
+        engine.bind(extra_entry, extra)
+    assert exc.value.diagnostic.code is CommandErrorCode.TOO_MANY_ARGUMENTS
 
     assert declarations.function_tools == ()
     black = engine.resolve("black 99")

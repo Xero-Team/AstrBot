@@ -296,6 +296,48 @@ async def test_blocked_sender_is_stopped_in_every_session():
 
 
 @pytest.mark.asyncio
+async def test_private_chat_sender_block_does_not_read_session_overlay():
+    preferences = _Preferences()
+    event = make_real_event(
+        message_type=MessageType.FRIEND_MESSAGE,
+        group_id="",
+        session_id="user-1",
+    )
+    session_key = session_admission_key_from_event(event)
+    sender_key = sender_admission_key_from_event(event)
+    assert session_key != sender_key
+    preferences.values[(session_key, SESSION_SERVICE_CONFIG_KEY)] = {
+        "llm_enabled": True
+    }
+    preferences.sender_values[(sender_key, SESSION_SERVICE_CONFIG_KEY)] = {
+        "blocked": True
+    }
+    stage = await _stage(preferences=preferences)
+
+    await stage.process(event)
+
+    assert event.is_stopped() is True
+
+
+@pytest.mark.asyncio
+async def test_private_chat_session_overlay_does_not_list_the_sender():
+    preferences = _Preferences()
+    event = make_real_event(
+        message_type=MessageType.FRIEND_MESSAGE,
+        group_id="",
+        session_id="user-1",
+    )
+    preferences.values[
+        (session_admission_key_from_event(event), SESSION_SERVICE_CONFIG_KEY)
+    ] = {"llm_enabled": True}
+    stage = await _stage(unlisted_senders="deny", preferences=preferences)
+
+    await stage.process(event)
+
+    assert event.is_stopped() is True
+
+
+@pytest.mark.asyncio
 async def test_blocked_sender_passthrough_allows_user_unblock_and_bot_status():
     preferences = _Preferences()
     event = make_real_event(message_type=MessageType.GROUP_MESSAGE)

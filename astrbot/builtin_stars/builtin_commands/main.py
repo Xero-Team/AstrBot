@@ -400,17 +400,13 @@ class Main(star.Star):
 
     @filter.permission("session.manage")
     @user.command("block")
-    async def user_block(
-        self, event: AstrMessageEvent, sender_id: GreedyStr = GreedyStr("")
-    ) -> None:
+    async def user_block(self, event: AstrMessageEvent, sender_id: str = "") -> None:
         """Block a sender in every session of this bot instance"""
         await self.user_c.set_blocked(event, sender_id, True)
 
     @filter.permission("session.manage")
     @user.command("unblock")
-    async def user_unblock(
-        self, event: AstrMessageEvent, sender_id: GreedyStr = GreedyStr("")
-    ) -> None:
+    async def user_unblock(self, event: AstrMessageEvent, sender_id: str = "") -> None:
         """Unblock a sender in every session of this bot instance"""
         await self.user_c.set_blocked(event, sender_id, False)
 
@@ -420,17 +416,13 @@ class Main(star.Star):
 
     @filter.permission("session.manage")
     @user_llm.command("on")
-    async def user_llm_on(
-        self, event: AstrMessageEvent, sender_id: GreedyStr = GreedyStr("")
-    ) -> None:
+    async def user_llm_on(self, event: AstrMessageEvent, sender_id: str = "") -> None:
         """Enable built-in LLM for a sender"""
         await self.user_c.set_llm_enabled(event, sender_id, True)
 
     @filter.permission("session.manage")
     @user_llm.command("off")
-    async def user_llm_off(
-        self, event: AstrMessageEvent, sender_id: GreedyStr = GreedyStr("")
-    ) -> None:
+    async def user_llm_off(self, event: AstrMessageEvent, sender_id: str = "") -> None:
         """Disable built-in LLM for a sender"""
         await self.user_c.set_llm_enabled(event, sender_id, False)
 

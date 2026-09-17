@@ -43,8 +43,18 @@ def sender_key_from_token(event: AstrMessageEvent, token: str) -> str | None:
     sender_id = token.strip()
     if not sender_id:
         return None
-    if sender_id.startswith("im:"):
-        return sender_id
+    if sender_id.lower().startswith("im:"):
+        parts = sender_id.split(":", 3)
+        if len(parts) != 4 or not all(part.strip() for part in parts):
+            return None
+        try:
+            return Subject.im(
+                platform_instance=parts[1].strip(),
+                bot_account_id=parts[2].strip(),
+                sender_id=parts[3].strip(),
+            ).id
+        except ValueError:
+            return None
     platform_id = event.get_platform_id()
     if not (isinstance(platform_id, str) and platform_id.strip()):
         name = event.get_platform_name()

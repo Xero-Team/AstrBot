@@ -4507,7 +4507,7 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "options": ["allow", "deny"],
                         "labels": ["允许", "拒绝"],
-                        "hint": "allow 放行没有覆盖的发送者。deny 只放行已有 blocked 或 llm_enabled 覆盖的发送者。发送者列表选择器不在本切片。",
+                        "hint": "allow 放行没有覆盖的发送者。deny 只放行已有 blocked 或 llm_enabled 覆盖的发送者。Dashboard 自定义规则仍只编辑会话；用 /user block、/user unblock、/user llm on|off 写入发送者覆盖。",
                     },
                 },
             },

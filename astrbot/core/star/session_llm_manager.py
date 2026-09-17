@@ -206,7 +206,7 @@ class SessionServiceManager:
     async def is_sender_blocked(self, event: AstrMessageEvent) -> bool:
         """Check whether the inbound sender has a UID ``blocked`` overlay.
 
-        ``scope=sender`` is readable in this slice; missing rows are unblocked.
+        Missing sender rows are unblocked.
 
         Args:
             event: Inbound event used to mint the sender key.

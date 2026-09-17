@@ -144,7 +144,7 @@ LINE 等需要公网媒体 URL 的目标要求配置可访问的 HTTPS `callback
 - `/user llm on <sender_id>`：为该发送者打开内置 LLM（可覆盖会话级关闭）。
 - `/user llm off <sender_id>`：为该发送者关闭内置 LLM；匹配到的指令仍会执行。
 
-`sender_id` 必填：平台用户 ID（用当前 `get_platform_id()` / `get_self_id()` 铸成 `Subject.im`），或完整的 `im:` 主体 ID。省略或空参数只显示用法，不会操作自己。这些指令需要 `session.manage`。它们不是 `/black`，也不会注册 LLM tool。被拉黑的发送者在准入阶段被丢掉，只放行 `/user unblock` 和 `/bot status`。会话被完全禁用时，发送者 `llm_enabled=true` 不能救活事件。
+`sender_id` 必填：平台用户 ID（用当前 `get_platform_id()` / `get_self_id()` 铸成 `Subject.im`），或完整的 `im:{平台}:{机器人}:{发送者}` 主体 ID。省略或空参数只显示用法，不会操作自己。多余参数是绑定错误，不会算进 ID。这些指令需要 `session.manage`。它们不是 `/black`，也不会注册 LLM tool。被拉黑的发送者在准入阶段被丢掉，只放行 `/user unblock` 和 `/bot status`。会话被完全禁用时，发送者 `llm_enabled=true` 不能救活事件。
 
 ### TTS 状态
 

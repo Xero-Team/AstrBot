@@ -361,3 +361,40 @@ async def test_sender_llm_setter_follows_composition_table():
         "llm_enabled": True
     }
     assert await manager.should_process_llm_request(event) is False
+
+
+@pytest.mark.asyncio
+async def test_private_chat_session_and_sender_keys_stay_distinct():
+    event = make_real_event(
+        message_type=MessageType.FRIEND_MESSAGE,
+        group_id="",
+        session_id="user-1",
+    )
+    session_key = session_admission_key_from_event(event)
+    sender_key = sender_admission_key_from_event(event)
+    assert session_key != sender_key
+    assert session_key.startswith("session:")
+    assert sender_key.startswith("im:")
+
+    preferences = _Preferences()
+    preferences.values[("umo", session_key, "session_service_config")] = {
+        "llm_enabled": False
+    }
+    manager = _manager(preferences)
+
+    assert await manager.should_process_llm_request(event) is False
+    assert await manager.is_sender_blocked(event) is False
+
+    await manager.set_sender_llm_enabled(event, True)
+    assert await manager.should_process_llm_request(event) is True
+    assert preferences.values[("umo", session_key, "session_service_config")] == {
+        "llm_enabled": False
+    }
+
+    await manager.set_sender_blocked(event, True)
+    assert await manager.is_sender_blocked(event) is True
+    assert await manager.is_session_blocked(event.unified_msg_origin) is False
+    assert preferences.values[("sender", sender_key, "session_service_config")] == {
+        "blocked": True,
+        "llm_enabled": True,
+    }

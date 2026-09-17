@@ -233,6 +233,11 @@ DEFAULT_CONFIG = {
         "plugin_routes": [],
         "mcp_routes": [],
         "skill_routes": [],
+        # Provider presets the operator manages for the coding CLIs themselves.
+        # Separate from a coding agent's own `providers`: this list is what the
+        # CLI's global configuration is switched between, not what a delegated
+        # run is layered with.
+        "cli_providers": [],
     },
     "provider_stt_settings": {
         "enable": False,

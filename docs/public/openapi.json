@@ -82,6 +82,9 @@
       "name": "Config Profiles"
     },
     {
+      "name": "Coding CLI"
+    },
+    {
       "name": "Bot Config Routes"
     },
     {
@@ -321,6 +324,58 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ConfigId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/coding-cli/global-config": {
+      "get": {
+        "tags": ["Coding CLI"],
+        "summary": "Read each coding CLI's own configuration and its providers",
+        "operationId": "getCodingCliGlobalConfig",
+        "x-astrbot-scope": "config",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Coding CLI"],
+        "summary": "Switch a coding CLI to one of its configured providers",
+        "operationId": "switchCodingCliProvider",
+        "x-astrbot-scope": "config",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodingCliSwitchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/coding-cli/global-config/{cli}": {
+      "delete": {
+        "tags": ["Coding CLI"],
+        "summary": "Remove AstrBot's configuration from a coding CLI's global config",
+        "operationId": "removeCodingCliGlobalConfig",
+        "x-astrbot-scope": "config",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CodingCli"
           }
         ],
         "responses": {
@@ -5437,6 +5492,15 @@
           "type": "string"
         }
       },
+      "CodingCli": {
+        "name": "cli",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": ["claude_code", "codex"]
+        }
+      },
       "ConfigId": {
         "name": "config_id",
         "in": "path",
@@ -5713,6 +5777,20 @@
       "DynamicConfig": {
         "type": "object",
         "additionalProperties": true
+      },
+      "CodingCliSwitchRequest": {
+        "type": "object",
+        "required": ["cli", "provider_id"],
+        "properties": {
+          "cli": {
+            "type": "string",
+            "enum": ["claude_code", "codex"]
+          },
+          "provider_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "CreateConfigProfileRequest": {
         "type": "object",

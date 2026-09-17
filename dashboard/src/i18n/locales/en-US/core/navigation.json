@@ -50,5 +50,6 @@
     "current": "Current"
   },
   "pluginWebui": "Plugin Pages",
-  "btw": "BTW Dual Loop"
+  "btw": "BTW Dual Loop",
+  "cliConfig": "CLI Global Config"
 }

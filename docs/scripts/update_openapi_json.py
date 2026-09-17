@@ -14,6 +14,7 @@ PUBLIC_OPEN_API_TAGS = {
     "Open API",
     "System Config",
     "Config Profiles",
+    "Coding CLI",
     "Bot Config Routes",
     "Bots",
     "Provider Sources",

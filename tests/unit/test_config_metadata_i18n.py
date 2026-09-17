@@ -133,11 +133,26 @@ def test_config_metadata_locale_trees_match() -> None:
     assert sorted(en_keys - zh_keys) == []
 
 
+# Fields the generic config renderer must not offer a control for, because the
+# generic control would corrupt them.  ``cli_providers`` is a list of objects
+# edited by the CLI config page and written through the same profile, so a
+# string-list Control here would flatten every entry to "[object Object]".
+BTW_FIELDS_WITHOUT_CONTROLS = frozenset({"btw.cli_providers"})
+
+
 def test_every_btw_profile_field_reaches_dashboard_controls() -> None:
     converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
     items = converted["ai_group"]["metadata"]["btw"]["items"]
-    expected_fields = {f"btw.{field}" for field in _flatten(DEFAULT_CONFIG["btw"])}
+    expected_fields = {
+        f"btw.{field}" for field in _flatten(DEFAULT_CONFIG["btw"])
+    } - BTW_FIELDS_WITHOUT_CONTROLS
     assert set(items) == expected_fields
+
+
+def test_the_fields_without_controls_are_still_real_settings() -> None:
+    """A field skipped above must exist, so the exemption cannot outlive it."""
+    present = {f"btw.{field}" for field in _flatten(DEFAULT_CONFIG["btw"])}
+    assert BTW_FIELDS_WITHOUT_CONTROLS <= present
 
 
 def test_btw_controls_survive_dashboard_metadata_conversion() -> None:

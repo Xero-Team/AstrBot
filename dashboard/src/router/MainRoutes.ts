@@ -120,6 +120,11 @@ const MainRoutes = {
       component: () => import('@/views/BtwPage.vue'),
     },
     {
+      name: 'CliConfig',
+      path: '/cli-config',
+      component: () => import('@/views/CliConfigPage.vue'),
+    },
+    {
       name: 'CronJobs',
       path: '/cron',
       component: () => import('@/views/CronJobPage.vue'),

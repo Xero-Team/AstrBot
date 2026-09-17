@@ -50,5 +50,6 @@
     "current": "当前"
   },
   "pluginWebui": "插件页面",
-  "btw": "BTW 双循环"
+  "btw": "BTW 双循环",
+  "cliConfig": "CLI 全局配置"
 }

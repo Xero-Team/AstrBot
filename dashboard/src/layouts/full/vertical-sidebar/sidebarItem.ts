@@ -118,6 +118,11 @@ const sidebarItem: menu[] = [
         to: '/btw',
       },
       {
+        title: 'core.navigation.cliConfig',
+        icon: 'mdi-pencil-ruler',
+        to: '/cli-config',
+      },
+      {
         title: 'core.navigation.data',
         icon: 'mdi-database',
         to: '/dashboard',

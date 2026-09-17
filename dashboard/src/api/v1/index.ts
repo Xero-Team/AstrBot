@@ -2,6 +2,7 @@ export * from './appearance';
 export * from './auth';
 export * from './automation';
 export * from './chat';
+export * from './codingCli';
 export * from './config';
 export * from './conversations';
 export * from './files';

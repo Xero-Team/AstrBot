@@ -29,7 +29,18 @@ import subprocess
 import sys
 import threading
 import time
-from ctypes import wintypes
+from ctypes import (
+    POINTER,
+    Structure,
+    byref,
+    c_int,
+    c_longlong,
+    c_size_t,
+    c_ulonglong,
+    c_void_p,
+    sizeof,
+    wintypes,
+)
 from typing import Any
 
 from astrbot import logger
@@ -61,7 +72,7 @@ _ERROR_INSUFFICIENT_BUFFER = 122
 _JOB_TERMINATE_EXIT_CODE = 1
 
 
-class _ThreadEntry32(ctypes.Structure):
+class _ThreadEntry32(Structure):
     _fields_ = (
         ("dwSize", wintypes.DWORD),
         ("cntUsage", wintypes.DWORD),
@@ -73,23 +84,23 @@ class _ThreadEntry32(ctypes.Structure):
     )
 
 
-class _BasicLimitInformation(ctypes.Structure):
+class _BasicLimitInformation(Structure):
     _fields_ = (
-        ("PerProcessUserTimeLimit", ctypes.c_longlong),
-        ("PerJobUserTimeLimit", ctypes.c_longlong),
+        ("PerProcessUserTimeLimit", c_longlong),
+        ("PerJobUserTimeLimit", c_longlong),
         ("LimitFlags", wintypes.DWORD),
-        ("MinimumWorkingSetSize", ctypes.c_size_t),
-        ("MaximumWorkingSetSize", ctypes.c_size_t),
+        ("MinimumWorkingSetSize", c_size_t),
+        ("MaximumWorkingSetSize", c_size_t),
         ("ActiveProcessLimit", wintypes.DWORD),
-        ("Affinity", ctypes.c_size_t),
+        ("Affinity", c_size_t),
         ("PriorityClass", wintypes.DWORD),
         ("SchedulingClass", wintypes.DWORD),
     )
 
 
-class _IoCounters(ctypes.Structure):
+class _IoCounters(Structure):
     _fields_ = tuple(
-        (name, ctypes.c_ulonglong)
+        (name, c_ulonglong)
         for name in (
             "ReadOperationCount",
             "WriteOperationCount",
@@ -101,14 +112,14 @@ class _IoCounters(ctypes.Structure):
     )
 
 
-class _ExtendedLimitInformation(ctypes.Structure):
+class _ExtendedLimitInformation(Structure):
     _fields_ = (
         ("BasicLimitInformation", _BasicLimitInformation),
         ("IoInfo", _IoCounters),
-        ("ProcessMemoryLimit", ctypes.c_size_t),
-        ("JobMemoryLimit", ctypes.c_size_t),
-        ("PeakProcessMemoryUsed", ctypes.c_size_t),
-        ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ("ProcessMemoryLimit", c_size_t),
+        ("JobMemoryLimit", c_size_t),
+        ("PeakProcessMemoryUsed", c_size_t),
+        ("PeakJobMemoryUsed", c_size_t),
     )
 
 
@@ -116,7 +127,8 @@ def _kernel32() -> Any:
     """Return the Windows kernel library, or ``None`` off Windows."""
     if sys.platform != "win32":
         return None
-    return ctypes.WinDLL("kernel32", use_last_error=True)
+    windll = getattr(ctypes, "WinDLL", None)
+    return windll("kernel32", use_last_error=True) if windll else None
 
 
 def _last_error() -> int:
@@ -124,8 +136,11 @@ def _last_error() -> int:
 
     ``ctypes.get_last_error`` exists only on Windows and only when the library
     that failed was loaded with ``use_last_error``, so it is looked up rather
-    than referenced: this module is imported on POSIX as well.
+    than referenced: this module is imported on POSIX as well, where the name
+    does not exist at all.
     """
+    import ctypes
+
     getter = getattr(ctypes, "get_last_error", None)
     return int(getter()) if getter is not None else 0
 
@@ -135,12 +150,12 @@ _KERNEL32 = _kernel32()
 # wrong one fails here rather than as a misread handle at kill time.
 if _KERNEL32 is not None:  # pragma: no cover - Windows only
     _KERNEL32.CreateJobObjectW.restype = wintypes.HANDLE
-    _KERNEL32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
+    _KERNEL32.CreateJobObjectW.argtypes = (c_void_p, wintypes.LPCWSTR)
     _KERNEL32.SetInformationJobObject.restype = wintypes.BOOL
     _KERNEL32.SetInformationJobObject.argtypes = (
         wintypes.HANDLE,
-        ctypes.c_int,
-        ctypes.c_void_p,
+        c_int,
+        c_void_p,
         wintypes.DWORD,
     )
     _KERNEL32.OpenProcess.restype = wintypes.HANDLE
@@ -153,14 +168,14 @@ if _KERNEL32 is not None:  # pragma: no cover - Windows only
     _KERNEL32.IsProcessInJob.argtypes = (
         wintypes.HANDLE,
         wintypes.HANDLE,
-        ctypes.POINTER(ctypes.c_int),
+        POINTER(c_int),
     )
     _KERNEL32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     _KERNEL32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
     _KERNEL32.Thread32First.restype = wintypes.BOOL
-    _KERNEL32.Thread32First.argtypes = (wintypes.HANDLE, ctypes.c_void_p)
+    _KERNEL32.Thread32First.argtypes = (wintypes.HANDLE, c_void_p)
     _KERNEL32.Thread32Next.restype = wintypes.BOOL
-    _KERNEL32.Thread32Next.argtypes = (wintypes.HANDLE, ctypes.c_void_p)
+    _KERNEL32.Thread32Next.argtypes = (wintypes.HANDLE, c_void_p)
     _KERNEL32.OpenThread.restype = wintypes.HANDLE
     _KERNEL32.OpenThread.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
     _KERNEL32.ResumeThread.restype = wintypes.DWORD
@@ -199,8 +214,8 @@ class ProcessTree:
         if not _KERNEL32.SetInformationJobObject(
             job,
             _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
-            ctypes.byref(limits),
-            ctypes.sizeof(limits),
+            byref(limits),
+            sizeof(limits),
         ):
             logger.debug("Could not configure the job object; closing it.")
             _KERNEL32.CloseHandle(job)
@@ -490,8 +505,8 @@ def _wait_until_in_job(handle: int, job: int) -> bool:
     """
     deadline = time.monotonic() + _JOB_OBJECT_ASSIGN_TIMEOUT_MS / 1000
     while True:
-        in_job = ctypes.c_int()
-        if _KERNEL32.IsProcessInJob(handle, job, ctypes.byref(in_job)):
+        in_job = c_int()
+        if _KERNEL32.IsProcessInJob(handle, job, byref(in_job)):
             if in_job.value:
                 return True
         elif _last_error() != _ERROR_INSUFFICIENT_BUFFER:
@@ -516,8 +531,8 @@ def _resume(pid: int) -> None:
             return
         try:
             entry = _ThreadEntry32()
-            entry.dwSize = ctypes.sizeof(entry)
-            found = _KERNEL32.Thread32First(snapshot, ctypes.byref(entry))
+            entry.dwSize = sizeof(entry)
+            found = _KERNEL32.Thread32First(snapshot, byref(entry))
             while found:
                 if entry.th32OwnerProcessID == pid:
                     handle = _KERNEL32.OpenThread(
@@ -531,6 +546,6 @@ def _resume(pid: int) -> None:
                                 )
                         finally:
                             _KERNEL32.CloseHandle(handle)
-                found = _KERNEL32.Thread32Next(snapshot, ctypes.byref(entry))
+                found = _KERNEL32.Thread32Next(snapshot, byref(entry))
         finally:
             _KERNEL32.CloseHandle(snapshot)

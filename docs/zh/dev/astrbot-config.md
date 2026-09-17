@@ -31,7 +31,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | 键                                                | 用途                                                                                                                                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `config_version`                                  | 当前核心配置结构版本，默认 `3`，不要手动降级。                                                                                                                     |
-| `platform_settings`                               | 所有消息平台共用的收发、白名单、限流和分段回复行为。                                                                                                               |
+| `platform_settings`                               | 所有消息平台共用的收发、限流和分段回复行为。                                                                                                                       |
 | `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                                                                                               |
 | `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                                                                                                 |
 | `agent_runner`                                    | 当前配置档的 Agent 执行器类型及其内联配置。                                                                                                                        |
@@ -44,6 +44,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                                                                                            |
 | `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                                                                                           |
 | `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=prefix`、`group=prefix`、`prefixes=["/"]`。                                                                     |
+| `admission`                                       | 未列入会话策略；默认 `unlisted_sessions=allow`。                                                                                                                   |
 | `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                                                                                        |
 | 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                                                                                                      |
 
@@ -65,6 +66,8 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 路由顺序是先匹配指令，再判断 LLM 访问。命中指令时只执行指令；裸指令组输出帮助；未知子指令输出 Orbit 诊断且不会回落到 LLM。否则事件通过 LLM 门禁或被丢弃。通知和请求属于透传事件。启用合并后，私聊窗口中的后续片段不再要求重复 LLM 前缀；收到指令会丢弃缓冲回合。NapCat 的 `input_status` 只暂停或恢复回合窗口，不会进入消息 Pipeline。
 
+未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖的群或私聊；WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
+
 ## `platform_settings`
 
 常用字段如下：
@@ -74,7 +77,6 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `unique_session`                          | `false`                     | 是否为群内成员拆分独立会话。                                                                                |
 | `group_sender_concurrency`                | `false`                     | 实验性。同群不同发送者可并行生成，发送仍按群整轮排队。与 `unique_session` 互斥；会关闭同群流式。            |
 | `rate_limit`                              | `60` 秒 / `30` 条 / `stall` | 超限时等待（`stall`）或丢弃（`discard`）。                                                                  |
-| `enable_id_white_list`                    | `true`                      | 启用 ID 白名单；管理员是否绕过由两个 `wl_ignore_admin_*` 字段控制。                                         |
 | `reply_prefix`                            | `""`                        | 所有回复的前缀。                                                                                            |
 | `reply_with_mention` / `reply_with_quote` | `false`                     | @ 用户或引用原消息，实际能力取决于适配器。                                                                  |
 | `forward_threshold`                       | `1500`                      | OneBot `aiocqhttp` 适配器的长回复转发阈值；其他平台是否支持取决于适配器。                                   |

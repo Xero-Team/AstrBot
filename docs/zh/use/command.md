@@ -64,7 +64,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 
 唤醒阶段在 `is_wake` 确定后会把自动名写入存储；手动别名优先，自动 upsert 不覆盖 `user_alias`。
 
-使用 `/session info` 得到的用户 ID 可以通过 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。群聊开启 `unique_session` 时，该指令也会显示可用于白名单的群 ID。
+使用 `/session info` 得到的用户 ID 可以通过 `/admin grant` 授予当前会话的 `session_admin`。这不是全局 operator。群聊开启 `unique_session` 时，该指令也会显示群 ID；群准入和 `/llm disable` 用的是这个群会话，不是改写后的个人 UMO。
 
 ### 跨会话监听与发送
 
@@ -135,7 +135,7 @@ LINE 等需要公网媒体 URL 的目标要求配置可访问的 HTTPS `callback
 - `/llm enable`：启用当前会话的 LLM 聊天。
 - `/llm disable`：停用当前会话的 LLM 聊天。
 
-这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。IM 里写入的是规范会话键，因此隔离会话开启时会关掉整个群的 LLM；Dashboard 自定义规则页的 LLM 开关目前仍按 UMO 保存。
 
 ### TTS 状态
 

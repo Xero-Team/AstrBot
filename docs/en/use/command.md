@@ -64,7 +64,7 @@ Both `enable` and `disable` are idempotent. They write the existing `session_ena
 
 After the waking stage finalizes `is_wake`, the automatic name is written to storage. A manual alias takes priority; automatic upserts do not overwrite `user_alias`.
 
-The user ID from `/session info` can be granted current-session `session_admin` with `/admin grant`. That is not a global operator. With group `unique_session` enabled, the command also reports the group ID used for allowlists.
+The user ID from `/session info` can be granted current-session `session_admin` with `/admin grant`. That is not a global operator. With group `unique_session` enabled, the command also reports the group ID. Group admission and `/llm disable` apply to that group session, not the rewritten per-member UMO.
 
 ### Cross-session watches and sending
 
@@ -135,7 +135,7 @@ These commands require `provider.use`. Cross-session assignment also requires `s
 - `/llm enable`: Enable LLM chat for the current session.
 - `/llm disable`: Disable LLM chat for the current session.
 
-These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode.
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode. IM writes the canonical session key, so isolated sessions disable LLM for the whole group. The Dashboard custom-rule LLM toggle still saves against the UMO.
 
 ### TTS state
 

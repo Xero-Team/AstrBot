@@ -107,7 +107,7 @@ To avoid flooding group chats, ordinary messages require the configured `llm_acc
 
 - which profile is bound to the message session, see [Configuration profiles](/en/use/config-profiles);
 - whether the platform and Provider are enabled;
-- allowlist, administrator bypass, and rate limiting, see [Platform handling](/en/use/platform-settings);
+- unlisted-session policy and rate limiting, see [Platform handling](/en/use/platform-settings);
 - self-message filtering and platform permissions.
 
 ### An administrator command says permission denied

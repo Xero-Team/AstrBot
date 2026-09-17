@@ -29,7 +29,9 @@ Each rule binds to one UMO and may include several overlays:
 - Forced persona. Outranks conversation choice and the profile default. See [Personas](./persona#which-persona-is-selected).
 - Display alias. This is the same `user_alias` written by `/session name`, not a separate `custom_name` field.
 
-`/bot enable`, `/bot disable`, `/llm enable`, `/llm disable`, `/tts enable`, `/tts disable`, `/session block`, and `/session unblock` write this same service rule. `/bot status` shows the session, LLM, TTS, and full-block switches. Those commands need `session.manage` or `session.block`. See [Built-in commands](./command).
+`/bot enable`, `/bot disable`, `/tts enable`, `/tts disable`, `/session block`, and `/session unblock` still write this service rule against the UMO. IM `/llm enable` and `/llm disable` write the canonical session key, so they disable LLM for the whole group when isolated sessions are on. The Dashboard custom-rule LLM toggle still saves against the UMO. `/bot status` shows the session, LLM, TTS, and full-block switches. Those commands need `session.manage` or `session.block`. See [Built-in commands](./command).
+
+When `unlisted_sessions=deny`, the admission stage only looks at overlays on the canonical session key. IM `/llm disable` writes that key; Dashboard rules on this page still save against the UMO and do not list a group for unlisted-session deny. Session on/off and full block still belong to the later session-status stage.
 
 ### Plugin rules (`session_plugin_config`)
 

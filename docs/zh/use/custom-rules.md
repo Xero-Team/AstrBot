@@ -29,7 +29,9 @@ UMO 唯一指定某个平台下的一个会话。用 `/session info` 查看。�
 - 强制人格。优先级高于对话选择和配置文件默认人格，见 [Persona](./persona#哪个-persona-会生效)。
 - 展示别名。与 `/session name` 写入同一份 `user_alias`，不是单独的 `custom_name` 字段。
 
-聊天里的 `/bot enable`、`/bot disable`、`/llm enable`、`/llm disable`、`/tts enable`、`/tts disable`、`/session block`、`/session unblock` 写的就是这一套服务规则。`/bot status` 可以查看当前会话的整体开关、LLM、TTS 和完全禁用状态。这些指令需要 `session.manage` 或 `session.block`，见 [内置指令](./command)。
+聊天里的 `/bot enable`、`/bot disable`、`/tts enable`、`/tts disable`、`/session block`、`/session unblock` 仍按 UMO 写服务规则。IM 里的 `/llm enable` 和 `/llm disable` 写的是规范会话键，所以隔离会话开启时会关掉整个群的 LLM；Dashboard 自定义规则页的 LLM 开关目前仍按 UMO 保存。`/bot status` 可以查看当前会话的整体开关、LLM、TTS 和完全禁用状态。这些指令需要 `session.manage` 或 `session.block`，见 [内置指令](./command)。
+
+`unlisted_sessions=deny` 时，准入阶段只看规范会话键上的覆盖。IM `/llm disable` 会写入该键；本页 Dashboard 规则目前仍按 UMO 保存，不会把群列入未列入会话策略。会话是否启用、是否完全禁用仍由后面的会话状态阶段处理。
 
 ### 插件规则（`session_plugin_config`）
 

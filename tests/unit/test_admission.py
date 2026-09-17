@@ -59,6 +59,9 @@ def test_group_session_key_ignores_unique_session_session_id():
     assert before == after == "session:napcat:group:room-a"
     assert "user-1" not in after
 
+    event.session_id = event.get_sender_id()
+    assert session_admission_key_from_event(event) == "session:napcat:group:room-a"
+
 
 def test_unique_session_on_or_off_yields_the_same_group_session_key():
     off_event = make_real_event(

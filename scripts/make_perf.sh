@@ -4,14 +4,15 @@ set -euo pipefail
 
 MODE="${MODE:-cpu}"
 DURATION="${DURATION:-30}"
+RATE="${RATE:-}"
 PYSPY_FROM="${ASTRBOT_PERF_PYSPY_FROM:-py-spy>=0.4.2}"
 
 action="start"
 if (($# == 1)) && [[ "$1" == "stop" ]]; then
   action="stop"
 elif (($# != 0)); then
-  echo "Usage: MODE=cpu|idle|mem DURATION=<seconds|0> scripts/make_perf.sh [stop]" >&2
-  echo "Do not pass other positional arguments; use make perf MODE=... DURATION=..." >&2
+  echo "Usage: MODE=cpu|idle|mem DURATION=<seconds|0> RATE=<hz> scripts/make_perf.sh [stop]" >&2
+  echo "Do not pass other positional arguments; use make perf MODE=... DURATION=... RATE=..." >&2
   exit 2
 fi
 
@@ -24,8 +25,9 @@ sidecar_log="${ASTRBOT_PERF_LOG_FILE:-$output_dir/perf_run.log}"
 port="${ASTRBOT_DASHBOARD_PORT:-6185}"
 
 usage_error() {
-  echo "Usage: MODE=cpu|idle|mem DURATION=<seconds or 0> make perf" >&2
+  echo "Usage: MODE=cpu|idle|mem DURATION=<seconds or 0> RATE=<hz> make perf" >&2
   echo "DURATION=0 starts a background sidecar until make stop-perf or make stop." >&2
+  echo "RATE is samples per second for cpu/idle. DURATION=0 defaults to 10; otherwise py-spy default 100." >&2
   echo "Linux-only: attaches to a running backend started by make dev or make run." >&2
   exit 2
 }
@@ -275,6 +277,14 @@ if [[ "$DURATION" != "0" && ! "$DURATION" =~ ^[1-9][0-9]*$ ]]; then
   usage_error
 fi
 
+if [[ -z "$RATE" && "$DURATION" == "0" && "$MODE" != "mem" ]]; then
+  RATE=10
+fi
+if [[ -n "$RATE" && ! "$RATE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "RATE must be a positive integer of samples per second, got: $RATE" >&2
+  usage_error
+fi
+
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required." >&2
   exit 2
@@ -295,9 +305,9 @@ mkdir -p "$output_dir"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
 if [[ "$DURATION" == "0" ]]; then
-  echo "Profiling backend PID $backend_pid (MODE=$MODE until make stop-perf / make stop)"
+  echo "Profiling backend PID $backend_pid (MODE=$MODE RATE=${RATE:-default} until make stop-perf / make stop)"
 else
-  echo "Profiling backend PID $backend_pid (MODE=$MODE DURATION=${DURATION}s)"
+  echo "Profiling backend PID $backend_pid (MODE=$MODE DURATION=${DURATION}s RATE=${RATE:-default})"
 fi
 
 case "$MODE" in
@@ -308,6 +318,9 @@ case "$MODE" in
     fi
     outfile="$output_dir/${MODE}-${stamp}.svg"
     record_args=(record --format flamegraph -o "$outfile" --pid "$backend_pid")
+    if [[ -n "$RATE" ]]; then
+      record_args+=(--rate "$RATE")
+    fi
     if [[ "$MODE" == "idle" ]]; then
       record_args+=(--idle)
     fi

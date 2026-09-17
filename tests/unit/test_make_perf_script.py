@@ -268,6 +268,7 @@ def test_cpu_mode_records_flamegraph(
     assert "record" in recorded
     assert f"--pid {proc.pid}" in recorded
     assert "--idle" not in recorded
+    assert "--rate" not in recorded
 
 
 def test_cpu_mode_walks_pid_file_to_python_child(perf_home: Path) -> None:
@@ -381,6 +382,7 @@ def test_zero_duration_cpu_sidecar_until_stop(
     recorded = log_path.read_text(encoding="utf-8")
     assert "py-spy" in recorded
     assert "--duration" not in recorded
+    assert "--rate 10" in recorded
     stop = _run_perf(env, "stop", extra_path=perf_home / "bin")
     assert stop.returncode == 0, stop.stderr
     outputs = list((perf_home / "out").glob("cpu-*.svg"))
@@ -417,3 +419,27 @@ def test_stop_without_sidecar_is_ok(perf_home: Path) -> None:
     env = _base_env(perf_home, _free_port(), 1)
     result = _run_perf(env, "stop")
     assert result.returncode == 0, result.stderr
+
+
+def test_rejects_invalid_rate(
+    perf_home: Path, python_http_server: tuple[subprocess.Popen[str], int]
+) -> None:
+    proc, port = python_http_server
+    env = _base_env(perf_home, port, proc.pid)
+    env["RATE"] = "0"
+    result = _run_perf(env)
+    assert result.returncode == 2
+    assert "RATE must be a positive integer" in (result.stderr or "")
+
+
+def test_cpu_mode_honors_rate(
+    perf_home: Path, python_http_server: tuple[subprocess.Popen[str], int]
+) -> None:
+    proc, port = python_http_server
+    log_path = perf_home / "uvx.log"
+    _write_executable(perf_home / "bin" / "uvx", _fake_uvx_script(log_path))
+    env = _base_env(perf_home, port, proc.pid)
+    env["RATE"] = "20"
+    result = _run_perf(env, extra_path=perf_home / "bin")
+    assert result.returncode == 0, result.stderr
+    assert "--rate 20" in log_path.read_text(encoding="utf-8")

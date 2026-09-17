@@ -81,15 +81,23 @@ CPU flame graph under `.tmp/perf/`.
 make run                   # or make dev
 make perf                  # 30s CPU flame graph
 make perf MODE=idle        # include await / I/O waits
-make perf DURATION=0       # background sidecar until make stop-perf / make stop
+make perf DURATION=0       # background sidecar at 10Hz until make stop-perf / make stop
+make perf DURATION=0 RATE=5
 make perf MODE=mem DURATION=60
 ```
 
 `DURATION=0` returns to the shell like `make run`: CPU/idle keep a background
 `py-spy` sampler, and `MODE=mem` leaves the tracker in the backend process.
-Use CPU sampling in production. Unlimited `MODE=mem` is much heavier and omits
-`--native`. Stop the sampler with `make stop-perf` before stopping the backend
-so the flame graph is written. `make stop` stops the sidecar first.
+The wide stacks in the SVG are the hot call paths; this is sampling, not a
+per-call counter. Default `MODE=cpu` records on-CPU Python stacks only;
+`MODE=idle` also counts await / I/O waits. Use CPU sampling in production.
+Unlimited `MODE=mem` is much heavier and omits `--native`. Stop the sampler
+with `make stop-perf` before stopping the backend so the flame graph is
+written. `make stop` stops the sidecar first.
+
+`py-spy` defaults to 100Hz. Background captures (`DURATION=0`) use 10Hz so
+the sampler is less likely to fall `behind in sampling`. If it still lags,
+lower `RATE` to 5 or 1.
 
 `MODE=cpu` and `MODE=idle` call `py-spy` through `uvx` and do not add it to the
 project lockfile. `MODE=mem` requires `import memray` to succeed in the backend

@@ -20,6 +20,7 @@ DASHBOARD_DIR ?= dashboard
 DOCS_DIR ?= docs
 MODE ?= cpu
 DURATION ?= 30
+RATE ?=
 NAPCAT_SCHEMA_OUTPUT_DIR ?= .tmp/napcat-schema
 NAPCAT_NORMALIZED_SCHEMA_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11-all-event.normalized.schema.json
 NAPCAT_MODELS_OUTPUT_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11_event_models.py
@@ -157,7 +158,7 @@ ifeq ($(OS),Windows_NT)
 	@echo "make perf is Linux-only." >&2
 	@exit 2
 else
-	@MODE="$(MODE)" DURATION="$(DURATION)" bash scripts/make_perf.sh
+	@MODE="$(MODE)" DURATION="$(DURATION)" RATE="$(RATE)" bash scripts/make_perf.sh
 endif
 
 clean: stop

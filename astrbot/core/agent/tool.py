@@ -254,12 +254,7 @@ class ToolSet:
         """
         for i, existing_tool in enumerate(self.tools):
             if existing_tool.name == tool.name:
-                # Use getattr with a default of True for compatibility with tools
-                # that may not define an `active` attribute (e.g., mocks).
-                existing_active = bool(getattr(existing_tool, "active", True))
-                new_active = bool(getattr(tool, "active", True))
-                # Overwrite if new tool is active, or if existing tool is not active
-                if new_active or not existing_active:
+                if tool.active or not existing_tool.active:
                     self.tools[i] = tool
                 return
         self.tools.append(tool)
@@ -279,7 +274,7 @@ class ToolSet:
         """Return a light tool set with only name/description."""
         light_tools = []
         for tool in self.tools:
-            if hasattr(tool, "active") and not tool.active:
+            if not tool.active:
                 continue
             light_params = {
                 "type": "object",
@@ -300,7 +295,7 @@ class ToolSet:
         """Return a tool set with name/parameters only (no description)."""
         param_tools = []
         for tool in self.tools:
-            if hasattr(tool, "active") and not tool.active:
+            if not tool.active:
                 continue
             params = (
                 copy.deepcopy(tool.parameters)
@@ -317,11 +312,6 @@ class ToolSet:
                 )
             )
         return ToolSet(param_tools)
-
-    @property
-    def func_list(self) -> list[FunctionTool]:
-        """Get the list of function tools."""
-        return self.tools
 
     def openai_chat_completions_schema(
         self,
@@ -501,7 +491,4 @@ class ToolSet:
         return iter(self.tools)
 
     def __repr__(self) -> str:
-        return f"ToolSet(tools={self.tools})"
-
-    def __str__(self) -> str:
         return f"ToolSet(tools={self.tools})"

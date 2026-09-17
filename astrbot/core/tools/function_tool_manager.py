@@ -278,9 +278,6 @@ class FunctionToolManager:
         """Read-only view of MCP runtime metadata for external callers."""
         return self._mcp_server_runtime_view
 
-    def empty(self) -> bool:
-        return len(self.func_list) == 0
-
     def spec_to_func(
         self,
         name: str,
@@ -341,23 +338,18 @@ class FunctionToolManager:
                 break
 
     def get_tool(self, name) -> FunctionTool | None:
-        # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
-        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
+        # Prefer the last active tool; fall back to the last same-name tool.
         for f in reversed(self.func_list):
-            if f.name == name and getattr(f, "active", True):
+            if f.name == name and f.active:
                 return f
-        # 退化则拿最后一个同名工具
         for f in reversed(self.func_list):
             if f.name == name:
                 return f
         if isinstance(name, str):
             try:
-                builtin_tool = self.get_builtin_tool(name)
+                return self.get_builtin_tool(name)
             except KeyError:
                 return None
-            if getattr(builtin_tool, "active", True):
-                return builtin_tool
-            return builtin_tool
         return None
 
     def get_builtin_tool(
@@ -956,38 +948,6 @@ class FunctionToolManager:
                 f"{enable_timeout:g}",
             )
             self._timeout_mismatch_warned = True
-
-    def openai_chat_completions_schema(
-        self,
-        omit_empty_parameter_field: bool = False,
-        *,
-        flatten_null_unions: bool = False,
-    ) -> list:
-        """获得 OpenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
-        return toolset.openai_chat_completions_schema(
-            omit_empty_parameter_field=omit_empty_parameter_field,
-            flatten_null_unions=flatten_null_unions,
-        )
-
-    def openai_responses_schema(self) -> list:
-        """Return active tools in the OpenAI Responses format."""
-        return ToolSet(
-            [f for f in self.func_list if f.active]
-        ).openai_responses_schema()
-
-    def anthropic_schema(self) -> list:
-        """获得 Anthropic API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
-        return toolset.anthropic_schema()
-
-    def google_schema(self) -> dict:
-        """获得 Google GenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
-        return toolset.google_schema()
 
     async def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具。

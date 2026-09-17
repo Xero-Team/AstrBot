@@ -87,6 +87,11 @@ _REMOVED_CONFIG_FIELDS = frozenset(
         "tool_permissions",
         "disable_builtin_commands",
         "group_wake_policy",
+        "enable_id_white_list",
+        "id_whitelist",
+        "id_whitelist_log",
+        "wl_ignore_admin_on_group",
+        "wl_ignore_admin_on_friend",
     }
 )
 

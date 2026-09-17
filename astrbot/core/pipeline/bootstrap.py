@@ -14,6 +14,7 @@ def builtin_stage_classes() -> Sequence[type[Stage]]:
     lightweight, while scheduler construction obtains a stable tuple rather
     than populating a process-global mutable registry.
     """
+    from .admission_check.stage import AdmissionCheckStage
     from .content_safety_check.stage import ContentSafetyCheckStage
     from .group_message_history.stage import GroupMessageHistoryStage
     from .preprocess_stage.stage import PreProcessStage
@@ -24,11 +25,10 @@ def builtin_stage_classes() -> Sequence[type[Stage]]:
     from .session_status_check.stage import SessionStatusCheckStage
     from .turn_coalesce.stage import TurnCoalesceStage
     from .waking_check.stage import WakingCheckStage
-    from .whitelist_check.stage import WhitelistCheckStage
 
     return (
         WakingCheckStage,
-        WhitelistCheckStage,
+        AdmissionCheckStage,
         SessionStatusCheckStage,
         TurnCoalesceStage,
         RateLimitStage,

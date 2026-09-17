@@ -6,6 +6,7 @@ from typing import TypedDict, TypeVar
 
 from astrbot import logger
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.config.admission_migration import apply_pending_session_allows
 from astrbot.core.config.agent_runner_migration import finalize_config_migrations
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
@@ -59,6 +60,12 @@ class AstrBotConfigManager:
             committed = await self.confs["default"].save_config_async()
             if committed:
                 logger.info("Agent Runner configuration migration completed")
+        applied = await apply_pending_session_allows(self.sp, self.confs)
+        if applied:
+            logger.info(
+                "Migrated %s listed session overlays from ID whitelist",
+                applied,
+            )
 
     def _get_abconf_data(self) -> dict[str, dict[str, str]]:
         """获取所有的 abconf 数据"""

@@ -269,7 +269,7 @@ adapter.
 2. `EventBus` chooses the `PipelineScheduler` for the event's config id and
    dispatches it under bounded concurrency while retaining task references.
 3. `astrbot/core/pipeline/bootstrap.py` defines the fixed sequence from
-   `WakingCheck` through `WhitelistCheck`, `SessionStatusCheck`,
+   `WakingCheck` through `AdmissionCheck`, `SessionStatusCheck`,
    `TurnCoalesce`, `RateLimit`, `ContentSafetyCheck`, `PreProcess`,
    `GroupMessageHistory`, `Process`, `ResultDecorate`, and finally `Respond`.
 

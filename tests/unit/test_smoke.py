@@ -71,7 +71,7 @@ def test_builtin_stage_classes_are_immutable_snapshots() -> None:
 
     expected_stage_names = {
         "WakingCheckStage",
-        "WhitelistCheckStage",
+        "AdmissionCheckStage",
         "SessionStatusCheckStage",
         "TurnCoalesceStage",
         "RateLimitStage",

@@ -40,7 +40,7 @@ Use the current checkout for source deployments. Repository Compose still source
 
 ## How It Works
 
-Platform adapters normalize inbound messages into `AstrMessageEvent`. `EventBus` selects a Pipeline from the matching config profile, then executes wake, whitelist, session-state, rate-limit, safety, preprocessing, plugin/Agent, result-decoration, and response stages in order. See [Project Architecture](/en/dev/architecture) for the startup flow, ownership boundaries, and change map.
+Platform adapters normalize inbound messages into `AstrMessageEvent`. `EventBus` selects a Pipeline from the matching config profile, then executes wake, admission, session-state, rate-limit, safety, preprocessing, plugin/Agent, result-decoration, and response stages in order. See [Project Architecture](/en/dev/architecture) for the startup flow, ownership boundaries, and change map.
 
 ## Notice
 

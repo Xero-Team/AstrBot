@@ -40,7 +40,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 
 ## 它是如何实现的？
 
-平台适配器把入站消息统一为 `AstrMessageEvent`，`EventBus` 根据配置文件选择 Pipeline，依次执行唤醒、白名单、会话状态、限流、安全、预处理、插件/Agent、结果装饰和发送阶段。完整的启动流程、所有权边界和修改位置请参阅[项目架构](/dev/architecture)。
+平台适配器把入站消息统一为 `AstrMessageEvent`，`EventBus` 根据配置文件选择 Pipeline，依次执行唤醒、准入、会话状态、限流、安全、预处理、插件/Agent、结果装饰和发送阶段。完整的启动流程、所有权边界和修改位置请参阅[项目架构](/dev/architecture)。
 
 ## 说明
 

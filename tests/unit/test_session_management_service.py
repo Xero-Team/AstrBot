@@ -12,6 +12,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from astrbot.core.auth.admission import session_admission_key_from_umo
 from astrbot.core.db.po import ConversationV2
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.star.star import PluginRegistry
@@ -467,6 +468,13 @@ async def test_batch_updates_validate_input_and_report_partial_failures(
         "llm_enabled": True,
         "session_blocked": True,
     }
+    assert preferences.session_values[
+        (session_admission_key_from_umo(good_umo), "session_service_config")
+    ] == {
+        "session_enabled": False,
+        "llm_enabled": True,
+        "session_blocked": True,
+    }
     assert provider_result["success_count"] == 1
     assert provider_result["failed_count"] == 1
     assert provider_result["failed_umos"] == [bad_umo]
@@ -680,3 +688,38 @@ async def test_session_mutation_authorizes_the_router_resolved_target_config(
 
     assert response.status_code == 403
     assert preferences.session_values == {}
+
+
+@pytest.mark.asyncio
+async def test_service_updates_dual_write_canonical_admission_keys(session_service):
+    service, preferences, _providers = session_service
+    umo = "napcat:GroupMessage:user-1_room-a"
+    canonical = session_admission_key_from_umo(umo, group_id="room-a")
+
+    await service.update_session_rule(
+        {
+            "umo": umo,
+            "rule_key": "session_service_config",
+            "rule_value": {"llm_enabled": False, "tts_enabled": True},
+        }
+    )
+    await service.batch_update_service(
+        {"umos": [umo], "group_id": "room-a", "session_enabled": True}
+    )
+
+    assert preferences.session_values[(umo, "session_service_config")] == {
+        "llm_enabled": False,
+        "tts_enabled": True,
+        "session_enabled": True,
+    }
+    assert preferences.session_values[(canonical, "session_service_config")] == {
+        "llm_enabled": False,
+        "session_enabled": True,
+    }
+
+    await service.delete_session_rule(
+        {"umo": umo, "rule_key": "session_service_config"}
+    )
+
+    assert (umo, "session_service_config") not in preferences.session_values
+    assert (canonical, "session_service_config") not in preferences.session_values

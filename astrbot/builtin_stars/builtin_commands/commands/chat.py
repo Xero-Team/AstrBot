@@ -1,4 +1,4 @@
-from astrbot.api import star
+from astrbot.api import session_admission_key_from_event, star
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n
@@ -10,9 +10,9 @@ class ChatCommands:
 
     async def status(self, event: AstrMessageEvent) -> None:
         """Show the LLM chat state for the current session."""
-        umo = event.unified_msg_origin
+        session_key = session_admission_key_from_event(event)
         settings = await self.context.preferences.session_get(
-            umo,
+            session_key,
             "session_service_config",
             {},
         )
@@ -28,17 +28,17 @@ class ChatCommands:
         event: AstrMessageEvent,
         enabled: bool,
     ) -> None:
-        """Set the LLM chat state for the current session."""
-        umo = event.unified_msg_origin
+        """Set the LLM chat state for the canonical group or private session."""
+        session_key = session_admission_key_from_event(event)
         settings = await self.context.preferences.session_get(
-            umo,
+            session_key,
             "session_service_config",
             {},
         )
         settings = dict(settings or {})
         settings["llm_enabled"] = enabled
         await self.context.preferences.session_put(
-            umo,
+            session_key,
             "session_service_config",
             settings,
         )

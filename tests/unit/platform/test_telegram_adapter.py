@@ -2873,9 +2873,12 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
     builder.build.side_effect = created_apps
 
     adapter = None
+    first_poll_kwargs: dict[str, object] = {}
+    second_poll_kwargs: dict[str, object] = {}
 
     def start_polling_side_effect(*args, **kwargs):
         nonlocal adapter
+        first_poll_kwargs.update(kwargs)
         error_callback = kwargs["error_callback"]
         assert adapter is not None
 
@@ -2890,6 +2893,7 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
     app_one.updater.start_polling.side_effect = start_polling_side_effect
 
     async def second_start_polling(*args, **kwargs):
+        second_poll_kwargs.update(kwargs)
         assert adapter is not None
         adapter._terminating = True
 
@@ -2913,6 +2917,8 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
         await adapter.run()
 
     assert builder.build.call_count == 2
+    assert first_poll_kwargs["drop_pending_updates"] is True
+    assert second_poll_kwargs["drop_pending_updates"] is False
     app_one.updater.stop.assert_awaited()
     app_one.bot.delete_my_commands.assert_awaited_once()
     app_one.stop.assert_awaited()
@@ -2955,9 +2961,12 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     builder.build.side_effect = created_apps
 
     adapter = None
+    first_poll_kwargs: dict[str, object] = {}
+    final_poll_kwargs: dict[str, object] = {}
 
     def first_start_polling(*args, **kwargs):
         nonlocal adapter
+        first_poll_kwargs.update(kwargs)
         error_callback = kwargs["error_callback"]
         assert adapter is not None
 
@@ -2973,6 +2982,7 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     app_two.initialize.side_effect = TimeoutError("init timeout")
 
     async def final_start_polling(*args, **kwargs):
+        final_poll_kwargs.update(kwargs)
         assert adapter is not None
         adapter._terminating = True
 
@@ -2999,6 +3009,8 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
         await adapter.run()
 
     assert builder.build.call_count == 3
+    assert first_poll_kwargs["drop_pending_updates"] is True
+    assert final_poll_kwargs["drop_pending_updates"] is False
     app_two.stop.assert_awaited()
     app_two.shutdown.assert_awaited()
     app_three.initialize.assert_awaited()
@@ -3902,6 +3914,7 @@ async def test_telegram_polling_allowed_updates_are_explicit():
             "business_message",
             "callback_query",
         ),
+        drop_pending_updates=True,
         error_callback=adapter._on_polling_error,
     )
 

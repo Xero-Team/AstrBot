@@ -12,7 +12,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
-from astrbot.core.star.plugin_context import PluginContext
+from astrbot.core.star.plugin_context import PluginContext, PreferenceCapability
 from astrbot.core.star.star import StarMetadata
 
 
@@ -388,3 +388,34 @@ def test_plugin_context_exposes_capabilities_not_core_managers():
         "send_message",
     ):
         assert not hasattr(plugin_context, forbidden)
+
+
+@pytest.mark.asyncio
+async def test_preference_capability_sender_get_and_put_delegate():
+    preferences = SimpleNamespace(
+        sender_get=AsyncMock(return_value={"blocked": True}),
+        sender_put=AsyncMock(),
+    )
+    capability = PreferenceCapability(preferences)
+
+    assert await capability.sender_get(
+        "im:napcat:bot:99",
+        "session_service_config",
+        {},
+    ) == {"blocked": True}
+    await capability.sender_put(
+        "im:napcat:bot:99",
+        "session_service_config",
+        {"llm_enabled": True},
+    )
+
+    preferences.sender_get.assert_awaited_once_with(
+        "im:napcat:bot:99",
+        "session_service_config",
+        {},
+    )
+    preferences.sender_put.assert_awaited_once_with(
+        "im:napcat:bot:99",
+        "session_service_config",
+        {"llm_enabled": True},
+    )

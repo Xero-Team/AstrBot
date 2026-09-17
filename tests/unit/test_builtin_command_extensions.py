@@ -16,7 +16,10 @@ from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaComma
 from astrbot.builtin_stars.builtin_commands.commands.plugin import PluginCommands
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
 from astrbot.builtin_stars.builtin_commands.commands.tts import TtsCommands
-from astrbot.builtin_stars.builtin_commands.commands.user import UserCommands
+from astrbot.builtin_stars.builtin_commands.commands.user import (
+    UserCommands,
+    sender_key_from_token,
+)
 from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
 from astrbot.builtin_stars.builtin_commands.main import Main
 from astrbot.core.auth.admission import session_admission_key_from_event
@@ -336,10 +339,6 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "variable_set": ("key", "value"),
         "conversation_switch": ("index",),
         "variable_unset": ("key",),
-        "user_block": ("sender_id",),
-        "user_unblock": ("sender_id",),
-        "user_llm_on": ("sender_id",),
-        "user_llm_off": ("sender_id",),
     }
     for handler_name, names in required_params.items():
         params = compile_command_schema(getattr(Main, handler_name)).params
@@ -894,10 +893,32 @@ async def test_user_commands_write_sender_overlays():
         "llm_enabled": False,
     }
 
+    stored[(full_id, "session_service_config")] = {
+        "blocked": False,
+        "llm_enabled": False,
+        "session_enabled": False,
+        "tts_enabled": False,
+        "persona_id": "p1",
+    }
+    await command.set_blocked(DummyEvent(message_str="user block"), full_id, True)
+    assert stored[(full_id, "session_service_config")] == {
+        "blocked": True,
+        "llm_enabled": False,
+    }
+
     empty_event = DummyEvent(message_str="user block")
     await command.set_blocked(empty_event, "  ", True)
     assert "Usage:" in _plain_text(empty_event.result)
     assert ("", "session_service_config") not in stored
+
+
+def test_sender_key_from_token_mints_raw_ids_like_admission():
+    event = DummyEvent(message_str="user block", platform_id="", platform_name="napcat")
+    assert sender_key_from_token(event, " 99 ") == "im:napcat:bot:99"
+    assert sender_key_from_token(event, "im:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_key_from_token(event, "  ") is None
+    empty = DummyEvent(message_str="user block", platform_id="", platform_name="")
+    assert sender_key_from_token(empty, "99") == "im:unknown:bot:99"
 
 
 @pytest.mark.asyncio
@@ -1216,9 +1237,9 @@ def test_user_operations_are_registered_as_native_subcommands():
     assert set(root_subcommands) == {"block", "unblock"}
     assert set(llm_subcommands) == {"on", "off"}
     for name in ("block", "unblock"):
-        assert root_subcommands[name].handler_params[0].is_required is True
+        assert root_subcommands[name].handler_params[0].is_required is False
     for name in ("on", "off"):
-        assert llm_subcommands[name].handler_params[0].is_required is True
+        assert llm_subcommands[name].handler_params[0].is_required is False
 
 
 def test_builtin_command_names_follow_grouped_cli_conventions():
@@ -1384,6 +1405,11 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
     assert dict(engine.bind(user_llm_entry, user_llm).values) == {
         "sender_id": "im:napcat:bot:99"
     }
+
+    missing = engine.resolve("user block")
+    assert missing.resolution.command_path == ("user", "block")
+    missing_entry = missing.resolution.entries[0]
+    assert dict(engine.bind(missing_entry, missing).values) == {"sender_id": ""}
 
     assert declarations.function_tools == ()
     black = engine.resolve("black 99")

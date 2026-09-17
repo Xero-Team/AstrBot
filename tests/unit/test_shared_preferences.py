@@ -36,6 +36,24 @@ async def test_put_updates_cache_and_persists(preferences):
 
 
 @pytest.mark.asyncio
+async def test_sender_get_and_put_use_sender_scope(preferences):
+    store, database = preferences
+    sender_id = "im:napcat:bot:99"
+
+    await store.sender_put(sender_id, "session_service_config", {"blocked": True})
+
+    assert await store.sender_get(sender_id, "session_service_config") == {
+        "blocked": True
+    }
+    persisted = await database.get_preference(
+        "sender", sender_id, "session_service_config"
+    )
+    assert persisted is not None
+    assert persisted.value == {"val": {"blocked": True}}
+    assert await store.sender_get(sender_id, "missing", {}) == {}
+
+
+@pytest.mark.asyncio
 async def test_remove_and_clear_update_cache_and_persist(preferences):
     store, database = preferences
     await store.put_async("umo", "session", "first", 1)

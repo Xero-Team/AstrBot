@@ -490,7 +490,7 @@
           },
           "coding_agents": {
             "description": "第三方编码代理",
-            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex）。每项包含 id、type、command、权限模式与 provider 预设；provider 的端点与模型会以该 CLI 原生配置层的形式生效，密钥只在运行时经环境变量传入、不落盘，也不改动用户全局配置。委派会启动本地进程并写入文件，因此还要求工作循环的 Computer Use 运行时为 local 或 sandbox，并通过 tool.local_exec 与 tool.file_write 的授权。"
+            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex）。每项包含 id、type、command、权限模式与 provider 预设；provider 的端点与模型会以该 CLI 原生配置层的形式生效，密钥只在运行时传给子进程，不会写进该配置层。密钥本身与其他 provider 凭据一样保存在本配置档中。委派会启动本地进程并写入文件，因此工作循环的 Computer Use 运行时必须是 local：sandbox 不够，因为进程由本机直接拉起，并不在沙箱内。同时需要 tool.local_exec 与 tool.file_write 的授权。"
           }
         },
         "work_session": {

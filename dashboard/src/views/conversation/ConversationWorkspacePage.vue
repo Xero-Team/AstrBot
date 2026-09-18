@@ -11,7 +11,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import '@/utils/monacoLoader';
 import { conversationApi } from '@/api/v1';
-import MessageList from '@/components/chat/MessageList.vue';
+import ConversationHistoryPreview from '@/components/conversation/ConversationHistoryPreview.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -21,7 +21,6 @@ import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog,
 } from '@/utils/confirmDialog';
-import type { MessagePart } from '@/domain/chat';
 import { getPlatformIcon } from '@/utils/platformUtils';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
@@ -143,7 +142,6 @@ const conversationHistory = ref<HistoryMessage[]>([]);
 const previewLoading = ref(false);
 const previewRequestId = ref(0);
 const previewPageScroll = ref(0);
-const previewMessagesRef = ref<HTMLElement | null>(null);
 const rawDataDialog = ref(false);
 const rawHistoryText = ref('');
 
@@ -245,65 +243,6 @@ const messageTypes = computed(() => [
   { label: tm('messageTypes.friend'), value: 'FriendMessage' },
   { label: tm('messageTypes.group'), value: 'GroupMessage' },
 ]);
-
-const formattedMessages = computed(() => {
-  const toolResultsById: Record<string, unknown> = {};
-  for (const message of conversationHistory.value) {
-    if (message?.role === 'tool' && message.tool_call_id) {
-      toolResultsById[message.tool_call_id] = message.content;
-    }
-  }
-
-  return conversationHistory.value
-    .filter(
-      (message) => message?.role === 'user' || message?.role === 'assistant',
-    )
-    .map((message) => {
-      const parts: MessagePart[] = [];
-      const content = message.content;
-      if (typeof content === 'string' && content.trim()) {
-        parts.push({ type: 'plain', text: content });
-      } else if (Array.isArray(content)) {
-        for (const item of content) {
-          if (item?.type === 'text' && item.text) {
-            parts.push({ type: 'plain', text: item.text });
-          } else if (item?.type === 'image_url' && item.image_url?.url) {
-            parts.push({ type: 'image', embedded_url: item.image_url.url });
-          }
-        }
-      } else if (content && typeof content === 'object') {
-        const text = Object.values(content)
-          .filter((value) => typeof value === 'string' && value.trim())
-          .join('\n');
-        if (text) parts.push({ type: 'plain', text });
-      }
-
-      if (
-        message.role === 'assistant' &&
-        Array.isArray(message.tool_calls) &&
-        message.tool_calls.length
-      ) {
-        parts.push({
-          type: 'tool_call',
-          tool_calls: message.tool_calls.map((toolCall) => ({
-            id: toolCall.id,
-            name: toolCall.function?.name || toolCall.name,
-            args: toolCall.function?.arguments ?? toolCall.arguments,
-            result: toolCall.id ? toolResultsById[toolCall.id] : undefined,
-            ts: 0,
-            finished_ts: 1,
-          })),
-        });
-      }
-
-      return {
-        content: {
-          type: message.role === 'user' ? 'user' : 'bot',
-          message: parts.length ? parts : [{ type: 'plain', text: '' }],
-        },
-      };
-    });
-});
 
 watch([keyword, umoQuery], () => {
   listAbortController.value?.abort();
@@ -578,11 +517,6 @@ async function openConversation(item: Conversation) {
   } finally {
     if (requestId === previewRequestId.value) {
       previewLoading.value = false;
-      await nextTick();
-      if (requestId === previewRequestId.value && previewMessagesRef.value) {
-        previewMessagesRef.value.scrollTop =
-          previewMessagesRef.value.scrollHeight;
-      }
     }
   }
 }
@@ -1346,19 +1280,17 @@ function changePage(nextPage: number) {
           </v-btn>
         </div>
 
-        <div ref="previewMessagesRef" class="preview-messages">
-          <div v-if="previewLoading" class="panel-state">
+        <div v-if="previewLoading" class="preview-messages">
+          <div class="panel-state">
             <v-progress-circular indeterminate size="28" width="3" />
             <span>{{ tm('workspace.preview.loading') }}</span>
           </div>
-          <div
-            v-else-if="!formattedMessages.length"
-            class="panel-state panel-state--empty"
-          >
-            <span>{{ tm('workspace.preview.empty') }}</span>
-          </div>
-          <MessageList v-else :messages="formattedMessages" :is-dark="isDark" />
         </div>
+        <ConversationHistoryPreview
+          v-else
+          :key="conversationKey(activeConversation)"
+          :messages="conversationHistory"
+        />
       </section>
     </main>
 
@@ -2065,18 +1997,6 @@ function changePage(nextPage: number) {
   overflow: auto;
   overscroll-behavior: contain;
   padding: 2px 6px 10px;
-}
-
-.preview-messages :deep(.messages-list) {
-  padding: 12px 8px 20px;
-}
-
-.preview-messages :deep(.message-row) {
-  margin-bottom: 14px;
-}
-
-.preview-messages :deep(.bot-avatar) {
-  display: none;
 }
 
 .raw-data-card {

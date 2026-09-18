@@ -47,7 +47,7 @@
 
     <v-card
       v-for="(entry, index) in entries"
-      :key="index"
+      :key="agentKeys[index]"
       class="coding-agents-editor__agent mb-4"
       variant="outlined"
     >
@@ -473,6 +473,25 @@ const entries = computed<CodingAgent[]>(() =>
 function commit(next: CodingAgent[]) {
   emit('update:modelValue', next);
 }
+
+/**
+ * A stable key per entry, so a card follows its agent rather than its slot.
+ *
+ * The id names the entry, so it is what a card is keyed on; an entry without
+ * one -- or sharing one with a neighbour, which the warnings above tell the
+ * operator about -- falls back to its position, which is then all it has.
+ */
+function entryKeys(items: { id: string }[]): string[] {
+  const seen = new Map<string, number>();
+  for (const item of items) {
+    seen.set(item.id, (seen.get(item.id) ?? 0) + 1);
+  }
+  return items.map((item, index) =>
+    item.id && seen.get(item.id) === 1 ? item.id : `#${index}`,
+  );
+}
+
+const agentKeys = computed(() => entryKeys(entries.value));
 
 function patchAgent(index: number, patch: Partial<CodingAgent>) {
   commit(

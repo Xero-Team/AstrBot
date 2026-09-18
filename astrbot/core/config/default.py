@@ -4857,7 +4857,7 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
             "description": "对话循环模型",
             "type": "string",
             "_special": "select_provider",
-            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型；该模型不可用时自动回退到当前会话或默认模型。",
             "condition": {"btw.enabled": True},
         },
         "btw.work_loop.enabled": {
@@ -4870,7 +4870,7 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
             "description": "工作循环模型",
             "type": "string",
             "_special": "select_provider",
-            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。",
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型；该模型不可用时自动回退到当前会话或默认模型。",
             "condition": {"btw.enabled": True},
         },
         "btw.work_loop.computer_use_runtime": {

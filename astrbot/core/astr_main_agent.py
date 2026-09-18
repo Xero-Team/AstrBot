@@ -223,7 +223,14 @@ class MainAgentBuildConfig:
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
     provider_id_override: str = ""
-    """Optional request-scoped chat provider override."""
+    """Preferred chat provider for this request, read from persisted config.
+
+    A preference, not a requirement: an id that no longer resolves to a chat
+    model is skipped with a warning, and selection continues with the request's
+    own provider choice and then the session/profile default. This is set by
+    the BTW loop models. A provider chosen for the request itself arrives as
+    ``selected_provider`` instead, and that one fails loudly.
+    """
     fallback_provider_ids: list[str] = field(default_factory=list)
     request_max_retries: int = 5
     subagent_orchestrator: dict = field(default_factory=dict)
@@ -359,8 +366,26 @@ def _select_provider(
     plugin_context: CoreExecutionContext,
     provider_id_override: str = "",
 ) -> ChatModel | None:
-    """Select chat provider for the event."""
-    sel_provider = provider_id_override or event.get_extra("selected_provider")
+    """Select chat provider for the event.
+
+    ``provider_id_override`` comes from persisted configuration (a BTW loop
+    model) rather than from this request, so it is a preference: when it no
+    longer resolves to a chat model, selection continues with the request's own
+    choice and then the session/profile default. A provider chosen for this
+    very request (``selected_provider``) still fails loudly, because the caller
+    asked for that specific model.
+    """
+    if provider_id_override:
+        provider = plugin_context.get_provider_by_id(provider_id_override)
+        if provider is not None and _is_chat_model(provider):
+            return provider
+        logger.warning(
+            "配置的对话模型 `%s` 不可用（未加载或类型不是对话模型），"
+            "本次请求改用请求或会话选择的对话模型。",
+            provider_id_override,
+        )
+
+    sel_provider = event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if provider is None:

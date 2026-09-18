@@ -629,13 +629,50 @@ class TestSelectProvider:
         assert mock_event.get_extra("selected_provider") == "session-model"
 
     @pytest.mark.parametrize("provider", [None, "not-a-chat-provider"])
-    def test_invalid_loop_override_does_not_fall_back(
-        self, mock_event, mock_context, provider
+    def test_unavailable_loop_override_falls_back_to_session_provider(
+        self, mock_event, mock_context, mock_provider, provider
     ):
-        mock_event.set_extra("selected_provider", "session-model")
+        """A configured loop model that is not loaded must not shadow the session."""
         mock_context.get_provider_by_id.return_value = provider
+        mock_context.get_using_provider.return_value = mock_provider
+
+        assert (
+            ama._select_provider(mock_event, mock_context, "loop-model")
+            is mock_provider
+        )
+        mock_context.get_using_provider.assert_called_once_with(
+            umo=mock_event.unified_msg_origin
+        )
+        assert mock_event.get_extra(ama.LLM_ERROR_MESSAGE_EXTRA_KEY) is None
+
+    @pytest.mark.parametrize("provider", [None, "not-a-chat-provider"])
+    def test_unavailable_loop_override_keeps_the_request_selection(
+        self, mock_event, mock_context, mock_provider, provider
+    ):
+        """Falling back must not drop the provider this request asked for."""
+        mock_event.set_extra("selected_provider", "session-model")
+        mock_context.get_provider_by_id.side_effect = lambda provider_id: (
+            provider if provider_id == "loop-model" else mock_provider
+        )
+
+        assert (
+            ama._select_provider(mock_event, mock_context, "loop-model")
+            is mock_provider
+        )
+        mock_context.get_using_provider.assert_not_called()
+
+    @pytest.mark.parametrize("unusable", [None, "not-a-chat-provider"])
+    def test_two_unusable_candidates_fail_once(
+        self, mock_event, mock_context, unusable
+    ):
+        """Both candidates unusable: fail loudly, and try each exactly once."""
+        mock_event.set_extra("selected_provider", "session-model")
+        mock_context.get_provider_by_id.return_value = unusable
 
         assert ama._select_provider(mock_event, mock_context, "loop-model") is None
+        assert [
+            call.args[0] for call in mock_context.get_provider_by_id.call_args_list
+        ] == ["loop-model", "session-model"]
         assert mock_event.get_extra(ama.LLM_ERROR_MESSAGE_EXTRA_KEY)
         mock_context.get_using_provider.assert_not_called()
 
@@ -2373,6 +2410,40 @@ class TestBuildMainAgent:
         assert result is not None
         mock_runner.reset.assert_awaited_once()
         assert mock_runner.reset.await_args.kwargs["enforce_max_turns"] == 7
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_falls_back_from_unloaded_loop_model(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """An unloaded configured loop model still builds on the session model."""
+        module = ama
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_id_override="sukaka/not-loaded",
+                ),
+            )
+
+        assert result is not None
+        assert result.provider is mock_provider
+        assert mock_event.get_extra(module.LLM_ERROR_MESSAGE_EXTRA_KEY) is None
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_provider(self, mock_event, mock_context):

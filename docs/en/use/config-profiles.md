@@ -54,7 +54,7 @@ System settings do not follow profile switches. `dashboard.host`, TOTP, and reve
 These live on the profile, not Settings:
 
 - [When the bot replies in groups](./group-wake): `llm_access`, command prefixes, isolated sessions
-- [Platform handling](./platform-settings): unlisted sessions, rate limit, content safety, inbound coalesce
+- [Platform handling](./platform-settings): unlisted sessions and senders, rate limit, content safety, inbound coalesce
 - [Speech STT / TTS](./speech)
 - [Knowledge base](./knowledge-base) `kb_names`
 - [Plugins](./plugin) `plugin_set`
@@ -66,6 +66,6 @@ These live on the profile, not Settings:
 
 1. Editing `default` while the group is bound to another profile.
 2. Creating a whole profile for one group's persona or model. Use a custom rule.
-3. Looking for wake, unlisted sessions, or TTS under **Settings**.
+3. Looking for wake, unlisted sessions and senders, or TTS under **Settings**.
 4. Editing JSON without **Apply this configuration**, so the form still shows old values.
 5. Copying profile files to another machine without the UMO routes.

@@ -87,15 +87,15 @@ If the session already has an open LLM turn window (inbound coalesce waiting for
 
 - Mutually exclusive with experimental group-sender concurrency.
 - Group notice/request events stay on the group session.
-- `/session info` also reports the group ID when isolation is on. Group admission and `/llm disable` apply to that group session, not the rewritten per-member UMO. Per-person refusal is a later slice.
+- `/session info` also reports the group ID when isolation is on. Group admission and `/llm disable` apply to that group session, not the rewritten per-member UMO. Per-person refusal is a sender overlay (`scope=sender` / `Subject.im.id`). It is instance-global, not a `UMO×UID` selector. A sender `llm_enabled=true` overlay cannot revive a fully blocked session.
 
 Isolation changes **who owns the context**. It does not relax `llm_access.group`, and it does not split group admission.
 
 ## Still dropped after a wake
 
-Pipeline order: wake check → [unlisted sessions](./platform-settings#unlisted-sessions) → session enabled → coalesce → rate limit → content safety → preprocess → plugin or LLM.
+Pipeline order: wake check → [unlisted sessions and senders](./platform-settings#unlisted-sessions-and-senders) → session enabled → coalesce → rate limit → content safety → preprocess → plugin or LLM.
 
-A policy admit can still vanish behind the unlisted-session policy, a custom rule that disabled the session, rate limits, or content safety. Session on/off is in [Custom rules](./custom-rules). Unmatched ordinary text still reaches plugin `EventMessageType.ALL` / `PRIVATE_MESSAGE` listeners.
+A policy admit can still vanish behind the unlisted-session or unlisted-sender policy, a sender block, a custom rule that disabled the session, rate limits, or content safety. Session on/off is in [Custom rules](./custom-rules). Unmatched ordinary text still reaches plugin `EventMessageType.ALL` / `PRIVATE_MESSAGE` listeners.
 
 ## Common misconfigurations
 
@@ -106,3 +106,4 @@ A policy admit can still vanish behind the unlisted-session policy, a custom rul
 5. Assuming a reply equals a mention; `reply_to_bot` is a separate switch.
 6. `unlisted_sessions=deny` and this group has no session overlay.
 7. A custom rule or `/llm disable` turned LLM off for the session.
+8. That sender is blocked with `/user block`, or `unlisted_senders=deny` and the sender has no overlay.

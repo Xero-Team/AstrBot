@@ -16,7 +16,10 @@ if TYPE_CHECKING:
     from astrbot.core.agent.tool import FunctionTool, ToolSet
     from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
     from astrbot.core.auth import AuthContext, Decision, Resource, Role, Subject
-    from astrbot.core.auth.admission import session_admission_key_from_event
+    from astrbot.core.auth.admission import (
+        sender_admission_key_from_event,
+        session_admission_key_from_event,
+    )
     from astrbot.core.config.astrbot_config import AstrBotConfig
     from astrbot.core.star.register import register_agent as agent
     from astrbot.core.star.register import register_llm_tool as llm_tool
@@ -40,6 +43,10 @@ _EXPORTS = {
     "Resource": ("astrbot.core.auth", "Resource"),
     "Role": ("astrbot.core.auth", "Role"),
     "Subject": ("astrbot.core.auth", "Subject"),
+    "sender_admission_key_from_event": (
+        "astrbot.core.auth.admission",
+        "sender_admission_key_from_event",
+    ),
     "session_admission_key_from_event": (
         "astrbot.core.auth.admission",
         "session_admission_key_from_event",
@@ -110,5 +117,6 @@ __all__ = [
     "llm_tool",
     "logger",
     "safe_error",
+    "sender_admission_key_from_event",
     "session_admission_key_from_event",
 ]

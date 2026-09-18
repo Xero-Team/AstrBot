@@ -1190,11 +1190,16 @@
       }
     },
     "admission": {
-      "description": "Unlisted sessions",
+      "description": "Unlisted sessions and senders",
       "admission": {
         "unlisted_sessions": {
           "description": "Unlisted session policy",
           "hint": "allow admits sessions with no overlay. deny admits only sessions that already have an overlay on the canonical session key. Upgrades list per config profile. Dashboard custom rules and IM /llm write that overlay.",
+          "labels": ["Allow", "Deny"]
+        },
+        "unlisted_senders": {
+          "description": "Unlisted sender policy",
+          "hint": "allow admits senders with no overlay. deny admits only senders that already have a blocked or llm_enabled overlay. Dashboard custom rules still edit sessions only; write sender overlays with /user block, /user unblock, and /user llm on|off.",
           "labels": ["Allow", "Deny"]
         }
       }

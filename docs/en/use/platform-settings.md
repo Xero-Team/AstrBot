@@ -1,18 +1,19 @@
 # Platform handling
 
-**Config → Platform** and **Ext.** hold send/receive behavior shared by every messaging platform. These run **after** the [wake check](./group-wake). A policy-admitted message can still be dropped by the unlisted-session policy, a rate limit, or a content-safety check.
+**Config → Platform** and **Ext.** hold send/receive behavior shared by every messaging platform. These run **after** the [wake check](./group-wake). A policy-admitted message can still be dropped by the unlisted-session or unlisted-sender policy, a rate limit, or a content-safety check.
 
 Open **Config → Platform**. Segmented replies live under **Ext.** Fields belong to the current profile. See [Configuration profiles](./config-profiles).
 
-## Unlisted sessions
+## Unlisted sessions and senders
 
-| Field                         | Default | Notes                                                                            |
-| ----------------------------- | ------- | -------------------------------------------------------------------------------- |
-| `admission.unlisted_sessions` | `allow` | `allow` admits sessions with no overlay; `deny` admits only listed groups or DMs |
+| Field                         | Default | Notes                                                                                       |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `admission.unlisted_sessions` | `allow` | `allow` admits sessions with no overlay; `deny` admits only listed groups or DMs            |
+| `admission.unlisted_senders`  | `allow` | `allow` admits senders with no overlay; `deny` admits only IM subjects that have an overlay |
 
 The default is `allow`: new groups and DMs continue into later stages. After you switch to `deny`, only sessions that already have an overlay on the canonical session key, or that this profile listed during upgrade, are answered. Overlays come from IM `/llm` and Dashboard [custom rules](./custom-rules) writing `llm_enabled` / `session_enabled` / `session_blocked`. Upgrade allowlists are stored per profile; they do not write `session_enabled` into preferences.
 
-Group admission uses the canonical session key (`session:{platform instance}:group:{group id}`), not a unique-session rewritten UMO. Direct messages use `session:{platform instance}:private:{peer id}`. WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this stage. Per-person refusal is a later slice; unlisted senders are allowed for now.
+Group admission uses the canonical session key (`session:{platform instance}:group:{group id}`), not a unique-session rewritten UMO. Direct messages use `session:{platform instance}:private:{peer id}`. Sender overlays live on `im:{platform instance}:{bot account}:{sender id}` and apply instance-wide. WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this stage. The default is `unlisted_senders=allow`: senders with no overlay still pass. After you switch to `deny`, only senders with a written `blocked` or `llm_enabled` overlay are listed. Dashboard custom rules still edit session overlays only; `/user block`, `/user unblock`, and `/user llm on|off` write the sender overlay. Any written `blocked` or `llm_enabled` value lists that sender.
 
 `id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone. Dashboard writes that include them fail. On upgrade, an empty or disabled list becomes `allow`. A non-empty enabled list becomes `deny` and each entry is listed on that profile. Bare IDs expand to one group key per `platform[].id` on that profile. Unique-session UMOs unwrap to the group id from `sender_id_group_id` / `sender_id%group_id`.
 

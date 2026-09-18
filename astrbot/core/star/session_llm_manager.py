@@ -14,6 +14,29 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
+def sender_service_config(existing: object, **fields: bool) -> dict[str, bool]:
+    """Return a sender overlay with only ``blocked`` and ``llm_enabled``.
+
+    Args:
+        existing: Stored preference value, typically a dict.
+        **fields: Overlay fields to write.
+
+    Returns:
+        A mapping that preserves existing bool overlays and applies ``fields``.
+        Extra keys such as persona, TTS, KB, or Provider are dropped.
+    """
+    config: dict[str, bool] = {}
+    if isinstance(existing, dict):
+        blocked = existing.get("blocked")
+        if isinstance(blocked, bool):
+            config["blocked"] = blocked
+        llm_enabled = existing.get("llm_enabled")
+        if isinstance(llm_enabled, bool):
+            config["llm_enabled"] = llm_enabled
+    config.update(fields)
+    return config
+
+
 class SessionServiceManager:
     """管理会话级别的服务启停状态，包括LLM和TTS"""
 
@@ -31,6 +54,22 @@ class SessionServiceManager:
 
     def _llm_scope_id(self, session_id: str) -> str:
         return session_admission_key_from_umo(session_id) or session_id
+
+    def _sender_scope_id(self, event_or_key: AstrMessageEvent | str) -> str:
+        if isinstance(event_or_key, str):
+            return event_or_key
+        return sender_admission_key_from_event(event_or_key)
+
+    async def _put_sender_overlay(self, scope_id: str, **fields: bool) -> None:
+        await self.preferences.put_async(
+            scope="sender",
+            scope_id=scope_id,
+            key=SESSION_SERVICE_CONFIG_KEY,
+            value=sender_service_config(
+                await self._service_config("sender", scope_id),
+                **fields,
+            ),
+        )
 
     async def is_llm_enabled_for_session(self, session_id: str) -> bool:
         """检查LLM是否在指定会话中启用
@@ -167,7 +206,7 @@ class SessionServiceManager:
     async def is_sender_blocked(self, event: AstrMessageEvent) -> bool:
         """Check whether the inbound sender has a UID ``blocked`` overlay.
 
-        ``scope=sender`` is readable in this slice; missing rows are unblocked.
+        Missing sender rows are unblocked.
 
         Args:
             event: Inbound event used to mint the sender key.
@@ -179,6 +218,36 @@ class SessionServiceManager:
             await self._service_config("sender", sender_admission_key_from_event(event))
         )
         return overlay.blocked
+
+    async def set_sender_blocked(
+        self, event_or_key: AstrMessageEvent | str, blocked: bool
+    ) -> None:
+        """Block or unblock an IM sender for this bot instance.
+
+        Args:
+            event_or_key: Inbound event used to mint ``Subject.im.id``, or that
+                sender key itself.
+            blocked: True to refuse the sender in every session.
+        """
+        await self._put_sender_overlay(
+            self._sender_scope_id(event_or_key),
+            blocked=blocked,
+        )
+
+    async def set_sender_llm_enabled(
+        self, event_or_key: AstrMessageEvent | str, enabled: bool
+    ) -> None:
+        """Set the sender LLM overlay for this bot instance.
+
+        Args:
+            event_or_key: Inbound event used to mint ``Subject.im.id``, or that
+                sender key itself.
+            enabled: True to enable built-in LLM for this sender.
+        """
+        await self._put_sender_overlay(
+            self._sender_scope_id(event_or_key),
+            llm_enabled=enabled,
+        )
 
     async def set_session_blocked(self, session_id: str, blocked: bool) -> None:
         """Block or unblock all functionality for a session."""

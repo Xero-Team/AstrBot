@@ -83,6 +83,7 @@ def test_default_config_omits_group_active_reply():
 
 def test_default_config_uses_unlisted_session_admission():
     assert DEFAULT_CONFIG["admission"]["unlisted_sessions"] == "allow"
+    assert DEFAULT_CONFIG["admission"]["unlisted_senders"] == "allow"
     platform_settings = DEFAULT_CONFIG["platform_settings"]
     for key in (
         "enable_id_white_list",

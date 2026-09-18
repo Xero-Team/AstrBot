@@ -290,6 +290,14 @@ class SharedPreferences:
     async def session_put(self, umo: str, key: str, value: Any) -> None:
         await self.put_async("umo", umo, key, value)
 
+    async def sender_get(self, sender_id: str, key: str, default: _VT = None) -> _VT:
+        """Get one sender-scoped preference."""
+        return await self.get_async("sender", sender_id, key, default)
+
+    async def sender_put(self, sender_id: str, key: str, value: Any) -> None:
+        """Store one sender-scoped preference."""
+        await self.put_async("sender", sender_id, key, value)
+
     async def global_put(self, key: str, value: Any) -> None:
         await self.put_async("global", "global", key, value)
 

@@ -1,18 +1,19 @@
 # 平台处理
 
-配置文件的 **平台配置** 和 **扩展功能** 里，有一组所有消息平台共用的收发行为。它们在 [唤醒检查](./group-wake) 之后生效：策略已经放行的消息，仍可能被未列入会话策略、限流或内容安全丢掉。
+配置文件的 **平台配置** 和 **扩展功能** 里，有一组所有消息平台共用的收发行为。它们在 [唤醒检查](./group-wake) 之后生效：策略已经放行的消息，仍可能被未列入会话或未列入发送者策略、限流或内容安全丢掉。
 
 入口：WebUI **配置文件 → 平台配置**。分段回复在 **扩展功能**。这些字段属于当前配置文件，见 [配置文件](./config-profiles)。
 
-## 未列入会话
+## 未列入会话和发送者
 
-| 字段                          | 默认    | 说明                                                            |
-| ----------------------------- | ------- | --------------------------------------------------------------- |
-| `admission.unlisted_sessions` | `allow` | `allow` 放行没有覆盖的会话；`deny` 只放行已有会话覆盖的群或私聊 |
+| 字段                          | 默认    | 说明                                                                |
+| ----------------------------- | ------- | ------------------------------------------------------------------- |
+| `admission.unlisted_sessions` | `allow` | `allow` 放行没有覆盖的会话；`deny` 只放行已有会话覆盖的群或私聊     |
+| `admission.unlisted_senders`  | `allow` | `allow` 放行没有覆盖的发送者；`deny` 只放行已有发送者覆盖的 IM 主体 |
 
 默认 `allow`：新群和新私聊都会进入后续流水线。改成 `deny` 后，只有规范会话键上已有覆盖、或本配置档升级列入集里的会话会被响应。覆盖来自 IM `/llm`、Dashboard [自定义规则](./custom-rules) 写入的 `llm_enabled` / `session_enabled` / `session_blocked`。升级时旧白名单按配置档记入列入集，不会把 `session_enabled` 写到偏好里。
 
-群准入用的是规范会话键（`session:{平台实例}:group:{群 ID}`），不是隔离会话改写后的 UMO。私聊用 `session:{平台实例}:private:{对方 ID}`。WebChat、OneBot 的 `notice` / `request`，以及当前实例上拥有 `provider.manage` 的发送者，会跳过这一关。按人拒绝属于后续切片，现在未列入发送者一律放行。
+群准入用的是规范会话键（`session:{平台实例}:group:{群 ID}`），不是隔离会话改写后的 UMO。私聊用 `session:{平台实例}:private:{对方 ID}`。发送者覆盖写在 `im:{平台实例}:{机器人账号}:{发送者 ID}` 上，对本机器人实例全局生效。WebChat、OneBot 的 `notice` / `request`，以及当前实例上拥有 `provider.manage` 的发送者，会跳过这一关。默认 `unlisted_senders=allow`：没有发送者覆盖的人仍然放行。改成 `deny` 后，只有已写入 `blocked` 或 `llm_enabled` 的发送者会被列入。Dashboard 自定义规则仍只编辑会话覆盖；用 `/user block`、`/user unblock`、`/user llm on|off` 写入发送者覆盖。写入任意 `blocked` 或 `llm_enabled` 都会列入该发送者。
 
 旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除，Dashboard 写入这些字段会失败。升级时：空列表或关闭的白名单变成 `allow`；非空且开启的列表变成 `deny`，并把条目列入该配置档。裸 ID 会按该配置档里每个 `platform[].id` 展开成群会话键。隔离会话 UMO 会按 `sender_id_group_id` / `sender_id%group_id` 解开成群 ID。
 

@@ -44,7 +44,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 | `platform` / `platform_specific`                  | 平台实例，以及 Lark、Telegram、Discord 等平台特异行为。                                                                                                            |
 | `command_prefixes`                                | 指令头前缀，默认 ["/"]。                                                                                                                                           |
 | `llm_access`                                      | 当前配置档的私聊和群聊 LLM 访问策略；默认 `private=prefix`、`group=prefix`、`prefixes=["/"]`。                                                                     |
-| `admission`                                       | 未列入会话策略；默认 `unlisted_sessions=allow`。                                                                                                                   |
+| `admission`                                       | 未列入会话和发送者策略；默认 `unlisted_sessions=allow`、`unlisted_senders=allow`。                                                                                 |
 | `inbound_coalesce`                                | 可选的连续私聊 LLM 消息有界合并，默认关闭。                                                                                                                        |
 | 其他顶层键                                        | 管理员、T2I、代理、日志、时区、插件、知识库、Trace 和指标等。                                                                                                      |
 
@@ -66,7 +66,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 路由顺序是先匹配指令，再判断 LLM 访问。命中指令时只执行指令；裸指令组输出帮助；未知子指令输出 Orbit 诊断且不会回落到 LLM。否则事件通过 LLM 门禁或被丢弃。通知和请求属于透传事件。启用合并后，私聊窗口中的后续片段不再要求重复 LLM 前缀；收到指令会丢弃缓冲回合。NapCat 的 `input_status` 只暂停或恢复回合窗口，不会进入消息 Pipeline。
 
-未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖、或该配置档升级列入集里的群或私聊；WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
+未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖、或该配置档升级列入集里的群或私聊。未列入发送者由 `admission.unlisted_senders` 控制，同样默认 `allow`。`deny` 只放行已有 `blocked` 或 `llm_enabled` 覆盖的 IM 主体。用 `/user block`、`/user unblock`、`/user llm on|off` 写入这些覆盖。WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
 
 ## `platform_settings`
 

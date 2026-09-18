@@ -16,13 +16,21 @@ from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaComma
 from astrbot.builtin_stars.builtin_commands.commands.plugin import PluginCommands
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
 from astrbot.builtin_stars.builtin_commands.commands.tts import TtsCommands
+from astrbot.builtin_stars.builtin_commands.commands.user import (
+    UserCommands,
+    sender_key_from_token,
+)
 from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
 from astrbot.builtin_stars.builtin_commands.main import Main
-from astrbot.core.auth.admission import session_admission_key_from_event
+from astrbot.core.auth.admission import (
+    sender_admission_key_from_event,
+    session_admission_key_from_event,
+)
 from astrbot.core.command import (
     CommandEngine,
     CommandError,
     CommandErrorCode,
+    CommandResolutionKind,
     build_command_catalog,
 )
 from astrbot.core.command.schema import compile_command_schema
@@ -40,6 +48,7 @@ from astrbot.core.star.star_handler import (
     materialize_handler_declarations,
 )
 from tests.unit.builtin_command_fakes import FakeI18n
+from tests.unit.test_waking_check_stage import make_real_event
 
 
 class DummyEvent:
@@ -287,6 +296,10 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "tts_disable",
         "tts_enable",
         "tts_status",
+        "user_block",
+        "user_unblock",
+        "user_llm_on",
+        "user_llm_off",
         "persona_list",
         "persona_set",
         "persona_status",
@@ -840,6 +853,91 @@ async def test_chat_commands_report_and_set_session_service_status():
 
 
 @pytest.mark.asyncio
+async def test_user_commands_write_sender_overlays():
+    stored: dict[tuple[str, str], dict] = {}
+
+    async def sender_get(sender_id: str, key: str, default: dict) -> dict:
+        assert key == "session_service_config"
+        return dict(stored.get((sender_id, key), default))
+
+    async def sender_put(sender_id: str, key: str, value: dict) -> None:
+        assert key == "session_service_config"
+        stored[(sender_id, key)] = dict(value)
+
+    command = UserCommands(
+        SimpleNamespace(
+            preferences=SimpleNamespace(
+                sender_get=sender_get,
+                sender_put=sender_put,
+            ),
+            i18n=FakeI18n(),
+        )
+    )
+    event = DummyEvent(message_str="user block 99")
+    await command.set_blocked(event, "99", True)
+    minted = "im:napcat:bot:99"
+    assert stored[(minted, "session_service_config")] == {"blocked": True}
+    assert minted in _plain_text(event.result)
+
+    full_id = "im:napcat:bot:other"
+    llm_event = DummyEvent(message_str="user llm on")
+    await command.set_llm_enabled(llm_event, full_id, True)
+    assert stored[(full_id, "session_service_config")] == {"llm_enabled": True}
+
+    await command.set_blocked(DummyEvent(message_str="user unblock"), full_id, False)
+    assert stored[(full_id, "session_service_config")] == {
+        "blocked": False,
+        "llm_enabled": True,
+    }
+    await command.set_llm_enabled(
+        DummyEvent(message_str="user llm off"), full_id, False
+    )
+    assert stored[(full_id, "session_service_config")] == {
+        "blocked": False,
+        "llm_enabled": False,
+    }
+
+    stored[(full_id, "session_service_config")] = {
+        "blocked": False,
+        "llm_enabled": False,
+        "session_enabled": False,
+        "tts_enabled": False,
+        "persona_id": "p1",
+    }
+    await command.set_blocked(DummyEvent(message_str="user block"), full_id, True)
+    assert stored[(full_id, "session_service_config")] == {
+        "blocked": True,
+        "llm_enabled": False,
+    }
+
+    empty_event = DummyEvent(message_str="user block")
+    await command.set_blocked(empty_event, "  ", True)
+    assert "Usage:" in _plain_text(empty_event.result)
+    assert ("", "session_service_config") not in stored
+
+    invalid_event = DummyEvent(message_str="user block")
+    await command.set_blocked(invalid_event, "im:foo", True)
+    assert "Usage:" in _plain_text(invalid_event.result)
+    assert ("im:foo", "session_service_config") not in stored
+
+
+def test_sender_key_from_token_mints_raw_ids_like_admission():
+    event = DummyEvent(message_str="user block", platform_id="", platform_name="napcat")
+    assert sender_key_from_token(event, " 99 ") == "im:napcat:bot:99"
+    assert sender_key_from_token(event, "im:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_key_from_token(event, "IM:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_key_from_token(event, "im:foo") is None
+    assert sender_key_from_token(event, "im:napcat:bot:") is None
+    assert sender_key_from_token(event, "  ") is None
+    empty = DummyEvent(message_str="user block", platform_id="", platform_name="")
+    assert sender_key_from_token(empty, "99") == "im:unknown:bot:99"
+    real = make_real_event(message_type=MessageType.GROUP_MESSAGE)
+    minted = sender_admission_key_from_event(real)
+    assert sender_key_from_token(real, real.get_sender_id()) == minted
+    assert sender_key_from_token(real, minted) == minted
+
+
+@pytest.mark.asyncio
 async def test_chat_commands_disable_unique_session_group_on_canonical_key():
     calls: list[str] = []
 
@@ -1133,6 +1231,33 @@ def test_model_operations_are_registered_as_native_subcommands():
     assert subcommands["set"].handler_params[0].is_required is True
 
 
+def test_user_operations_are_registered_as_native_subcommands():
+    user_group = Main.user.parent_group
+    root_subcommands = {
+        filter_ref.command_name: filter_ref
+        for filter_ref in user_group.sub_command_filters
+        if isinstance(filter_ref, CommandFilter)
+    }
+    llm_group = next(
+        filter_ref
+        for filter_ref in user_group.sub_command_filters
+        if isinstance(filter_ref, CommandGroupFilter) and filter_ref.group_name == "llm"
+    )
+    llm_subcommands = {
+        filter_ref.command_name: filter_ref
+        for filter_ref in llm_group.sub_command_filters
+        if isinstance(filter_ref, CommandFilter)
+    }
+
+    assert user_group.group_name == "user"
+    assert set(root_subcommands) == {"block", "unblock"}
+    assert set(llm_subcommands) == {"on", "off"}
+    for name in ("block", "unblock"):
+        assert root_subcommands[name].handler_params[0].is_required is False
+    for name in ("on", "off"):
+        assert llm_subcommands[name].handler_params[0].is_required is False
+
+
 def test_builtin_command_names_follow_grouped_cli_conventions():
     def command_names(group: CommandGroupFilter) -> set[str]:
         return {
@@ -1179,6 +1304,7 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
         "admin": {"grant", "list", "revoke"},
         "persona": {"list", "set", "show", "status", "unset"},
         "plugin": {"disable", "enable", "install", "list", "show"},
+        "user": {"block", "unblock"},
     }
     for attribute, expected in expected_groups.items():
         group = getattr(Main, attribute).parent_group
@@ -1239,6 +1365,10 @@ def test_non_public_builtin_commands_declare_the_planned_actions():
         "bot_enable": "session.manage",
         "bot_disable": "session.manage",
         "bot_leave": "session.manage",
+        "user_block": "session.manage",
+        "user_unblock": "session.manage",
+        "user_llm_on": "session.manage",
+        "user_llm_off": "session.manage",
         "task_stop": "session.manage",
         "work": "session.read",
         "conversation_create": "session.manage",
@@ -1279,6 +1409,33 @@ def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
 
     tts = engine.resolve("tts enable")
     assert tts.resolution.command_path == ("tts", "enable")
+
+    user_block = engine.resolve("user block 99")
+    assert user_block.resolution.command_path == ("user", "block")
+    user_block_entry = user_block.resolution.entries[0]
+    assert dict(engine.bind(user_block_entry, user_block).values) == {"sender_id": "99"}
+
+    user_llm = engine.resolve("user llm off im:napcat:bot:99")
+    assert user_llm.resolution.command_path == ("user", "llm", "off")
+    user_llm_entry = user_llm.resolution.entries[0]
+    assert dict(engine.bind(user_llm_entry, user_llm).values) == {
+        "sender_id": "im:napcat:bot:99"
+    }
+
+    missing = engine.resolve("user block")
+    assert missing.resolution.command_path == ("user", "block")
+    missing_entry = missing.resolution.entries[0]
+    assert dict(engine.bind(missing_entry, missing).values) == {"sender_id": ""}
+
+    extra = engine.resolve("user block 99 extra")
+    extra_entry = extra.resolution.entries[0]
+    with pytest.raises(CommandError) as exc:
+        engine.bind(extra_entry, extra)
+    assert exc.value.diagnostic.code is CommandErrorCode.TOO_MANY_ARGUMENTS
+
+    assert declarations.function_tools == ()
+    black = engine.resolve("black 99")
+    assert black.resolution.kind is CommandResolutionKind.UNKNOWN_ROOT
 
     named = engine.resolve("session name --clear")
     assert named.resolution.command_path == ("session", "name")

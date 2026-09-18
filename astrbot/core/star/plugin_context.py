@@ -415,6 +415,19 @@ class PreferenceCapability:
         """Remove a session-scoped preference."""
         await self._preferences.session_remove(umo, key)
 
+    async def sender_get(
+        self,
+        sender_id: str,
+        key: str,
+        default: _VT = None,
+    ) -> _VT:
+        """Read a sender-scoped preference."""
+        return await self._preferences.sender_get(sender_id, key, default)
+
+    async def sender_put(self, sender_id: str, key: str, value: Any) -> None:
+        """Store a sender-scoped preference."""
+        await self._preferences.sender_put(sender_id, key, value)
+
     async def global_get(self, key: str, default: _VT = None) -> _VT:
         """Read a global preference."""
         return await self._preferences.global_get(key, default)  # type: ignore[return-value]

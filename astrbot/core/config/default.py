@@ -312,6 +312,7 @@ DEFAULT_CONFIG = {
     },
     "admission": {
         "unlisted_sessions": "allow",
+        "unlisted_senders": "allow",
     },
     "inbound_coalesce": {
         "enable": False,
@@ -3306,6 +3307,10 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "options": ["allow", "deny"],
                     },
+                    "unlisted_senders": {
+                        "type": "string",
+                        "options": ["allow", "deny"],
+                    },
                 },
             },
             "inbound_coalesce": {
@@ -4486,7 +4491,7 @@ CONFIG_METADATA_3 = {
                 },
             },
             "admission": {
-                "description": "未列入会话",
+                "description": "未列入会话和发送者",
                 "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
@@ -4496,6 +4501,13 @@ CONFIG_METADATA_3 = {
                         "options": ["allow", "deny"],
                         "labels": ["允许", "拒绝"],
                         "hint": "allow 放行没有覆盖的会话。deny 只放行规范会话键上已有覆盖的会话。升级迁移按配置档列入；Dashboard 自定义规则和 IM /llm 会写入该覆盖。",
+                    },
+                    "admission.unlisted_senders": {
+                        "description": "未列入发送者策略",
+                        "type": "string",
+                        "options": ["allow", "deny"],
+                        "labels": ["允许", "拒绝"],
+                        "hint": "allow 放行没有覆盖的发送者。deny 只放行已有 blocked 或 llm_enabled 覆盖的发送者。Dashboard 自定义规则仍只编辑会话；用 /user block、/user unblock、/user llm on|off 写入发送者覆盖。",
                     },
                 },
             },

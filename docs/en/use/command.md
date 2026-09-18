@@ -144,7 +144,7 @@ These commands require `session.manage`. Both `enable` and `disable` are idempot
 - `/user llm on <sender_id>`: Enable built-in LLM for that sender (can override a session-level off).
 - `/user llm off <sender_id>`: Disable built-in LLM for that sender; matched commands still run.
 
-`sender_id` is required. Use the UID from `/session info` (minted for the current bot into `im:{platform}:{bot}:{sender}`), or paste that full Subject ID. An omitted or empty token prints usage and writes nothing; it does not target self. Extra tokens are a bind error, not part of the id. These commands require `session.manage`. A blocked sender is dropped at admission except for `/user unblock` and `/bot status`. A sender `llm_enabled=true` overlay cannot revive a fully blocked session.
+`sender_id` is required. Use the UID from `/session info` (minted for the current bot into `im:{platform}:{bot}:{sender}`), or paste that full Subject ID. An omitted or empty token prints usage and writes nothing; it does not target self. Extra tokens are a bind error, not part of the id. These commands require `session.manage`. A blocked sender is dropped at admission except for `/user unblock` and `/bot status`. A sender `llm_enabled=true` overlay cannot revive a fully blocked session. The Sender target on Dashboard [custom rules](./custom-rules) reads and writes the same preference row, but it requires the full `im:` subject ID.
 
 ### TTS state
 

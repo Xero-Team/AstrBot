@@ -826,6 +826,7 @@ def fake_core_lifecycle(fake_db: FakeDb):
     class FakePreferences:
         def __init__(self) -> None:
             self.values: dict[str, object] = {}
+            self.sender_values: dict[tuple[str, str], object] = {}
 
         async def global_get(self, key: str, default: object = None) -> object:
             return self.values.get(key, default)
@@ -838,6 +839,17 @@ def fake_core_lifecycle(fake_db: FakeDb):
 
         async def session_put(self, *_args, **_kwargs) -> None:
             return None
+
+        async def sender_get(
+            self, sender_id: str, key: str, default: object = None
+        ) -> object:
+            return copy.deepcopy(self.sender_values.get((sender_id, key), default))
+
+        async def sender_put(self, sender_id: str, key: str, value: object) -> None:
+            self.sender_values[(sender_id, key)] = copy.deepcopy(value)
+
+        async def sender_remove(self, sender_id: str, key: str) -> None:
+            self.sender_values.pop((sender_id, key), None)
 
     plugin_lifecycle = SimpleNamespace(
         reload_failed_plugin=reload_plugin,

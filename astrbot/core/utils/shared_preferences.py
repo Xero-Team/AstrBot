@@ -298,6 +298,10 @@ class SharedPreferences:
         """Store one sender-scoped preference."""
         await self.put_async("sender", sender_id, key, value)
 
+    async def sender_remove(self, sender_id: str, key: str) -> None:
+        """Remove one sender-scoped preference."""
+        await self.remove_async("sender", sender_id, key)
+
     async def global_put(self, key: str, value: Any) -> None:
         await self.put_async("global", "global", key, value)
 

@@ -14,6 +14,7 @@ from astrbot.core.auth.admission import (
     conversation_kind_from_event,
     platform_instance_from_event,
     sender_admission_key_from_event,
+    sender_admission_key_from_id,
     sender_overlay_from_config,
     session_admission_key,
     session_admission_key_from_event,
@@ -131,6 +132,18 @@ def test_private_session_key_matches_subject_im_peer():
     assert session_key == "session:napcat:private:user-1"
     assert sender_key == subject.id == "im:napcat:bot:user-1"
     assert session_key.rsplit(":", 1)[-1] == sender_key.rsplit(":", 1)[-1]
+
+
+def test_sender_admission_key_from_id_requires_full_im_subject():
+    assert sender_admission_key_from_id("im:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_admission_key_from_id("IM:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_admission_key_from_id("  im:napcat:bot:other  ") == (
+        "im:napcat:bot:other"
+    )
+    assert sender_admission_key_from_id("99") is None
+    assert sender_admission_key_from_id("im:foo") is None
+    assert sender_admission_key_from_id("im:napcat:bot:") is None
+    assert sender_admission_key_from_id("  ") is None
 
 
 def test_sender_key_reuses_attached_im_subject():

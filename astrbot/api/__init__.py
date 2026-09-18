@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from astrbot.core.auth import AuthContext, Decision, Resource, Role, Subject
     from astrbot.core.auth.admission import (
         sender_admission_key_from_event,
+        sender_admission_key_from_id,
         session_admission_key_from_event,
     )
     from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -46,6 +47,10 @@ _EXPORTS = {
     "sender_admission_key_from_event": (
         "astrbot.core.auth.admission",
         "sender_admission_key_from_event",
+    ),
+    "sender_admission_key_from_id": (
+        "astrbot.core.auth.admission",
+        "sender_admission_key_from_id",
     ),
     "session_admission_key_from_event": (
         "astrbot.core.auth.admission",
@@ -118,5 +123,6 @@ __all__ = [
     "logger",
     "safe_error",
     "sender_admission_key_from_event",
+    "sender_admission_key_from_id",
     "session_admission_key_from_event",
 ]

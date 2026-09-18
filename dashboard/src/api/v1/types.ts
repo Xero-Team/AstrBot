@@ -630,6 +630,7 @@ export interface SessionRuleListParams {
   page?: number;
   page_size?: number;
   search?: string;
+  target_type?: 'session' | 'sender';
 }
 
 export interface ChatHistoryPageParams {

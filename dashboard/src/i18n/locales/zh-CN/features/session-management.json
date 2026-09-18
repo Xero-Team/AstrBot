@@ -15,13 +15,20 @@
     "editCustomName": "编辑备注",
     "batchDelete": "批量删除"
   },
+  "targetType": {
+    "session": "会话",
+    "sender": "发送者"
+  },
   "customRules": {
     "title": "自定义规则",
     "rulesCount": "条规则",
     "hasRules": "已配置",
     "noRules": "暂无自定义规则",
     "noRulesDesc": "点击「添加规则」为特定会话配置自定义规则",
+    "noSenderRulesDesc": "点击「添加规则」写入发送者覆盖。使用完整 im:{平台}:{机器人}:{发送者} 主体 ID。",
     "serviceConfig": "服务配置",
+    "blocked": "已拉黑",
+    "llmEnabled": "LLM",
     "pluginConfig": "插件配置",
     "kbConfig": "知识库配置",
     "providerConfig": "模型配置",
@@ -32,11 +39,13 @@
     "title": "编辑备注名"
   },
   "search": {
-    "placeholder": "搜索会话..."
+    "placeholder": "搜索会话...",
+    "senderPlaceholder": "搜索发送者..."
   },
   "table": {
     "headers": {
       "umoInfo": "消息会话来源",
+      "senderInfo": "发送者主体 ID",
       "rulesOverview": "规则概览",
       "actions": "操作"
     }
@@ -50,7 +59,10 @@
   "addRule": {
     "title": "添加自定义规则",
     "description": "选择一个消息会话来源 (UMO) 来配置自定义规则。自定义规则的优先级高于该来源所属的配置文件中的全局规则。可以使用 /session info 指令获取该来源的 UMO 信息。",
+    "senderDescription": "填写完整发送者主体 ID。与 /user 指令写入同一份 preference。可从 /session info 复制 UID。",
     "selectUmo": "选择会话",
+    "senderId": "发送者主体 ID",
+    "senderIdHint": "格式 im:{平台实例}:{机器人账号}:{发送者 ID}",
     "noUmos": "暂无可用会话"
   },
   "ruleEditor": {
@@ -61,6 +73,7 @@
       "sessionEnabled": "启用该消息会话来源的消息处理",
       "llmEnabled": "启用 LLM",
       "ttsEnabled": "启用 TTS",
+      "blocked": "拉黑该发送者",
       "sessionBlocked": "完全禁用该会话的所有功能",
       "customName": "消息会话来源备注名称"
     },
@@ -89,7 +102,8 @@
   },
   "deleteConfirm": {
     "title": "确认删除",
-    "message": "确定要删除此会话的所有自定义规则吗？删除后将恢复使用全局配置。"
+    "message": "确定要删除此会话的所有自定义规则吗？删除后将恢复使用全局配置。",
+    "senderMessage": "确定要删除此发送者覆盖吗？删除后该发送者不再被列入。"
   },
   "batchDeleteConfirm": {
     "title": "确认批量删除",

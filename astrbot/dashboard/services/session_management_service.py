@@ -7,6 +7,7 @@ from sqlmodel import col, select
 from astrbot import logger
 from astrbot.core.auth.admission import (
     SESSION_SERVICE_CONFIG_KEY,
+    sender_admission_key_from_id,
     session_admission_key_from_umo,
 )
 from astrbot.core.db.po import ConversationV2, Preference
@@ -15,6 +16,7 @@ from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.star.session_llm_manager import sender_service_config
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.umo_alias import (
     build_umo_alias_map,
@@ -38,6 +40,9 @@ _SESSION_CONFIG_RULE_KEYS = frozenset(
     {"session_service_config", "session_plugin_config", "kb_config"}
 )
 _ADMISSION_OVERLAY_FIELDS = ("session_enabled", "session_blocked", "llm_enabled")
+_TARGET_SESSION = "session"
+_TARGET_SENDER = "sender"
+_SENDER_OVERLAY_FIELDS = ("blocked", "llm_enabled")
 
 
 class SessionManagementServiceError(Exception):
@@ -98,6 +103,51 @@ class SessionManagementService:
         ):
             raise SessionManagementServiceError("参数 umos 必须是非空字符串数组")
         return umos
+
+    @staticmethod
+    def _normalize_target_type(value: object) -> str:
+        if value in (None, "", _TARGET_SESSION):
+            return _TARGET_SESSION
+        if value == _TARGET_SENDER:
+            return _TARGET_SENDER
+        raise SessionManagementServiceError("参数 target_type 必须是 session 或 sender")
+
+    @staticmethod
+    def _sender_key(sender_id: object) -> str:
+        if not isinstance(sender_id, str) or not sender_id.strip():
+            raise SessionManagementServiceError("缺少必要参数: sender_id")
+        sender_key = sender_admission_key_from_id(sender_id)
+        if sender_key is None:
+            raise SessionManagementServiceError(
+                "参数 sender_id 必须是完整的 im: 主体 ID"
+            )
+        return sender_key
+
+    @staticmethod
+    def _sender_overlay_value(config: object) -> dict[str, bool]:
+        return sender_service_config(config)
+
+    def _sender_ids_from_payload(self, payload: dict[str, Any]) -> list[str]:
+        sender_ids: list[str] = []
+        seen: set[str] = set()
+        direct = payload.get("sender_id")
+        if direct:
+            sender_ids.append(self._sender_key(direct))
+            seen.add(sender_ids[-1])
+        raw_ids = payload.get("sender_ids")
+        if raw_ids:
+            if not isinstance(raw_ids, list) or not all(
+                isinstance(item, str) and item for item in raw_ids
+            ):
+                raise SessionManagementServiceError(
+                    "参数 sender_ids 必须是非空字符串数组"
+                )
+            for item in raw_ids:
+                sender_key = self._sender_key(item)
+                if sender_key not in seen:
+                    sender_ids.append(sender_key)
+                    seen.add(sender_key)
+        return sender_ids
 
     def resolve_umo_config_id(self, umo: str) -> str:
         """Resolve a UMO's configuration from runtime-owned routing state.
@@ -347,28 +397,89 @@ class SessionManagementService:
 
         return {umo_id: umo_rules[umo_id] for umo_id in paginated_umo_ids}, total
 
+    async def get_sender_rules(
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        search: str = "",
+    ) -> tuple[dict[str, dict[str, bool]], int]:
+        sender_rules: dict[str, dict[str, bool]] = {}
+        async with self.db_helper.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(Preference).where(
+                    col(Preference.scope) == "sender",
+                    col(Preference.key) == SESSION_SERVICE_CONFIG_KEY,
+                )
+            )
+            prefs = result.scalars().all()
+            for pref in prefs:
+                sender_id = pref.scope_id
+                raw_value = pref.value
+                if not isinstance(raw_value, dict) or "val" not in raw_value:
+                    logger.warning("忽略格式错误的发送者规则: sender_id=%s", sender_id)
+                    continue
+                overlay = self._sender_overlay_value(raw_value["val"])
+                if not overlay:
+                    continue
+                sender_rules[sender_id] = overlay
+
+        if search:
+            search_lower = search.lower()
+            sender_rules = {
+                sender_id: overlay
+                for sender_id, overlay in sender_rules.items()
+                if search_lower in sender_id.lower()
+            }
+
+        total = len(sender_rules)
+        all_sender_ids = sorted(sender_rules)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_ids = all_sender_ids[start_idx:end_idx]
+        return {
+            sender_id: sender_rules[sender_id] for sender_id in paginated_ids
+        }, total
+
     async def list_session_rules(
         self,
         *,
         page: int,
         page_size: int,
         search: str,
+        target_type: str = _TARGET_SESSION,
     ) -> dict:
         page, page_size = self._normalize_page(page, page_size, default_page_size=10)
-        umo_rules, total = await self.get_umo_rules(
-            page=page,
-            page_size=page_size,
-            search=search,
-        )
-
-        alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
-        rules_list = [
-            {
-                "rules": rules,
-                **self.build_umo_info(umo, alias_map),
-            }
-            for umo, rules in umo_rules.items()
-        ]
+        target = self._normalize_target_type(target_type)
+        if target == _TARGET_SENDER:
+            sender_rules, total = await self.get_sender_rules(
+                page=page,
+                page_size=page_size,
+                search=search,
+            )
+            rules_list = [
+                {
+                    "target_type": _TARGET_SENDER,
+                    "sender_id": sender_id,
+                    "rules": {SESSION_SERVICE_CONFIG_KEY: overlay},
+                }
+                for sender_id, overlay in sender_rules.items()
+            ]
+        else:
+            umo_rules, total = await self.get_umo_rules(
+                page=page,
+                page_size=page_size,
+                search=search,
+            )
+            alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
+            rules_list = [
+                {
+                    "target_type": _TARGET_SESSION,
+                    "rules": rules,
+                    **self.build_umo_info(umo, alias_map),
+                }
+                for umo, rules in umo_rules.items()
+            ]
 
         available_personas = [
             {"name": p.persona_id, "prompt": p.system_prompt}
@@ -420,6 +531,8 @@ class SessionManagementService:
 
     async def update_session_rule(self, data: object) -> dict:
         payload = self._payload(data)
+        if self._normalize_target_type(payload.get("target_type")) == _TARGET_SENDER:
+            return await self._update_sender_rule(payload)
         umo = payload.get("umo")
         rule_key = payload.get("rule_key")
         rule_value = payload.get("rule_value")
@@ -459,6 +572,39 @@ class SessionManagementService:
                 await self.preferences.session_put(umo, rule_key, rule_value)
         return {"message": f"规则 {rule_key} 已更新", "umo": umo}
 
+    async def _update_sender_rule(self, payload: dict[str, Any]) -> dict:
+        sender_key = self._sender_key(payload.get("sender_id"))
+        rule_key = payload.get("rule_key")
+        rule_value = payload.get("rule_value")
+        if not rule_key:
+            raise SessionManagementServiceError("缺少必要参数: rule_key")
+        if rule_key != SESSION_SERVICE_CONFIG_KEY:
+            raise SessionManagementServiceError(
+                "发送者规则只支持 session_service_config"
+            )
+        if not isinstance(rule_value, dict):
+            raise SessionManagementServiceError(
+                f"规则 {rule_key} 需要对象类型的 rule_value"
+            )
+        fields = {
+            name: rule_value[name]
+            for name in _SENDER_OVERLAY_FIELDS
+            if isinstance(rule_value.get(name), bool)
+        }
+        existing = await self.preferences.sender_get(
+            sender_key, SESSION_SERVICE_CONFIG_KEY, {}
+        )
+        await self.preferences.sender_put(
+            sender_key,
+            SESSION_SERVICE_CONFIG_KEY,
+            sender_service_config(existing, **fields),
+        )
+        return {
+            "message": f"规则 {rule_key} 已更新",
+            "sender_id": sender_key,
+            "target_type": _TARGET_SENDER,
+        }
+
     async def delete_session_rule(self, data: object) -> dict:
         payload = self._payload(data)
         umo = payload.get("umo")
@@ -488,9 +634,52 @@ class SessionManagementService:
 
     async def delete_session_rules(self, data: object) -> dict:
         payload = self._payload(data)
+        if self._normalize_target_type(payload.get("target_type")) == _TARGET_SENDER:
+            return await self._delete_sender_rules(payload)
         if payload.get("umo") and not payload.get("umos") and not payload.get("scope"):
             return await self.delete_session_rule(payload)
         return await self.batch_delete_session_rule(payload)
+
+    async def _delete_sender_rules(self, payload: dict[str, Any]) -> dict:
+        sender_ids = self._sender_ids_from_payload(payload)
+        if not sender_ids:
+            raise SessionManagementServiceError("缺少必要参数: sender_id")
+        rule_key = payload.get("rule_key")
+        if rule_key and rule_key != SESSION_SERVICE_CONFIG_KEY:
+            raise SessionManagementServiceError(
+                "发送者规则只支持 session_service_config"
+            )
+        success_count = 0
+        failed_ids: list[str] = []
+        for sender_id in sender_ids:
+            try:
+                await self.preferences.sender_remove(
+                    sender_id, SESSION_SERVICE_CONFIG_KEY
+                )
+                success_count += 1
+            except Exception as exc:
+                logger.error("删除发送者规则失败: %s", safe_error("", exc))
+                failed_ids.append(sender_id)
+        message = f"已删除 {success_count} 条规则"
+        result: dict[str, Any] = {
+            "message": message,
+            "success_count": success_count,
+            "target_type": _TARGET_SENDER,
+        }
+        if failed_ids:
+            result.update(
+                {
+                    "message": f"{message}，{len(failed_ids)} 条删除失败",
+                    "failed_sender_ids": failed_ids,
+                }
+            )
+        elif len(sender_ids) == 1:
+            result = {
+                "message": "所有规则已删除",
+                "sender_id": sender_ids[0],
+                "target_type": _TARGET_SENDER,
+            }
+        return result
 
     async def batch_delete_session_rule(self, data: object) -> dict:
         payload = self._payload(data)

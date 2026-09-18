@@ -35,8 +35,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from astrbot import logger
-
 CODING_GLOBAL_AGENT_TYPES = ("claude_code", "codex")
 
 # What AstrBot writes into a file it does not own.
@@ -172,17 +170,40 @@ def _backup_path(path: Path) -> Path:
 def _read_json(path: Path) -> dict:
     """Return a JSON object from ``path``, or an empty one.
 
-    A file that cannot be parsed is treated as absent rather than replaced: the
-    operator's own configuration is not this module's to discard.
+    For a reader, a file that cannot be parsed is absent: there is nothing to
+    report about it and nothing to change.  A caller that is about to write
+    wants :func:`_read_json_object` instead -- for it the same fallback would
+    mean replacing the file, and the operator's own configuration is not this
+    module's to discard.
+    """
+    try:
+        return _read_json_object(path)
+    except ValueError:
+        return {}
+
+
+def _read_json_object(path: Path) -> dict:
+    """Return ``path`` as a JSON object, or an empty object when it is absent.
+
+    A file that exists and cannot be read as a JSON object is an error rather
+    than an absence, because a write has nowhere to put the difference: it would
+    replace settings that are not ours with the handful of keys we do own.
     """
     if not path.is_file():
         return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
-    except OSError, ValueError:
-        logger.warning("%s is not valid JSON; leaving it alone.", path)
-        return {}
-    return payload if isinstance(payload, dict) else {}
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            f"{path} is not valid JSON. AstrBot will not replace it; fix or move "
+            f"it before switching a provider."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"{path} does not hold a JSON object. AstrBot will not replace it; "
+            f"fix or move it before switching a provider."
+        )
+    return payload
 
 
 def _atomic_write(path: Path, text: str, *, private: bool) -> None:
@@ -254,17 +275,36 @@ def _managed_block(base_url: str, model: str, env_key: str) -> str:
     return "\n".join(lines)
 
 
-def _strip_managed_block(text: str) -> str:
-    """Return ``text`` without AstrBot's section, keeping everything else."""
+def _managed_bounds(text: str) -> tuple[int, int] | None:
+    """Return where AstrBot's section starts and ends past the end marker."""
     start = text.find(CODEX_MANAGED_BEGIN)
     if start == -1:
-        return text
+        return None
     end = text.find(CODEX_MANAGED_END, start)
     if end == -1:
-        # No closing marker: the file was edited by hand or truncated.  Leave it
-        # alone rather than guess where the section was meant to end.
+        return None
+    return start, end + len(CODEX_MANAGED_END)
+
+
+def _has_unclosed_block(text: str) -> bool:
+    """Whether an opening marker is left without its closing one.
+
+    That happens when the file was edited by hand or truncated, and where the
+    section was meant to stop is not knowable from what is left.  Both reading
+    and writing refuse it rather than guess: a write that guessed would add a
+    second section in front of the orphan and then, next time, strip only its
+    own, leaving the file growing a block at a time.
+    """
+    start = text.find(CODEX_MANAGED_BEGIN)
+    return start != -1 and text.find(CODEX_MANAGED_END, start) == -1
+
+
+def _strip_managed_block(text: str) -> str:
+    """Return ``text`` without AstrBot's section, keeping everything else."""
+    bounds = _managed_bounds(text)
+    if bounds is None:
         return text
-    end += len(CODEX_MANAGED_END)
+    start, end = bounds
     while end < len(text) and text[end] == "\n":
         end += 1
     return text[:start] + text[end:]
@@ -303,10 +343,9 @@ def read_state(cli: str) -> ManagedFile:
     base_url = ""
     model = ""
     env_key = ""
-    start = text.find(CODEX_MANAGED_BEGIN)
-    end = text.find(CODEX_MANAGED_END, start) if start != -1 else -1
-    if start != -1 and end != -1:
-        for line in text[start:end].splitlines():
+    bounds = _managed_bounds(text)
+    if bounds is not None:
+        for line in text[bounds[0] : bounds[1]].splitlines():
             key, _, value = line.partition("=")
             value = value.strip().strip('"')
             if key.strip() == "base_url":
@@ -319,7 +358,7 @@ def read_state(cli: str) -> ManagedFile:
     return ManagedFile(
         path=path,
         exists=path.is_file(),
-        managed=start != -1 and end != -1,
+        managed=bounds is not None,
         base_url=base_url,
         model=model,
         has_credential=bool(auth.get(env_key)) if env_key else False,
@@ -351,10 +390,14 @@ def apply_provider(cli: str, provider: Mapping) -> ManagedFile:
         )
 
     path = target_path(cli)
-    _back_up_once(path)
 
     if cli == "claude_code":
-        payload = _read_json(path)
+        # Read before backing up: a file that is refused needs no copy taken.
+        # `_read_json_object` refuses a file that exists and is not a JSON
+        # object, which is what keeps the fallback to `{}` from becoming a
+        # replacement of everything in it.
+        payload = _read_json_object(path)
+        _back_up_once(path)
         env = payload.get("env")
         env = dict(env) if isinstance(env, Mapping) else {}
         env["ANTHROPIC_BASE_URL"] = base_url
@@ -374,10 +417,22 @@ def apply_provider(cli: str, provider: Mapping) -> ManagedFile:
         )
         return read_state(cli)
 
-    env_key = credential_env_name(provider_id)
     existing = (
         path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
     )
+    if _has_unclosed_block(existing):
+        raise ValueError(
+            f"{path} opens AstrBot's section with {CODEX_MANAGED_BEGIN!r} and "
+            f"never closes it, so where that section ends cannot be known. "
+            f"Close or remove it before switching a provider."
+        )
+    # Both files are read before either is written, so a refusal here leaves the
+    # CLI's configuration as it was rather than switched in part.
+    auth_path = codex_home() / CODEX_AUTH_FILE
+    _read_json_object(auth_path)
+
+    env_key = credential_env_name(provider_id)
+    _back_up_once(path)
     block = _managed_block(base_url, model, env_key if api_key else "")
     rest = _strip_managed_block(existing)
     _atomic_write(path, f"{block}\n" + (f"\n{rest}" if rest else ""), private=False)
@@ -396,7 +451,7 @@ def _apply_codex_credential(env_key: str, api_key: str) -> None:
     if not api_key and not auth_path.is_file():
         return
     _back_up_once(auth_path)
-    auth = _read_json(auth_path)
+    auth = _read_json_object(auth_path)
     if api_key:
         auth[env_key] = api_key
     else:
@@ -440,7 +495,7 @@ def remove_provider(cli: str, provider_id: str = "") -> ManagedFile:
         return read_state(cli)
 
     if cli == "claude_code":
-        payload = _read_json(path)
+        payload = _read_json_object(path)
         env = payload.get("env")
         if isinstance(env, Mapping):
             env = dict(env)
@@ -475,7 +530,7 @@ def _drop_credentials_for(provider_id: str) -> None:
     auth_path = codex_home() / CODEX_AUTH_FILE
     if not auth_path.is_file():
         return
-    auth = _read_json(auth_path)
+    auth = _read_json_object(auth_path)
     key = credential_env_name(provider_id)
     if key not in auth:
         return
@@ -497,7 +552,7 @@ def _drop_stored_credentials() -> None:
     auth_path = codex_home() / CODEX_AUTH_FILE
     if not auth_path.is_file():
         return
-    auth = _read_json(auth_path)
+    auth = _read_json_object(auth_path)
     stored = [key for key in auth if key.upper().startswith(_CODEX_KEY_PREFIX)]
     if not stored:
         return

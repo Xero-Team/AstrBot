@@ -170,15 +170,61 @@ def test_a_truncated_section_is_left_alone(homes):
     assert state.managed is False
 
 
-def test_an_unparseable_json_file_is_not_replaced_with_astrbots(homes):
+def test_a_truncated_section_refuses_the_write_rather_than_doubling_it(homes):
+    path = cg.target_path("codex")
+    path.parent.mkdir(parents=True)
+    original = f'{cg.CODEX_MANAGED_BEGIN}\nbase_url = "https://x.example"\n[user]\n'
+    path.write_text(original, encoding="utf-8")
+
+    # Leaving the orphan alone is not enough on its own: prepending a complete
+    # section in front of it would keep the orphan for good, and the next
+    # rewrite would strip only the section it wrote.
+    with pytest.raises(ValueError):
+        cg.apply_provider("codex", PROVIDER)
+
+    assert path.read_text(encoding="utf-8") == original
+    assert not path.with_name(path.name + cg.BACKUP_SUFFIX).exists()
+
+
+def test_an_unparseable_json_file_is_left_alone_rather_than_replaced(homes):
     path = cg.target_path("claude_code")
     path.parent.mkdir(parents=True)
     path.write_text("{ this is not json", encoding="utf-8")
 
-    # A backup is taken, so the damaged file is recoverable...
-    cg.apply_provider("claude_code", {**PROVIDER, "api_key": ""})
-    backup = path.with_name(path.name + cg.BACKUP_SUFFIX)
-    assert backup.read_text(encoding="utf-8") == "{ this is not json"
+    # The file holds settings that are not AstrBot's, and failing to read it is
+    # not a reason to discard them: a backup would only make the loss
+    # recoverable, so the switch is refused before anything is written.
+    with pytest.raises(ValueError):
+        cg.apply_provider("claude_code", {**PROVIDER, "api_key": ""})
+
+    assert path.read_text(encoding="utf-8") == "{ this is not json"
+    assert not path.with_name(path.name + cg.BACKUP_SUFFIX).exists()
+
+
+def test_a_json_array_is_not_replaced_by_an_object(homes):
+    path = cg.target_path("claude_code")
+    path.parent.mkdir(parents=True)
+    path.write_text('["not", "an", "object"]', encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        cg.apply_provider("claude_code", {**PROVIDER, "api_key": ""})
+
+    assert path.read_text(encoding="utf-8") == '["not", "an", "object"]'
+
+
+def test_a_broken_codex_auth_file_is_refused_before_the_config_is_written(homes):
+    config = cg.target_path("codex")
+    config.parent.mkdir(parents=True)
+    auth = cg.codex_home() / cg.CODEX_AUTH_FILE
+    auth.write_text("{not json", encoding="utf-8")
+
+    # Running the switch in two steps would leave the config written and the
+    # credential not; both files are read before either is written.
+    with pytest.raises(ValueError):
+        cg.apply_provider("codex", PROVIDER)
+
+    assert not config.exists()
+    assert auth.read_text(encoding="utf-8") == "{not json"
 
 
 def test_removing_restores_what_the_user_had(homes):

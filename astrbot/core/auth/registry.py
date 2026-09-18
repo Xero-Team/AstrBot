@@ -116,6 +116,8 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.web_search": _SESSION_AND_ABOVE,
     "tool.session_history": _SESSION_AND_ABOVE,
     "tool.memory_read": _SESSION_AND_ABOVE,
+    "tool.memory_write": _SESSION_OWNER_AND_ABOVE,
+    "tool.schedule_write": _SESSION_OWNER_AND_ABOVE,
     "skill.read": _SESSION_AND_ABOVE,
     "dashboard.account.manage": _ROOT_ONLY,
     "filesystem.read": frozenset({Role.OPERATOR, Role.ROOT}),

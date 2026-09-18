@@ -84,6 +84,8 @@ ACTIONS = frozenset(
         "tool.web_search",
         "tool.session_history",
         "tool.memory_read",
+        "tool.memory_write",
+        "tool.schedule_write",
         "skill.read",
         "dashboard.account.manage",
         "filesystem.read",

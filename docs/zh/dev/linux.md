@@ -1,12 +1,12 @@
 # Linux 开发环境
 
-这是 Linux 下受支持的源码开发流程。项目使用 Python 3.14.6、`uv`、Node.js
+这是 Linux 下受支持的源码开发流程。项目使用 Python 3.14.7、`uv`、Node.js
 26 和 pnpm；以下命令不依赖 PowerShell。
 
 ## 前置工具
 
-先使用发行版包管理器安装基础工具，再用发行版推荐的方式安装 Python 3.14.6、`uv`
-与 Node.js 26。CI 使用 Node.js 26.5.0；`make doctor` 接受兼容的 Node 26
+先使用发行版包管理器安装基础工具，再用发行版推荐的方式安装 Python 3.14.7、`uv`
+与 Node.js 26。CI 使用 Node.js 26.9.0；`make doctor` 接受兼容的 Node 26
 版本。
 
 Ubuntu/Debian：

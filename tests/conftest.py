@@ -32,6 +32,7 @@ pytest_plugins = [
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
 os.environ.setdefault("ASTRBOT_DISABLE_METRICS", "1")
+os.environ.setdefault("PTB_TIMEDELTA", "1")
 
 
 @pytest.fixture(autouse=True)

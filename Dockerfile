@@ -13,7 +13,7 @@
 #   docker  Docker CLI and Compose plugin
 ARG ASTRBOT_FEATURES=full
 ARG GITHUB_RELEASE_BASES="https://github.com https://ghproxy.net/https://github.com https://gh-proxy.com/https://github.com https://ghfast.top/https://github.com"
-FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144 AS builder
+FROM python:3.14.7-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6 AS builder
 WORKDIR /AstrBot
 
 ARG ASTRBOT_FEATURES
@@ -30,13 +30,13 @@ ENV UV_INSTALL_DIR=/usr/local/bin \
     PATH=/usr/local/cargo/bin:${PATH} \
     XDG_BIN_HOME=/usr/local/bin \
     UV_LINK_MODE=copy \
-    SHFMT_VERSION=3.13.1 \
-    HADOLINT_VERSION=2.14.0 \
-    PLAYWRIGHT_VERSION=1.62.0 \
+    SHFMT_VERSION=3.14.1 \
+    HADOLINT_VERSION=2.15.1 \
+    PLAYWRIGHT_VERSION=1.63.0 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-    TYPST_VERSION=0.15.0 \
-    YQ_VERSION=4.53.3 \
-    QUARTO_VERSION=1.9.38 \
+    TYPST_VERSION=0.15.1 \
+    YQ_VERSION=4.53.6 \
+    QUARTO_VERSION=1.10.18 \
     PNPM_STORE_DIR=/pnpm/store \
     UV_CACHE_DIR=/root/.cache/uv \
     NPM_CONFIG_CACHE=/root/.npm \
@@ -156,11 +156,11 @@ EOF
 
 RUN touch "${BASH_ENV}" \
     && echo '. "${BASH_ENV}"' >> ~/.bashrc \
-    && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | PROFILE="${BASH_ENV}" bash \
+    && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.7/install.sh | PROFILE="${BASH_ENV}" bash \
     && . "${BASH_ENV}" \
-    && nvm install 26.5.0 \
-    && nvm alias default 26.5.0 \
-    && npm install -g npm@12.0.2 pnpm@11.21.0 \
+    && nvm install 26.9.0 \
+    && nvm alias default 26.9.0 \
+    && npm install -g npm@12.0.2 pnpm@12.5.0 \
     && current_node_dir="$(dirname "$(dirname "$(nvm which current)")")" \
     && for tool in node npm npx pnpm; do \
         if [ -x "${current_node_dir}/bin/${tool}" ]; then \
@@ -175,7 +175,7 @@ RUN --mount=type=cache,target=/root/.cache,sharing=locked \
     curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv --version \
     && uvx --version \
-    && echo "3.14.6" > .python-version
+    && echo "3.14.7" > .python-version
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv pip install -r requirements.txt --no-cache-dir --system \
@@ -451,7 +451,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && quarto --version \
     && mkdir -p /opt/microsoft/powershell/7 \
     && tmpdir="$(mktemp -d)" \
-    && download-github-release "PowerShell/PowerShell/releases/download/v7.6.3/powershell-7.6.3-linux-${powershell_arch}.tar.gz" "${tmpdir}/powershell.tar.gz" tar-gzip "${GITHUB_RELEASE_BASES}" \
+    && download-github-release "PowerShell/PowerShell/releases/download/v7.6.6/powershell-7.6.6-linux-${powershell_arch}.tar.gz" "${tmpdir}/powershell.tar.gz" tar-gzip "${GITHUB_RELEASE_BASES}" \
     && tar -xzf "${tmpdir}/powershell.tar.gz" -C /opt/microsoft/powershell/7 \
     && rm -rf "${tmpdir}" \
     && chmod +x /opt/microsoft/powershell/7/pwsh \
@@ -490,7 +490,7 @@ CMD ["python", "main.py"]
 # Keep the development image above separate from the production runtime. The
 # runtime copies only the application, installed Python packages, browser
 # assets, and the Node/uv tools needed by runtime MCP integrations.
-FROM python:3.14.6-slim@sha256:7bec7ddcddeff7975d6ba9b4be7dd6f6b2f55e7491539145e2978f7f97ce9144 AS runtime
+FROM python:3.14.7-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6 AS runtime
 
 WORKDIR /AstrBot
 
@@ -501,7 +501,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PLAYWRIGHT_BROWSERS_PATH=/opt/astrbot/runtime-assets/ms-playwright \
     DOCKER_CONFIG=/opt/astrbot/runtime-assets/docker-config \
     NVM_DIR=/opt/astrbot/runtime-assets/nvm \
-    PATH=/opt/astrbot/runtime-assets/bin:/opt/astrbot/runtime-assets/nvm/versions/node/v26.5.0/bin:/usr/local/bin:${PATH} \
+    PATH=/opt/astrbot/runtime-assets/bin:/opt/astrbot/runtime-assets/nvm/versions/node/v26.9.0/bin:/usr/local/bin:${PATH} \
     UV_LINK_MODE=copy \
     UV_INSTALL_DIR=/usr/local/bin \
     HOME=/root

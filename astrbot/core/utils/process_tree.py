@@ -267,8 +267,9 @@ class ProcessTree:
         process = await asyncio.create_subprocess_exec(*argv, **kwargs)
         assigner = self._assigner
         if assigner is None:
-            # Unarmed: the child is already running, so the best that is left is
-            # binding it from a thread that can wait on it.
+            # Unarmed Windows: the child is already running, so the best that
+            # is left is binding it from a thread that can wait on it. POSIX
+            # uses a session and has no job to bind.
             self._bind(process.pid)
         else:
             await assigner.assign(process.pid)
@@ -279,12 +280,16 @@ class ProcessTree:
 
         The assignment itself runs off the event loop: a child that has already
         started cannot be bound from the thread that spawned it, but a thread
-        that merely waits on that child can.
+        that merely waits on that child can. Off Windows there is no job.
         """
+        if self._job is None or _KERNEL32 is None:
+            return
         threading.Thread(target=self._bind_blocking, args=(pid,), daemon=True).start()
 
     def _bind_blocking(self, pid: int) -> None:
         """Assign one child to this tree's job, best effort."""
+        if _KERNEL32 is None:
+            return
         # PROCESS_SET_QUOTA | PROCESS_TERMINATE, the access a job needs.
         handle = _KERNEL32.OpenProcess(_PROCESS_ASSIGN_ACCESS, False, pid)
         if not handle:

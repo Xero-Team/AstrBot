@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Mapping
-from typing import cast
+from typing import Any, cast
 
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
@@ -102,7 +102,11 @@ class XinferenceRerankProvider(RerankProvider):
             logger.error("Xinference rerank model is not initialized.")
             return []
         try:
-            response = await self.model.rerank(documents, query, top_n)
+            response = await self.model.rerank(
+                cast("list[str | dict[str, Any]]", documents),
+                query,
+                top_n,
+            )
             if not isinstance(response, Mapping):
                 logger.warning("Xinference rerank returned an invalid response")
                 return []

@@ -1,4 +1,5 @@
 import logging
+import os
 import ssl
 from typing import Any
 
@@ -45,4 +46,5 @@ def configure_runtime_ca_bundle(log_obj: Any | None = None) -> bool:
 
 
 def initialize_runtime_bootstrap(log_obj: Any | None = None) -> bool:
+    os.environ.setdefault("PTB_TIMEDELTA", "1")
     return configure_runtime_ca_bundle(log_obj=log_obj)

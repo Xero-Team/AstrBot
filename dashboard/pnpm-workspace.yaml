@@ -3,41 +3,46 @@ allowBuilds:
   esbuild: true
   vue-demi: true
 minimumReleaseAgeExclude:
-  - prettier@3.9.6
+  - prettier@3.9.8
   - '@vue/language-core@3.3.11'
-  - vite@8.2.2
+  - vite@8.3.0
   - vue-tsc@3.3.11
   - linkify-it@5.0.2
-  - markdown-it@15.0.1
-  - vuetify@4.2.0
-  - apexcharts@7.1.0
-  - markstream-vue@2.0.8
-  - pinyin-pro@3.29.3
+  - markdown-it@15.0.2
+  - vuetify@4.2.1
+  - apexcharts@7.4.0
+  - markstream-vue@2.0.11
+  - mermaid@12.0.0
+  - pinyin-pro@3.29.4
   - stream-diffs@0.0.2
   - stream-markdown-parser@1.2.13
-  - '@types/node@26.5.0'
+  - '@types/node@26.6.1'
   - '@playwright/test@1.63.0'
   - '@vitest/coverage-v8@5.0.0'
   - vitest@5.0.0
+  - typescript-eslint@8.70.0
+  - '@vitejs/plugin-vue@6.0.9'
+  - jsdom@30.0.1
+  - vue-i18n@11.4.12
+  - sass@1.104.1
   - dompurify@3.4.15
   - eslint@10.10.0
   - eslint-plugin-vue@10.11.0
   - katex@0.18.7
-  - sass@1.104.0
   - postcss@8.5.28
   - undici@7.29.1
-  - '@vue/compiler-core@3.5.42'
-  - '@vue/compiler-dom@3.5.42'
-  - '@vue/compiler-sfc@3.5.42'
-  - '@vue/compiler-ssr@3.5.42'
-  - '@vue/reactivity@3.5.42'
-  - '@vue/runtime-core@3.5.42'
-  - '@vue/runtime-dom@3.5.42'
-  - '@vue/server-renderer@3.5.42'
-  - '@vue/shared@3.5.42'
-  - '@vue/test-utils@2.5.0'
+  - '@vue/compiler-core@3.5.43'
+  - '@vue/compiler-dom@3.5.43'
+  - '@vue/compiler-sfc@3.5.43'
+  - '@vue/compiler-ssr@3.5.43'
+  - '@vue/reactivity@3.5.43'
+  - '@vue/runtime-core@3.5.43'
+  - '@vue/runtime-dom@3.5.43'
+  - '@vue/server-renderer@3.5.43'
+  - '@vue/shared@3.5.43'
+  - '@vue/test-utils@2.5.1'
   - vue-router@5.3.1
-  - vue@3.5.42
+  - vue@3.5.43
 overrides:
   brace-expansion@^5.0.5: 5.0.9
   dompurify: 3.4.15

@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call
 
@@ -440,14 +441,18 @@ async def test_save_uploaded_file_renames_image_to_detected_suffix(
         "save_upload_to_path",
         fake_save_upload_to_path,
     )
+    detect_mock = AsyncMock(return_value="image/png")
     monkeypatch.setattr(
         chat_service_module,
         "detect_image_mime_type_async",
-        AsyncMock(return_value="image/png"),
+        detect_mock,
     )
 
     result = await service.save_uploaded_file(upload)
 
+    sniffed = detect_mock.await_args.args[0]
+    assert not isinstance(sniffed, bytes)
+    assert Path(sniffed).name == "photo.bin"
     insert_kwargs = service.db.insert_attachment.await_args.kwargs
     assert insert_kwargs["type"] == "image"
     assert insert_kwargs["mime_type"] == "image/png"

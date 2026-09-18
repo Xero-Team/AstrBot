@@ -87,10 +87,51 @@ function imageUrlFromContentItem(item: unknown): string | null {
   return imageUrl.url;
 }
 
+const markdownSanitizeOptions = {
+  ALLOWED_TAGS: [
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'p',
+    'br',
+    'hr',
+    'ul',
+    'ol',
+    'li',
+    'blockquote',
+    'pre',
+    'code',
+    'a',
+    'img',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+    'strong',
+    'em',
+    'del',
+    's',
+  ],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'align'],
+};
+
 function renderTextHtml(text: string): string {
-  return DOMPurify.sanitize(markdown.render(text), {
-    USE_PROFILES: { html: true },
-  });
+  return DOMPurify.sanitize(markdown.render(text), markdownSanitizeOptions);
+}
+
+function roleLabel(role: string): string {
+  if (knownRoles.includes(role)) {
+    return tm(`workspace.preview.roles.${role}`);
+  }
+  if (role === 'unknown') {
+    return tm('status.unknown');
+  }
+  return role;
 }
 
 const records = computed(() =>
@@ -108,7 +149,7 @@ const records = computed(() =>
         : [message.content];
 
       for (const item of content) {
-        if (item == null) continue;
+        if (item === null || item === undefined) continue;
         const text = textFromContentItem(item);
         if (text !== null) {
           if (text.length) {
@@ -170,11 +211,7 @@ const records = computed(() =>
 
       return {
         role,
-        label: knownRoles.includes(role)
-          ? tm(`workspace.preview.roles.${role}`)
-          : role === 'unknown'
-            ? tm('status.unknown')
-            : role,
+        label: roleLabel(role),
         name: typeof message.name === 'string' ? message.name : '',
         toolCallId:
           typeof message.tool_call_id === 'string' ? message.tool_call_id : '',
@@ -185,10 +222,7 @@ const records = computed(() =>
 </script>
 
 <template>
-  <div
-    class="history-preview"
-    :style="{ '--preview-font-size': `${fontSize}px` }"
-  >
+  <div class="history-preview" :data-font-size="String(fontSize)">
     <div class="reading-toolbar">
       <span class="record-count">{{
         tm('workspace.preview.messageCount', { count: records.length })
@@ -275,12 +309,13 @@ const records = computed(() =>
             tm('status.emptyContent')
           }}</span>
           <template v-for="(part, partIndex) in record.parts" :key="partIndex">
-            <!-- eslint-disable-next-line vue/no-v-html -- part.html is sanitized by DOMPurify. -->
+            <!-- eslint-disable vue/no-v-html -- part.html is sanitized by DOMPurify. -->
             <div
               v-if="part.kind === 'text' && markdownEnabled"
               class="record-markdown"
               v-html="part.html"
             />
+            <!-- eslint-enable vue/no-v-html -->
             <pre v-else-if="part.kind === 'text'" class="record-text">{{
               part.text
             }}</pre>
@@ -314,6 +349,28 @@ const records = computed(() =>
   min-height: 0;
   min-width: 0;
   color: rgb(var(--v-theme-on-surface));
+  --preview-font-size: 13px;
+}
+.history-preview[data-font-size='12'] {
+  --preview-font-size: 12px;
+}
+.history-preview[data-font-size='13'] {
+  --preview-font-size: 13px;
+}
+.history-preview[data-font-size='14'] {
+  --preview-font-size: 14px;
+}
+.history-preview[data-font-size='15'] {
+  --preview-font-size: 15px;
+}
+.history-preview[data-font-size='16'] {
+  --preview-font-size: 16px;
+}
+.history-preview[data-font-size='17'] {
+  --preview-font-size: 17px;
+}
+.history-preview[data-font-size='18'] {
+  --preview-font-size: 18px;
 }
 
 .reading-toolbar,

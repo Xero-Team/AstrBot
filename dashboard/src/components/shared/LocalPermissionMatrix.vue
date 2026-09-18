@@ -306,9 +306,12 @@
       </tbody>
     </v-table>
 
-    <v-alert>
-      v-if="memberHasElevatedAccess" type="warning" variant="tonal"
-      density="compact" >
+    <v-alert
+      v-if="memberHasElevatedAccess"
+      type="warning"
+      variant="tonal"
+      density="compact"
+    >
       {{ tm('memberWarning') }}
     </v-alert>
   </div>

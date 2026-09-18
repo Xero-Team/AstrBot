@@ -543,7 +543,7 @@ class ChatService:
             ) from exc
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
-                file_path.read_bytes(),
+                file_path,
                 default_mime_type=None,
             )
             if detected_mime_type:

@@ -1271,11 +1271,9 @@ def _append_system_reminders(
             now = datetime.datetime.now().astimezone()
         current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
         weekday = WEEKDAY_NAMES[now.weekday()]
-        datetime_prompt = f"Current datetime: {current_time}, Weekday: {weekday}"
-        if cfg.get("datetime_system_prompt_scope") == "current":
-            transient_system_parts.append(datetime_prompt)
-        else:
-            persistent_system_parts.append(datetime_prompt)
+        transient_system_parts.append(
+            f"Current datetime: {current_time}, Weekday: {weekday}"
+        )
 
     if persistent_system_parts:
         req.extra_user_content_parts.append(

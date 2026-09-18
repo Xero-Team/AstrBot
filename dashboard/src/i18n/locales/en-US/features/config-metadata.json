@@ -579,7 +579,7 @@
         },
         "datetime_system_prompt": {
           "description": "Real-world Time Awareness",
-          "hint": "When enabled, current time information will be appended to the system prompt."
+          "hint": "When enabled, a temporary current-time reminder is appended after this turn's last user message and is not saved to conversation history."
         },
         "show_tool_use_status": {
           "description": "Show Tool Call Information"

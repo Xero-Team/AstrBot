@@ -193,7 +193,7 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 
 When `btw.enabled` is enabled for a local Agent profile, `btw.conversation_loop.provider_id` and `btw.work_loop.provider_id` select the chat model for each loop. A configured loop model takes priority over the event/session model selection. An empty field preserves the current selection, including the profile default. Messages without an explicit work-loop marker use the conversation model. Disabling BTW ignores both overrides.
 
-The selected provider must still be a configured chat model. An unavailable or incompatible loop provider fails through the existing model-selection error path; it does not silently switch to the other loop's model. Existing model fallback and retry settings continue to apply to the selected primary provider.
+The selected provider must still be a configured chat model. An unavailable or incompatible loop provider falls back to the event/session model selection and logs a warning, so one stale setting cannot strand every request; it never silently switches to the other loop's model. Existing model fallback and retry settings continue to apply to the selected primary provider.
 
 ### Computer Use boundaries
 

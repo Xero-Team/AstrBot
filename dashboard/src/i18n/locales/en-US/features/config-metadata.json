@@ -461,7 +461,7 @@
         "conversation_loop": {
           "provider_id": {
             "description": "Conversation loop model",
-            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority."
+            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority; if it is unavailable, the session or default model is used instead."
           }
         },
         "work_loop": {
@@ -471,7 +471,7 @@
           },
           "provider_id": {
             "description": "Work loop model",
-            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority."
+            "hint": "Leave empty to keep the current session model selection. When set, this model takes priority; if it is unavailable, the session or default model is used instead."
           },
           "computer_use_runtime": {
             "description": "Work loop Computer Use runtime",

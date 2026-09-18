@@ -455,7 +455,7 @@
         "conversation_loop": {
           "provider_id": {
             "description": "对话循环模型",
-            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。"
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型；该模型不可用时自动回退到当前会话或默认模型。"
           }
         },
         "work_loop": {
@@ -465,7 +465,7 @@
           },
           "provider_id": {
             "description": "工作循环模型",
-            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型。"
+            "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型；该模型不可用时自动回退到当前会话或默认模型。"
           },
           "computer_use_runtime": {
             "description": "工作循环 Computer Use 运行时",

@@ -359,10 +359,28 @@ def _select_provider(
     plugin_context: CoreExecutionContext,
     provider_id_override: str = "",
 ) -> ChatModel | None:
-    """Select chat provider for the event."""
+    """Select chat provider for the event.
+
+    ``provider_id_override`` comes from persisted configuration (a BTW loop
+    model) rather than from this request, so it is a preference: when the
+    configured provider is no longer loaded, the request falls back to the
+    session/default selection instead of failing outright. A provider chosen
+    for this very request (``selected_provider``) still fails loudly, because
+    the caller asked for that specific model.
+    """
     sel_provider = provider_id_override or event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
+        if provider is not None and _is_chat_model(provider):
+            return provider
+        if provider_id_override:
+            logger.warning(
+                "配置的对话模型 `%s` 不可用（未加载或类型错误），"
+                "本次请求改用当前会话/默认的对话模型。请检查 BTW 双循环的模型设置。",
+                sel_provider,
+            )
+            # Fall back to whatever this request would have selected on its own.
+            return _select_provider(event, plugin_context)
         if provider is None:
             logger.error("未找到指定的提供商: %s。", sel_provider)
             _set_llm_error_message(
@@ -370,16 +388,12 @@ def _select_provider(
                 f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
             )
             return None
-        if not _is_chat_model(provider):
-            logger.error(
-                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
-            )
-            _set_llm_error_message(
-                event,
-                f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
-            )
-            return None
-        return provider
+        logger.error("选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider))
+        _set_llm_error_message(
+            event,
+            f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
+        )
+        return None
     try:
         return plugin_context.get_using_provider(umo=event.unified_msg_origin)
     except ValueError as exc:

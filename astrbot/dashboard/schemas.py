@@ -810,14 +810,19 @@ class ConfigRouteUpsertRequest(BaseModel):
 
 
 class SessionRuleRequest(OpenModel):
+    target_type: Literal["session", "sender"] | None = None
     umo: str | None = None
+    sender_id: str | None = None
     rule_key: str | None = None
     rule_value: Any = None
 
 
 class UmoListRequest(OpenModel):
+    target_type: Literal["session", "sender"] | None = None
     umo: str | None = None
     umos: list[str] | None = None
+    sender_id: str | None = None
+    sender_ids: list[str] | None = None
     scope: Literal["all", "group", "private", "custom_group"] | None = None
     group_id: str | None = None
     rule_key: str | None = None

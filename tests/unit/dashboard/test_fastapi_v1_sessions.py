@@ -311,6 +311,36 @@ async def test_v1_delete_session_provider_rule_clears_provider_manager_cache_pat
 
 
 @pytest.mark.asyncio
+async def test_v1_sender_session_rule_uses_sender_preferences(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+):
+    sender_id = "im:napcat:bot:99"
+    headers = _jwt_headers()
+    upsert_response = await asgi_client.post(
+        "/api/v1/sessions/rules",
+        json={
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rule_key": "session_service_config",
+            "rule_value": {"blocked": True, "persona_id": "p1"},
+        },
+        headers=headers,
+    )
+    store = asgi_app.state.services.sessions.preferences.sender_values
+    assert upsert_response.status_code == 200
+    assert upsert_response.json()["status"] == "ok"
+    assert store[(sender_id, "session_service_config")] == {"blocked": True}
+    delete_response = await asgi_client.post(
+        "/api/v1/sessions/rules/delete",
+        json={"target_type": "sender", "sender_id": sender_id},
+        headers=headers,
+    )
+    assert delete_response.status_code == 200
+    assert store == {}
+
+
+@pytest.mark.asyncio
 async def test_v1_subagent_config_rejects_legacy_enable_field(
     asgi_client: httpx.AsyncClient,
 ):

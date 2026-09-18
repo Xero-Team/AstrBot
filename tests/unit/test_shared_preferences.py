@@ -52,6 +52,13 @@ async def test_sender_get_and_put_use_sender_scope(preferences):
     assert persisted.value == {"val": {"blocked": True}}
     assert await store.sender_get(sender_id, "missing", {}) == {}
 
+    await store.sender_remove(sender_id, "session_service_config")
+    assert await store.sender_get(sender_id, "session_service_config") is None
+    assert (
+        await database.get_preference("sender", sender_id, "session_service_config")
+        is None
+    )
+
 
 @pytest.mark.asyncio
 async def test_remove_and_clear_update_cache_and_persist(preferences):

@@ -4718,6 +4718,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "target_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["session", "sender"],
+              "default": "session"
+            }
           }
         ],
         "responses": {
@@ -6939,9 +6948,16 @@
       },
       "SessionRuleRequest": {
         "type": "object",
-        "required": ["umo", "rule_key"],
+        "required": ["rule_key"],
         "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": ["session", "sender"]
+          },
           "umo": {
+            "type": "string"
+          },
+          "sender_id": {
             "type": "string"
           },
           "rule_key": {
@@ -6956,10 +6972,23 @@
       "UmoListRequest": {
         "type": "object",
         "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": ["session", "sender"]
+          },
           "umo": {
             "type": "string"
           },
           "umos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sender_id": {
+            "type": "string"
+          },
+          "sender_ids": {
             "type": "array",
             "items": {
               "type": "string"

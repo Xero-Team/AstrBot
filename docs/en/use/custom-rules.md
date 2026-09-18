@@ -1,24 +1,25 @@
 # Custom rules
 
-Custom rules override a configuration profile for one unified message origin (UMO). Use them for a few exceptions. Do not split a whole profile just to change one group's persona or turn TTS off.
+Custom rules override a configuration profile for one unified message origin (UMO) or one sender. Use them for a few exceptions. Do not split a whole profile just to change one group's persona or turn TTS off.
 
-A UMO uniquely identifies one session on one platform. `/session info` prints it. Profiles themselves are in [Configuration profiles](./config-profiles).
+A UMO uniquely identifies one session on one platform. Sender overlays use the full subject ID `im:{platform instance}:{bot account}:{sender id}`. `/session info` prints both. Profiles themselves are in [Configuration profiles](./config-profiles).
 
-Open **Custom rules**. The page help icon points here.
+Open **Custom rules**. Choose **Session** or **Sender** at the top of the page. The page help icon points here.
 
 ## When to use a rule versus a profile
 
 | Need                                                                     | Use                                           |
 | ------------------------------------------------------------------------ | --------------------------------------------- |
 | One model, wake policy, and plugin set for a platform or class of groups | Create or bind a [profile](./config-profiles) |
-| Disable LLM, pin a persona, or change knowledge bases for one group      | Custom rule                                   |
+| Disable LLM, pin a persona, or change knowledge bases for one group      | Custom rule (session)                         |
+| Block one person in a shared group, or enable LLM for one person         | Custom rule (sender) or `/user`               |
 | Temporarily silence the current session                                  | `/bot disable` or session on/off on this page |
 
 Rules outrank the profile. If a rule disables LLM, enabling it on the profile does nothing. With no rule, the session defaults to everything enabled (legacy compatibility).
 
 ## Rule types
 
-Each rule binds to one UMO and may include several overlays:
+Session rules bind to one UMO and may include several overlays. Sender rules bind to an `im:` subject ID and only store `blocked` / `llm_enabled` on the service overlay.
 
 ### Service rules (`session_service_config`)
 
@@ -33,7 +34,11 @@ Each rule binds to one UMO and may include several overlays:
 
 When `unlisted_sessions=deny`, the admission stage looks at overlays on the canonical session key and this profile's upgrade listed set. IM `/llm` and Dashboard rules on this page both list that key. Session on/off and full block still belong to the later session-status stage, which still reads the UMO.
 
-Sender overlays live on `scope=sender` with `scope_id=Subject.im.id` (`im:{platform instance}:{bot account}:{sender id}`). Only `blocked` and `llm_enabled` are honored. They apply to every session on this bot instance, including shared groups with isolated sessions off; they are not a `UMO×UID` selector. This Dashboard page still edits session rules only. Write sender overlays with `/user block`, `/user unblock`, and `/user llm on|off`. See [Built-in commands](./command).
+### Sender overlays (sender)
+
+Sender overlays live on `scope=sender` with `scope_id=Subject.im.id` (`im:{platform instance}:{bot account}:{sender id}`). Only `blocked` and `llm_enabled` are honored. They apply to every session on this bot instance, including shared groups with isolated sessions off; they are not a `UMO×UID` selector. Persona, TTS, knowledge bases, providers, and plugin disables still belong to session rules.
+
+The **Sender** target on this page and `/user block`, `/user unblock`, and `/user llm on|off` read and write the same preference row. Dashboard requires the full `im:` subject ID; chat `/user` can also mint a raw sender id from the current session. See [Built-in commands](./command). Save applies immediately; a restart is unnecessary. Deleting the row unlists that sender.
 
 ### Plugin rules (`session_plugin_config`)
 
@@ -58,13 +63,13 @@ Pin chat, STT, or TTS models for this UMO. Unset fields follow the profile. Spee
 
 ## Steps
 
-1. Open **Custom rules** and add a rule.
-2. Pick a UMO that has already appeared, or fill platform / type / session.
-3. Change only the fields you need to override.
+1. Open **Custom rules**, choose **Session** or **Sender**, and add a rule.
+2. Session: pick a UMO that has already appeared, or fill platform / type / session. Sender: paste a full `im:` subject ID.
+3. Change only the fields you need to override. Sender rows only have block and LLM.
 4. Save. It applies immediately; a restart is usually unnecessary.
-5. Delete the rule to fall back to the profile.
+5. Delete the rule to fall back to the profile or unlisted behavior.
 
-The page supports UMO search, bulk delete, and grouping.
+The session view supports UMO search, bulk delete, and grouping. The sender view supports subject-ID search and delete; it has no groups or batch provider updates.
 
 ## Common misconfigurations
 
@@ -72,3 +77,4 @@ The page supports UMO search, bulk delete, and grouping.
 2. The rule pins a persona, then you edit the profile default and expect this group to follow.
 3. `kb_ids` points at a deleted knowledge base, so retrieval is skipped.
 4. You created a profile per group and left the rule table empty.
+5. You tried to block one person with a session rule or the old allowlist. Per-person refusal is a sender overlay; do not paste an `im:` ID into a UMO field.

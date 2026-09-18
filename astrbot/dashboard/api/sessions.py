@@ -151,6 +151,7 @@ async def list_session_rules(
     page: int = Query(1),
     page_size: int = Query(10),
     search: str = Query(""),
+    target_type: str = Query("session"),
     _auth: AuthContext = Depends(require_data_scope),
     service: SessionManagementService = Depends(get_service),
 ):
@@ -160,6 +161,7 @@ async def list_session_rules(
                 page=page,
                 page_size=page_size,
                 search=search.strip(),
+                target_type=target_type,
             )
         )
     except SessionManagementServiceError as exc:
@@ -177,9 +179,10 @@ async def update_session_rule(
 ):
     try:
         body = payload.model_dump(exclude_none=True)
-        await _authorize_session_umos(
-            request, auth, service, await _payload_umos(service, body)
-        )
+        if body.get("target_type") != "sender":
+            await _authorize_session_umos(
+                request, auth, service, await _payload_umos(service, body)
+            )
         return ok(await service.update_session_rule(body))
     except ApiError:
         raise
@@ -198,9 +201,10 @@ async def delete_session_rule(
 ):
     try:
         body = payload.model_dump(exclude_none=True)
-        await _authorize_session_umos(
-            request, auth, service, await _payload_umos(service, body)
-        )
+        if body.get("target_type") != "sender":
+            await _authorize_session_umos(
+                request, auth, service, await _payload_umos(service, body)
+            )
         return ok(await service.delete_session_rules(body))
     except ApiError:
         raise

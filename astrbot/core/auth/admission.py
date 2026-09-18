@@ -276,6 +276,32 @@ def sender_admission_key_from_event(event: AdmissionEvent) -> str:
     ).id
 
 
+def sender_admission_key_from_id(token: str) -> str | None:
+    """Mint a sender overlay key from a full ``im:`` subject id.
+
+    Args:
+        token: Full ``im:{platform}:{bot}:{sender}`` subject id.
+
+    Returns:
+        The normalized sender preference scope id, or None when the token
+        is empty or cannot be minted.
+    """
+    sender_id = token.strip()
+    if not sender_id.lower().startswith("im:"):
+        return None
+    parts = sender_id.split(":", 3)
+    if len(parts) != 4 or not all(part.strip() for part in parts):
+        return None
+    try:
+        return Subject.im(
+            platform_instance=parts[1].strip(),
+            bot_account_id=parts[2].strip(),
+            sender_id=parts[3].strip(),
+        ).id
+    except ValueError:
+        return None
+
+
 def session_overlay_from_config(config: object) -> SessionAdmissionOverlay:
     """Parse a ``session_service_config`` mapping into a session overlay.
 

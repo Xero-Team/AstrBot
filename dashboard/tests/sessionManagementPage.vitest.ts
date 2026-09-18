@@ -48,6 +48,19 @@ describe('SessionManagementPage', () => {
     vi.clearAllMocks();
     api.listGroups.mockResolvedValue(response({ groups: [] }));
     api.activeUmos.mockResolvedValue(response({ umos: [], umo_infos: [] }));
+    api.listRules.mockResolvedValue(
+      response({
+        rules: [],
+        total: 0,
+        available_personas: [{ name: 'persona-a' }],
+        available_chat_providers: [],
+        available_stt_providers: [],
+        available_tts_providers: [],
+        available_plugins: [],
+        available_kbs: [],
+      }),
+    );
+    api.upsertRule.mockResolvedValue(response({}));
   });
 
   it('does not expose a sensitive transport failure while loading session rules', async () => {
@@ -85,6 +98,81 @@ describe('SessionManagementPage', () => {
     expect(document.body.textContent).toContain(
       'A custom group must contain at least one session',
     );
+
+    wrapper.unmount();
+  });
+
+  it('loads sender overlays and saves only blocked and llm fields', async () => {
+    const wrapper = mountWithVuetify(SessionManagementPage, {
+      global: {
+        stubs: { VDataTableServer: dataTableStub },
+      },
+    });
+    await flushPromises();
+    expect(api.listRules).toHaveBeenCalledWith(
+      expect.objectContaining({ target_type: 'session' }),
+    );
+
+    const senderToggle = wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Sender');
+    expect(senderToggle).toBeDefined();
+    await senderToggle!.trigger('click');
+    await flushPromises();
+    expect(api.listRules).toHaveBeenCalledWith(
+      expect.objectContaining({ target_type: 'sender' }),
+    );
+
+    const addRule = wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Add Rule');
+    expect(addRule).toBeDefined();
+    await addRule!.trigger('click');
+    await flushPromises();
+
+    const senderField = wrapper
+      .findAllComponents({ name: 'VTextField' })
+      .find((field) => field.props('label') === 'Sender subject ID');
+    expect(senderField).toBeDefined();
+    const next = wrapper
+      .findAllComponents({ name: 'VBtn' })
+      .find((button) => button.text() === 'Next');
+    expect(next).toBeDefined();
+
+    await senderField!.setValue('99');
+    await flushPromises();
+    expect(next!.attributes('disabled')).toBeDefined();
+
+    await senderField!.setValue('im:napcat:bot:99');
+    await flushPromises();
+    expect(next!.attributes('disabled')).toBeUndefined();
+    await next!.trigger('click');
+    await flushPromises();
+
+    expect(document.body.textContent).toContain('Block this sender');
+    expect(document.body.textContent).not.toContain('Persona Configuration');
+    expect(document.body.textContent).not.toContain('Plugin Configuration');
+    expect(document.body.textContent).not.toContain(
+      'Knowledge Base Configuration',
+    );
+    expect(document.body.textContent).not.toContain('Provider Configuration');
+
+    const save = wrapper
+      .findAllComponents({ name: 'VBtn' })
+      .find((button) => button.text() === 'Save');
+    expect(save).toBeDefined();
+    await save!.trigger('click');
+    await flushPromises();
+
+    expect(api.upsertRule).toHaveBeenCalledWith({
+      target_type: 'sender',
+      sender_id: 'im:napcat:bot:99',
+      rule_key: 'session_service_config',
+      rule_value: {
+        blocked: false,
+        llm_enabled: true,
+      },
+    });
 
     wrapper.unmount();
   });

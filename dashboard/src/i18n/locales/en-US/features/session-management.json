@@ -15,13 +15,20 @@
     "editCustomName": "Edit Note",
     "batchDelete": "Batch Delete"
   },
+  "targetType": {
+    "session": "Session",
+    "sender": "Sender"
+  },
   "customRules": {
     "title": "Custom Rules",
     "rulesCount": "rules",
     "hasRules": "Configured",
     "noRules": "No Custom Rules",
     "noRulesDesc": "Click 'Add Rule' to configure custom rules for specific sessions",
+    "noSenderRulesDesc": "Click 'Add Rule' to write a sender overlay. Use a full im:{platform}:{bot}:{sender} subject ID.",
     "serviceConfig": "Service Config",
+    "blocked": "Blocked",
+    "llmEnabled": "LLM",
     "pluginConfig": "Plugin Config",
     "kbConfig": "Knowledge Base",
     "providerConfig": "Provider Config",
@@ -32,11 +39,13 @@
     "title": "Edit Note"
   },
   "search": {
-    "placeholder": "Search sessions..."
+    "placeholder": "Search sessions...",
+    "senderPlaceholder": "Search senders..."
   },
   "table": {
     "headers": {
       "umoInfo": "Unified Message Origin",
+      "senderInfo": "Sender subject ID",
       "rulesOverview": "Rules Overview",
       "actions": "Actions"
     }
@@ -50,7 +59,11 @@
   "addRule": {
     "title": "Add Custom Rule",
     "description": "Select a session (UMO) to configure custom rules. Custom rules take priority over global settings.",
+    "senderDescription": "Enter a full sender subject ID. This writes the same preference as /user. Copy the UID from /session info.",
     "selectUmo": "Select Session",
+    "senderId": "Sender subject ID",
+    "senderIdHint": "Format im:{platform instance}:{bot account}:{sender id}",
+    "senderIdError": "Use a full im:{platform}:{bot}:{sender} subject ID",
     "noUmos": "No sessions available"
   },
   "ruleEditor": {
@@ -61,6 +74,7 @@
       "sessionEnabled": "Enable Session",
       "llmEnabled": "Enable LLM",
       "ttsEnabled": "Enable TTS",
+      "blocked": "Block this sender",
       "sessionBlocked": "Fully block all functionality",
       "customName": "Custom Name"
     },
@@ -89,7 +103,8 @@
   },
   "deleteConfirm": {
     "title": "Confirm Delete",
-    "message": "Are you sure you want to delete all custom rules for this session? Global settings will be used after deletion."
+    "message": "Are you sure you want to delete all custom rules for this session? After deletion, global configuration will be used.",
+    "senderMessage": "Delete this sender overlay? The sender will no longer be listed."
   },
   "batchDeleteConfirm": {
     "title": "Confirm Batch Delete",

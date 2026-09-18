@@ -5,6 +5,21 @@
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h4">{{ tm('customRules.title') }}</span>
           <ConfigDocsLink docs="use/custom-rules.html" />
+          <v-btn-toggle
+            v-model="targetType"
+            density="compact"
+            variant="outlined"
+            divided
+            class="ml-3"
+            mandatory
+          >
+            <v-btn size="small" value="session">{{
+              tm('targetType.session')
+            }}</v-btn>
+            <v-btn size="small" value="sender">{{
+              tm('targetType.sender')
+            }}</v-btn>
+          </v-btn-toggle>
           <v-chip size="small" class="ml-1"
             >{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip
           >
@@ -12,7 +27,11 @@
             <v-text-field
               v-model="searchQuery"
               prepend-inner-icon="mdi-magnify"
-              :label="tm('search.placeholder')"
+              :label="
+                isSenderTarget
+                  ? tm('search.senderPlaceholder')
+                  : tm('search.placeholder')
+              "
               hide-details
               clearable
               variant="solo-filled"
@@ -67,13 +86,17 @@
             :items-length="totalItems"
             class="elevation-0 session-rules-table"
             show-select
-            item-value="umo"
+            :item-value="tableItemValue"
             return-object
             @update:options="onTableOptionsUpdate"
           >
             <!-- UMO 信息 -->
             <template #item.umo_info="{ item }">
+              <code v-if="isSenderRule(item)" class="text-body-2">{{
+                item.sender_id
+              }}</code>
               <UmoDisplay
+                v-else
                 :umo="item.umo"
                 :platform="item.platform"
                 :message-type="item.message_type"
@@ -89,7 +112,27 @@
 
             <!-- 规则概览 -->
             <template #item.rules_overview="{ item }">
-              <div class="d-flex flex-wrap ga-1">
+              <div v-if="isSenderRule(item)" class="d-flex flex-wrap ga-1">
+                <v-chip
+                  v-if="item.rules.session_service_config?.blocked === true"
+                  size="x-small"
+                  color="error"
+                  variant="outlined"
+                >
+                  {{ tm('customRules.blocked') }}
+                </v-chip>
+                <v-chip
+                  v-if="
+                    'llm_enabled' in (item.rules.session_service_config || {})
+                  "
+                  size="x-small"
+                  color="primary"
+                  variant="outlined"
+                >
+                  {{ tm('customRules.llmEnabled') }}
+                </v-chip>
+              </div>
+              <div v-else class="d-flex flex-wrap ga-1">
                 <v-chip
                   v-if="item.rules.session_service_config"
                   size="x-small"
@@ -164,7 +207,11 @@
                   {{ tm('customRules.noRules') }}
                 </div>
                 <div class="text-body-2 text-medium-emphasis">
-                  {{ tm('customRules.noRulesDesc') }}
+                  {{
+                    isSenderTarget
+                      ? tm('customRules.noSenderRulesDesc')
+                      : tm('customRules.noRulesDesc')
+                  }}
                 </div>
                 <v-btn
                   color="primary"
@@ -181,7 +228,7 @@
         </v-card-text>
       </v-card>
       <!-- 批量操作面板 -->
-      <v-card flat class="mt-4">
+      <v-card v-if="!isSenderTarget" flat class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h6">{{ tm('batchOperations.title') }}</span>
           <v-chip size="small" class="ml-2" color="info" variant="outlined">
@@ -269,7 +316,7 @@
       </v-card>
 
       <!-- 分组管理面板 -->
-      <v-card flat class="mt-4">
+      <v-card v-if="!isSenderTarget" flat class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h6">{{ tm('groups.title') }}</span>
           <v-chip
@@ -581,10 +628,26 @@
 
           <v-card-text class="pa-4">
             <v-alert type="info" variant="tonal" class="mb-4">
-              {{ tm('addRule.description') }}
+              {{
+                isSenderTarget
+                  ? tm('addRule.senderDescription')
+                  : tm('addRule.description')
+              }}
             </v-alert>
 
+            <v-text-field
+              v-if="isSenderTarget"
+              v-model="selectedNewSenderId"
+              :label="tm('addRule.senderId')"
+              :hint="tm('addRule.senderIdHint')"
+              :error-messages="
+                senderIdInvalid ? tm('addRule.senderIdError') : undefined
+              "
+              persistent-hint
+              variant="outlined"
+            />
             <v-autocomplete
+              v-else
               v-model="selectedNewUmo"
               :items="availableUmos"
               :loading="loadingUmos"
@@ -639,7 +702,7 @@
             <v-btn
               color="primary"
               variant="tonal"
-              :disabled="!selectedNewUmo"
+              :disabled="!canCreateNewRule"
               @click="createNewRule"
             >
               {{ tm('buttons.next') }}
@@ -658,7 +721,11 @@
               class="ml-2 font-weight-regular"
               variant="outlined"
             >
-              {{ selectedUmo.umo }}
+              {{
+                isSenderRule(selectedUmo)
+                  ? selectedUmo.sender_id
+                  : selectedUmo.umo
+              }}
             </v-chip>
             <v-spacer></v-spacer>
             <v-btn
@@ -677,7 +744,26 @@
                 </h3>
               </div>
 
-              <v-row density="comfortable">
+              <v-row v-if="isSenderRule(selectedUmo)" density="comfortable">
+                <v-col cols="12">
+                  <v-checkbox
+                    v-model="senderOverlay.blocked"
+                    :label="tm('ruleEditor.serviceConfig.blocked')"
+                    color="error"
+                    hide-details
+                    class="mb-2"
+                  />
+                </v-col>
+                <v-col cols="12">
+                  <v-checkbox
+                    v-model="senderOverlay.llm_enabled"
+                    :label="tm('ruleEditor.serviceConfig.llmEnabled')"
+                    color="primary"
+                    hide-details
+                  />
+                </v-col>
+              </v-row>
+              <v-row v-else density="comfortable">
                 <v-col cols="12">
                   <v-checkbox
                     v-model="serviceConfig.session_enabled"
@@ -735,218 +821,220 @@
                 </v-btn>
               </div>
 
-              <!-- Provider Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.providerConfig.title') }}
-                </h3>
-              </div>
+              <template v-if="!isSenderRule(selectedUmo)">
+                <!-- Provider Config Section -->
+                <div class="d-flex align-center mb-4 mt-4">
+                  <h3 class="font-weight-bold mb-0">
+                    {{ tm('ruleEditor.providerConfig.title') }}
+                  </h3>
+                </div>
 
-              <v-row density="comfortable">
-                <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.chat_completion"
-                    :items="chatProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.chatProvider')"
-                    variant="outlined"
-                    hide-details
-                    class="mb-2"
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.speech_to_text"
-                    :items="sttProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.sttProvider')"
-                    variant="outlined"
-                    hide-details
-                    :disabled="availableSttProviders.length === 0"
-                    class="mb-2"
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.text_to_speech"
-                    :items="ttsProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.ttsProvider')"
-                    variant="outlined"
-                    hide-details
-                    :disabled="availableTtsProviders.length === 0"
-                  />
-                </v-col>
-              </v-row>
+                <v-row density="comfortable">
+                  <v-col cols="12">
+                    <v-select
+                      v-model="providerConfig.chat_completion"
+                      :items="chatProviderOptions"
+                      item-title="label"
+                      item-value="value"
+                      :label="tm('ruleEditor.providerConfig.chatProvider')"
+                      variant="outlined"
+                      hide-details
+                      class="mb-2"
+                    />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-select
+                      v-model="providerConfig.speech_to_text"
+                      :items="sttProviderOptions"
+                      item-title="label"
+                      item-value="value"
+                      :label="tm('ruleEditor.providerConfig.sttProvider')"
+                      variant="outlined"
+                      hide-details
+                      :disabled="availableSttProviders.length === 0"
+                      class="mb-2"
+                    />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-select
+                      v-model="providerConfig.text_to_speech"
+                      :items="ttsProviderOptions"
+                      item-title="label"
+                      item-value="value"
+                      :label="tm('ruleEditor.providerConfig.ttsProvider')"
+                      variant="outlined"
+                      hide-details
+                      :disabled="availableTtsProviders.length === 0"
+                    />
+                  </v-col>
+                </v-row>
 
-              <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="saveProviderConfig"
-                >
-                  {{ tm('buttons.save') }}
-                </v-btn>
-              </div>
-
-              <!-- Persona Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.personaConfig.title') }}
-                </h3>
-              </div>
-
-              <v-row density="comfortable">
-                <v-col cols="12">
-                  <v-select
-                    v-model="serviceConfig.persona_id"
-                    :items="personaOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.personaConfig.selectPersona')"
-                    variant="outlined"
-                    hide-details
-                    clearable
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-alert
-                    type="info"
-                    variant="tonal"
-                    class="mt-2"
-                    icon="mdi-information-outline"
-                  >
-                    {{ tm('ruleEditor.personaConfig.hint') }}
-                  </v-alert>
-                </v-col>
-              </v-row>
-
-              <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="saveServiceConfig"
-                >
-                  {{ tm('buttons.save') }}
-                </v-btn>
-              </div>
-
-              <!-- Plugin Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.pluginConfig.title') }}
-                </h3>
-              </div>
-
-              <v-row density="comfortable">
-                <v-col cols="12">
-                  <v-select
-                    v-model="pluginConfig.disabled_plugins"
-                    :items="pluginOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.pluginConfig.disabledPlugins')"
-                    variant="outlined"
-                    hide-details
-                    multiple
-                    chips
-                    closable-chips
-                    clearable
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-alert
-                    type="info"
-                    variant="tonal"
-                    class="mt-2"
-                    icon="mdi-information-outline"
-                  >
-                    {{ tm('ruleEditor.pluginConfig.hint') }}
-                  </v-alert>
-                </v-col>
-              </v-row>
-
-              <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="savePluginConfig"
-                >
-                  {{ tm('buttons.save') }}
-                </v-btn>
-              </div>
-
-              <!-- KB Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.kbConfig.title') }}
-                </h3>
-              </div>
-
-              <v-row density="comfortable">
-                <v-col cols="12">
-                  <v-select
-                    v-model="kbConfig.kb_ids"
-                    :items="kbOptions"
-                    item-title="label"
-                    item-value="value"
-                    :disabled="availableKbs.length === 0"
-                    :label="tm('ruleEditor.kbConfig.selectKbs')"
-                    variant="outlined"
-                    hide-details
-                    multiple
-                    chips
-                    closable-chips
-                    clearable
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model.number="kbConfig.top_k"
-                    :label="tm('ruleEditor.kbConfig.topK')"
-                    variant="outlined"
-                    hide-details
-                    type="number"
-                    min="1"
-                    max="20"
-                    class="mt-3"
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-checkbox
-                    v-model="kbConfig.enable_rerank"
-                    :label="tm('ruleEditor.kbConfig.enableRerank')"
+                <div class="d-flex justify-end mt-4">
+                  <v-btn
                     color="primary"
-                    hide-details
-                    class="mt-3"
-                  />
-                </v-col>
-              </v-row>
+                    variant="tonal"
+                    size="small"
+                    :loading="saving"
+                    prepend-icon="mdi-content-save"
+                    @click="saveProviderConfig"
+                  >
+                    {{ tm('buttons.save') }}
+                  </v-btn>
+                </div>
 
-              <div class="d-flex justify-end mt-4">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  size="small"
-                  :loading="saving"
-                  prepend-icon="mdi-content-save"
-                  @click="saveKbConfig"
-                >
-                  {{ tm('buttons.save') }}
-                </v-btn>
-              </div>
+                <!-- Persona Config Section -->
+                <div class="d-flex align-center mb-4 mt-4">
+                  <h3 class="font-weight-bold mb-0">
+                    {{ tm('ruleEditor.personaConfig.title') }}
+                  </h3>
+                </div>
+
+                <v-row density="comfortable">
+                  <v-col cols="12">
+                    <v-select
+                      v-model="serviceConfig.persona_id"
+                      :items="personaOptions"
+                      item-title="label"
+                      item-value="value"
+                      :label="tm('ruleEditor.personaConfig.selectPersona')"
+                      variant="outlined"
+                      hide-details
+                      clearable
+                    />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-alert
+                      type="info"
+                      variant="tonal"
+                      class="mt-2"
+                      icon="mdi-information-outline"
+                    >
+                      {{ tm('ruleEditor.personaConfig.hint') }}
+                    </v-alert>
+                  </v-col>
+                </v-row>
+
+                <div class="d-flex justify-end mt-4">
+                  <v-btn
+                    color="primary"
+                    variant="tonal"
+                    size="small"
+                    :loading="saving"
+                    prepend-icon="mdi-content-save"
+                    @click="saveServiceConfig"
+                  >
+                    {{ tm('buttons.save') }}
+                  </v-btn>
+                </div>
+
+                <!-- Plugin Config Section -->
+                <div class="d-flex align-center mb-4 mt-4">
+                  <h3 class="font-weight-bold mb-0">
+                    {{ tm('ruleEditor.pluginConfig.title') }}
+                  </h3>
+                </div>
+
+                <v-row density="comfortable">
+                  <v-col cols="12">
+                    <v-select
+                      v-model="pluginConfig.disabled_plugins"
+                      :items="pluginOptions"
+                      item-title="label"
+                      item-value="value"
+                      :label="tm('ruleEditor.pluginConfig.disabledPlugins')"
+                      variant="outlined"
+                      hide-details
+                      multiple
+                      chips
+                      closable-chips
+                      clearable
+                    />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-alert
+                      type="info"
+                      variant="tonal"
+                      class="mt-2"
+                      icon="mdi-information-outline"
+                    >
+                      {{ tm('ruleEditor.pluginConfig.hint') }}
+                    </v-alert>
+                  </v-col>
+                </v-row>
+
+                <div class="d-flex justify-end mt-4">
+                  <v-btn
+                    color="primary"
+                    variant="tonal"
+                    size="small"
+                    :loading="saving"
+                    prepend-icon="mdi-content-save"
+                    @click="savePluginConfig"
+                  >
+                    {{ tm('buttons.save') }}
+                  </v-btn>
+                </div>
+
+                <!-- KB Config Section -->
+                <div class="d-flex align-center mb-4 mt-4">
+                  <h3 class="font-weight-bold mb-0">
+                    {{ tm('ruleEditor.kbConfig.title') }}
+                  </h3>
+                </div>
+
+                <v-row density="comfortable">
+                  <v-col cols="12">
+                    <v-select
+                      v-model="kbConfig.kb_ids"
+                      :items="kbOptions"
+                      item-title="label"
+                      item-value="value"
+                      :disabled="availableKbs.length === 0"
+                      :label="tm('ruleEditor.kbConfig.selectKbs')"
+                      variant="outlined"
+                      hide-details
+                      multiple
+                      chips
+                      closable-chips
+                      clearable
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model.number="kbConfig.top_k"
+                      :label="tm('ruleEditor.kbConfig.topK')"
+                      variant="outlined"
+                      hide-details
+                      type="number"
+                      min="1"
+                      max="20"
+                      class="mt-3"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-checkbox
+                      v-model="kbConfig.enable_rerank"
+                      :label="tm('ruleEditor.kbConfig.enableRerank')"
+                      color="primary"
+                      hide-details
+                      class="mt-3"
+                    />
+                  </v-col>
+                </v-row>
+
+                <div class="d-flex justify-end mt-4">
+                  <v-btn
+                    color="primary"
+                    variant="tonal"
+                    size="small"
+                    :loading="saving"
+                    prepend-icon="mdi-content-save"
+                    @click="saveKbConfig"
+                  >
+                    {{ tm('buttons.save') }}
+                  </v-btn>
+                </div>
+              </template>
             </div>
           </v-card-text>
         </v-card>
@@ -959,9 +1047,17 @@
             tm('deleteConfirm.title')
           }}</v-card-title>
           <v-card-text>
-            {{ tm('deleteConfirm.message') }}
+            {{
+              deleteTarget && isSenderRule(deleteTarget)
+                ? tm('deleteConfirm.senderMessage')
+                : tm('deleteConfirm.message')
+            }}
             <br /><br />
-            <code>{{ deleteTarget?.umo }}</code>
+            <code>{{
+              deleteTarget && isSenderRule(deleteTarget)
+                ? deleteTarget.sender_id
+                : deleteTarget?.umo
+            }}</code>
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
@@ -1097,6 +1193,7 @@ type SnackbarColor = 'success' | 'error';
 type GroupDialogMode = 'create' | 'edit';
 type ProviderRuleType = 'chat_completion' | 'speech_to_text' | 'text_to_speech';
 type ApiBatchScope = 'all' | 'group' | 'private' | 'custom_group';
+type RuleTargetType = 'session' | 'sender';
 
 type RuleKey =
   | 'session_service_config'
@@ -1132,6 +1229,7 @@ interface SessionServiceConfig {
   llm_enabled?: boolean;
   tts_enabled?: boolean;
   session_blocked?: boolean;
+  blocked?: boolean;
   custom_name?: string;
   persona_id?: string | null;
   [key: string]: unknown;
@@ -1162,6 +1260,8 @@ interface SessionRuleSet {
 
 interface SessionRuleItem extends UmoInfoData {
   umo: string;
+  sender_id?: string;
+  target_type?: RuleTargetType;
   rules: SessionRuleSet;
 }
 
@@ -1214,6 +1314,11 @@ const deleting = ref(false);
 const loadingUmos = ref(false);
 const rulesList = ref<SessionRuleItem[]>([]);
 const searchQuery = ref('');
+const targetType = ref<RuleTargetType>('session');
+const isSenderTarget = computed(() => targetType.value === 'sender');
+const tableItemValue = computed(() =>
+  isSenderTarget.value ? 'sender_id' : 'umo',
+);
 
 const currentPage = ref(1);
 const itemsPerPage = ref(10);
@@ -1230,10 +1335,25 @@ const addRuleDialog = ref(false);
 const availableUmos = ref<string[]>([]);
 const availableUmoInfoMap = ref<Record<string, UmoDisplayInfo>>({});
 const selectedNewUmo = ref<string | null>(null);
+const selectedNewSenderId = ref('');
+const canCreateNewRule = computed(() =>
+  isSenderTarget.value
+    ? isSenderSubjectId(selectedNewSenderId.value)
+    : Boolean(selectedNewUmo.value),
+);
+const senderIdInvalid = computed(() => {
+  const value = selectedNewSenderId.value.trim();
+  return isSenderTarget.value && value.length > 0 && !isSenderSubjectId(value);
+});
 
 const ruleDialog = ref(false);
 const selectedUmo = ref<SessionRuleItem | null>(null);
 const editingRules = ref<SessionRuleSet>({});
+
+const senderOverlay = reactive({
+  blocked: false,
+  llm_enabled: true,
+});
 
 const serviceConfig = reactive<
   Required<
@@ -1310,7 +1430,9 @@ const snackbarColor = ref<SnackbarColor>('success');
 
 const headers = computed(() => [
   {
-    title: tm('table.headers.umoInfo'),
+    title: isSenderTarget.value
+      ? tm('table.headers.senderInfo')
+      : tm('table.headers.umoInfo'),
     key: 'umo_info',
     sortable: false,
     minWidth: '300px',
@@ -1458,6 +1580,12 @@ const debouncedSearch = createDebouncedCallback(() => {
 
 watch(searchQuery, () => {
   debouncedSearch();
+});
+
+watch(targetType, () => {
+  currentPage.value = 1;
+  selectedItems.value = [];
+  void loadData();
 });
 
 onMounted(() => {
@@ -1701,14 +1829,38 @@ function normalizeUmoInfo(
 }
 
 function normalizeRuleItem(raw: unknown): SessionRuleItem | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  if (source.target_type === 'sender') {
+    const senderId = normalizeString(source.sender_id);
+    if (!senderId) {
+      return null;
+    }
+    return {
+      umo: '',
+      sender_id: senderId,
+      target_type: 'sender',
+      platform: '',
+      message_type: '',
+      session_id: '',
+      auto_name: '',
+      user_alias: '',
+      display_name: senderId,
+      rules: normalizeRuleSet(source.rules),
+    };
+  }
+
   const info = normalizeUmoInfo(raw);
   if (!info) {
     return null;
   }
 
-  const source = raw as Record<string, unknown>;
   return {
     ...info,
+    target_type: 'session',
     rules: normalizeRuleSet(source.rules),
   };
 }
@@ -1779,6 +1931,23 @@ function getAvailableUmoDisplayProps(value: unknown) {
     autoName: info.auto_name,
     userAlias: info.user_alias,
   };
+}
+
+function isSenderSubjectId(value: string): boolean {
+  const parts = value.trim().split(':');
+  return (
+    parts.length >= 4 &&
+    parts[0].toLowerCase() === 'im' &&
+    parts[1].trim().length > 0 &&
+    parts[2].trim().length > 0 &&
+    parts.slice(3).join(':').trim().length > 0
+  );
+}
+
+function isSenderRule(
+  item: SessionRuleItem | null | undefined,
+): item is SessionRuleItem & { sender_id: string; target_type: 'sender' } {
+  return item?.target_type === 'sender' && Boolean(item.sender_id);
 }
 
 function hasProviderConfig(rules: SessionRuleSet | null | undefined): boolean {
@@ -1966,6 +2135,7 @@ async function loadData() {
       page: currentPage.value,
       page_size: itemsPerPage.value,
       search: searchQuery.value || '',
+      target_type: targetType.value,
     });
 
     if (response.data.status !== 'ok') {
@@ -2057,10 +2227,40 @@ async function refreshData() {
 async function openAddRuleDialog() {
   addRuleDialog.value = true;
   selectedNewUmo.value = null;
-  await loadUmos();
+  selectedNewSenderId.value = '';
+  if (!isSenderTarget.value) {
+    await loadUmos();
+  }
+}
+
+function buildSenderItem(
+  senderId: string,
+  rules: SessionRuleSet = {},
+): SessionRuleItem {
+  return {
+    umo: '',
+    sender_id: senderId,
+    target_type: 'sender',
+    platform: '',
+    message_type: '',
+    session_id: '',
+    auto_name: '',
+    user_alias: '',
+    display_name: senderId,
+    rules,
+  };
 }
 
 function createNewRule() {
+  if (isSenderTarget.value) {
+    const senderId = selectedNewSenderId.value.trim();
+    if (!isSenderSubjectId(senderId)) {
+      return;
+    }
+    addRuleDialog.value = false;
+    openRuleEditor(buildSenderItem(senderId));
+    return;
+  }
   if (!selectedNewUmo.value) {
     return;
   }
@@ -2081,6 +2281,8 @@ function openRuleEditor(item: SessionRuleItem) {
   serviceConfig.session_blocked = svcConfig.session_blocked === true;
   serviceConfig.custom_name = sessionAliasName(item);
   serviceConfig.persona_id = svcConfig.persona_id || null;
+  senderOverlay.blocked = svcConfig.blocked === true;
+  senderOverlay.llm_enabled = svcConfig.llm_enabled !== false;
 
   providerConfig.chat_completion =
     editingRules.value.provider_perf_chat_completion || FOLLOW_CONFIG_VALUE;
@@ -2107,8 +2309,62 @@ function closeRuleEditor() {
   editingRules.value = {};
 }
 
+async function saveSenderOverlay(
+  item: SessionRuleItem & { sender_id: string },
+) {
+  saving.value = true;
+  try {
+    const config = {
+      blocked: senderOverlay.blocked,
+      llm_enabled: senderOverlay.llm_enabled,
+    };
+    if (!isSenderSubjectId(item.sender_id)) {
+      showError(tm('addRule.senderIdError'));
+      return;
+    }
+    const response = await sessionApi.upsertRule({
+      target_type: 'sender',
+      sender_id: item.sender_id,
+      rule_key: 'session_service_config',
+      rule_value: config,
+    });
+    if (response.data.status !== 'ok') {
+      showError(response.data.message || tm('messages.saveError'));
+      return;
+    }
+    const savedId =
+      normalizeString(
+        (response.data.data as { sender_id?: unknown } | undefined)?.sender_id,
+      ) || item.sender_id;
+    editingRules.value.session_service_config = config;
+    const existing = rulesList.value.find((row) => row.sender_id === savedId);
+    if (existing) {
+      existing.rules = { session_service_config: config };
+    } else {
+      rulesList.value.push(
+        buildSenderItem(savedId, { session_service_config: config }),
+      );
+    }
+    selectedUmo.value = {
+      ...item,
+      sender_id: savedId,
+      rules: { session_service_config: config },
+    };
+    showSuccess(tm('messages.saveSuccess'));
+  } catch {
+    showError(tm('messages.saveError'));
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function saveServiceConfig() {
   if (!selectedUmo.value) {
+    return;
+  }
+
+  if (isSenderRule(selectedUmo.value)) {
+    await saveSenderOverlay(selectedUmo.value);
     return;
   }
 
@@ -2329,17 +2585,26 @@ async function deleteAllRules() {
 
   deleting.value = true;
   try {
-    const response = await sessionApi.deleteRules({
-      umo: deleteTarget.value.umo,
-    });
+    const response = await sessionApi.deleteRules(
+      isSenderRule(deleteTarget.value)
+        ? {
+            target_type: 'sender',
+            sender_id: deleteTarget.value.sender_id,
+          }
+        : {
+            umo: deleteTarget.value.umo,
+          },
+    );
 
     if (response.data.status !== 'ok') {
       showError(response.data.message || tm('messages.deleteError'));
       return;
     }
 
-    const index = rulesList.value.findIndex(
-      (item) => item.umo === deleteTarget.value!.umo,
+    const index = rulesList.value.findIndex((item) =>
+      isSenderRule(deleteTarget.value)
+        ? item.sender_id === deleteTarget.value.sender_id
+        : item.umo === deleteTarget.value!.umo,
     );
     if (index > -1) {
       rulesList.value.splice(index, 1);
@@ -2370,9 +2635,18 @@ async function batchDeleteRules() {
 
   deleting.value = true;
   try {
-    const response = await sessionApi.deleteRules({
-      umos: selectedItems.value.map((item) => item.umo),
-    });
+    const response = await sessionApi.deleteRules(
+      isSenderTarget.value
+        ? {
+            target_type: 'sender',
+            sender_ids: selectedItems.value
+              .map((item) => item.sender_id)
+              .filter((id): id is string => Boolean(id)),
+          }
+        : {
+            umos: selectedItems.value.map((item) => item.umo),
+          },
+    );
 
     if (response.data.status !== 'ok') {
       showError(response.data.message || tm('messages.batchDeleteError'));

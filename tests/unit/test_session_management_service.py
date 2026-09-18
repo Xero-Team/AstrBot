@@ -31,6 +31,7 @@ class _Preferences:
 
     def __init__(self) -> None:
         self.session_values: dict[tuple[str, str], Any] = {}
+        self.sender_values: dict[tuple[str, str], Any] = {}
         self.global_values: dict[str, Any] = {}
         self.fail_session_put_for: set[str] = set()
         self.fail_session_remove_for: set[str] = set()
@@ -54,6 +55,15 @@ class _Preferences:
         if umo in self.fail_session_remove_for:
             raise RuntimeError(f"cannot remove {umo}")
         self.session_values.pop((umo, key), None)
+
+    async def sender_get(self, sender_id: str, key: str, default: Any = None) -> Any:
+        return self.sender_values.get((sender_id, key), default)
+
+    async def sender_put(self, sender_id: str, key: str, value: Any) -> None:
+        self.sender_values[(sender_id, key)] = value
+
+    async def sender_remove(self, sender_id: str, key: str) -> None:
+        self.sender_values.pop((sender_id, key), None)
 
     async def clear_async(self, scope: str, scope_id: str) -> None:
         assert scope == "umo"
@@ -723,3 +733,164 @@ async def test_service_updates_dual_write_canonical_admission_keys(session_servi
 
     assert (umo, "session_service_config") not in preferences.session_values
     assert (canonical, "session_service_config") not in preferences.session_values
+
+
+@pytest.mark.asyncio
+async def test_sender_rules_share_preference_rows_and_drop_session_fields(
+    session_service,
+    temp_db,
+):
+    service, preferences, _providers = session_service
+    sender_id = "im:napcat:bot:99"
+    await temp_db.insert_preference_or_update(
+        "sender",
+        sender_id,
+        "session_service_config",
+        {"val": {"blocked": True, "persona_id": "p1", "tts_enabled": False}},
+    )
+    await _put_rule(
+        temp_db,
+        "qq:FriendMessage:alice",
+        "session_service_config",
+        {"val": {"llm_enabled": False}},
+    )
+
+    session_listed = await service.list_session_rules(page=1, page_size=20, search="")
+    sender_listed = await service.list_session_rules(
+        page=1, page_size=20, search="", target_type="sender"
+    )
+    searched = await service.list_session_rules(
+        page=1, page_size=20, search="bot:99", target_type="sender"
+    )
+
+    assert {item["umo"] for item in session_listed["rules"]} == {
+        "qq:FriendMessage:alice"
+    }
+    assert session_listed["rules"][0]["target_type"] == "session"
+    assert sender_listed["total"] == 1
+    assert sender_listed["rules"] == [
+        {
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rules": {"session_service_config": {"blocked": True}},
+        }
+    ]
+    assert searched["total"] == 1
+
+    with pytest.raises(SessionManagementServiceError, match="sender_id"):
+        await service.update_session_rule(
+            {
+                "target_type": "sender",
+                "rule_key": "session_service_config",
+                "rule_value": {"blocked": True},
+            }
+        )
+    with pytest.raises(SessionManagementServiceError, match="im:"):
+        await service.update_session_rule(
+            {
+                "target_type": "sender",
+                "sender_id": "99",
+                "rule_key": "session_service_config",
+                "rule_value": {"blocked": True},
+            }
+        )
+    with pytest.raises(SessionManagementServiceError, match="session_service_config"):
+        await service.update_session_rule(
+            {
+                "target_type": "sender",
+                "sender_id": sender_id,
+                "rule_key": "kb_config",
+                "rule_value": {},
+            }
+        )
+    with pytest.raises(SessionManagementServiceError, match="blocked 或 llm_enabled"):
+        await service.update_session_rule(
+            {
+                "target_type": "sender",
+                "sender_id": sender_id,
+                "rule_key": "session_service_config",
+                "rule_value": {"persona_id": "p1"},
+            }
+        )
+    with pytest.raises(SessionManagementServiceError, match="blocked"):
+        await service.update_session_rule(
+            {
+                "target_type": "sender",
+                "sender_id": sender_id,
+                "rule_key": "session_service_config",
+                "rule_value": {"blocked": "yes"},
+            }
+        )
+
+    await service.update_session_rule(
+        {
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rule_key": "session_service_config",
+            "rule_value": {
+                "blocked": True,
+                "llm_enabled": False,
+                "persona_id": "p1",
+                "session_blocked": True,
+            },
+        }
+    )
+    assert preferences.sender_values[(sender_id, "session_service_config")] == {
+        "blocked": True,
+        "llm_enabled": False,
+    }
+
+    await service.delete_session_rules(
+        {"target_type": "sender", "sender_id": sender_id}
+    )
+    assert (sender_id, "session_service_config") not in preferences.sender_values
+
+
+@pytest.mark.asyncio
+async def test_sender_rule_routes_skip_session_resource_authorization(
+    session_service,
+):
+    service, preferences, _providers = session_service
+    sender_id = "im:napcat:bot:99"
+    app, headers = _session_app(service, _ConfigBoundAuthorization("config-a"))
+    headers["X-AstrBot-Config-Id"] = "config-a"
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        upserted = await client.post(
+            "/api/v1/sessions/rules",
+            json={
+                "target_type": "sender",
+                "sender_id": sender_id,
+                "rule_key": "session_service_config",
+                "rule_value": {"blocked": True},
+            },
+            headers=headers,
+        )
+        listed = await client.get(
+            "/api/v1/sessions/rules",
+            params={"target_type": "sender"},
+            headers=headers,
+        )
+        deleted = await client.post(
+            "/api/v1/sessions/rules/delete",
+            json={"target_type": "sender", "sender_id": sender_id},
+            headers=headers,
+        )
+        session_denied = await client.patch(
+            "/api/v1/sessions/service",
+            json={"umos": ["napcat:GroupMessage:room-a"], "llm_enabled": False},
+            headers=headers,
+        )
+
+    assert upserted.status_code == 200
+    assert upserted.json()["status"] == "ok"
+    assert upserted.json()["data"]["sender_id"] == sender_id
+    assert listed.status_code == 200
+    assert listed.json()["status"] == "ok"
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "ok"
+    assert session_denied.status_code == 403
+    assert preferences.sender_values == {}

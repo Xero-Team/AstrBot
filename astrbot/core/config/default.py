@@ -219,11 +219,20 @@ DEFAULT_CONFIG = {
             "provider_id": "",
             "computer_use_runtime": "inherit",
             "max_concurrent": 2,
+            "read_only": True,
+            "report_via_conversation": True,
+            "workspace_root": "",
+            "coding_agents": [],
         },
         "work_session": {"max_age_seconds": 3600},
         "plugin_routes": [],
         "mcp_routes": [],
         "skill_routes": [],
+        # Provider presets the operator manages for the coding CLIs themselves.
+        # Separate from a coding agent's own `providers`: this list is what the
+        # CLI's global configuration is switched between, not what a delegated
+        # run is layered with.
+        "cli_providers": [],
     },
     "provider_stt_settings": {
         "enable": False,
@@ -4876,6 +4885,34 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
             "description": "工作任务执行并发",
             "type": "int",
             "hint": "同时执行的工作任务数，默认 2。此值不是等待队列的长度限制。",
+            "condition": {"btw.work_loop.enabled": True},
+        },
+        "btw.work_loop.read_only": {
+            "description": "工作循环只读",
+            "type": "bool",
+            "hint": "默认开启。开启后工作循环只保留读取与搜索能力，Shell、Python、写文件、浏览器和 MCP 写入工具都会被移除，写操作改由第三方编码代理在任务目录中执行。此设置只收紧能力，不授予任何权限。",
+            "condition": {"btw.work_loop.enabled": True},
+        },
+        "btw.work_loop.report_via_conversation": {
+            "description": "由对话循环汇报工作结果",
+            "type": "bool",
+            "hint": "默认开启。开启后工作成果交由对话循环合成一条含完成标志与产物路径的汇报；关闭后由工作循环直接投递结果。",
+            "condition": {"btw.work_loop.enabled": True},
+        },
+        "btw.work_loop.workspace_root": {
+            "description": "编码代理任务目录根路径",
+            "type": "string",
+            "hint": "每个委派任务在此目录下拥有独立文件夹。留空时使用数据目录下的 btw/workspaces。",
+            "condition": {"btw.work_loop.enabled": True},
+        },
+        "btw.work_loop.coding_agents": {
+            "description": "第三方编码代理",
+            "type": "list",
+            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex）。每项包含 id、type、command、模型、输出上限、权限模式与可写目录；委派会启动本地进程并写入文件，因此还要求工作循环的 Computer Use 运行时为 local（sandbox 下委派等于绕过沙箱），并通过 tool.local_exec 与 tool.file_write 的授权。Claude Code 以非交互方式（-p）运行，没有终端可以回答权限询问：acceptEdits 只自动放行编辑，需要跑 shell 命令的任务会一直等到超时，这类任务要显式选择 bypassPermissions。代理使用的 provider 由「第三方agent配置」页面统一管理，切换的是该 CLI 自己的全局配置。",
+            "_special": "select_coding_agents",
+            # The editor is a list of cards, one per agent; half of a row is
+            # not enough to lay one out.
+            "full_width": True,
             "condition": {"btw.work_loop.enabled": True},
         },
         "btw.work_session.max_age_seconds": {

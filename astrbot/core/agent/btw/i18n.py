@@ -15,6 +15,11 @@ LOCALES: dict[str, dict[str, str]] = {
         "btw.work.status.failed": "工作任务执行失败。",
         "btw.work.status.cancelled": "工作任务已取消。",
         "btw.work.status.unconfirmed": "工作任务已结束，但结果投递未确认。",
+        "btw.work.report.completed": "✅ 工作任务已完成。",
+        "btw.work.report.failed": "❌ 工作任务执行失败。",
+        "btw.work.report.cancelled": "🛑 工作任务已取消。",
+        "btw.work.report.unconfirmed": "⚠️ 工作任务已结束，但结果投递未确认。",
+        "btw.work.report.artifacts": "本次任务产出的文件：",
     },
     "en-US": {
         "btw.work.started": "🔧 Work task started.",
@@ -26,6 +31,13 @@ LOCALES: dict[str, dict[str, str]] = {
         "btw.work.status.unconfirmed": (
             "The work task ended, but its result delivery is unconfirmed."
         ),
+        "btw.work.report.completed": "✅ Work task completed.",
+        "btw.work.report.failed": "❌ Work task failed.",
+        "btw.work.report.cancelled": "🛑 Work task cancelled.",
+        "btw.work.report.unconfirmed": (
+            "⚠️ The work task ended, but its result delivery is unconfirmed."
+        ),
+        "btw.work.report.artifacts": "Files this task produced:",
     },
 }
 

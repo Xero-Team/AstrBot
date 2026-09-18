@@ -49,5 +49,7 @@
     "selectVersion": "选择版本",
     "current": "当前"
   },
-  "pluginWebui": "插件页面"
+  "pluginWebui": "插件页面",
+  "btw": "BTW 双循环",
+  "thirdPartyAgents": "第三方agent配置"
 }

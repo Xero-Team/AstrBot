@@ -213,7 +213,7 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 ## BTW 插件工具循环分配
 
-在配置档中启用 BTW 后，可通过 **配置文件 → AI 配置 → 能力 → BTW 双循环 → 插件工具循环分配** 为每个已启用的非系统插件选择对话循环、工作循环或两者。未分配的插件默认仅工作循环可用；选择两者会保存显式覆盖，重新选择工作循环会移除覆盖。关闭 BTW 后保留普通工具可用性。
+在配置档中启用 BTW 后，可通过 **更多功能 → BTW 双循环 → 插件工具循环分配** 为每个已启用的非系统插件选择对话循环、工作循环或两者。未分配的插件默认仅工作循环可用；选择两者会保存显式覆盖，重新选择工作循环会移除覆盖。关闭 BTW 后保留普通工具可用性。
 
 主 Agent 与其子 Agent handoff 应用相同分配，并继续遵守 Persona、配置档与授权限制。循环分配不会授予工具执行权限。插件事件处理器和显式命令保留原有执行路径；此设置不会把整个插件转换为后台任务。
 
@@ -250,6 +250,30 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 工作执行器还需要开启 `btw.work_loop.enabled`，默认同样为 `false`。它复用 Agent 执行器并记录排队、运行、完成、失败、取消状态。`btw.work_loop.max_concurrent` 限制正在执行的任务数，默认 `2`，不限制等待队列长度。`btw.work_session.max_age_seconds` 默认保留终态记录 `3600` 秒；活动任务不会过期，终态过期记录在下次会话操作时清除。调度器接入后台服务后，由运行时拥有工作任务的执行和清理。
 
 后台工作在执行前确认接收，再通过当前回复装饰与发送阶段回送结果，包括回复内容检查；不重复运行入站阶段。WebChat 持续使用原请求标识，确认消息不会结束请求。事件临时文件保留到工作完成、失败或取消后再释放。配置档替换、删除以及运行时关闭会取消并回收其工作任务。
+
+## BTW 工作循环的只读边界与委派
+
+`btw.work_loop.read_only` 默认为 `true`。开启后工作循环的工具目录只保留读取与搜索能力：`astrbot_file_read_tool`、`astrbot_grep_tool`、网页搜索、记忆与知识库工具照常可用；Shell、Python、文件写入与编辑、上传下载、浏览器、CUA，以及 `readOnlyHint` 不为真的 MCP 工具都会被移除，`delegate_coding_task` 是唯一的写入途径。判定按语义而非名单：没有声明 `required_actions` 的工具一律视为可写，插件工具也不例外，因为没有东西为它担保。它只收紧能力：文件读取仍要求 `btw.work_loop.computer_use_runtime` 已授予 local 或 sandbox，角色、路径限制、沙箱、WebChat step-up 与逐项循环分配规则都不变。关闭 `read_only` 恢复原有的写入能力。
+
+`btw.work_loop.coding_agents` 声明可委派的本地 CLI 代理，在 Dashboard 的 **更多功能 → BTW 双循环** 页面配置。每个条目包含 `id`、`type`（`claude_code`、`codex` 或 `custom`）、`command`、`model`、`max_output_chars`、`permission_mode`（Claude Code 权限模式，默认 `acceptEdits`）、`sandbox`（Codex 沙箱，默认 `workspace-write`）、`project_dir`、`extra_args`、`env`、`timeout_seconds` 和 `providers`。`permission_mode` 与 `sandbox` 是交给该 CLI 自己执行的策略，不是操作系统级的隔离：默认值让代理只在任务目录内写入，配置了 `project_dir` 时该目录也会显式加入可写范围；`bypassPermissions` 与 `danger-full-access` 必须显式配置。Claude Code 以 `-p` 非交互方式运行，没有终端可以回答权限询问，而 `acceptEdits` 只自动放行编辑：需要跑 shell 命令（测试、git 等）的任务会一直等到 `timeout_seconds` 超时，这类任务必须显式选择 `bypassPermissions`。委派会启动本地进程并向文件系统写入，因此 `delegate_coding_task` 按 `tool.local_exec` 与 `tool.file_write` 授权：这项工作循环的 Computer Use 运行时必须是 `local`。`sandbox` 下放行等于绕过沙箱——这个进程由本机直接拉起，并不在沙箱里——`inherit` 在请求构建前等同 `none`，`provider_settings.computer_use_runtime` 默认的 `none` 会同时关闭文件读取和委派；WebChat step-up 等表面提升与逐项循环分配规则照常适用。
+
+工作循环通过 `delegate_coding_task` 交办一次写入任务：任务文本写入 `<btw.work_loop.workspace_root>/<会话 ID>-<代理 ID>-<运行 ID>/TASK.md`，`workspace_root` 留空时使用数据目录下的 `btw/workspaces`。每次委派都会新建一个带运行 ID 的目录，因此同一会话的两次委派不会互相覆盖。代理在该目录中运行，完整输出记录到同目录的 `output.log`。任务结束后工作循环读回状态、退出码、产物路径与代理的最终消息；产物是运行前后的差集——git 工作树取 `git status --porcelain` 的变化与运行期间的提交，普通目录取运行开始后写入的文件——在报告里以工作区根目录为基准给出相对路径，不暴露本机数据目录的绝对位置，最多 50 项。代理退出后仍留在其进程组或 Job Object 中的子进程会被一并结束，超时、取消与正常结束都是如此，因此一次委派不会留下还在写盘的遗留进程。
+
+每个代理还可以带一份 `providers` 预设列表与 `active_provider`：Dashboard 已不再编辑它们（代理用的 provider 改由 **更多功能 → 第三方agent配置** 页面切换该 CLI 自己的配置），但配置文件里手写的预设仍按下面的规则生效。预设的 `base_url`、`model` 会写进该 CLI 自己的配置层：Claude Code 用 `--settings` 指向数据目录下的 settings 文件，Codex 用 `--profile astrbot-btw-<代理 ID>` 叠加 `$CODEX_HOME/astrbot-btw-<代理 ID>.config.toml`。每个代理各用一份 Codex 配置层，两个代理同时运行时不会互相覆盖。密钥不落盘，只在拉起子进程时通过环境变量传入——Claude Code 读 `ANTHROPIC_AUTH_TOKEN`，Codex 由配置层的 `env_key` 指向按代理 ID 命名的变量——因此持久化的只有端点与模型。切换 provider 不会改写用户的全局 CLI 配置。预设既无 `base_url` 也无 `api_key` 时视为“官方登录”，不写任何配置层，代理沿用用户自己的登录。
+
+同一个页面还维护 `btw.cli_providers`，那是另一份列表：每个 CLI 一份 provider 列表，由操作者手动切换。点「启用」会把选中的 provider 写进该 CLI 在本机的全局配置——Claude Code 写 `~/.claude/settings.json` 的 `env` 块，Codex 在 `~/.codex/config.toml` 顶部写一段受管区块、密钥存进 `~/.codex/auth.json`。首次写入前原文件会被完整备份一次，「取回」用该备份还原并清掉 AstrBot 写入的密钥。代理没有配置自己的 `providers` 预设时，委派任务读的就是这个文件：在这里切换 provider，任务与你手动启动的会话用的是同一份配置。切换改写了不属于 AstrBot 的文件，因此按 `coding_cli.config.write` 授权并要求 step-up。
+
+任务完成后，`btw.work_loop.report_via_conversation`（默认 `true`）让工作循环把结果交给对话循环合成一条汇报：代理的回答在前，随后是完成状态与产物路径。流式结果的中间分片不受影响，只有最终结果带上汇报，且同一次运行只追加一次。关闭此项后结果由工作循环直接投递。
+
+## BTW 编码 CLI 的全局配置切换
+
+`btw.cli_providers` 是 **更多功能 → CLI 全局配置**（`/cli-config`）编辑的 provider 列表。它是普通配置：条目随配置档保存，`api_key` 也存在配置档里，与其他 provider 凭据一样。每个条目包含 `id`、`name`、可选的 `cli`（`claude_code` 或 `codex`；留空表示两个 CLI 都可用，界面上新增的条目总会带上所在分区）、`base_url`、`model`、`note` 和 `api_key`；`id` 在整份列表内唯一。
+
+委派任务不受这里的切换影响：一次运行加载自己那份配置层，不读这些文件。这里切换的是该 CLI 在本机的配置，也就是你手动开会话时用的配置。
+
+这是 AstrBot 唯一一处写进自己数据目录之外的地方。目标文件在第一次写入前备份一次（`.astrbot-backup`，由“收回”还原），写入是原子的（`mkstemp` + `fsync` + `os.replace` + 目录 fsync），持有凭据的文件权限为 `0o600`，响应只报告是否存有密钥、从不返回其值。Claude Code 走 `~/.claude/settings.json` 的 `env`（`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`、`ANTHROPIC_AUTH_TOKEN`），逐键合并、其余内容原样保留。Codex 的 TOML 标准库能读不能写，改写一个解析不了的文件会丢掉用户的注释，因此 AstrBot 的键写进文件顶部一段注释分隔的区块（TOML 要求顶层键排在所有表之前），其余部分逐字节保留，凭据写进 `auth.json`。
+
+两类文件会被拒绝而不是被覆盖：存在但读不成 JSON 对象的 `settings.json`（例如带注释的 JSONC 或数组），以及有起始标记却没有结束标记的 Codex 区块——后者的边界无从得知，猜错会让文件每切换一次就多出一段。状态路由要求 `platform.read`；切换与收回要求高风险动作 `coding_cli.config.write`，因此需要 step-up。
 
 ## WebUI 与认证
 

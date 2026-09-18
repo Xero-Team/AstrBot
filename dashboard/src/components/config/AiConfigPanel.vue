@@ -368,7 +368,9 @@ const localTabGroups = computed(() => {
       'websearch',
       'agent_computer_use',
       'proactive_capability',
-      'btw',
+      // `btw` lives on its own page now (More Features > BTW Dual Loop); the
+      // work loop is a separate execution path with its own boundary, and it
+      // was easy to lose among the model and runner options here.
     ]
       .filter((key) => props.metadata?.[key])
       .map((key) => ({

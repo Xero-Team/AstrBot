@@ -115,6 +115,16 @@ const MainRoutes = {
       component: () => import('@/views/SubAgentPage.vue'),
     },
     {
+      name: 'BtwSettings',
+      path: '/btw',
+      component: () => import('@/views/BtwPage.vue'),
+    },
+    {
+      name: 'ThirdPartyAgents',
+      path: '/third-party-agents',
+      component: () => import('@/views/ThirdPartyAgentsPage.vue'),
+    },
+    {
       name: 'CronJobs',
       path: '/cron',
       component: () => import('@/views/CronJobPage.vue'),

@@ -24,6 +24,9 @@ def is_work_loop_enabled(config: object) -> bool:
 # without setting one of these is reported as completed.
 WORK_FAILED_EXTRA = "btw_work_failed"
 THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
+# Set once the completion report has been folded into a run's final result, so
+# a result delivered more than once carries the report exactly once.
+WORK_REPORT_EXTRA = "btw_work_report_composed"
 
 
 def mark_work_run_failed(event) -> None:
@@ -62,6 +65,31 @@ def stop_requested(event) -> bool:
     )
 
 
+def resolve_run_status(event, *, produced: bool) -> WorkSessionStatus:
+    """Return the status one work run ends in.
+
+    Two owners need this answer: the work loop, which records it, and the
+    conversation loop, which reports it before the record exists.  Reading the
+    same markers through one function keeps a reported status and a recorded
+    one from disagreeing.
+
+    Args:
+        event: The finished work event.
+        produced: Whether the executor emitted anything at all.  A run that
+            emitted nothing never reached an Agent, so it did not complete.
+
+    Returns:
+        The status the run ends in.
+    """
+    failed = bool(event.get_extra(WORK_FAILED_EXTRA)) or bool(
+        event.get_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY)
+    )
+    cancelled = stop_requested(event)
+    if failed or (not produced and not cancelled):
+        return WorkSessionStatus.FAILED
+    return WorkSessionStatus.CANCELLED if cancelled else WorkSessionStatus.COMPLETED
+
+
 class TaskType(StrEnum):
     """The execution loop selected for a user request."""
 
@@ -95,6 +123,9 @@ class WorkSession:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     error: str | None = None
+    # What the run produced outside the Agent's own answer: the task folders a
+    # delegated coding agent worked in and the paths it reported changing.
+    artifacts: list[str] = field(default_factory=list)
 
     def update_status(
         self,

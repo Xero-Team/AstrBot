@@ -49,5 +49,7 @@
     "selectVersion": "Select Version",
     "current": "Current"
   },
-  "pluginWebui": "Plugin Pages"
+  "pluginWebui": "Plugin Pages",
+  "btw": "BTW Dual Loop",
+  "thirdPartyAgents": "Third-party Agent Config"
 }

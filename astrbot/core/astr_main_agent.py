@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import copy
 import datetime
@@ -14,8 +12,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 from astrbot import logger
+from astrbot.core.agent.btw.coding_agents import has_enabled_coding_agent
 from astrbot.core.agent.btw.loop_routes import route_is_available_in_loop
-from astrbot.core.agent.btw.runtime_policy import resolve_computer_runtime
+from astrbot.core.agent.btw.runtime_policy import (
+    resolve_computer_runtime,
+    work_loop_is_read_only,
+)
 from astrbot.core.agent.btw.types import is_work_loop_enabled
 from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.handoff import HandoffTool
@@ -140,6 +142,20 @@ WEB_SEARCH_CITATION_PROMPT = (
     "Index is a unique identifier for each search result. "
     "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
     "after the sentence that uses the information. Do not invent citations."
+)
+WORK_LOOP_READ_ONLY_PROMPT = (
+    "You are the work loop of a two-loop agent. Your write capabilities are "
+    "removed on purpose: research, read, and plan for as long as the task "
+    "needs, then answer from what you found. Shell, Python, and file-writing "
+    "tools are not available to you, so do not call them."
+)
+WORK_LOOP_DELEGATION_PROMPT = (
+    "When the task must create or change files, delegate it with "
+    "`delegate_coding_task`. That coding agent runs with full write access "
+    "inside its own task folder, so the `task` you pass must stand alone: "
+    "state the goal, every input it needs, and the outputs you expect. Its "
+    "reply names the folder and the artifacts it produced; report those to "
+    "the user."
 )
 
 
@@ -554,6 +570,35 @@ def _apply_local_env_tools(
 ) -> None:
     _ = plugin_context
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
+
+
+def _apply_btw_work_loop_prompt(
+    req: ProviderRequest,
+    event: AstrMessageEvent,
+    plugin_context: CoreExecutionContext,
+    config: MainAgentBuildConfig,
+) -> None:
+    """State the work loop's read-only role and its delegation path.
+
+    The work loop's model decides what to do itself and what to hand over, so
+    it has to be told both halves: which capabilities were removed and what
+    replaces them.  Delegation starts a local process, so it is described only
+    when the request's own computer boundary would actually expose it.
+    """
+    if event.get_extra("btw_loop") != "work":
+        return
+    profile = plugin_context.get_config(umo=event.unified_msg_origin)
+    fragments: list[str] = []
+    if work_loop_is_read_only(profile, "work"):
+        fragments.append(WORK_LOOP_READ_ONLY_PROMPT)
+    if (
+        config.computer_use_runtime == "local"
+        and config.allow_computer_tools
+        and has_enabled_coding_agent(profile)
+    ):
+        fragments.append(WORK_LOOP_DELEGATION_PROMPT)
+    if fragments:
+        req.system_prompt = f"{req.system_prompt or ''}\n" + "\n".join(fragments) + "\n"
 
 
 def _build_local_mode_prompt() -> str:
@@ -1393,6 +1438,9 @@ def _assemble_request_tool_catalog(
         loop_mode=loop_mode,
         # Only the conversation loop submits work; the work loop runs it.
         work_loop_submission=loop_mode == "conversation" and is_work_loop_enabled(cfg),
+        # The work loop plans and reads; writes belong to a coding agent.
+        work_loop_read_only=work_loop_is_read_only(cfg, loop_mode),
+        work_loop_delegation=loop_mode == "work" and has_enabled_coding_agent(cfg),
     )
     existing = req.func_tool
     if existing is not None:
@@ -1653,6 +1701,7 @@ async def _prepare_request_for_agent(
     await _apply_kb(event, req, plugin_context, config)
     req.session_id = req.session_id or event.unified_msg_origin
     _assemble_request_tool_catalog(event, req, plugin_context, config)
+    _apply_btw_work_loop_prompt(req, event, plugin_context, config)
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
     if config.computer_use_runtime == "sandbox":

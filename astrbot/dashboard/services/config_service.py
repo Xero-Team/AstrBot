@@ -141,6 +141,98 @@ def _is_sensitive_config_key(key: str | None) -> bool:
     return normalized.endswith(SENSITIVE_CONFIG_SUFFIXES)
 
 
+def _item_identity(item: Any) -> str | None:
+    """Return the ``id`` that names a list item, when it carries one."""
+    if not isinstance(item, dict):
+        return None
+    identity = item.get("id")
+    return identity if isinstance(identity, str) and identity else None
+
+
+def _items_by_identity(items: list) -> dict[str, int]:
+    """Map each item's ``id`` to its position, or ``{}`` when that does not fit.
+
+    A list of objects is read by identity only when every item carries a unique,
+    non-empty ``id``.  Anything else -- a list of scalars, a repeated or missing
+    id -- leaves position as the only reading the two lists share.
+    """
+    by_id: dict[str, int] = {}
+    for index, item in enumerate(items):
+        identity = _item_identity(item)
+        if identity is None or identity in by_id:
+            return {}
+        by_id[identity] = index
+    return by_id
+
+
+def _stored_twins(posted: list, current: list) -> list[Any]:
+    """Return the stored item each posted item is the same entry as, if any.
+
+    An entry that carries an ``id`` is matched by it, so that moving, removing
+    or copying one cannot hand it a neighbour's stored value; that is the
+    failure this exists to prevent, and it is also what makes the match survive
+    a reordering.  An entry the stored list does not name -- a new one, or one
+    the client renamed, which it has no way to say -- falls back to its own
+    position, but only while that stored item is not already claimed by a name,
+    so a fallback can never hand the same stored value out twice.
+    """
+    current_by_id = _items_by_identity(current)
+    if not current_by_id:
+        return [
+            current[index] if index < len(current) else None
+            for index in range(len(posted))
+        ]
+
+    twins: list[Any] = [None] * len(posted)
+    matched: set[int] = set()
+    claimed: set[int] = set()
+    for index, item in enumerate(posted):
+        position = current_by_id.get(_item_identity(item) or "")
+        if position is None:
+            continue
+        twins[index] = current[position]
+        matched.add(index)
+        claimed.add(position)
+    for index in range(len(posted)):
+        if index in matched or index >= len(current) or index in claimed:
+            continue
+        twins[index] = current[index]
+    return twins
+
+
+def _blank_placeholders(value: Any, *, key_name: str | None) -> Any:
+    """Replace every secret marker that has no stored value to stand for.
+
+    A response writes ``REDACTED_SECRET_PLACEHOLDER`` where a secret is stored,
+    so the marker is never itself a secret.  A request that carries it for
+    something the profile does not have -- a copied entry, a hand-built one --
+    has nothing to resolve it back to, and keeping it would write the marker
+    into the configuration as if it were a credential.
+    """
+    if isinstance(value, dict):
+        blanked = {
+            key: _blank_placeholders(item, key_name=key) for key, item in value.items()
+        }
+        return blanked if blanked != value else value
+
+    if isinstance(value, list):
+        if key_name and _is_sensitive_config_key(key_name):
+            blanked = [
+                "" if item == REDACTED_SECRET_PLACEHOLDER else item for item in value
+            ]
+            return blanked if blanked != value else value
+        return [_blank_placeholders(item, key_name=key_name) for item in value]
+
+    if (
+        key_name
+        and _is_sensitive_config_key(key_name)
+        and value == REDACTED_SECRET_PLACEHOLDER
+    ):
+        return ""
+
+    return value
+
+
 def _redact_sensitive_config(value: Any, *, key_name: str | None = None) -> Any:
     if isinstance(value, dict):
         return {
@@ -172,6 +264,7 @@ def _restore_redacted_sensitive_config(
     if isinstance(posted_value, dict) and isinstance(current_value, dict):
         for key, item in posted_value.items():
             if key not in current_value:
+                posted_value[key] = _blank_placeholders(item, key_name=key)
                 continue
             posted_value[key] = _restore_redacted_sensitive_config(
                 item,
@@ -184,22 +277,22 @@ def _restore_redacted_sensitive_config(
         if key_name and _is_sensitive_config_key(key_name):
             restored_items = []
             for idx, item in enumerate(posted_value):
-                if (
-                    item == REDACTED_SECRET_PLACEHOLDER
-                    and idx < len(current_value)
-                    and isinstance(current_value[idx], str)
-                ):
-                    restored_items.append(current_value[idx])
-                else:
+                if item != REDACTED_SECRET_PLACEHOLDER:
                     restored_items.append(item)
+                    continue
+                stored = current_value[idx] if idx < len(current_value) else None
+                restored_items.append(stored if isinstance(stored, str) else "")
             return restored_items
 
+        twins = _stored_twins(posted_value, current_value)
         for idx, item in enumerate(posted_value):
-            if idx >= len(current_value):
-                break
+            counterpart = twins[idx]
+            if counterpart is None:
+                posted_value[idx] = _blank_placeholders(item, key_name=key_name)
+                continue
             posted_value[idx] = _restore_redacted_sensitive_config(
                 item,
-                current_value[idx],
+                counterpart,
                 key_name=key_name,
             )
         return posted_value
@@ -209,7 +302,7 @@ def _restore_redacted_sensitive_config(
         and _is_sensitive_config_key(key_name)
         and posted_value == REDACTED_SECRET_PLACEHOLDER
     ):
-        return current_value
+        return current_value if current_value != REDACTED_SECRET_PLACEHOLDER else ""
 
     return posted_value
 
@@ -269,9 +362,10 @@ def sensitive_config_changed(
             return False
         if isinstance(posted, list):
             current_list = current if isinstance(current, list) else []
+            twins = _stored_twins(posted, current_list)
             if any(
                 changed(
-                    current_list[index] if index < len(current_list) else None,
+                    twins[index],
                     value,
                     key_name=key_name,
                     path=path,
@@ -279,14 +373,19 @@ def sensitive_config_changed(
                 for index, value in enumerate(posted)
             ):
                 return True
-            return bool(
-                missing_is_change
-                and key_name
-                and _is_sensitive_config_key(key_name)
-                and any(
-                    item not in (None, "", [], {})
-                    for item in current_list[len(posted) :]
+            if not (
+                missing_is_change and key_name and _is_sensitive_config_key(key_name)
+            ):
+                return False
+            if _items_by_identity(current_list):
+                posted_identities = {_item_identity(value) for value in posted}
+                return any(
+                    _item_identity(item) not in posted_identities
+                    for item in current_list
+                    if item not in (None, "", [], {})
                 )
+            return any(
+                item not in (None, "", [], {}) for item in current_list[len(posted) :]
             )
         return False
 

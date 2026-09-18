@@ -848,3 +848,10 @@ class SessionGroupRequest(OpenModel):
     umos: list[str] | None = None
     add_umos: list[str] | None = None
     remove_umos: list[str] | None = None
+
+
+class CodingCliSwitchRequest(BaseModel):
+    """Ask for one configured provider to become a CLI's default on this host."""
+
+    cli: Literal["claude_code", "codex"]
+    provider_id: str

@@ -91,6 +91,10 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "platform.read": _SESSION_AND_ABOVE,
     "provider.manage": _INSTANCE_AND_ABOVE,
     "provider.credentials.write": _INSTANCE_AND_ABOVE,
+    # Writing a preset into the CLI's own global configuration replaces what the
+    # user runs interactively and can persist a credential in that file, so it
+    # sits at the same level as a provider credential change and is high-risk.
+    "coding_cli.config.write": _INSTANCE_AND_ABOVE,
     "platform.manage": _INSTANCE_AND_ABOVE,
     "agent.manage": _SESSION_OWNER_AND_ABOVE,
     "extension.read": _SESSION_AND_ABOVE,
@@ -116,6 +120,8 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.web_search": _SESSION_AND_ABOVE,
     "tool.session_history": _SESSION_AND_ABOVE,
     "tool.memory_read": _SESSION_AND_ABOVE,
+    "tool.memory_write": _SESSION_OWNER_AND_ABOVE,
+    "tool.schedule_write": _SESSION_OWNER_AND_ABOVE,
     "skill.read": _SESSION_AND_ABOVE,
     "dashboard.account.manage": _ROOT_ONLY,
     "filesystem.read": frozenset({Role.OPERATOR, Role.ROOT}),

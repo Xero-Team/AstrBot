@@ -101,6 +101,37 @@ WORKSPACE_FILE_READ_TOOLS: frozenset[str] = frozenset(
     {"astrbot_file_read_tool", "astrbot_grep_tool"}
 )
 
+# Actions that change state outside the Agent's own reasoning.  The read-only
+# work loop keeps every tool whose actions stay outside this set, so the list
+# is the single place that decides what "write-capable" means for a tool that
+# is not one of the known computer tools.  It covers host state (files,
+# processes, the browser, the isolated computer) and AstrBot's own state
+# (scheduled tasks, long-term memory): a work loop that plans and reads must
+# not be able to change either.
+WRITE_CAPABILITY_ACTIONS: frozenset[str] = frozenset(
+    {
+        "tool.file_write",
+        "tool.local_exec",
+        "tool.python_exec",
+        "tool.browser_control",
+        "tool.computer_use",
+        "tool.mcp_write",
+        "tool.memory_write",
+        "tool.schedule_write",
+    }
+)
+
+DELEGATE_CODING_TASK_TOOL_NAME = "delegate_coding_task"
+SUBMIT_WORK_TASK_TOOL_NAME = "submit_work_task"
+
+# Tools that belong to exactly one loop.  A work run must not be able to submit
+# more work, and a conversation run must not carry out the work itself, so the
+# loop is part of the tool's identity rather than of its configuration.
+LOOP_SCOPED_TOOL_NAMES: Mapping[str, str] = {
+    SUBMIT_WORK_TASK_TOOL_NAME: "conversation",
+    DELEGATE_CODING_TASK_TOOL_NAME: "work",
+}
+
 WEB_SEARCH_PROVIDER_TOOLS: Mapping[str, tuple[str, ...]] = {
     "tavily": ("web_search_tavily", "tavily_extract_web_page"),
     "bocha": ("web_search_bocha",),
@@ -143,6 +174,8 @@ class ToolCatalogInputs:
     btw_config: Mapping[str, object] | None = None
     loop_mode: str = "conversation"
     work_loop_submission: bool = False
+    work_loop_read_only: bool = False
+    work_loop_delegation: bool = False
 
 
 def assemble_tool_catalog(inputs: ToolCatalogInputs) -> ToolSet:
@@ -317,7 +350,9 @@ def _platform_baseline(inputs: ToolCatalogInputs) -> set[str]:
     if inputs.add_cron_tools:
         names.add("future_task")
     if inputs.work_loop_submission:
-        names.add("submit_work_task")
+        names.add(SUBMIT_WORK_TASK_TOOL_NAME)
+    if inputs.work_loop_delegation:
+        names.add(DELEGATE_CODING_TASK_TOOL_NAME)
     return names
 
 
@@ -478,12 +513,82 @@ def _apply_visibility(names: set[str], *, inputs: ToolCatalogInputs) -> set[str]
             continue
         if name in WORKSPACE_FILE_READ_TOOLS and name not in computer_names:
             continue
+        if tool_blocked_in_loop(
+            name,
+            actions,
+            loop_mode=inputs.loop_mode,
+            work_loop_read_only=inputs.work_loop_read_only,
+        ):
+            continue
         if inputs.computer_use_runtime == "none" and _is_computer_capability_action(
             actions
         ):
             continue
         visible.add(name)
     return visible
+
+
+def tool_blocked_in_loop(
+    name: str,
+    actions: Sequence[str],
+    *,
+    loop_mode: str,
+    work_loop_read_only: bool,
+) -> bool:
+    """Return whether a loop's own policy keeps a tool out of its catalog.
+
+    The catalog and the tool executor both consult this, so a tool that was
+    assembled into a request, carried into a handoff, or left behind by a
+    configuration change cannot be called in a loop that must not have it.
+
+    Args:
+        name: The tool's registered name.
+        actions: The actions the tool declares.
+        loop_mode: The loop the tool would run in.
+        work_loop_read_only: Whether the work loop must drop write-capable
+            tools; ignored in the conversation loop.
+
+    Returns:
+        Whether the tool must not run in this loop.
+    """
+    loop = "work" if loop_mode == "work" else "conversation"
+    home_loop = LOOP_SCOPED_TOOL_NAMES.get(name)
+    if home_loop is not None and home_loop != loop:
+        return True
+    if loop != "work" or not work_loop_read_only:
+        return False
+    return _is_write_capable_tool(name, actions)
+
+
+def _is_write_capable_tool(name: str, actions: Sequence[str]) -> bool:
+    """Return whether a tool changes state outside the Agent's own reasoning.
+
+    Known computer tools answer by name: the workspace read tools stay, and
+    every other computer tool the runtime exposes can write.  Everything else
+    answers from its declared actions, which is how MCP and plugin tools state
+    what they do.  A tool that declares nothing is treated as a writer here:
+    the boundary is a promise that the work loop cannot change anything, and an
+    undeclared tool is one nothing in the repository vouches for.  A plugin
+    tool says it only reads by declaring a read action such as ``skill.read``.
+
+    Args:
+        name: The tool's registered name.
+        actions: The actions the tool declares.
+
+    Returns:
+        Whether a read-only work loop must leave the tool out.
+    """
+    if name == DELEGATE_CODING_TASK_TOOL_NAME:
+        # The work loop's one sanctioned way to change files.  It declares the
+        # actions a local executor declares, so the computer-use boundary, the
+        # surface elevation, and the authorization decision all still gate it;
+        # only this loop-level rule steps aside.
+        return False
+    if name in COMPUTER_TOOL_NAMES:
+        return name not in WORKSPACE_FILE_READ_TOOLS
+    if not actions:
+        return True
+    return bool(WRITE_CAPABILITY_ACTIONS.intersection(actions))
 
 
 def elevated_instance_tool_actions_from_metadata(

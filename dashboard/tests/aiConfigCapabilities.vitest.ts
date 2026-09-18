@@ -57,28 +57,16 @@ function mountAiPanel(metadata: Record<string, unknown>) {
 }
 
 describe('AI capabilities panel', () => {
-  it('lists the BTW dual-loop group after the other capabilities', async () => {
+  it('lists only the capability groups that stay in this panel', async () => {
+    // BTW is deliberately absent: it moved to its own page under More Features,
+    // because the work loop is a separate execution path with its own boundary
+    // and was easy to lose among the model and agent-runner options here.
     await initI18n('en-US');
     const wrapper = mountAiPanel(buildMetadata(true));
 
     const capabilitiesTab = wrapper.findAll('.ai-config-tabs__item')[2];
     expect(capabilitiesTab?.text()).toBe('Capabilities');
     await capabilitiesTab?.trigger('click');
-
-    expect(wrapper.findAll('.v4-group').map((group) => group.text())).toEqual([
-      'knowledgebase',
-      'websearch',
-      'agent_computer_use',
-      'proactive_capability',
-      'btw',
-    ]);
-  });
-
-  it('omits the BTW group when the panel metadata does not carry it', async () => {
-    await initI18n('en-US');
-    const wrapper = mountAiPanel(buildMetadata(false));
-
-    await wrapper.findAll('.ai-config-tabs__item')[2]?.trigger('click');
 
     expect(wrapper.findAll('.v4-group').map((group) => group.text())).toEqual([
       'knowledgebase',

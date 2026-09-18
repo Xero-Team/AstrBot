@@ -77,7 +77,7 @@ def _display_next_run_time(value: datetime | None, tzinfo) -> datetime | None:
     return value.astimezone(tzinfo) if tzinfo else value.astimezone()
 
 
-@builtin_tool(config=_CRON_TOOL_CONFIG)
+@builtin_tool(config=_CRON_TOOL_CONFIG, required_actions=("tool.schedule_write",))
 @dataclass
 class FutureTaskTool(FunctionTool[AstrAgentContext]):
     name: str = "future_task"

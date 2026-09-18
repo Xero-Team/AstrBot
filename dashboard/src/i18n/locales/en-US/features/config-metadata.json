@@ -481,6 +481,22 @@
           "max_concurrent": {
             "description": "Concurrent work execution",
             "hint": "Active execution limit, default 2. This is not a waiting-queue length limit."
+          },
+          "read_only": {
+            "description": "Read-only work loop",
+            "hint": "On by default. The work loop keeps only reading and searching: Shell, Python, file writing, browser, and MCP write tools are removed, and writes are carried out by a coding agent inside its own task folder. This setting only removes capabilities; it grants none."
+          },
+          "report_via_conversation": {
+            "description": "Report work results from the conversation loop",
+            "hint": "On by default. A finished task is handed to the conversation loop, which composes one report with a completion marker and the artifact paths. Off delivers the result from the work loop directly."
+          },
+          "workspace_root": {
+            "description": "Coding-agent task folder root",
+            "hint": "Each delegated task gets its own folder under this path. Empty uses btw/workspaces inside the data directory."
+          },
+          "coding_agents": {
+            "description": "Third-party coding agents",
+            "hint": "Local CLI agents that can be handed write tasks (for example Claude Code or Codex). Each entry carries an id, type, command, model, output cap, permission mode, and the extra directory it may write to. A delegation starts a local process and writes files, so the work loop's Computer Use runtime must also be local (delegating under sandbox would be the way out of it), and `tool.local_exec` and `tool.file_write` must both be authorized. Claude Code runs non-interactively under `-p`, so there is no terminal to answer a permission prompt: `acceptEdits` approves edits alone, and a task that runs shell commands waits until it times out unless `bypassPermissions` is chosen deliberately. The provider an agent runs against is managed on the Third-party Agent Config page, which switches that CLI's own global configuration."
           }
         },
         "work_session": {

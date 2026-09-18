@@ -141,7 +141,7 @@ class QueryEpisodeTool(FunctionTool[AstrAgentContext]):
         )
 
 
-@builtin_tool
+@builtin_tool(required_actions=("tool.memory_write",))
 @dataclass
 class MaintainMemoryTool(FunctionTool[AstrAgentContext]):
     name: str = "maintain_memory"

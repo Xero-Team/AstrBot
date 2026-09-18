@@ -264,7 +264,10 @@ def test_handoff_respects_btw_runtime_for_all_tool_declarations(
     event.get_extra = lambda key, default=None: loop if key == "btw_loop" else default
     profile = {
         "provider_settings": {"computer_use_runtime": "local"},
-        "btw": {"enabled": enabled, "work_loop": {"computer_use_runtime": override}},
+        "btw": {
+            "enabled": enabled,
+            "work_loop": {"computer_use_runtime": override, "read_only": False},
+        },
     }
     context = SimpleNamespace(
         get_config=lambda **_: profile,
@@ -295,6 +298,59 @@ def test_handoff_respects_btw_runtime_for_all_tool_declarations(
                 expected_runtime == "sandbox"
             )
     assert profile["provider_settings"]["computer_use_runtime"] == "local"
+
+
+def test_handoff_keeps_a_read_only_work_loop_inside_its_boundary():
+    manager = FunctionToolManager()
+    manager.func_list = [
+        FunctionTool(
+            name="weather",
+            description="weather",
+            parameters={},
+            required_actions=("plugin:weather:read",),
+        ),
+        # A tool that declares nothing is not vouched for by anything in the
+        # repository, so a read-only loop leaves it out too.
+        FunctionTool(name="mystery", description="mystery", parameters={}),
+        FunctionTool(name="astrbot_execute_shell", description="shell", parameters={}),
+        FunctionTool(name="astrbot_file_read_tool", description="read", parameters={}),
+        FunctionTool(
+            name="astrbot_create_skill_payload", description="neo", parameters={}
+        ),
+        FunctionTool(
+            name="delegate_coding_task", description="delegate", parameters={}
+        ),
+    ]
+    profile = {
+        "provider_settings": {"computer_use_runtime": "local"},
+        "btw": {"enabled": True, "work_loop": {"computer_use_runtime": "local"}},
+    }
+
+    def names_for(loop):
+        event = _DummyEvent()
+        event.get_extra = lambda key, default=None: (
+            loop if key == "btw_loop" else default
+        )
+        context = SimpleNamespace(
+            get_config=lambda **_: profile,
+            get_llm_tool_manager=lambda: manager,
+        )
+        run_context = ContextWrapper(
+            context=SimpleNamespace(event=event, context=context)
+        )
+        toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+        assert toolset is not None
+        return toolset.names()
+
+    work_names = names_for("work")
+    assert "weather" in work_names
+    assert "astrbot_file_read_tool" in work_names
+    assert "delegate_coding_task" in work_names
+    assert "mystery" not in work_names
+    assert "astrbot_execute_shell" not in work_names
+    assert "astrbot_create_skill_payload" not in work_names
+
+    assert "delegate_coding_task" not in names_for("conversation")
 
 
 @pytest.mark.asyncio

@@ -8,19 +8,24 @@ The AstrBot admin panel features plugin management, log viewing, visual configur
 
 These entries match the default WebUI sidebar. If you customized the sidebar, check or restore the default layout under `Settings → Appearance` in the lower-left corner.
 
-| Previous entry point                    | Current entry point                                                                 |
-| --------------------------------------- | ----------------------------------------------------------------------------------- |
-| Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` next to the AI heading → Change execution mode |
-| Data / Dashboard                        | More → Data → Statistics                                                            |
-| Conversation Management / Conversations | More → Data → Conversations                                                         |
-| Logs / Console                          | More → Data → Logs                                                                  |
-| Trace                                   | More → Data → Trace                                                                 |
-| Config → Normal Config                  | Config → Select a profile                                                           |
-| Config → System Config                  | Settings → General, Appearance, Network, or Security                                |
-| Command Management                      | Plugins → Manage behavior → Commands                                                |
-| Standalone MCP / Skills entries         | Plugins → MCP / Skills                                                              |
+| Previous entry point                        | Current entry point                                                                 |
+| ------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Providers → Add Provider → Agent Runner     | Config → Select a profile → AI → `…` next to the AI heading → Change execution mode |
+| Data / Dashboard                            | More → Data → Statistics                                                            |
+| Conversation Management / Conversations     | More → Data → Conversations                                                         |
+| Logs / Console                              | More → Data → Logs                                                                  |
+| Trace                                       | More → Data → Trace                                                                 |
+| Config → Normal Config                      | Config → Select a profile                                                           |
+| Config → System Config                      | Settings → General, Appearance, Network, or Security                                |
+| Command Management                          | Plugins → Manage behavior → Commands                                                |
+| Standalone MCP / Skills entries             | Plugins → MCP / Skills                                                              |
+| Config → AI → Capabilities → BTW dual loops | More Features → BTW Dual Loop (`/btw`)                                              |
 
 Legacy log, trace, conversation, and statistics URLs still redirect to the matching tabs. Agent runners are now saved with each profile instead of being created as a provider; see [Agent Runner](./agent-runner.md).
+
+The BTW dual-loop settings moved out of the AI panel on the configuration page to **More Features → BTW Dual Loop** (`/btw`). The page loads and saves whichever profile it is pointed at, and holds what it held before: both loops and their models, the work loop's read-only boundary, the Computer Use runtime, the task folder root and result reporting, and the coding-agent list.
+
+**More Features → CLI Global Config** (`/cli-config`) is a new entry: it keeps the provider list for Claude Code and Codex and switches one of them to be that CLI's own default on this host. A switch rewrites the CLI's own configuration file (backed up once, and "take back" restores it), so it asks for a step-up; a delegated task loads a layer of its own and is not affected.
 
 ## Accessing the Admin Panel
 

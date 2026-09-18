@@ -803,6 +803,24 @@ async def test_sender_rules_share_preference_rows_and_drop_session_fields(
                 "rule_value": {},
             }
         )
+    with pytest.raises(SessionManagementServiceError, match="blocked 或 llm_enabled"):
+        await service.update_session_rule(
+            {
+                "target_type": "sender",
+                "sender_id": sender_id,
+                "rule_key": "session_service_config",
+                "rule_value": {"persona_id": "p1"},
+            }
+        )
+    with pytest.raises(SessionManagementServiceError, match="blocked"):
+        await service.update_session_rule(
+            {
+                "target_type": "sender",
+                "sender_id": sender_id,
+                "rule_key": "session_service_config",
+                "rule_value": {"blocked": "yes"},
+            }
+        )
 
     await service.update_session_rule(
         {

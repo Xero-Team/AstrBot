@@ -63,6 +63,7 @@
     "selectUmo": "选择会话",
     "senderId": "发送者主体 ID",
     "senderIdHint": "格式 im:{平台实例}:{机器人账号}:{发送者 ID}",
+    "senderIdError": "请填写完整 im:{平台}:{机器人}:{发送者} 主体 ID",
     "noUmos": "暂无可用会话"
   },
   "ruleEditor": {

@@ -586,11 +586,18 @@ class SessionManagementService:
             raise SessionManagementServiceError(
                 f"规则 {rule_key} 需要对象类型的 rule_value"
             )
-        fields = {
-            name: rule_value[name]
-            for name in _SENDER_OVERLAY_FIELDS
-            if isinstance(rule_value.get(name), bool)
-        }
+        fields: dict[str, bool] = {}
+        for name in _SENDER_OVERLAY_FIELDS:
+            if name not in rule_value:
+                continue
+            value = rule_value[name]
+            if not isinstance(value, bool):
+                raise SessionManagementServiceError(f"参数 {name} 必须是布尔值")
+            fields[name] = value
+        if not fields:
+            raise SessionManagementServiceError(
+                "发送者规则需要 blocked 或 llm_enabled 布尔值"
+            )
         existing = await self.preferences.sender_get(
             sender_key, SESSION_SERVICE_CONFIG_KEY, {}
         )

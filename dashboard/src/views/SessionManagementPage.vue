@@ -640,6 +640,9 @@
               v-model="selectedNewSenderId"
               :label="tm('addRule.senderId')"
               :hint="tm('addRule.senderIdHint')"
+              :error-messages="
+                senderIdInvalid ? tm('addRule.senderIdError') : undefined
+              "
               persistent-hint
               variant="outlined"
             />
@@ -1335,9 +1338,13 @@ const selectedNewUmo = ref<string | null>(null);
 const selectedNewSenderId = ref('');
 const canCreateNewRule = computed(() =>
   isSenderTarget.value
-    ? selectedNewSenderId.value.trim().length > 0
+    ? isSenderSubjectId(selectedNewSenderId.value)
     : Boolean(selectedNewUmo.value),
 );
+const senderIdInvalid = computed(() => {
+  const value = selectedNewSenderId.value.trim();
+  return isSenderTarget.value && value.length > 0 && !isSenderSubjectId(value);
+});
 
 const ruleDialog = ref(false);
 const selectedUmo = ref<SessionRuleItem | null>(null);
@@ -1926,10 +1933,21 @@ function getAvailableUmoDisplayProps(value: unknown) {
   };
 }
 
+function isSenderSubjectId(value: string): boolean {
+  const parts = value.trim().split(':');
+  return (
+    parts.length >= 4 &&
+    parts[0].toLowerCase() === 'im' &&
+    parts[1].trim().length > 0 &&
+    parts[2].trim().length > 0 &&
+    parts.slice(3).join(':').trim().length > 0
+  );
+}
+
 function isSenderRule(
   item: SessionRuleItem | null | undefined,
 ): item is SessionRuleItem & { sender_id: string; target_type: 'sender' } {
-  return Boolean(item && item.target_type === 'sender' && item.sender_id);
+  return item?.target_type === 'sender' && Boolean(item.sender_id);
 }
 
 function hasProviderConfig(rules: SessionRuleSet | null | undefined): boolean {
@@ -2236,7 +2254,7 @@ function buildSenderItem(
 function createNewRule() {
   if (isSenderTarget.value) {
     const senderId = selectedNewSenderId.value.trim();
-    if (!senderId) {
+    if (!isSenderSubjectId(senderId)) {
       return;
     }
     addRuleDialog.value = false;
@@ -2300,6 +2318,10 @@ async function saveSenderOverlay(
       blocked: senderOverlay.blocked,
       llm_enabled: senderOverlay.llm_enabled,
     };
+    if (!isSenderSubjectId(item.sender_id)) {
+      showError(tm('addRule.senderIdError'));
+      return;
+    }
     const response = await sessionApi.upsertRule({
       target_type: 'sender',
       sender_id: item.sender_id,
@@ -2310,19 +2332,22 @@ async function saveSenderOverlay(
       showError(response.data.message || tm('messages.saveError'));
       return;
     }
+    const savedId =
+      normalizeString(
+        (response.data.data as { sender_id?: unknown } | undefined)?.sender_id,
+      ) || item.sender_id;
     editingRules.value.session_service_config = config;
-    const existing = rulesList.value.find(
-      (row) => row.sender_id === item.sender_id,
-    );
+    const existing = rulesList.value.find((row) => row.sender_id === savedId);
     if (existing) {
       existing.rules = { session_service_config: config };
     } else {
       rulesList.value.push(
-        buildSenderItem(item.sender_id, { session_service_config: config }),
+        buildSenderItem(savedId, { session_service_config: config }),
       );
     }
     selectedUmo.value = {
       ...item,
+      sender_id: savedId,
       rules: { session_service_config: config },
     };
     showSuccess(tm('messages.saveSuccess'));

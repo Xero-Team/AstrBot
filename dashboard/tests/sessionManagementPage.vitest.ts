@@ -134,13 +134,17 @@ describe('SessionManagementPage', () => {
       .findAllComponents({ name: 'VTextField' })
       .find((field) => field.props('label') === 'Sender subject ID');
     expect(senderField).toBeDefined();
-    await senderField!.setValue('im:napcat:bot:99');
-    await flushPromises();
-
     const next = wrapper
       .findAllComponents({ name: 'VBtn' })
       .find((button) => button.text() === 'Next');
     expect(next).toBeDefined();
+
+    await senderField!.setValue('99');
+    await flushPromises();
+    expect(next!.attributes('disabled')).toBeDefined();
+
+    await senderField!.setValue('im:napcat:bot:99');
+    await flushPromises();
     expect(next!.attributes('disabled')).toBeUndefined();
     await next!.trigger('click');
     await flushPromises();

@@ -63,6 +63,7 @@
     "selectUmo": "Select Session",
     "senderId": "Sender subject ID",
     "senderIdHint": "Format im:{platform instance}:{bot account}:{sender id}",
+    "senderIdError": "Use a full im:{platform}:{bot}:{sender} subject ID",
     "noUmos": "No sessions available"
   },
   "ruleEditor": {

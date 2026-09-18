@@ -37,7 +37,7 @@
     <template v-else>
       <div class="btw-page__scope">
         <v-select
-          v-model="scope"
+          :model-value="scope"
           class="btw-page__scope-select"
           :items="scopeOptions"
           :label="tm('btwPage.appliesTo')"
@@ -45,8 +45,7 @@
           persistent-hint
           density="compact"
           variant="outlined"
-          hide-details
-          @update:model-value="loadConfig"
+          @update:model-value="onScopeChange"
         />
       </div>
 
@@ -93,6 +92,8 @@
       @confirm="confirmTwoFactor"
       @cancel="twoFactorOpen = false"
     />
+
+    <UnsavedChangesConfirmDialog ref="unsavedChangesDialog" />
   </div>
 </template>
 
@@ -105,6 +106,7 @@ import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
+import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useModuleI18n } from '@/i18n/composables';
 import { runConfigMutationWithStepUp, stepUpHeaders } from '@/utils/stepUp';
@@ -115,8 +117,19 @@ defineOptions({ name: 'BtwPage' });
 /** The id the backend uses for the profile that is the running configuration. */
 const SYSTEM_SCOPE = 'default';
 
+interface UnsavedChangesDialogExposed {
+  open: (options: {
+    title: string;
+    message: string;
+    confirmHint: string;
+    cancelHint: string;
+    closeHint: string;
+  }) => Promise<boolean | 'close'>;
+}
+
 const { tm } = useModuleI18n('features/config');
 const confirmDialog = useConfirmDialog();
+const unsavedChangesDialog = ref<UnsavedChangesDialogExposed | null>(null);
 
 const {
   dialogOpen: stepUpOpen,
@@ -219,7 +232,20 @@ const hasUnsavedChanges = computed(
 );
 
 async function save(twoFactorCode = '') {
-  if (saving.value) return;
+  await saveProfile(scope.value, twoFactorCode);
+}
+
+/**
+ * Save the settings currently in hand into ``target``.
+ *
+ * Separate from ``save`` because switching profiles has to write the profile
+ * the operator is leaving, which is no longer the one the select shows.
+ *
+ * Returns:
+ *   Whether the profile now holds what the page was showing.
+ */
+async function saveProfile(target: string, twoFactorCode = '') {
+  if (saving.value) return false;
   saving.value = true;
   const headers: Record<string, string> = {};
   if (twoFactorCode) headers['X-2FA-Code'] = twoFactorCode;
@@ -233,18 +259,14 @@ async function save(twoFactorCode = '') {
           validateStatus: (status: number) =>
             (status >= 200 && status < 300) || status === 401,
         };
-        return configProfileApi.update(
-          scope.value,
-          configData.value,
-          requestConfig,
-        );
+        return configProfileApi.update(target, configData.value, requestConfig);
       },
-      scope.value,
+      target,
       requestStepUp,
     );
     if (!response) {
       saving.value = false;
-      return;
+      return false;
     }
 
     const payload = asRecord(response.data?.data);
@@ -254,7 +276,7 @@ async function save(twoFactorCode = '') {
         : '';
       twoFactorOpen.value = true;
       saving.value = false;
-      return;
+      return false;
     }
 
     if (response.data?.status === 'ok') {
@@ -262,11 +284,13 @@ async function save(twoFactorCode = '') {
       twoFactorError.value = '';
       savedSnapshot.value = snapshot(configData.value);
       showSnack(response.data?.message || tm('btwPage.saveSuccess'), 'success');
-    } else {
-      showSnack(response.data?.message || tm('btwPage.saveError'), 'error');
+      return true;
     }
+    showSnack(response.data?.message || tm('btwPage.saveError'), 'error');
+    return false;
   } catch {
     showSnack(tm('btwPage.saveError'), 'error');
+    return false;
   } finally {
     saving.value = false;
   }
@@ -275,6 +299,51 @@ async function save(twoFactorCode = '') {
 function confirmTwoFactor(code: string) {
   twoFactorError.value = '';
   void save(code);
+}
+
+function createUnsavedChangesDialogOptions(message: string) {
+  return {
+    title: tm('unsavedChangesWarning.dialogTitle'),
+    message,
+    confirmHint: `${tm('unsavedChangesWarning.options.saveAndSwitch')}:${tm('unsavedChangesWarning.options.confirm')}`,
+    cancelHint: `${tm('unsavedChangesWarning.options.discardAndSwitch')}:${tm('unsavedChangesWarning.options.cancel')}`,
+    closeHint: `${tm('unsavedChangesWarning.options.closeCard')}:"x"`,
+  };
+}
+
+async function openUnsavedChangesDialog(message: string) {
+  return (
+    (await unsavedChangesDialog.value?.open(
+      createUnsavedChangesDialogOptions(message),
+    )) ?? false
+  );
+}
+
+/**
+ * Point the page at another profile, without losing edits made in this one.
+ *
+ * The select is bound one way on purpose: it stays on the profile being
+ * edited until this decides to move, so declining the prompt needs no undo.
+ */
+async function onScopeChange(next: unknown) {
+  const target = typeof next === 'string' ? next : '';
+  if (!target || target === scope.value) return;
+
+  if (!hasUnsavedChanges.value) {
+    scope.value = target;
+    await loadConfig();
+    return;
+  }
+
+  const previous = scope.value;
+  const saveAndSwitch = await openUnsavedChangesDialog(
+    tm('unsavedChangesWarning.switchConfig'),
+  );
+  if (saveAndSwitch === 'close') return;
+  if (saveAndSwitch && !(await saveProfile(previous))) return;
+
+  scope.value = target;
+  await loadConfig();
 }
 
 onBeforeRouteLeave(async () => {

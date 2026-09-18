@@ -1214,7 +1214,7 @@
         },
         "unlisted_senders": {
           "description": "未列入发送者策略",
-          "hint": "allow 放行没有覆盖的发送者。deny 只放行已有 blocked 或 llm_enabled 覆盖的发送者。Dashboard 自定义规则仍只编辑会话；用 /user block、/user unblock、/user llm on|off 写入发送者覆盖。",
+          "hint": "allow 放行没有覆盖的发送者。deny 只放行已有 blocked 或 llm_enabled 覆盖的发送者。Dashboard 自定义规则的发送者目标和 /user block、/user unblock、/user llm on|off 写入同一份覆盖。",
           "labels": ["允许", "拒绝"]
         }
       }

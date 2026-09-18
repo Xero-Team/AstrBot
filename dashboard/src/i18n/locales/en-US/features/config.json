@@ -305,7 +305,7 @@
     "baseUrlHintClaude": "For example https://api.example.com -- written as ANTHROPIC_BASE_URL.",
     "baseUrlHintCodex": "For example https://api.example.com/v1 -- written as the Codex provider's base_url.",
     "apiKey": "API key",
-    "apiKeyHint": "Stored in the CLI's own configuration file on this host, readable only by you. Leave empty when editing to keep the stored key.",
+    "apiKeyHint": "Stored in this AstrBot profile, and written into the CLI's own configuration file when you switch this provider. Leave empty when editing to keep the stored key.",
     "model": "Model",
     "modelHint": "Optional. Written as the CLI's default model.",
     "note": "Note",

@@ -33,11 +33,11 @@ export interface CodingCliState {
 /**
  * One provider as `btw.cli_providers` stores it.
  *
- * `api_key` is what this editor holds for the entry: the whole credential, once
- * the profile has been read, and an empty string when the operator has not
- * typed one.  Only a switch writes it anywhere, and only into the CLI's own
- * file -- the profile keeps the list itself, which is why the page can read a
- * key back and the API cannot.
+ * `api_key` is what the operator typed in the field and nothing else.  A config
+ * response writes the marker `__ASTRBOT_REDACTED__` where a stored key would
+ * be, so the editor treats it as "a key is stored, the field is empty": the
+ * marker goes back only for the entry it came from, and only a switch ever
+ * writes a value into the CLI's own file.
  */
 export interface StoredCliProvider extends CodingCliProvider {
   /** The CLI this provider is scoped to; empty means either CLI may use it. */

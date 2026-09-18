@@ -134,6 +134,20 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+/** What a config response writes where a stored secret would be. */
+const REDACTED_SECRET_PLACEHOLDER = '__ASTRBOT_REDACTED__';
+
+/**
+ * The operator's own key, never the marker a response puts in its place.
+ *
+ * Treating the marker as a key is how it ends up stored as one: it is what the
+ * field would show, and what the next save would write back.
+ */
+function typedKey(value: unknown): string {
+  const key = text(value);
+  return key === REDACTED_SECRET_PLACEHOLDER ? '' : key;
+}
+
 function showSnack(message: string, color: 'success' | 'error') {
   snackMessage.value = message;
   snackColor.value = color;
@@ -159,7 +173,7 @@ function rawProviders(config: OpenConfig): Record<string, unknown>[] {
  * configuration this page saves, so the unsaved-changes check below covers the
  * list.  A stored key is carried through untouched -- an empty field means
  * "leave it alone", never "erase it", because the editor cannot tell the two
- * apart.
+ * apart -- and what carries it is the marker, put back only where it came from.
  */
 const providers = computed<StoredCliProvider[]>({
   get: () =>
@@ -172,7 +186,7 @@ const providers = computed<StoredCliProvider[]>({
       has_api_key: Boolean(text(entry.api_key).trim()),
       current: false,
       cli: text(entry.cli).trim(),
-      api_key: text(entry.api_key),
+      api_key: typedKey(entry.api_key),
     })),
   set: (next) => {
     const config = configData.value as Record<string, unknown>;
@@ -194,8 +208,17 @@ const providers = computed<StoredCliProvider[]>({
       };
       if (provider.cli) entry.cli = provider.cli;
       else delete entry.cli;
-      if (provider.api_key) entry.api_key = provider.api_key;
-      else delete entry.api_key;
+      if (provider.api_key) {
+        entry.api_key = provider.api_key;
+      } else if (provider.has_api_key) {
+        // The profile still holds a key for this entry and the operator did not
+        // type a new one, so the marker is what says "keep it".  It is posted
+        // only where it came from: the profile resolves it by the entry's id,
+        // and a copy of this entry has an id the profile has never seen.
+        entry.api_key = REDACTED_SECRET_PLACEHOLDER;
+      } else {
+        delete entry.api_key;
+      }
       return entry;
     });
     config.btw = btw;

@@ -305,7 +305,7 @@
     "baseUrlHintClaude": "例如 https://api.example.com —— 写入 ANTHROPIC_BASE_URL。",
     "baseUrlHintCodex": "例如 https://api.example.com/v1 —— 写入 Codex provider 的 base_url。",
     "apiKey": "API Key",
-    "apiKeyHint": "保存在本机该 CLI 自己的配置文件里，仅本机用户可读。编辑时留空表示保留已存的密钥。",
+    "apiKeyHint": "保存在本 AstrBot 配置档中，切换该 provider 时会写入该 CLI 自己的配置文件。编辑时留空表示保留已存的密钥。",
     "model": "模型",
     "modelHint": "可选。会写成该 CLI 的默认模型。",
     "note": "备注",

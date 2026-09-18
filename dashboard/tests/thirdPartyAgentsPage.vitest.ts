@@ -35,6 +35,10 @@ vi.mock('@/api/v1/authorization', () => ({
 /**
  * A profile as the endpoint returns it.
  *
+ * The key is the marker a response carries, not the key: the redaction happens
+ * before the page ever sees it, and a fixture that carries a real secret tests
+ * a path that does not exist.
+ *
  * Built fresh for every test: the page edits the configuration it was handed,
  * so a shared object would carry one test's edits into the next.
  */
@@ -46,7 +50,7 @@ function configFixture() {
           id: 'gw',
           name: 'Gateway',
           base_url: 'https://gw.example',
-          api_key: 'sk-secret',
+          api_key: REDACTED_SECRET_PLACEHOLDER,
           model: 'opus',
           note: '',
         },
@@ -54,6 +58,9 @@ function configFixture() {
     },
   };
 }
+
+/** The marker a config response carries in place of a stored key. */
+const REDACTED_SECRET_PLACEHOLDER = '__ASTRBOT_REDACTED__';
 
 const CLI_STATE = {
   clis: [
@@ -156,9 +163,14 @@ describe('ThirdPartyAgentsPage', () => {
     );
     const ids = savedConfig().btw.cli_providers.map((entry) => entry.id);
     expect(ids).toEqual(['gw', 'mine']);
-    // The stored list is rebuilt, never flattened: the key that was already
-    // there survives an edit made through the editor.
-    expect(savedConfig().btw.cli_providers[0].api_key).toBe('sk-secret');
+    // The marker goes back for the entry it came from, which is what the
+    // profile resolves to the stored key, and nowhere else.
+    expect(savedConfig().btw.cli_providers[0].api_key).toBe(
+      REDACTED_SECRET_PLACEHOLDER,
+    );
+    // The provider that was just added has an id the profile has never seen,
+    // so there is no stored key for it: posting the marker would store it.
+    expect(savedConfig().btw.cli_providers[1].api_key).toBeUndefined();
     wrapper.unmount();
   });
 

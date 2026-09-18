@@ -194,7 +194,7 @@
                         size="small"
                         prepend-icon="mdi-content-copy"
                         :aria-label="`${tm('thirdPartyAgentsPage.duplicate')}: ${provider.name}`"
-                        @click="duplicate(state.cli, provider)"
+                        @click="duplicate(provider)"
                       >
                         {{ tm('thirdPartyAgentsPage.duplicate') }}
                       </v-btn>
@@ -425,6 +425,8 @@ const snackColor = ref<'success' | 'error'>('success');
 
 const formOpen = ref(false);
 const formEditing = ref(false);
+/** The id the open form started from, which a rename changes. */
+const formOriginalId = ref('');
 const formError = ref('');
 const showKey = ref(false);
 const form = ref({
@@ -492,8 +494,14 @@ function commit(next: StoredCliProvider[]) {
   emit('update:modelValue', next);
 }
 
-function nextId(base: string, cli: CodingCliKind): string {
-  const taken = providersFor(cli).map((provider) => provider.id);
+/**
+ * A free id, over the whole list rather than over one CLI.
+ *
+ * The profile's list is keyed by id alone, so two entries sharing one are two
+ * entries where the profile will only keep the first.
+ */
+function nextId(base: string): string {
+  const taken = providers.value.map((provider) => provider.id);
   if (!taken.includes(base)) return base;
   let suffix = 2;
   while (taken.includes(`${base}-${suffix}`)) suffix += 1;
@@ -534,9 +542,12 @@ function openForm(cli: CodingCliKind, provider?: CodingCliProvider) {
   formEditing.value = Boolean(provider);
   formError.value = '';
   showKey.value = false;
+  // The id the form opened on, so a rename can still find the entry it is
+  // renaming: the stored key belongs to that entry, not to the new name.
+  formOriginalId.value = provider?.id ?? '';
   form.value = {
     cli,
-    id: provider?.id ?? nextId('provider', cli),
+    id: provider?.id ?? nextId('provider'),
     name: provider?.name ?? '',
     base_url: provider?.base_url ?? '',
     api_key: '',
@@ -556,21 +567,19 @@ function confirmForm() {
     formError.value = tm('thirdPartyAgentsPage.endpointOrKeyRequired');
     return;
   }
-  const scope = form.value.cli === 'claude_code' ? '' : form.value.cli;
-  const clash = providers.value.some(
-    (provider) => provider.id === id && (provider.cli ?? '') === scope,
-  );
-  const editingSelf =
-    formEditing.value &&
-    find(id) !== undefined &&
-    (find(id)?.cli ?? '') === scope;
-  if (clash && !editingSelf) {
+  // The id names the entry and the profile keeps one entry per id, so the whole
+  // list is checked rather than the CLI the form was opened from.
+  const occupant = find(id);
+  const editingSelf = formEditing.value && formOriginalId.value === id;
+  if (occupant !== undefined && !editingSelf) {
     formError.value = tm('thirdPartyAgentsPage.idTaken');
     return;
   }
 
   const apiKey = form.value.api_key.trim();
-  const previous = find(id);
+  const previous =
+    providers.value.find((entry) => entry.id === formOriginalId.value) ??
+    find(id);
   const entry: StoredCliProvider = {
     id,
     name: form.value.name.trim() || id,
@@ -579,21 +588,29 @@ function confirmForm() {
     note: form.value.note.trim(),
     has_api_key: Boolean(apiKey) || Boolean(previous?.has_api_key),
     current: false,
-    cli: scope,
-    api_key: apiKey || (previous?.api_key ?? ''),
+    // The section the form was opened from, always: an entry that names no CLI
+    // would be shown under every CLI, which is not what adding one here means.
+    cli: form.value.cli,
+    api_key: apiKey,
   };
 
-  const index = providers.value.findIndex((provider) => provider.id === id);
-  const next = [...providers.value];
-  if (index === -1) next.push(entry);
-  else next[index] = entry;
-  commit(next);
+  // A rename replaces the entry it was opened on; anything else is a new id.
+  const replaced = providers.value.findIndex(
+    (provider) => provider.id === formOriginalId.value,
+  );
+  const target = replaced === -1 ? find(id) : providers.value[replaced];
+  if (target === undefined) commit([...providers.value, entry]);
+  else
+    commit(
+      providers.value.map((provider) =>
+        provider === target ? entry : provider,
+      ),
+    );
   formOpen.value = false;
 }
 
-function duplicate(cli: CodingCliKind, provider: CodingCliProvider) {
-  const id = nextId(`${provider.id}-copy`, cli);
-  const source = find(provider.id);
+function duplicate(provider: StoredCliProvider) {
+  const id = nextId(`${provider.id}-copy`);
   commit([
     ...providers.value,
     {
@@ -601,8 +618,11 @@ function duplicate(cli: CodingCliKind, provider: CodingCliProvider) {
       id,
       name: `${provider.name} (copy)`,
       current: false,
-      cli: source?.cli ?? '',
-      api_key: source?.api_key ?? '',
+      // Metadata only: the source's key is a marker that names the source's
+      // stored secret, and this entry has an id the profile has never seen, so
+      // there is nothing there to keep.
+      api_key: '',
+      has_api_key: false,
     },
   ]);
 }

@@ -54,13 +54,19 @@ const STATE = {
   ],
 };
 
-/** The operator's own list, which is what the cards render from. */
+/**
+ * The operator's own list, as the page hands it over.
+ *
+ * `api_key` is empty and `has_api_key` is true for the entry whose key the
+ * profile holds: the page reads the marker a response carries as "a key is
+ * stored, the field is empty" and puts the marker back only for this entry.
+ */
 const PROVIDERS: StoredCliProvider[] = [
   {
     id: 'gw',
     name: 'Gateway',
     base_url: 'https://gw.example',
-    api_key: 'sk-secret',
+    api_key: '',
     model: 'opus',
     note: 'primary',
     has_api_key: true,
@@ -246,8 +252,70 @@ describe('CodingCliProviders', () => {
     await wrapper.vm.$nextTick();
 
     const entry = emittedProviders(wrapper).find((item) => item.id === 'gw');
-    expect(entry?.api_key).toBe('sk-secret');
+    // The key is reported as still stored and its value is not in the list at
+    // all; the page is what turns that back into the marker the profile
+    // resolves, and only for the entry whose id the marker came from.
+    expect(entry?.api_key).toBe('');
+    expect(entry?.has_api_key).toBe(true);
     expect(entry?.note).toBe('updated note');
+    wrapper.unmount();
+  });
+
+  it('adds a provider scoped to the CLI whose section it was added from', async () => {
+    const wrapper = mountProviders();
+    await flushPromises();
+
+    // `openFormAndFill` adds from the Claude Code section, the first one.
+    await openFormAndFill(wrapper, {
+      id: 'mine',
+      base_url: 'https://mine.example',
+      api_key: 'sk-2',
+    });
+
+    // Scoped, not left open: an entry with no `cli` is shown under every CLI,
+    // so leaving it unset would put a Claude provider in the Codex section too.
+    const added = emittedProviders(wrapper).find(
+      (entry) => entry.id === 'mine',
+    );
+    expect(added?.cli).toBe('claude_code');
+    wrapper.unmount();
+  });
+
+  it('does not carry a stored key onto a duplicate', async () => {
+    const wrapper = mountProviders();
+    await flushPromises();
+
+    await cardFor(wrapper, 'claude_code', 'gw')
+      .find('.coding-cli-providers__duplicate')
+      .trigger('click');
+    await wrapper.vm.$nextTick();
+
+    const copy = emittedProviders(wrapper).find(
+      (entry) => entry.id === 'gw-copy',
+    );
+    // Metadata only.  Copying `has_api_key` would make the page post the
+    // source's marker under a new id, which the profile cannot resolve -- and
+    // a switch would then write the marker into the CLI's own file as a key.
+    expect(copy?.has_api_key).toBe(false);
+    expect(copy?.api_key).toBe('');
+    expect(copy?.base_url).toBe('https://gw.example');
+    wrapper.unmount();
+  });
+
+  it('refuses an id another provider already uses, whichever CLI it is under', async () => {
+    const wrapper = mountProviders();
+    await flushPromises();
+
+    // `gw` is unscoped and so is listed under both CLIs, but the profile keys
+    // its list by id alone: a second `gw` would be dropped on the next load.
+    await openFormAndFill(wrapper, {
+      id: 'gw',
+      base_url: 'https://other.example',
+    });
+
+    expect(wrapper.find('.coding-cli-providers__form-error').exists()).toBe(
+      true,
+    );
     wrapper.unmount();
   });
 

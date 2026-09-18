@@ -1274,3 +1274,31 @@ async def test_prepare_images_for_provider_skips_oversized_input(tmp_path, monke
     paths = await media_utils.prepare_images_for_provider(str(image_path))
 
     assert paths == []
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_bounds_output_bytes(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(media_utils, "MODEL_IMAGE_MAX_BYTES", 8 * 1024)
+    image_path = tmp_path / "noisy.png"
+    noisy = PILImage.new("RGB", (256, 256))
+    noisy.putdata(
+        [
+            ((index * 37) % 256, (index * 73) % 256, (index * 19) % 256)
+            for index in range(256 * 256)
+        ]
+    )
+    noisy.save(image_path, format="PNG")
+
+    paths = await media_utils.prepare_images_for_provider(
+        str(image_path),
+        max_size=256,
+        quality=95,
+    )
+
+    assert len(paths) == 1
+    assert Path(paths[0]).stat().st_size < 8 * 1024
+    with PILImage.open(paths[0]) as jpeg:
+        assert jpeg.format == "JPEG"

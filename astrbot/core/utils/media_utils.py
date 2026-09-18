@@ -36,7 +36,8 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1024
 IMAGE_COMPRESS_DEFAULT_QUALITY = 85
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
-MODEL_IMAGE_MAX_INPUT_BYTES = 32 * 1024 * 1024
+MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
+MODEL_IMAGE_MAX_BYTES = 512 * 1024
 PROVIDER_JPEG_MAX_ANIMATED_FRAMES = 8
 PROVIDER_JPEG_MAX_COMPOSE_FRAMES = 64
 PROVIDER_JPEG_STATIC_HAMMING = 12
@@ -1826,16 +1827,38 @@ def _save_provider_jpeg(
             resized = working.copy()
             resized.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
             working = resized
+        quality = min(max(int(quality), 1), 100)
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        output_path = temp_dir / f"provider_jpeg_{uuid.uuid4().hex}.jpg"
-        working.save(
-            output_path,
-            "JPEG",
-            quality=quality,
-            optimize=IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
-        )
-        return str(output_path)
+        while True:
+            output_path = temp_dir / f"provider_jpeg_{uuid.uuid4().hex}.jpg"
+            working.save(
+                output_path,
+                "JPEG",
+                quality=quality,
+                optimize=IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
+            )
+            encoded_size = output_path.stat().st_size
+            if encoded_size < MODEL_IMAGE_MAX_BYTES:
+                return str(output_path)
+            output_path.unlink(missing_ok=True)
+            if working.size == (1, 1):
+                raise ValueError("Image cannot fit the model input byte limit")
+            scale = min(
+                0.85, math.sqrt((MODEL_IMAGE_MAX_BYTES - 1) / encoded_size) * 0.95
+            )
+            shrunk = working.copy()
+            shrunk.thumbnail(
+                (
+                    max(1, int(working.width * scale)),
+                    max(1, int(working.height * scale)),
+                ),
+                PILImage.Resampling.LANCZOS,
+            )
+            if resized is not None:
+                resized.close()
+            resized = shrunk
+            working = shrunk
     finally:
         if resized is not None:
             resized.close()

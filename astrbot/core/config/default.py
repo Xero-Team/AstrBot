@@ -4325,12 +4325,12 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
-                        "hint": "送给模型的图片会转为 JPEG。关闭时仍会转 JPEG，但不会按最长边缩小。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。",
+                        "hint": "送给模型的图片会转为 JPEG，且每张输出严格小于 512 KiB。关闭时仍会转 JPEG，但不会按最长边缩小（仍可能为满足 512 KiB 上限而缩小）。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。超过 64 MiB 的原图会在解码前跳过。",
                     },
                     "provider_settings.image_compress_options.max_size": {
-                        "description": "最大边长",
+                        "description": "输入图片最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。CUA 沙箱下输入图片不缩放，以保持像素坐标 1:1；大图可能超出服务商上传限制。",
+                        "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。系统会在必要时进一步压缩，使每张输出严格小于 512 KiB。CUA 沙箱下输入图片默认不缩放，以保持像素坐标 1:1；若仍超过 512 KiB 才会继续缩小。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },

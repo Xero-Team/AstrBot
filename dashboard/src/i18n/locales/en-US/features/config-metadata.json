@@ -628,14 +628,14 @@
         },
         "image_compress_enabled": {
           "description": "Enable image compression",
-          "hint": "Provider-bound images are converted to JPEG. When disabled, images are still converted to JPEG but are not downscaled. Animated GIF/WebP sources are dhash-sampled, up to 8 frames."
+          "hint": "Provider-bound images are converted to JPEG, each strictly below 512 KiB. When disabled, images are still converted to JPEG but are not downscaled unless needed to meet the 512 KiB cap. Animated GIF/WebP sources are dhash-sampled, up to 8 frames. Originals larger than 64 MiB are skipped before decoding."
         },
         "image_compress_options": {
           "description": "Image compression settings",
-          "hint": "Control the JPEG long-edge limit and quality for model requests. Images are always converted to JPEG and never upscaled; animated sources are sampled to at most 8 frames.",
+          "hint": "Control the JPEG long-edge limit and quality for model requests. Images are always converted to JPEG, never upscaled, and further reduced when needed so each output is strictly below 512 KiB; animated sources are sampled to at most 8 frames.",
           "max_size": {
-            "description": "Maximum edge length",
-            "hint": "Longest edge of the compressed image in pixels. Images larger than this are downscaled only; they are never enlarged."
+            "description": "Input image maximum edge length",
+            "hint": "Longest edge of the compressed image in pixels. Images larger than this are downscaled only; they are never enlarged. The system may reduce them further to stay strictly below 512 KiB."
           },
           "quality": {
             "description": "JPEG quality",

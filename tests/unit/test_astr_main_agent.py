@@ -11,7 +11,10 @@ import pytest
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
-from astrbot.core.agent.request_preparation import prepare_provider_request
+from astrbot.core.agent.request_preparation import (
+    clone_provider_request,
+    prepare_provider_request,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.conversation_mgr import DIALOGUE_LOOP_SCOPE, WORK_LOOP_SCOPE
@@ -503,7 +506,6 @@ def test_datetime_reminder_is_temp_without_affecting_identity(mock_event):
         req,
         {
             "datetime_system_prompt": True,
-            "datetime_system_prompt_scope": "persistent",
             "identifier": True,
             "group_name_display": True,
         },
@@ -517,6 +519,21 @@ def test_datetime_reminder_is_temp_without_affecting_identity(mock_event):
     ]
     assert parts[0].is_temp is False
     assert parts[1].is_temp is True
+
+
+def test_datetime_reminder_ignores_leftover_scope_key(mock_event):
+    req = ProviderRequest(prompt="Hello")
+    _append_reminders_at_fixed_now(
+        mock_event,
+        req,
+        {
+            "datetime_system_prompt": True,
+            "datetime_system_prompt_scope": "persistent",
+        },
+    )
+
+    assert [part.text for part in req.extra_user_content_parts] == [_DATETIME_REMINDER]
+    assert req.extra_user_content_parts[0].is_temp is True
 
 
 def test_datetime_reminder_omitted_when_disabled(mock_event):
@@ -548,7 +565,15 @@ async def test_datetime_reminder_not_persisted_in_history(mock_event):
         },
     )
 
-    message = Message.model_validate(await req.assemble_context())
+    cloned = clone_provider_request(req)
+    message = Message.model_validate(await cloned.assemble_context())
+    assert isinstance(message.content, list)
+    datetime_parts = [
+        part for part in message.content if "Current datetime" in part.text
+    ]
+    assert [part.text for part in datetime_parts] == [_DATETIME_REMINDER]
+    assert datetime_parts[0].is_temp is True
+
     dumped = dump_messages_with_checkpoints([message])
 
     assert dumped == [

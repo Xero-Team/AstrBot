@@ -157,7 +157,7 @@ API keys are sensitive configuration. Never commit a real `cmd_config.json`, scr
 - `persona_pool` limits selectable Personas; `["*"]` means all.
 - `prompt_prefix` is the user-prompt template. Placeholders use logic-free `{{name}}` syntax, not Jinja2. The only allowed key is `prompt`. If the template contains `{{prompt}}`, that slot is replaced with the user input; if it does not, the prefix is prepended. Persona `system_prompt` and workspace `EXTRA_PROMPT.md` are not templates.
 - Built-in LLM templates use the same `{{name}}` syntax. Cron wake allows `cron_job`; background-task wake allows `background_task_result`; tool-loop notices allow `follow_up_lines`, `tool_names`, `tool_name`, `streak`, `overflow_path`, and `read_tool_hint`. Unknown `{{name}}` tokens stay literal, and substitution values are not scanned again.
-- `identifier` and `group_name_display` add user identity or group name to the prompt and persist that user reminder.
+- `identifier` and `group_name_display` append a persistent user `<system_reminder>` with user identity or group name after this turn's last user message.
 - `datetime_system_prompt` appends a temporary current-time `<system_reminder>` after this turn's last user message. It is not saved to conversation history and is not written into the system prompt.
 
 The default Persona ID is configured on `agent_runner`. See [Personas](../use/persona) for selection priority.

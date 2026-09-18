@@ -4260,7 +4260,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.datetime_system_prompt": {
                         "description": "现实世界时间感知",
                         "type": "bool",
-                        "hint": "启用后，会在本轮最后一条用户消息后附加一条临时当前时间 reminder，不写入会话历史。",
+                        "hint": "启用后，会在本轮最后一条用户消息后附加一条临时当前时间提醒，不写入会话历史。",
                         "condition": {
                             "agent_runner.runner_type": "local",
                         },

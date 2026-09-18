@@ -661,6 +661,21 @@ class TestSelectProvider:
         )
         mock_context.get_using_provider.assert_not_called()
 
+    @pytest.mark.parametrize("unusable", [None, "not-a-chat-provider"])
+    def test_two_unusable_candidates_fail_once(
+        self, mock_event, mock_context, unusable
+    ):
+        """Both candidates unusable: fail loudly, and try each exactly once."""
+        mock_event.set_extra("selected_provider", "session-model")
+        mock_context.get_provider_by_id.return_value = unusable
+
+        assert ama._select_provider(mock_event, mock_context, "loop-model") is None
+        assert [
+            call.args[0] for call in mock_context.get_provider_by_id.call_args_list
+        ] == ["loop-model", "session-model"]
+        assert mock_event.get_extra(ama.LLM_ERROR_MESSAGE_EXTRA_KEY)
+        mock_context.get_using_provider.assert_not_called()
+
     def test_select_provider_by_id(self, mock_event, mock_context, mock_provider):
         """Test selecting provider by ID from event extra."""
         module = ama

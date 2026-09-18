@@ -47,7 +47,11 @@ from astrbot.core.utils.totp import (
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, DashboardValidationError
-from astrbot.dashboard.upload_utils import save_upload_to_path
+from astrbot.dashboard.upload_utils import (
+    UploadLimitError,
+    UploadPathError,
+    save_upload_to_path,
+)
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -1474,6 +1478,7 @@ class ConfigFileService:
             raise DashboardValidationError("No files uploaded")
 
         allowed_exts = self._allowed_file_extensions(meta)
+        storage_root = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
         plugin_root_path = self._plugin_root_path(name)
         plugin_root_path.mkdir(parents=True, exist_ok=True)
 
@@ -1499,10 +1504,18 @@ class ConfigFileService:
                 continue
 
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            await save_upload_to_path(file, save_path)
-            if save_path.is_file() and save_path.stat().st_size > MAX_FILE_BYTES:
-                save_path.unlink()
+            try:
+                await save_upload_to_path(
+                    file,
+                    save_path,
+                    root=storage_root,
+                    max_bytes=MAX_FILE_BYTES,
+                )
+            except UploadLimitError:
                 errors.append(f"File too large: {filename}")
+                continue
+            except UploadPathError:
+                errors.append(f"Invalid path: {filename}")
                 continue
             uploaded.append(rel_path)
 

@@ -30,7 +30,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 from astrbot.dashboard.schemas import KnowledgeBaseRequest
-from astrbot.dashboard.upload_utils import save_upload_to_path
+from astrbot.dashboard.upload_utils import UploadLimitError, save_upload_to_path
 from astrbot.dashboard.utils import generate_tsne_visualization
 
 
@@ -954,12 +954,13 @@ class KnowledgeBaseService:
                     written_bytes = await save_upload_to_path(
                         file,
                         temp_file_path,
+                        root=staging_dir,
                         max_bytes=min(
                             KB_UPLOAD_MAX_PART_SIZE,
                             KB_UPLOAD_MAX_BYTES - total_bytes,
                         ),
                     )
-                except ValueError as exc:
+                except UploadLimitError as exc:
                     raise KnowledgeBaseServiceError(
                         "Upload exceeds request size limit", status_code=422
                     ) from exc

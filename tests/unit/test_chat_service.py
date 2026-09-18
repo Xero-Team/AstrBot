@@ -433,7 +433,7 @@ async def test_save_uploaded_file_renames_image_to_detected_suffix(
         headers={"content-type": "image/jpeg"},
     )
 
-    async def fake_save_upload_to_path(file, path, *, max_bytes=None):
+    async def fake_save_upload_to_path(file, path, *, max_bytes=None, root=None):
         path.write_bytes(b"binary")
 
     monkeypatch.setattr(

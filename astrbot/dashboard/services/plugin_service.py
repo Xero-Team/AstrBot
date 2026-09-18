@@ -1597,11 +1597,12 @@ class PluginService:
         self._ensure_not_demo()
         logger.info(f"正在安装用户上传的插件 {upload_file.filename}")
         filename = str(upload_file.filename or "plugin.zip").replace("\\", "/")
+        temp_root = get_astrbot_temp_path()
         file_path = os.path.join(
-            get_astrbot_temp_path(),
+            temp_root,
             f"plugin_upload_{os.path.basename(filename) or 'plugin.zip'}",
         )
-        await save_upload_to_path(upload_file, file_path)
+        await save_upload_to_path(upload_file, file_path, root=temp_root)
         try:
             plugin_info = await self.plugin_lifecycle.install_plugin_from_file(
                 file_path,

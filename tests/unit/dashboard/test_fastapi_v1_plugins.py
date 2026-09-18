@@ -669,7 +669,7 @@ async def test_save_upload_to_path_writes_starlette_upload(tmp_path: Path):
     upload = UploadFile(file=source, filename="demo.txt")
 
     destination = tmp_path / "demo.txt"
-    await save_upload_to_path(upload, destination)
+    await save_upload_to_path(upload, destination, root=tmp_path)
 
     assert destination.read_bytes() == b"upload-bytes"
 
@@ -688,7 +688,29 @@ async def test_save_upload_to_path_unlinks_partial_file_when_over_limit(
     destination = tmp_path / "big.bin"
 
     with pytest.raises(ValueError, match="byte limit"):
-        await save_upload_to_path(upload, destination, max_bytes=4)
+        await save_upload_to_path(upload, destination, root=tmp_path, max_bytes=4)
+
+    assert not destination.exists()
+
+
+@pytest.mark.asyncio
+async def test_save_upload_to_path_rejects_destination_outside_root(
+    tmp_path: Path,
+):
+    from starlette.datastructures import UploadFile
+
+    from astrbot.dashboard.upload_utils import (
+        UploadPathError,
+        save_upload_to_path,
+    )
+
+    source = SpooledTemporaryFile()
+    source.write(b"escape")
+    upload = UploadFile(file=source, filename="escape.bin")
+    destination = tmp_path.parent / "escape.bin"
+
+    with pytest.raises(UploadPathError, match="escapes configured root"):
+        await save_upload_to_path(upload, destination, root=tmp_path)
 
     assert not destination.exists()
 

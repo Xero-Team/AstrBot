@@ -39,7 +39,7 @@ from astrbot.core.webchat.result_reducer import (
     parse_webchat_attachment,
 )
 from astrbot.core.webchat.run_coordinator import WebChatRun, WebChatRunCoordinator
-from astrbot.dashboard.upload_utils import save_upload_to_path
+from astrbot.dashboard.upload_utils import UploadLimitError, save_upload_to_path
 
 if TYPE_CHECKING:
     from astrbot.core.conversation_mgr import ConversationManager
@@ -534,9 +534,10 @@ class ChatService:
             await save_upload_to_path(
                 file,
                 file_path,
+                root=attachments_dir,
                 max_bytes=MAX_UPLOAD_FILE_SIZE_BYTES,
             )
-        except ValueError as exc:
+        except UploadLimitError as exc:
             file_path.unlink(missing_ok=True)
             raise ChatServiceError(
                 f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"

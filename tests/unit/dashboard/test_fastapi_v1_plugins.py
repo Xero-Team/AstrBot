@@ -675,6 +675,25 @@ async def test_save_upload_to_path_writes_starlette_upload(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_save_upload_to_path_unlinks_partial_file_when_over_limit(
+    tmp_path: Path,
+):
+    from starlette.datastructures import UploadFile
+
+    from astrbot.dashboard.upload_utils import save_upload_to_path
+
+    source = SpooledTemporaryFile()
+    source.write(b"0123456789")
+    upload = UploadFile(file=source, filename="big.bin")
+    destination = tmp_path / "big.bin"
+
+    with pytest.raises(ValueError, match="byte limit"):
+        await save_upload_to_path(upload, destination, max_bytes=4)
+
+    assert not destination.exists()
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_config_file_routes_reach_service_layer(
     asgi_client: httpx.AsyncClient,
 ):

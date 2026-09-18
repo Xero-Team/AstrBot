@@ -13,13 +13,17 @@ async def save_upload_to_path(
     path = Path(destination)
     written = 0
     await upload_file.seek(0)
-    with path.open("wb") as output:
-        while True:
-            chunk = await upload_file.read(1024 * 1024)
-            if not chunk:
-                break
-            written += len(chunk)
-            if max_bytes is not None and written > max_bytes:
-                raise ValueError("Upload exceeds configured byte limit")
-            output.write(chunk)
+    try:
+        with path.open("wb") as output:
+            while True:
+                chunk = await upload_file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if max_bytes is not None and written > max_bytes:
+                    raise ValueError("Upload exceeds configured byte limit")
+                output.write(chunk)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
     return written

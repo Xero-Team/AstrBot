@@ -40,6 +40,24 @@ watch([markdownEnabled, fontSize], () => {
 });
 
 const markdown = new MarkdownIt({ html: false, breaks: true, linkify: true });
+const defaultLinkOpen =
+  markdown.renderer.rules.link_open ||
+  ((tokens, idx, options, _env, self) =>
+    self.renderToken(tokens, idx, options));
+markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  token.attrSet('target', '_blank');
+  token.attrSet('rel', 'noopener noreferrer');
+  return defaultLinkOpen(tokens, idx, options, env, self);
+};
+const defaultImage =
+  markdown.renderer.rules.image ||
+  ((tokens, idx, options, _env, self) =>
+    self.renderToken(tokens, idx, options));
+markdown.renderer.rules.image = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet('referrerpolicy', 'no-referrer');
+  return defaultImage(tokens, idx, options, env, self);
+};
 const knownRoles = [
   'user',
   'assistant',
@@ -117,7 +135,16 @@ const markdownSanitizeOptions = {
     'del',
     's',
   ],
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'align'],
+  ALLOWED_ATTR: [
+    'href',
+    'src',
+    'alt',
+    'title',
+    'align',
+    'target',
+    'rel',
+    'referrerpolicy',
+  ],
 };
 
 function renderTextHtml(text: string): string {

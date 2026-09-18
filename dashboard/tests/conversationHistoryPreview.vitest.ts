@@ -10,7 +10,7 @@ describe('ConversationHistoryPreview', () => {
           {
             role: 'assistant',
             content:
-              '<script>alert(1)</script> ![xss](javascript:alert(1)) **ok**',
+              '<script>alert(1)</script> ![xss](javascript:alert(1)) [xss](javascript:alert(1)) [ok](https://example.com) **ok**',
           },
         ],
       },
@@ -21,6 +21,11 @@ describe('ConversationHistoryPreview', () => {
     expect(preview.attributes('data-font-size')).toBe('13');
     expect(wrapper.find('script').exists()).toBe(false);
     expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.find('a[href^="javascript:"]').exists()).toBe(false);
+    const safeLink = wrapper.get('.record-markdown a');
+    expect(safeLink.attributes('href')).toBe('https://example.com');
+    expect(safeLink.attributes('target')).toBe('_blank');
+    expect(safeLink.attributes('rel')).toBe('noopener noreferrer');
     expect(wrapper.get('.record-markdown').html()).toContain(
       '<strong>ok</strong>',
     );

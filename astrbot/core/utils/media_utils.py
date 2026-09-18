@@ -7,7 +7,6 @@ probing, and image compression helpers.
 import asyncio
 import base64
 import binascii
-import io
 import math
 import mimetypes
 import os
@@ -17,6 +16,7 @@ import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
@@ -1958,7 +1958,7 @@ def _compress_image_sync(
     optimize: bool,
 ) -> str | None:
     """Run image compression synchronously via ``asyncio.to_thread``."""
-    with PILImage.open(io.BytesIO(data)) as opened_img:
+    with PILImage.open(BytesIO(data)) as opened_img:
         converted_img: PILImage.Image | None = None
 
         try:
@@ -2025,7 +2025,7 @@ async def compress_image(
 
     def _exceeds_max_size(source: bytes | Path) -> bool:
         try:
-            fp = io.BytesIO(source) if isinstance(source, bytes) else source
+            fp = BytesIO(source) if isinstance(source, bytes) else source
             with PILImage.open(fp) as opened_img:
                 return max(opened_img.size) > max_size
         except Exception:  # noqa: BLE001

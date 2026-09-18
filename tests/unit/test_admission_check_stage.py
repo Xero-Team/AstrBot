@@ -358,6 +358,10 @@ async def test_blocked_sender_passthrough_allows_user_unblock_and_bot_status():
         make_real_event(message_type=MessageType.GROUP_MESSAGE),
         f"{BUILTIN_COMMANDS_MODULE}_bot_enable",
     )
+    llm_on = _with_handlers(
+        make_real_event(message_type=MessageType.GROUP_MESSAGE),
+        f"{BUILTIN_COMMANDS_MODULE}_user_llm_on",
+    )
     preferences.sender_values[
         (sender_admission_key_from_event(unblock), SESSION_SERVICE_CONFIG_KEY)
     ] = {"blocked": True}
@@ -367,20 +371,39 @@ async def test_blocked_sender_passthrough_allows_user_unblock_and_bot_status():
     preferences.sender_values[
         (sender_admission_key_from_event(enable), SESSION_SERVICE_CONFIG_KEY)
     ] = {"blocked": True}
+    preferences.sender_values[
+        (sender_admission_key_from_event(llm_on), SESSION_SERVICE_CONFIG_KEY)
+    ] = {"blocked": True}
 
     await stage.process(event)
     await stage.process(unblock)
     await stage.process(status)
     await stage.process(enable)
+    await stage.process(llm_on)
 
     assert event.is_stopped() is True
     assert unblock.is_stopped() is False
     assert status.is_stopped() is False
     assert enable.is_stopped() is True
+    assert llm_on.is_stopped() is True
     assert SENDER_BLOCKED_PASSTHROUGH_HANDLERS == {
         f"{BUILTIN_COMMANDS_MODULE}_user_unblock",
         f"{BUILTIN_COMMANDS_MODULE}_bot_status",
     }
+
+
+@pytest.mark.asyncio
+async def test_sender_llm_off_still_admits_the_event():
+    preferences = _Preferences()
+    event = make_real_event(message_type=MessageType.GROUP_MESSAGE)
+    preferences.sender_values[
+        (sender_admission_key_from_event(event), SESSION_SERVICE_CONFIG_KEY)
+    ] = {"llm_enabled": False}
+    stage = await _stage(preferences=preferences)
+
+    await stage.process(event)
+
+    assert event.is_stopped() is False
 
 
 @pytest.mark.asyncio

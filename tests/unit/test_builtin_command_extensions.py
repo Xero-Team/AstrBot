@@ -22,7 +22,10 @@ from astrbot.builtin_stars.builtin_commands.commands.user import (
 )
 from astrbot.builtin_stars.builtin_commands.commands.work import WorkCommands
 from astrbot.builtin_stars.builtin_commands.main import Main
-from astrbot.core.auth.admission import session_admission_key_from_event
+from astrbot.core.auth.admission import (
+    sender_admission_key_from_event,
+    session_admission_key_from_event,
+)
 from astrbot.core.command import (
     CommandEngine,
     CommandError,
@@ -45,6 +48,7 @@ from astrbot.core.star.star_handler import (
     materialize_handler_declarations,
 )
 from tests.unit.builtin_command_fakes import FakeI18n
+from tests.unit.test_waking_check_stage import make_real_event
 
 
 class DummyEvent:
@@ -927,6 +931,10 @@ def test_sender_key_from_token_mints_raw_ids_like_admission():
     assert sender_key_from_token(event, "  ") is None
     empty = DummyEvent(message_str="user block", platform_id="", platform_name="")
     assert sender_key_from_token(empty, "99") == "im:unknown:bot:99"
+    real = make_real_event(message_type=MessageType.GROUP_MESSAGE)
+    minted = sender_admission_key_from_event(real)
+    assert sender_key_from_token(real, real.get_sender_id()) == minted
+    assert sender_key_from_token(real, minted) == minted
 
 
 @pytest.mark.asyncio

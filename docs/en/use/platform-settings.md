@@ -1,10 +1,10 @@
 # Platform handling
 
-**Config → Platform** and **Ext.** hold send/receive behavior shared by every messaging platform. These run **after** the [wake check](./group-wake). A policy-admitted message can still be dropped by the unlisted-session policy, a rate limit, or a content-safety check.
+**Config → Platform** and **Ext.** hold send/receive behavior shared by every messaging platform. These run **after** the [wake check](./group-wake). A policy-admitted message can still be dropped by the unlisted-session or unlisted-sender policy, a rate limit, or a content-safety check.
 
 Open **Config → Platform**. Segmented replies live under **Ext.** Fields belong to the current profile. See [Configuration profiles](./config-profiles).
 
-## Unlisted sessions
+## Unlisted sessions and senders
 
 | Field                         | Default | Notes                                                                                       |
 | ----------------------------- | ------- | ------------------------------------------------------------------------------------------- |

@@ -164,7 +164,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 10. `ResultDecorateStage`
 11. `RespondStage`
 
-`AdmissionCheckStage` 按 `admission.unlisted_sessions` 和规范会话覆盖决定是否放行；WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。`session_enabled` / `session_blocked` 的指令透传仍由 `SessionStatusCheckStage` 处理。`GroupMessageHistoryStage` 在插件处理前持久化非 WebChat 的入站群消息，供 `GetGroupMessageHistoryTool` 使用；私聊和 WebChat 会跳过。`ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。`SessionStatusCheckStage` 在会话关闭时停止事件，但放行已激活的 `/bot status` 和 `/bot enable`，以便从聊天重新打开会话。
+`AdmissionCheckStage` 按 `admission.unlisted_sessions`、`admission.unlisted_senders`、规范会话覆盖和 `Subject.im.id` 上的发送者覆盖决定是否放行。发送者 `blocked` 会丢掉该 IM 主体在本机器人实例上所有会话的事件，只放行 `/user unblock` 和 `/bot status`。WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。`session_enabled` / `session_blocked` 的指令透传仍由 `SessionStatusCheckStage` 处理。`GroupMessageHistoryStage` 在插件处理前持久化非 WebChat 的入站群消息，供 `GetGroupMessageHistoryTool` 使用；私聊和 WebChat 会跳过。`ProcessStage` 负责插件处理与 Agent 调用；`ResultDecorateStage` 处理前缀、分段、TTS、本地文转图、引用等结果装饰；`RespondStage` 统一调用平台发送接口。流水线同时支持普通异步 stage 和用异步生成器实现的洋葱式前后处理，修改时必须保留停止传播和收尾语义。`SessionStatusCheckStage` 在会话关闭时停止事件，但放行已激活的 `/bot status` 和 `/bot enable`，以便从聊天重新打开会话。
 
 入站路由在 `WakingCheckStage` 中一次完成：指令、LLM、透传或丢弃。阶段会把 `should_run_command`、`should_run_llm`、`route_kind` 和明确的 `wake_reasons` 集合写入事件。指令匹配优先于 LLM 访问：命中指令时只执行指令，裸指令组输出帮助，未知子指令输出 Orbit 诊断且不会回落到 LLM。LLM 访问从事件所属配置档的 `llm_access` 读取；`command_prefixes` 只负责指令头。派生属性 `is_wake` 不能作为 Pipeline 门禁。
 

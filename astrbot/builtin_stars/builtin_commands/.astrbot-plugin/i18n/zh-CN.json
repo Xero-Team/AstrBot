@@ -148,7 +148,7 @@
     "flow.set.on": "会话流式覆盖已开启。",
     "flow.set.off": "会话流式覆盖已关闭。",
     "flow.unset.ok": "已移除会话流式覆盖，改跟随全局配置。",
-    "user.usage": "用法：/user block|unblock <sender_id> 或 /user llm on|off <sender_id>。sender_id 是平台用户 ID 或完整 im: 主体 ID。这不是 /black。",
+    "user.usage": "用法：/user block|unblock <sender_id> 或 /user llm on|off <sender_id>。sender_id 用 /session info 里的 UID，或完整 im: 授权主体 ID。",
     "user.block.ok": "已在本机器人实例拉黑发送者 {sender}。",
     "user.unblock.ok": "已在本机器人实例解除拉黑发送者 {sender}。",
     "user.llm.on.ok": "已为本机器人实例的发送者 {sender} 启用 LLM。",

@@ -42,7 +42,7 @@ class AgentRequestSubStage(Stage):
 
         if not await self.session_services.should_process_llm_request(event):
             logger.debug(
-                f"The session {event.unified_msg_origin} has disabled AI capability, skipping processing."
+                "Built-in LLM is disabled for this event by a session or sender overlay; skipping processing."
             )
             mark_work_run_failed(event)
             return

@@ -7,16 +7,17 @@ asked for, and nothing that called the functions directly could see it.
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 
 from astrbot.core.auth.models import HIGH_RISK_ACTIONS
+
+# The harness exports its fixtures too, `asgi_app` among them, which this file
+# builds on to install the authorizer the routes are checked against.
 from tests.unit.dashboard.fastapi_v1_support import *  # noqa: F403
-from tests.unit.dashboard.fastapi_v1_support import (
-    asgi_app,  # noqa: F401 - the fixture this file reuses
-)
 
 PROVIDERS = [
     {
@@ -140,9 +141,11 @@ async def test_a_switch_with_a_step_up_writes_the_cli_own_file(
     )
 
     assert response.status_code == 200
-    settings = (cli_homes / "claude" / "settings.json").read_text(encoding="utf-8")
-    assert "https://gw.example" in settings
-    assert "sk-secret" in settings
+    settings = json.loads(
+        (cli_homes / "claude" / "settings.json").read_text(encoding="utf-8")
+    )
+    assert settings["env"]["ANTHROPIC_BASE_URL"] == PROVIDERS[0]["base_url"]
+    assert settings["env"]["ANTHROPIC_AUTH_TOKEN"] == PROVIDERS[0]["api_key"]
     # The write that replaced the file can be undone, and nothing else about
     # the response names the key it just wrote.
-    assert "sk-secret" not in response.text
+    assert PROVIDERS[0]["api_key"] not in response.text

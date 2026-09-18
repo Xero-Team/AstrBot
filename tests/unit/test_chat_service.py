@@ -432,7 +432,7 @@ async def test_save_uploaded_file_renames_image_to_detected_suffix(
         headers={"content-type": "image/jpeg"},
     )
 
-    async def fake_save_upload_to_path(file, path):
+    async def fake_save_upload_to_path(file, path, *, max_bytes=None):
         path.write_bytes(b"binary")
 
     monkeypatch.setattr(
@@ -457,6 +457,38 @@ async def test_save_uploaded_file_renames_image_to_detected_suffix(
         "filename": "photo.png",
         "type": "image",
     }
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_declared_size(tmp_path):
+    service = _service()
+    service.attachments_dir = str(tmp_path)
+
+    class FakeUpload:
+        filename = "big.bin"
+        content_type = "application/octet-stream"
+        size = chat_service_module.MAX_UPLOAD_FILE_SIZE_BYTES + 1
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await service.save_uploaded_file(FakeUpload())
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_stream(tmp_path, monkeypatch):
+    service = _service()
+    service.attachments_dir = str(tmp_path)
+    monkeypatch.setattr(chat_service_module, "MAX_UPLOAD_FILE_SIZE_BYTES", 8)
+    monkeypatch.setattr(chat_service_module, "MAX_UPLOAD_FILE_SIZE_MB", 0)
+    upload = UploadFile(
+        filename="big.bin",
+        file=BytesIO(b"0123456789"),
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await service.save_uploaded_file(upload)
+
+    assert not list(tmp_path.iterdir())
 
 
 @pytest.mark.asyncio

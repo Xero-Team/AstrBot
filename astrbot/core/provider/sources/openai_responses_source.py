@@ -179,6 +179,7 @@ class ProviderOpenAIResponses(Provider):
             "api_key": self.chosen_api_key,
             "default_headers": self.custom_headers,
             "timeout": self.timeout,
+            "max_retries": 0,
             "http_client": create_proxy_client(
                 "OpenAI Responses",
                 provider_config,

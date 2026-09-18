@@ -36,6 +36,7 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1024
 IMAGE_COMPRESS_DEFAULT_QUALITY = 85
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+MODEL_IMAGE_MAX_INPUT_BYTES = 32 * 1024 * 1024
 PROVIDER_JPEG_MAX_ANIMATED_FRAMES = 8
 PROVIDER_JPEG_MAX_COMPOSE_FRAMES = 64
 PROVIDER_JPEG_STATIC_HAMMING = 12
@@ -71,15 +72,15 @@ MEDIA_MIME_EXTENSIONS = {
     "video/quicktime": ".mov",
 }
 
-IMAGE_FORMAT_MIME_TYPES = {
-    "JPEG": "image/jpeg",
-    "PNG": "image/png",
-    "GIF": "image/gif",
-    "WEBP": "image/webp",
-    "BMP": "image/bmp",
-    "TIFF": "image/tiff",
-    "AVIF": "image/avif",
-}
+_IMAGE_MAGIC_MIME_TYPES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"BM", "image/bmp"),
+    (b"II*\x00", "image/tiff"),
+    (b"MM\x00*", "image/tiff"),
+)
 
 AUDIO_FORMAT_MIME_TYPES = {
     "aac": "audio/aac",
@@ -439,29 +440,38 @@ def detect_image_mime_type(
     *,
     default_mime_type: str | None = "image/jpeg",
 ) -> str | None:
-    """Detect an image MIME type from bytes.
+    """Detect an image MIME type by sniffing the file header.
+
+    Only the first bytes of the input are read, so detection cost and memory
+    stay constant regardless of file size.
 
     Args:
         image_source: Encoded image bytes or a local image path to inspect.
         default_mime_type: MIME type to return when detection fails.
 
     Returns:
-        The detected MIME type, or ``default_mime_type`` when detection fails or
-        the format is unknown.
+        The detected MIME type, or ``default_mime_type`` when the header does
+        not match a known image format.
     """
 
     try:
         if isinstance(image_source, bytes):
-            image_resource = io.BytesIO(image_source)
+            header = image_source[:32]
         else:
-            image_resource = Path(image_source)
-        with PILImage.open(image_resource) as image:
-            image.verify()
-            image_format = str(image.format or "").upper()
-    except Exception:
+            with Path(image_source).open("rb") as image_file:
+                header = image_file.read(32)
+    except OSError:
         return default_mime_type
 
-    return IMAGE_FORMAT_MIME_TYPES.get(image_format, default_mime_type)
+    if len(header) >= 12:
+        if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+            return "image/webp"
+        if header[4:8] == b"ftyp" and (b"avif" in header[8:] or b"avis" in header[8:]):
+            return "image/avif"
+    for magic, mime_type in _IMAGE_MAGIC_MIME_TYPES:
+        if header.startswith(magic):
+            return mime_type
+    return default_mime_type
 
 
 async def detect_image_mime_type_async(
@@ -1841,6 +1851,17 @@ def _prepare_images_for_provider_sync(
 ) -> list[str]:
     source = Path(url_or_path)
     if not source.is_file():
+        return []
+    try:
+        input_size = source.stat().st_size
+    except OSError:
+        return []
+    if input_size > MODEL_IMAGE_MAX_INPUT_BYTES:
+        logger.warning(
+            "Skipping oversized image input (%d bytes): %s",
+            input_size,
+            source,
+        )
         return []
     try:
         frames = _compose_image_frames(str(source))

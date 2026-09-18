@@ -117,6 +117,7 @@ def test_null_api_version_uses_regular_openai_client(monkeypatch):
     )
 
     assert created[0]["base_url"] is None
+    assert created[0]["max_retries"] == 0
 
 
 def test_responses_tools_preserve_plugin_schema():

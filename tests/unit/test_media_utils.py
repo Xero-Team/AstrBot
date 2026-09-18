@@ -254,6 +254,39 @@ def test_detect_image_mime_type_accepts_path(tmp_path):
     )
 
 
+def test_detect_image_mime_type_sniffs_common_headers():
+    assert (
+        media_utils.detect_image_mime_type(b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
+        == "image/png"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\xff\xd8\xff\xe0" + b"\x00" * 28)
+        == "image/jpeg"
+    )
+    assert media_utils.detect_image_mime_type(b"GIF89a" + b"\x00" * 26) == "image/gif"
+    assert (
+        media_utils.detect_image_mime_type(b"RIFF\x00\x00\x00\x00WEBPVP8 ")
+        == "image/webp"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\x00\x00\x00\x20ftypavif" + b"\x00" * 20)
+        == "image/avif"
+    )
+
+
+def test_detect_image_mime_type_returns_default_for_unknown_input():
+    assert (
+        media_utils.detect_image_mime_type(
+            b"definitely not an image", default_mime_type=None
+        )
+        is None
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"", default_mime_type="image/jpeg")
+        == "image/jpeg"
+    )
+
+
 @pytest.mark.asyncio
 async def test_resolve_image_ref_to_base64_data_decodes_data_uri(tmp_path, monkeypatch):
     from PIL import Image as PILImage
@@ -1226,3 +1259,18 @@ def test_compose_image_frames_caps_long_gif(tmp_path):
     finally:
         for frame in composed:
             frame.image.close()
+
+
+@pytest.mark.asyncio
+async def test_prepare_images_for_provider_skips_oversized_input(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_path = tmp_path / "oversized.png"
+    PILImage.new("RGB", (4, 4)).save(image_path, format="PNG")
+    with image_path.open("ab") as f:
+        f.truncate(media_utils.MODEL_IMAGE_MAX_INPUT_BYTES + 1)
+
+    paths = await media_utils.prepare_images_for_provider(str(image_path))
+
+    assert paths == []

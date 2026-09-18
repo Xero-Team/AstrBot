@@ -475,6 +475,7 @@ class ProviderOpenAIChatCompletions(Provider):
                 "api_version": provider_config.get("api_version", None),
                 "default_headers": self.custom_headers,
                 "timeout": self.timeout,
+                "max_retries": 0,
                 "http_client": self._create_http_client(provider_config),
             }
             if isinstance(api_base, str):
@@ -488,6 +489,7 @@ class ProviderOpenAIChatCompletions(Provider):
                 base_url=api_base if isinstance(api_base, str) else None,
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
 

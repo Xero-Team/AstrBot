@@ -118,9 +118,9 @@ const sidebarItem: menu[] = [
         to: '/btw',
       },
       {
-        title: 'core.navigation.cliConfig',
-        icon: 'mdi-pencil-ruler',
-        to: '/cli-config',
+        title: 'core.navigation.thirdPartyAgents',
+        icon: 'mdi-console-line',
+        to: '/third-party-agents',
       },
       {
         title: 'core.navigation.data',

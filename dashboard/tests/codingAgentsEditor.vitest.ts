@@ -17,17 +17,6 @@ const claudeAgent = {
   env: {},
   timeout_seconds: 1800,
   max_output_chars: 20000,
-  active_provider: 'official',
-  providers: [
-    {
-      id: 'official',
-      name: 'official',
-      base_url: '',
-      api_key: '',
-      model: '',
-      wire_api: 'responses',
-    },
-  ],
 };
 
 function mountEditor(modelValue: unknown) {
@@ -121,26 +110,12 @@ describe('CodingAgentsEditor', () => {
       false,
     );
 
-    // The wire API is a Codex field: only `_codex_profile` writes it.
-    expect(
-      agents[0].find('.coding-agents-editor__provider-wire-api').exists(),
-    ).toBe(false);
-    expect(
-      agents[1].find('.coding-agents-editor__provider-wire-api').exists(),
-    ).toBe(true);
-    expect(
-      agents[2].find('.coding-agents-editor__provider-wire-api').exists(),
-    ).toBe(false);
-
     for (const agent of agents) {
       expect(agent.find('.coding-agents-editor__command').exists()).toBe(true);
       expect(agent.find('.coding-agents-editor__extra-args').exists()).toBe(
         true,
       );
       expect(agent.find('.coding-agents-editor__env').exists()).toBe(true);
-      expect(agent.find('.coding-agents-editor__providers').exists()).toBe(
-        true,
-      );
     }
     wrapper.unmount();
   });
@@ -183,8 +158,6 @@ describe('CodingAgentsEditor', () => {
       env: {},
       timeout_seconds: 1800,
       max_output_chars: 20000,
-      active_provider: '',
-      providers: [],
     });
     wrapper.unmount();
   });
@@ -231,93 +204,6 @@ describe('CodingAgentsEditor', () => {
     expect(lastEmitted(wrapper).map((entry) => entry.id)).toEqual([
       'claude_code',
     ]);
-    wrapper.unmount();
-  });
-
-  it('activates a new preset only when none was active', async () => {
-    const unset = { ...claudeAgent, active_provider: '', providers: [] };
-    const wrapper = mountEditor([unset]);
-
-    await wrapper.find('.coding-agents-editor__add-provider').trigger('click');
-
-    const added = lastEmitted(wrapper)[0];
-    expect(added.providers).toEqual([
-      {
-        id: 'provider',
-        name: 'provider',
-        base_url: '',
-        api_key: '',
-        model: '',
-        wire_api: 'responses',
-      },
-    ]);
-    expect(added.active_provider).toBe('provider');
-    wrapper.unmount();
-
-    const configured = mountEditor([{ ...claudeAgent }]);
-    await configured
-      .find('.coding-agents-editor__add-provider')
-      .trigger('click');
-    expect(lastEmitted(configured)[0].active_provider).toBe('official');
-    configured.unmount();
-  });
-
-  it('repoints the active preset when the active one is removed', async () => {
-    const wrapper = mountEditor([
-      {
-        ...claudeAgent,
-        active_provider: 'official',
-        providers: [...claudeAgent.providers, { id: 'gw', name: 'gw' }],
-      },
-    ]);
-
-    await wrapper
-      .find('.coding-agents-editor__remove-provider')
-      .trigger('click');
-
-    const entry = lastEmitted(wrapper)[0];
-    expect((entry.providers as { id: string }[]).map((p) => p.id)).toEqual([
-      'gw',
-    ]);
-    expect(entry.active_provider).toBe('gw');
-    wrapper.unmount();
-  });
-
-  it('keeps a renamed preset active instead of falling back to the first', async () => {
-    const wrapper = mountEditor([
-      {
-        ...claudeAgent,
-        // Active, and not first: renaming it must not repoint to `official`.
-        active_provider: 'gw',
-        providers: [
-          {
-            id: 'gw',
-            name: 'gw',
-            base_url: '',
-            api_key: '',
-            model: '',
-            wire_api: 'responses',
-          },
-          {
-            id: 'official',
-            name: 'official',
-            base_url: '',
-            api_key: '',
-            model: '',
-            wire_api: 'responses',
-          },
-        ],
-      },
-    ]);
-
-    control(wrapper, '.coding-agents-editor__provider-id').vm.$emit(
-      'update:modelValue',
-      'gateway',
-    );
-    await wrapper.vm.$nextTick();
-
-    const entry = lastEmitted(wrapper)[0];
-    expect(entry.active_provider).toBe('gateway');
     wrapper.unmount();
   });
 
@@ -380,7 +266,10 @@ describe('CodingAgentsEditor', () => {
         env: ['oops'],
         timeout_seconds: 'x',
         max_output_chars: 5,
-        providers: [null, { id: '' }, { id: 'p' }],
+        // Fields this editor stopped owning: a save has to drop them, or a
+        // profile would keep an invisible preset alive.
+        active_provider: 'p',
+        providers: [{ id: 'p', base_url: 'https://gw.example' }],
       },
     ]);
 
@@ -405,17 +294,6 @@ describe('CodingAgentsEditor', () => {
         env: {},
         timeout_seconds: 1800,
         max_output_chars: 20000,
-        active_provider: 'p',
-        providers: [
-          {
-            id: 'p',
-            name: 'p',
-            base_url: '',
-            api_key: '',
-            model: '',
-            wire_api: 'responses',
-          },
-        ],
       },
     ]);
     wrapper.unmount();

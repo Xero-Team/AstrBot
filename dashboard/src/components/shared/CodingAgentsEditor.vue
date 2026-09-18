@@ -6,6 +6,12 @@
   enforces in `astrbot/core/agent/btw/coding_agents.py`; that module stays the
   source of truth, and a change there has to be mirrored here.
 
+  A preset list used to live inside each entry, naming the endpoint the run was
+  layered with.  The Dashboard stopped offering it: a CLI's provider is switched
+  on the third-party agent page, which rewrites that CLI's own configuration,
+  and a delegated run reads the same file.  Saving here drops the stored preset
+  fields, so a profile cannot keep an invisible setting alive.
+
   Nothing is emitted until the operator edits something.  The configuration page
   treats a change to the profile as unsaved work, so normalizing on load would
   raise that banner before anyone typed.
@@ -41,7 +47,7 @@
 
     <v-card
       v-for="(entry, index) in entries"
-      :key="agentKeys[index]"
+      :key="index"
       class="coding-agents-editor__agent mb-4"
       variant="outlined"
     >
@@ -301,209 +307,17 @@
             "
           />
         </div>
-
-        <div class="coding-agents-editor__providers mt-4">
-          <div class="text-subtitle-1">
-            {{ tm('codingAgentsEditor.providers') }}
-          </div>
-          <div class="text-body-2 text-medium-emphasis mb-2">
-            {{
-              entry.type === 'custom'
-                ? tm('codingAgentsEditor.providersCustomHint')
-                : tm('codingAgentsEditor.providersHint')
-            }}
-          </div>
-
-          <div
-            v-if="entry.providers.length"
-            class="coding-agents-editor__active-provider mb-2"
-          >
-            <v-select
-              :model-value="entry.active_provider"
-              :items="entry.providers.map((provider) => provider.id)"
-              :label="tm('codingAgentsEditor.activeProvider')"
-              :hint="tm('codingAgentsEditor.activeProviderHint')"
-              persistent-hint
-              density="compact"
-              variant="outlined"
-              @update:model-value="
-                patchAgent(index, { active_provider: text($event) })
-              "
-            />
-          </div>
-
-          <v-alert
-            v-else
-            class="coding-agents-editor__no-providers"
-            density="compact"
-            variant="tonal"
-            type="info"
-          >
-            {{ tm('codingAgentsEditor.noProviders') }}
-          </v-alert>
-
-          <v-card
-            v-for="(provider, providerIndex) in entry.providers"
-            :key="providerKey(agentKeys[index], provider.id)"
-            class="coding-agents-editor__provider mb-2"
-            variant="tonal"
-          >
-            <v-card-text>
-              <v-row density="compact">
-                <v-col cols="12" sm="6">
-                  <v-text-field
-                    class="coding-agents-editor__provider-id"
-                    :model-value="provider.id"
-                    :label="tm('codingAgentsEditor.providerId')"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    @update:model-value="
-                      patchProvider(index, providerIndex, { id: text($event) })
-                    "
-                  />
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field
-                    class="coding-agents-editor__provider-name"
-                    :model-value="provider.name"
-                    :label="tm('codingAgentsEditor.providerName')"
-                    :placeholder="provider.id"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    @update:model-value="
-                      patchProvider(index, providerIndex, {
-                        name: text($event),
-                      })
-                    "
-                  />
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field
-                    class="coding-agents-editor__provider-base-url"
-                    :model-value="provider.base_url"
-                    :label="tm('codingAgentsEditor.providerBaseUrl')"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    @update:model-value="
-                      patchProvider(index, providerIndex, {
-                        base_url: text($event),
-                      })
-                    "
-                  />
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field
-                    class="coding-agents-editor__provider-api-key"
-                    :model-value="provider.api_key"
-                    :type="
-                      revealed.has(providerKey(agentKeys[index], provider.id))
-                        ? 'text'
-                        : 'password'
-                    "
-                    :label="tm('codingAgentsEditor.providerApiKey')"
-                    :hint="tm('codingAgentsEditor.providerApiKeyHint')"
-                    persistent-hint
-                    density="compact"
-                    variant="outlined"
-                    :append-inner-icon="
-                      revealed.has(providerKey(agentKeys[index], provider.id))
-                        ? 'mdi-eye-off-outline'
-                        : 'mdi-eye-outline'
-                    "
-                    @click:append-inner="
-                      toggleRevealed(providerKey(agentKeys[index], provider.id))
-                    "
-                    @update:model-value="
-                      patchProvider(index, providerIndex, {
-                        api_key: text($event),
-                      })
-                    "
-                  />
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field
-                    class="coding-agents-editor__provider-model"
-                    :model-value="provider.model"
-                    :label="tm('codingAgentsEditor.providerModel')"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    @update:model-value="
-                      patchProvider(index, providerIndex, {
-                        model: text($event),
-                      })
-                    "
-                  />
-                </v-col>
-                <v-col v-if="entry.type === 'codex'" cols="12" sm="6">
-                  <v-select
-                    class="coding-agents-editor__provider-wire-api"
-                    :model-value="provider.wire_api"
-                    :items="wireApiOptions(provider.wire_api)"
-                    :label="tm('codingAgentsEditor.providerWireApi')"
-                    :hint="tm('codingAgentsEditor.providerWireApiHint')"
-                    persistent-hint
-                    density="compact"
-                    variant="outlined"
-                    @update:model-value="
-                      patchProvider(index, providerIndex, {
-                        wire_api: text($event),
-                      })
-                    "
-                  />
-                </v-col>
-              </v-row>
-              <div class="d-flex justify-end">
-                <v-btn
-                  class="coding-agents-editor__remove-provider"
-                  color="error"
-                  variant="text"
-                  size="small"
-                  prepend-icon="mdi-delete"
-                  @click="removeProvider(index, providerIndex)"
-                >
-                  {{ tm('codingAgentsEditor.removeProvider') }}
-                </v-btn>
-              </div>
-            </v-card-text>
-          </v-card>
-
-          <div class="d-flex justify-end">
-            <v-btn
-              class="coding-agents-editor__add-provider"
-              color="primary"
-              variant="tonal"
-              size="small"
-              prepend-icon="mdi-plus"
-              @click="addProvider(index)"
-            >
-              {{ tm('codingAgentsEditor.addProvider') }}
-            </v-btn>
-          </div>
-        </div>
       </v-card-text>
     </v-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import ListConfigItem from './ListConfigItem.vue';
 
 type AgentType = 'claude_code' | 'codex' | 'custom';
-
-interface ProviderPreset {
-  id: string;
-  name: string;
-  base_url: string;
-  api_key: string;
-  model: string;
-  wire_api: string;
-}
 
 interface CodingAgent {
   [key: string]: unknown;
@@ -520,8 +334,6 @@ interface CodingAgent {
   env: Record<string, string>;
   timeout_seconds: number;
   max_output_chars: number;
-  active_provider: string;
-  providers: ProviderPreset[];
 }
 
 // Mirrors `astrbot/core/agent/btw/coding_agents.py`.
@@ -541,7 +353,6 @@ const CLAUDE_PERMISSION_MODES = [
   'plan',
 ];
 const CODEX_SANDBOXES = ['read-only', 'workspace-write', 'danger-full-access'];
-const WIRE_APIS = ['responses', 'chat'];
 const DEFAULT_PERMISSION_MODE = 'acceptEdits';
 const DEFAULT_SANDBOX = 'workspace-write';
 const DEFAULT_TIMEOUT_SECONDS = 1800;
@@ -558,7 +369,6 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/config');
-const revealed = ref(new Set<string>());
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -595,35 +405,6 @@ function countOr(value: unknown, fallback: number, minimum: number): number {
   return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
 }
 
-function projectProvider(raw: unknown): ProviderPreset | null {
-  if (!isRecord(raw)) return null;
-  const id = text(raw.id).trim();
-  if (!id) return null;
-  const name = text(raw.name);
-  return {
-    ...raw,
-    id,
-    name: name || id,
-    base_url: text(raw.base_url),
-    api_key: text(raw.api_key),
-    model: text(raw.model),
-    wire_api: text(raw.wire_api).trim() || 'responses',
-  };
-}
-
-function projectProviders(raw: unknown): ProviderPreset[] {
-  const providers: ProviderPreset[] = [];
-  const seen = new Set<string>();
-  for (const item of Array.isArray(raw) ? raw : []) {
-    const provider = projectProvider(item);
-    if (provider && !seen.has(provider.id)) {
-      seen.add(provider.id);
-      providers.push(provider);
-    }
-  }
-  return providers;
-}
-
 /**
  * Project one stored entry onto the shape the backend would actually use.
  *
@@ -636,11 +417,8 @@ function projectAgent(raw: unknown): CodingAgent | null {
   const type = CODING_AGENT_TYPES.includes(raw.type as AgentType)
     ? (raw.type as AgentType)
     : 'claude_code';
-  const providers = projectProviders(raw.providers);
-  const providerIds = providers.map((provider) => provider.id);
-  const active = text(raw.active_provider).trim();
   return {
-    ...raw,
+    ...withoutPresets(raw),
     id: text(raw.id).trim(),
     name: text(raw.name),
     type,
@@ -666,11 +444,22 @@ function projectAgent(raw: unknown): CodingAgent | null {
       DEFAULT_MAX_OUTPUT_CHARS,
       MIN_MAX_OUTPUT_CHARS,
     ),
-    active_provider: providerIds.includes(active)
-      ? active
-      : (providerIds[0] ?? ''),
-    providers,
   };
+}
+
+/**
+ * Drop the preset fields this editor no longer owns.
+ *
+ * They are still honored by the backend, but the Dashboard stopped offering
+ * them -- the CLI's provider is switched on the third-party agent page -- so a
+ * profile that still carries them would otherwise keep an invisible setting
+ * alive, and a save here has to be able to remove it.
+ */
+function withoutPresets(raw: Record<string, unknown>): Record<string, unknown> {
+  const rest = { ...raw };
+  delete rest.providers;
+  delete rest.active_provider;
+  return rest;
 }
 
 const entries = computed<CodingAgent[]>(() =>
@@ -685,60 +474,12 @@ function commit(next: CodingAgent[]) {
   emit('update:modelValue', next);
 }
 
-/**
- * A stable key per entry, so a card follows its agent rather than its slot.
- *
- * The id names the entry, so it is what a card is keyed on; an entry without
- * one -- or sharing one with a neighbour, which the warnings above tell the
- * operator about -- falls back to its position, which is then all it has.  The
- * reveal state of a preset is keyed off this too, so moving an agent must not
- * carry an open key along with the slot it used to sit in.
- */
-function entryKeys(items: { id: string }[]): string[] {
-  const seen = new Map<string, number>();
-  for (const item of items) {
-    seen.set(item.id, (seen.get(item.id) ?? 0) + 1);
-  }
-  return items.map((item, index) =>
-    item.id && seen.get(item.id) === 1 ? item.id : `#${index}`,
-  );
-}
-
-const agentKeys = computed(() => entryKeys(entries.value));
-
 function patchAgent(index: number, patch: Partial<CodingAgent>) {
   commit(
     entries.value.map((entry, i) =>
       i === index ? { ...entry, ...patch } : entry,
     ),
   );
-}
-
-function patchProvider(
-  agentIndex: number,
-  providerIndex: number,
-  patch: Partial<ProviderPreset>,
-) {
-  const agent = entries.value[agentIndex];
-  const previousId = agent.providers[providerIndex]?.id ?? '';
-  const providers = agent.providers.map((provider, i) =>
-    i === providerIndex ? { ...provider, ...patch } : provider,
-  );
-  // Renaming the preset that was active keeps it active: it is the same
-  // preset under another name, and falling back to the first one instead would
-  // silently move the run to a provider the operator did not choose.
-  const renamed = patch.id === undefined ? '' : text(patch.id).trim();
-  const active =
-    renamed && agent.active_provider === previousId
-      ? renamed
-      : repointActive(providers, agent.active_provider);
-  patchAgent(agentIndex, { providers, active_provider: active });
-}
-
-/** Keep `active_provider` naming a preset that still exists, as the backend does. */
-function repointActive(providers: ProviderPreset[], current: string): string {
-  const ids = providers.map((provider) => provider.id);
-  return ids.includes(current) ? current : (ids[0] ?? '');
 }
 
 function uniqueId(existing: string[], base: string): string {
@@ -764,8 +505,6 @@ function newAgent(id: string): CodingAgent {
     env: {},
     timeout_seconds: DEFAULT_TIMEOUT_SECONDS,
     max_output_chars: DEFAULT_MAX_OUTPUT_CHARS,
-    active_provider: '',
-    providers: [],
   };
 }
 
@@ -803,43 +542,6 @@ function setType(index: number, value: unknown) {
   patchAgent(index, { type, command });
 }
 
-function addProvider(agentIndex: number) {
-  const agent = entries.value[agentIndex];
-  const id = uniqueId(
-    agent.providers.map((provider) => provider.id),
-    'provider',
-  );
-  patchAgent(agentIndex, {
-    providers: [
-      ...agent.providers,
-      {
-        id,
-        name: id,
-        base_url: '',
-        api_key: '',
-        model: '',
-        wire_api: 'responses',
-      },
-    ],
-    // A new preset becomes active only when nothing else is.
-    active_provider: agent.active_provider || id,
-  });
-}
-
-function removeProvider(agentIndex: number, providerIndex: number) {
-  const agent = entries.value[agentIndex];
-  const providers = agent.providers.filter((_, i) => i !== providerIndex);
-  patchAgent(agentIndex, {
-    providers,
-    active_provider: repointActive(providers, agent.active_provider),
-  });
-}
-
-/** Let a hand-written wire API stay selectable instead of blanking the field. */
-function wireApiOptions(current: string): string[] {
-  return WIRE_APIS.includes(current) ? [...WIRE_APIS] : [...WIRE_APIS, current];
-}
-
 function commitNumber(
   index: number,
   field: 'timeout_seconds' | 'max_output_chars',
@@ -849,17 +551,6 @@ function commitNumber(
 ) {
   const raw = (event.target as HTMLInputElement | null)?.value ?? '';
   patchAgent(index, { [field]: countOr(raw, fallback, minimum) });
-}
-
-function providerKey(agentKey: string, providerId: string): string {
-  return `${agentKey}:${providerId}`;
-}
-
-function toggleRevealed(key: string) {
-  const next = new Set(revealed.value);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
-  revealed.value = next;
 }
 
 /** `env` is a map on disk; the list editor holds strings, so it spells them out. */

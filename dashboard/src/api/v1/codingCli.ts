@@ -30,6 +30,21 @@ export interface CodingCliState {
   providers: CodingCliProvider[];
 }
 
+/**
+ * One provider as `btw.cli_providers` stores it.
+ *
+ * `api_key` is what this editor holds for the entry: the whole credential, once
+ * the profile has been read, and an empty string when the operator has not
+ * typed one.  Only a switch writes it anywhere, and only into the CLI's own
+ * file -- the profile keeps the list itself, which is why the page can read a
+ * key back and the API cannot.
+ */
+export interface StoredCliProvider extends CodingCliProvider {
+  /** The CLI this provider is scoped to; empty means either CLI may use it. */
+  cli: string;
+  api_key: string;
+}
+
 export interface CodingCliStatePayload {
   clis: CodingCliState[];
 }

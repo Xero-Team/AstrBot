@@ -496,7 +496,7 @@
           },
           "coding_agents": {
             "description": "Third-party coding agents",
-            "hint": "Local CLI agents that can be handed write tasks (for example Claude Code or Codex). Each entry carries an id, type, command, permission mode, and provider presets. A provider's endpoint and model take effect as that CLI's own config layer, and its key is passed to the child process for the length of the run rather than written into that layer. The key itself is stored in this AstrBot profile, like any other provider credential. A delegation starts a local process and writes files, so the work loop's Computer Use runtime must be `local`: `sandbox` is not enough, because the process is started on the host rather than inside the sandbox. `tool.local_exec` and `tool.file_write` must both be authorized."
+            "hint": "Local CLI agents that can be handed write tasks (for example Claude Code or Codex). Each entry carries an id, type, command, model, output cap, permission mode, and the extra directory it may write to. A delegation starts a local process and writes files, so the work loop's Computer Use runtime must also be local (delegating under sandbox would be the way out of it), and `tool.local_exec` and `tool.file_write` must both be authorized. Claude Code runs non-interactively under `-p`, so there is no terminal to answer a permission prompt: `acceptEdits` approves edits alone, and a task that runs shell commands waits until it times out unless `bypassPermissions` is chosen deliberately. The provider an agent runs against is managed on the Third-party Agent Config page, which switches that CLI's own global configuration."
           }
         },
         "work_session": {

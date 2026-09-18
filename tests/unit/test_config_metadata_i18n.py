@@ -135,8 +135,8 @@ def test_config_metadata_locale_trees_match() -> None:
 
 # Fields the generic config renderer must not offer a control for, because the
 # generic control would corrupt them.  ``cli_providers`` is a list of objects
-# edited by the CLI config page and written through the same profile, so a
-# string-list Control here would flatten every entry to "[object Object]".
+# edited by the third-party agent page and written through the same profile, so
+# a string-list control would flatten every entry to "[object Object]".
 BTW_FIELDS_WITHOUT_CONTROLS = frozenset({"btw.cli_providers"})
 
 

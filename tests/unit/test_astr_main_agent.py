@@ -459,83 +459,114 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     return conversation
 
 
+_FIXED_NOW = datetime.datetime(2026, 6, 8, 12, 34, tzinfo=datetime.UTC)
+_DATETIME_REMINDER = (
+    "<system_reminder>Current datetime: "
+    "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>"
+)
+
+
+class _FixedDateTime(datetime.datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz:
+            return _FIXED_NOW.astimezone(tz)
+        return _FIXED_NOW
+
+
+def _append_reminders_at_fixed_now(mock_event, req, cfg, timezone="UTC"):
+    with patch("astrbot.core.astr_main_agent.datetime.datetime", _FixedDateTime):
+        ama._append_system_reminders(mock_event, req, cfg, timezone)
+
+
 def test_append_system_reminders_includes_weekday(mock_event):
     """Test datetime reminder includes weekday information."""
     req = ProviderRequest(prompt="Hello")
-    fixed_now = datetime.datetime(
-        2026,
-        6,
-        8,
-        12,
-        34,
-        tzinfo=datetime.UTC,
+    _append_reminders_at_fixed_now(
+        mock_event,
+        req,
+        {"datetime_system_prompt": True},
     )
 
-    class FixedDateTime(datetime.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            if tz:
-                return fixed_now.astimezone(tz)
-            return fixed_now
-
-    with patch("astrbot.core.astr_main_agent.datetime.datetime", FixedDateTime):
-        ama._append_system_reminders(
-            mock_event,
-            req,
-            {"datetime_system_prompt": True},
-            "UTC",
-        )
-
-    assert [part.text for part in req.extra_user_content_parts] == [
-        "<system_reminder>Current datetime: "
-        "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>"
-    ]
-    assert req.extra_user_content_parts[0].is_temp is False
+    assert [part.text for part in req.extra_user_content_parts] == [_DATETIME_REMINDER]
+    assert req.extra_user_content_parts[0].is_temp is True
+    assert "Current datetime" not in (req.system_prompt or "")
 
 
-def test_current_datetime_scope_only_marks_datetime_temp(mock_event):
-    """Test current-scope datetime reminder is transient without affecting identity info."""
+def test_datetime_reminder_is_temp_without_affecting_identity(mock_event):
+    """Test datetime reminder is transient without affecting identity info."""
     req = ProviderRequest(prompt="Hello")
     mock_event.message_obj.group_id = "group123"
     mock_event.message_obj.group = MagicMock(group_name="TestGroup")
-    fixed_now = datetime.datetime(
-        2026,
-        6,
-        8,
-        12,
-        34,
-        tzinfo=datetime.UTC,
+    _append_reminders_at_fixed_now(
+        mock_event,
+        req,
+        {
+            "datetime_system_prompt": True,
+            "datetime_system_prompt_scope": "persistent",
+            "identifier": True,
+            "group_name_display": True,
+        },
     )
-
-    class FixedDateTime(datetime.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            if tz:
-                return fixed_now.astimezone(tz)
-            return fixed_now
-
-    with patch("astrbot.core.astr_main_agent.datetime.datetime", FixedDateTime):
-        ama._append_system_reminders(
-            mock_event,
-            req,
-            {
-                "datetime_system_prompt": True,
-                "datetime_system_prompt_scope": "current",
-                "identifier": True,
-                "group_name_display": True,
-            },
-            "UTC",
-        )
 
     parts = req.extra_user_content_parts
     assert [part.text for part in parts] == [
         "<system_reminder>User ID: user123, Nickname: TestUser\n"
         "Group name: TestGroup</system_reminder>",
-        "<system_reminder>Current datetime: "
-        "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>",
+        _DATETIME_REMINDER,
     ]
     assert parts[0].is_temp is False
     assert parts[1].is_temp is True
+
+
+def test_datetime_reminder_omitted_when_disabled(mock_event):
+    req = ProviderRequest(prompt="Hello")
+    _append_reminders_at_fixed_now(
+        mock_event,
+        req,
+        {"datetime_system_prompt": False, "identifier": True},
+    )
+
+    assert [part.text for part in req.extra_user_content_parts] == [
+        "<system_reminder>User ID: user123, Nickname: TestUser</system_reminder>"
+    ]
+    assert req.extra_user_content_parts[0].is_temp is False
+
+
+@pytest.mark.asyncio
+async def test_datetime_reminder_not_persisted_in_history(mock_event):
+    req = ProviderRequest(prompt="Hello")
+    mock_event.message_obj.group_id = "group123"
+    mock_event.message_obj.group = MagicMock(group_name="TestGroup")
+    _append_reminders_at_fixed_now(
+        mock_event,
+        req,
+        {
+            "datetime_system_prompt": True,
+            "identifier": True,
+            "group_name_display": True,
+        },
+    )
+
+    message = Message.model_validate(await req.assemble_context())
+    dumped = dump_messages_with_checkpoints([message])
+
+    assert dumped == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Hello"},
+                {
+                    "type": "text",
+                    "text": (
+                        "<system_reminder>User ID: user123, Nickname: TestUser\n"
+                        "Group name: TestGroup</system_reminder>"
+                    ),
+                },
+            ],
+        }
+    ]
+    assert "Current datetime" not in str(dumped)
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():

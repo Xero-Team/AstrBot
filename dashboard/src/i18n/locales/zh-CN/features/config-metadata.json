@@ -573,7 +573,7 @@
         },
         "datetime_system_prompt": {
           "description": "现实世界时间感知",
-          "hint": "启用后,会在系统提示词中附带当前时间信息。"
+          "hint": "启用后，会在本轮最后一条用户消息后附加一条临时当前时间 reminder，不写入会话历史。"
         },
         "show_tool_use_status": {
           "description": "输出工具调用信息"

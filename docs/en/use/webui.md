@@ -19,8 +19,11 @@ These entries match the default WebUI sidebar. If you customized the sidebar, ch
 | Config → System Config                  | Settings → General, Appearance, Network, or Security                                |
 | Command Management                      | Plugins → Manage behavior → Commands                                                |
 | Standalone MCP / Skills entries         | Plugins → MCP / Skills                                                              |
+| Config → AI → Capabilities → BTW dual loops | More Features → BTW Dual Loop (`/btw`)                                          |
 
 Legacy log, trace, conversation, and statistics URLs still redirect to the matching tabs. Agent runners are now saved with each profile instead of being created as a provider; see [Agent Runner](./agent-runner.md).
+
+The BTW dual-loop settings moved out of the AI panel on the configuration page to **More Features → BTW Dual Loop** (`/btw`). The page loads and saves whichever profile it is pointed at, and holds what it held before: both loops and their models, the work loop's read-only boundary, the Computer Use runtime, the task folder root and result reporting, and the coding-agent list.
 
 ## Accessing the Admin Panel
 

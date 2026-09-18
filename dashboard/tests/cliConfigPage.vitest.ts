@@ -54,7 +54,15 @@ const STATE = {
   ],
 };
 
-/** The operator's own list, which is what the cards render from. */
+/**
+ * The operator's own list, which is what the cards render from.
+ *
+ * The key is the marker the profile reports, not the key: a config response
+ * never carries a stored secret, and a fixture that carries one tests a path
+ * that does not exist.
+ */
+const REDACTED = '__ASTRBOT_REDACTED__';
+
 const CONFIG = {
   btw: {
     cli_providers: [
@@ -62,7 +70,7 @@ const CONFIG = {
         id: 'gw',
         name: 'Gateway',
         base_url: 'https://gw.example',
-        api_key: 'sk-secret',
+        api_key: REDACTED,
         model: 'opus',
         note: 'primary',
       },
@@ -252,8 +260,8 @@ describe('CliConfigPage', () => {
     await wrapper.vm.$nextTick();
     const keyInput = wrapper.find('.cli-config-page__form-api-key input')
       .element as HTMLInputElement;
-    // The API never sends a key back, so the field starts empty, and empty has
-    // to mean "unchanged" rather than "erase it".
+    // The profile reports a stored key as a marker, so the field starts empty
+    // and empty has to mean "unchanged" rather than "erase it".
     expect(keyInput.value).toBe('');
 
     // Something has to change for there to be anything to save.
@@ -266,8 +274,70 @@ describe('CliConfigPage', () => {
     await flushPromises();
 
     const entry = savedProviders().find((item) => item.id === 'gw');
-    expect(entry?.api_key).toBe('sk-secret');
+    // The marker goes back exactly where it came from, which is what the
+    // profile resolves to the stored key.  It is never copied to another entry:
+    // an id the profile has never seen has no key for the marker to name.
+    expect(entry?.api_key).toBe(REDACTED);
     expect(entry?.note).toBe('updated note');
+    wrapper.unmount();
+  });
+
+  it('adds a provider scoped to the CLI whose section it was added from', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    // `openFormAndFill` adds from the Claude Code section, the first one.
+    await openFormAndFill(wrapper, {
+      id: 'mine',
+      base_url: 'https://mine.example',
+      api_key: 'sk-2',
+    });
+
+    // Scoped, not left open: an entry with no `cli` is shown under every CLI,
+    // so leaving it unset would put a Claude provider in the Codex section too.
+    expect(() => cardFor(wrapper, 'claude_code', 'mine')).not.toThrow();
+    expect(() => cardFor(wrapper, 'codex', 'mine')).toThrow();
+
+    await wrapper.find('.cli-config-page__save').trigger('click');
+    await flushPromises();
+
+    const added = savedProviders().find((entry) => entry.id === 'mine');
+    expect(added?.cli).toBe('claude_code');
+    wrapper.unmount();
+  });
+
+  it('does not carry a stored key onto a duplicate', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await cardFor(wrapper, 'claude_code', 'gw')
+      .find('.cli-config-page__duplicate')
+      .trigger('click');
+    await wrapper.vm.$nextTick();
+    await wrapper.find('.cli-config-page__save').trigger('click');
+    await flushPromises();
+
+    const copy = savedProviders().find((entry) => entry.id === 'gw-copy');
+    // The copy is metadata only.  Posting the source's marker under a new id
+    // would store the marker itself, and the switch would write that string
+    // into the CLI's own file as if it were a key.
+    expect(copy?.api_key).toBeUndefined();
+    expect(copy?.base_url).toBe('https://gw.example');
+    wrapper.unmount();
+  });
+
+  it('refuses an id another provider already uses, whichever CLI it is under', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    // `gw` is unscoped and so is listed under both CLIs, but the profile keys
+    // its list by id alone: a second `gw` would be dropped on the next load.
+    await openFormAndFill(wrapper, {
+      id: 'gw',
+      base_url: 'https://other.example',
+    });
+
+    expect(wrapper.find('.cli-config-page__form-error').exists()).toBe(true);
     wrapper.unmount();
   });
 

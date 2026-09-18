@@ -193,7 +193,7 @@
                       size="small"
                       prepend-icon="mdi-content-copy"
                       :aria-label="`${tm('cliConfigPage.duplicate')}: ${provider.name}`"
-                      @click="duplicate(state.cli, provider)"
+                      @click="duplicate(provider)"
                     >
                       {{ tm('cliConfigPage.duplicate') }}
                     </v-btn>
@@ -419,14 +419,19 @@ const SYSTEM_SCOPE = 'default';
 /**
  * One stored provider.
  *
- * `api_key` is only ever what this page put there: the API reports whether a
- * key is stored, never the key itself, so a reload leaves this empty and an
- * empty field has to mean "leave the stored key alone".
+ * `api_key` is what the operator typed here and nothing else.  The profile
+ * reports a stored key as `__ASTRBOT_REDACTED__` rather than as itself, so the
+ * marker is not a key: `has_api_key` says one is stored, and saving puts the
+ * marker back only for the entry it came from.  An empty field means "leave the
+ * stored key alone", never "erase it".
  */
 interface StoredProvider extends CodingCliProvider {
   cli: string;
   api_key: string;
 }
+
+/** What a config response writes where a stored secret would be. */
+const REDACTED_SECRET_PLACEHOLDER = '__ASTRBOT_REDACTED__';
 
 const { tm } = useModuleI18n('features/config');
 const confirmDialog = useConfirmDialog();
@@ -453,6 +458,8 @@ const snackColor = ref<'success' | 'error'>('success');
 
 const formOpen = ref(false);
 const formEditing = ref(false);
+/** The id the open form started from, which a rename changes. */
+const formOriginalId = ref('');
 const formError = ref('');
 const showKey = ref(false);
 const form = ref({
@@ -473,6 +480,17 @@ const dirty = computed(
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+/**
+ * The operator's own key, never the marker a response puts in its place.
+ *
+ * Treating the marker as a key is how it ends up stored as one: it is what the
+ * field would show, and what the next save would write back.
+ */
+function typedKey(value: unknown): string {
+  const key = text(value);
+  return key === REDACTED_SECRET_PLACEHOLDER ? '' : key;
 }
 
 /** A short, safe reason for a failed request, for the operator to act on. */
@@ -529,8 +547,14 @@ function find(id: string) {
   return providers.value.find((provider) => provider.id === id);
 }
 
-function nextId(base: string, cli: CodingCliKind): string {
-  const taken = providersFor(cli).map((provider) => provider.id);
+/**
+ * A free id, over the whole list rather than over one CLI.
+ *
+ * The profile's list is keyed by id alone, so two entries sharing one are two
+ * entries where the profile will only keep the first.
+ */
+function nextId(base: string): string {
+  const taken = providers.value.map((provider) => provider.id);
   if (!taken.includes(base)) return base;
   let suffix = 2;
   while (taken.includes(`${base}-${suffix}`)) suffix += 1;
@@ -588,7 +612,7 @@ async function load() {
       has_api_key: Boolean(text(entry.api_key).trim()),
       current: false,
       cli: text(entry.cli).trim(),
-      api_key: text(entry.api_key),
+      api_key: typedKey(entry.api_key),
     }));
     savedProviders.value = JSON.stringify(providers.value);
     loaded.value = true;
@@ -631,8 +655,17 @@ async function save() {
       };
       if (provider.cli) entry.cli = provider.cli;
       else delete entry.cli;
-      if (provider.api_key) entry.api_key = provider.api_key;
-      else delete entry.api_key;
+      if (provider.api_key) {
+        entry.api_key = provider.api_key;
+      } else if (provider.has_api_key) {
+        // The profile still holds a key for this entry and the operator did not
+        // type a new one, so the marker is what says "keep it".  It is posted
+        // only where it came from: the restore resolves it by the entry's id,
+        // and a copy of this entry has an id the profile has never seen.
+        entry.api_key = REDACTED_SECRET_PLACEHOLDER;
+      } else {
+        delete entry.api_key;
+      }
       return entry;
     });
     config.btw = btw;
@@ -665,9 +698,12 @@ function openForm(cli: CodingCliKind, provider?: CodingCliProvider) {
   formEditing.value = Boolean(provider);
   formError.value = '';
   showKey.value = false;
+  // The id the form opened on, so a rename can still find the entry it is
+  // renaming: the stored key belongs to that entry, not to the new name.
+  formOriginalId.value = provider?.id ?? '';
   form.value = {
     cli,
-    id: provider?.id ?? nextId('provider', cli),
+    id: provider?.id ?? nextId('provider'),
     name: provider?.name ?? '',
     base_url: provider?.base_url ?? '',
     api_key: '',
@@ -687,21 +723,19 @@ function confirmForm() {
     formError.value = tm('cliConfigPage.endpointOrKeyRequired');
     return;
   }
-  const scope = form.value.cli === 'claude_code' ? '' : form.value.cli;
-  const clash = providers.value.some(
-    (provider) => provider.id === id && (provider.cli ?? '') === scope,
-  );
-  const editingSelf =
-    formEditing.value &&
-    find(id) !== undefined &&
-    (find(id)?.cli ?? '') === scope;
-  if (clash && !editingSelf) {
+  // The id names the entry and the profile keeps one entry per id, so the whole
+  // list is checked rather than the CLI the form was opened from.
+  const occupant = find(id);
+  const editingSelf = formEditing.value && formOriginalId.value === id;
+  if (occupant !== undefined && !editingSelf) {
     formError.value = tm('cliConfigPage.idTaken');
     return;
   }
 
   const apiKey = form.value.api_key.trim();
-  const previous = find(id);
+  const previous =
+    providers.value.find((entry) => entry.id === formOriginalId.value) ??
+    find(id);
   const entry: StoredProvider = {
     id,
     name: form.value.name.trim() || id,
@@ -710,21 +744,29 @@ function confirmForm() {
     note: form.value.note.trim(),
     has_api_key: Boolean(apiKey) || Boolean(previous?.has_api_key),
     current: false,
-    cli: scope,
-    api_key: apiKey || (previous?.api_key ?? ''),
+    // The section the form was opened from, always: an entry that names no CLI
+    // would be shown under every CLI, which is not what adding one here means.
+    cli: form.value.cli,
+    api_key: apiKey,
   };
 
-  const index = providers.value.findIndex((provider) => provider.id === id);
-  const next = [...providers.value];
-  if (index === -1) next.push(entry);
-  else next[index] = entry;
-  providers.value = next;
+  // A rename replaces the entry it was opened on; anything else is a new id.
+  const replaced = providers.value.findIndex(
+    (provider) => provider.id === formOriginalId.value,
+  );
+  const target = replaced === -1 ? find(id) : providers.value[replaced];
+  if (target === undefined) {
+    providers.value = [...providers.value, entry];
+  } else {
+    providers.value = providers.value.map((provider) =>
+      provider === target ? entry : provider,
+    );
+  }
   formOpen.value = false;
 }
 
-function duplicate(cli: CodingCliKind, provider: CodingCliProvider) {
-  const id = nextId(`${provider.id}-copy`, cli);
-  const source = find(provider.id);
+function duplicate(provider: StoredProvider) {
+  const id = nextId(`${provider.id}-copy`);
   providers.value = [
     ...providers.value,
     {
@@ -732,8 +774,11 @@ function duplicate(cli: CodingCliKind, provider: CodingCliProvider) {
       id,
       name: `${provider.name} (copy)`,
       current: false,
-      cli: source?.cli ?? '',
-      api_key: source?.api_key ?? '',
+      // Metadata only: the source's key is a marker that names the source's
+      // stored secret, and this entry has an id the profile has never seen, so
+      // there is nothing there to keep.
+      api_key: '',
+      has_api_key: false,
     },
   ];
 }

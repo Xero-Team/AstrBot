@@ -261,6 +261,16 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 
 任务完成后，`btw.work_loop.report_via_conversation`（默认 `true`）让工作循环把结果交给对话循环合成一条汇报：代理的回答在前，随后是完成状态与产物路径。流式结果的中间分片不受影响，只有最终结果带上汇报，且同一次运行只追加一次。关闭此项后结果由工作循环直接投递。
 
+## BTW 编码 CLI 的全局配置切换
+
+`btw.cli_providers` 是 **更多功能 → CLI 全局配置**（`/cli-config`）编辑的 provider 列表。它是普通配置：条目随配置档保存，`api_key` 也存在配置档里，与其他 provider 凭据一样。每个条目包含 `id`、`name`、可选的 `cli`（`claude_code` 或 `codex`；留空表示两个 CLI 都可用，界面上新增的条目总会带上所在分区）、`base_url`、`model`、`note` 和 `api_key`；`id` 在整份列表内唯一。
+
+委派任务不受这里的切换影响：一次运行加载自己那份配置层，不读这些文件。这里切换的是该 CLI 在本机的配置，也就是你手动开会话时用的配置。
+
+这是 AstrBot 唯一一处写进自己数据目录之外的地方。目标文件在第一次写入前备份一次（`.astrbot-backup`，由“收回”还原），写入是原子的（`mkstemp` + `fsync` + `os.replace` + 目录 fsync），持有凭据的文件权限为 `0o600`，响应只报告是否存有密钥、从不返回其值。Claude Code 走 `~/.claude/settings.json` 的 `env`（`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`、`ANTHROPIC_AUTH_TOKEN`），逐键合并、其余内容原样保留。Codex 的 TOML 标准库能读不能写，改写一个解析不了的文件会丢掉用户的注释，因此 AstrBot 的键写进文件顶部一段注释分隔的区块（TOML 要求顶层键排在所有表之前），其余部分逐字节保留，凭据写进 `auth.json`。
+
+两类文件会被拒绝而不是被覆盖：存在但读不成 JSON 对象的 `settings.json`（例如带注释的 JSONC 或数组），以及有起始标记却没有结束标记的 Codex 区块——后者的边界无从得知，猜错会让文件每切换一次就多出一段。状态路由要求 `platform.read`；切换与收回要求高风险动作 `coding_cli.config.write`，因此需要 step-up。
+
 ## WebUI 与认证
 
 `dashboard` 的关键默认值：

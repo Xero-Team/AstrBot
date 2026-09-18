@@ -259,6 +259,16 @@ Each agent's `providers` is a list of provider presets, and `active_provider` se
 
 When a task finishes, `btw.work_loop.report_via_conversation` (default `true`) hands the result to the conversation loop, which composes one report: the agent's answer first, then the completion status and the artifact paths. Streamed chunks are unaffected; only the final result carries the report, and one run carries it exactly once. Turning the setting off delivers results from the work loop directly.
 
+## Switching a coding CLI's own global configuration
+
+`btw.cli_providers` is the provider list edited at **More Features → CLI Global Config** (`/cli-config`). It is ordinary configuration: the entries are saved with the profile, and so is `api_key`, like any other provider credential. Each entry carries `id`, `name`, an optional `cli` (`claude_code` or `codex`; empty means either CLI may use it, while an entry added in the Dashboard always names the section it came from), `base_url`, `model`, `note`, and `api_key`. The `id` is unique across the whole list.
+
+A delegated task is not affected by a switch made here: a run loads a configuration layer of its own and does not read these files. What is switched is the CLI's own configuration on this host, which is what the sessions you start by hand read.
+
+This is the one place AstrBot writes outside its own data directory. The target file is backed up once before the first write (`.astrbot-backup`, which "take back" restores), the write is atomic (`mkstemp` + `fsync` + `os.replace` + a directory fsync), a file holding a credential is `0o600`, and a response reports whether a key is stored and never its value. Claude Code is written through the `env` block of `~/.claude/settings.json` (`ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `ANTHROPIC_AUTH_TOKEN`), merged key by key with everything else left as it was. The standard library reads TOML but cannot write it, and rewriting a file we cannot parse faithfully would drop the user's comments, so Codex's keys go in a comment-delimited section at the top of `~/.codex/config.toml` (TOML requires top-level keys to precede every table) with the rest left byte for byte as it was; the credential goes in `auth.json`.
+
+Two files are refused rather than replaced: a `settings.json` that exists and cannot be read as a JSON object (JSONC comments, an array), and a Codex section that opens without closing -- where it was meant to end is not knowable, and a guess would leave the file one block longer on every switch. The state route requires `platform.read`; switching and taking the configuration back require the high-risk `coding_cli.config.write`, and therefore a step-up.
+
 ## WebUI and authentication
 
 Important `dashboard` defaults:

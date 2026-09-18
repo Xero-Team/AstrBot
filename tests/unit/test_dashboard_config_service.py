@@ -121,6 +121,132 @@ def test_sensitive_config_changed_ignores_redacted_placeholders() -> None:
     )
 
 
+def test_restore_matches_list_entries_by_id_not_position() -> None:
+    current = {
+        "coding_agents": [
+            {"id": "a", "providers": [{"id": "p1", "api_key": "key-a"}]},
+            {"id": "b", "providers": [{"id": "p2", "api_key": "key-b"}]},
+        ]
+    }
+    posted = copy.deepcopy(current)
+    posted["coding_agents"].reverse()
+    for agent in posted["coding_agents"]:
+        for provider in agent["providers"]:
+            provider["api_key"] = config_service.REDACTED_SECRET_PLACEHOLDER
+
+    restored = config_service._restore_redacted_sensitive_config(posted, current)
+
+    moved = restored["coding_agents"]
+    assert [agent["id"] for agent in moved] == ["b", "a"]
+    assert [agent["providers"][0]["api_key"] for agent in moved] == [
+        "key-b",
+        "key-a",
+    ]
+
+
+def test_sensitive_config_changed_matches_list_entries_by_id() -> None:
+    current = {
+        "providers": [
+            {"id": "a", "api_key": "key-a"},
+            {"id": "b", "api_key": "key-b"},
+        ]
+    }
+    posted = {
+        "providers": [
+            {"id": "b", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+            {"id": "a", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+        ]
+    }
+
+    assert not config_service.sensitive_config_changed(
+        current, posted, missing_is_change=False
+    )
+
+    posted["providers"][0]["api_key"] = "replacement"
+    assert config_service.sensitive_config_changed(
+        current, posted, missing_is_change=False
+    )
+
+
+def test_restore_blanks_a_placeholder_with_nothing_to_restore_from() -> None:
+    current = {"providers": [{"id": "p1", "api_key": "key-a"}]}
+    posted = {
+        "providers": [
+            {"id": "p1", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+            {"id": "p1-copy", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+        ]
+    }
+
+    restored = config_service._restore_redacted_sensitive_config(posted, current)
+
+    assert restored["providers"][0]["api_key"] == "key-a"
+    assert restored["providers"][1]["api_key"] == ""
+
+
+def test_restore_follows_an_entry_the_client_renamed() -> None:
+    current = {"providers": [{"id": "p1", "api_key": "key-a"}]}
+    posted = {
+        "providers": [
+            {"id": "p1-renamed", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER}
+        ]
+    }
+
+    restored = config_service._restore_redacted_sensitive_config(posted, current)
+
+    assert restored["providers"][0]["api_key"] == "key-a"
+
+
+def test_restore_never_hands_one_stored_key_to_two_entries() -> None:
+    current = {
+        "providers": [
+            {"id": "a", "api_key": "key-a"},
+            {"id": "b", "api_key": "key-b"},
+        ]
+    }
+    posted = {
+        "providers": [
+            {"id": "b", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+            {"id": "new", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+        ]
+    }
+
+    restored = config_service._restore_redacted_sensitive_config(posted, current)
+
+    assert [item["api_key"] for item in restored["providers"]] == ["key-b", ""]
+
+
+def test_restore_keeps_position_when_ids_do_not_name_the_entries() -> None:
+    current = {"items": [{"name": "x", "api_key": "key-a"}]}
+    posted = {
+        "items": [{"name": "x", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER}]
+    }
+
+    restored = config_service._restore_redacted_sensitive_config(posted, current)
+
+    assert restored["items"][0]["api_key"] == "key-a"
+
+    repeated = {
+        "items": [
+            {"id": "same", "api_key": "key-a"},
+            {"id": "same", "api_key": "key-b"},
+        ]
+    }
+    repeated_posted = {
+        "items": [
+            {"id": "same", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+            {"id": "same", "api_key": config_service.REDACTED_SECRET_PLACEHOLDER},
+        ]
+    }
+    restored_repeated = config_service._restore_redacted_sensitive_config(
+        repeated_posted, repeated
+    )
+
+    assert [item["api_key"] for item in restored_repeated["items"]] == [
+        "key-a",
+        "key-b",
+    ]
+
+
 def test_profile_and_system_config_responses_redact_secrets() -> None:
     current = {
         "dashboard": {"jwt_secret": "jwt-secret"},

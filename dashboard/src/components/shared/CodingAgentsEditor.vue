@@ -41,7 +41,7 @@
 
     <v-card
       v-for="(entry, index) in entries"
-      :key="index"
+      :key="agentKeys[index]"
       class="coding-agents-editor__agent mb-4"
       variant="outlined"
     >
@@ -344,7 +344,7 @@
 
           <v-card
             v-for="(provider, providerIndex) in entry.providers"
-            :key="providerIndex"
+            :key="providerKey(agentKeys[index], provider.id)"
             class="coding-agents-editor__provider mb-2"
             variant="tonal"
           >
@@ -399,7 +399,7 @@
                     class="coding-agents-editor__provider-api-key"
                     :model-value="provider.api_key"
                     :type="
-                      revealed.has(providerKey(index, providerIndex))
+                      revealed.has(providerKey(agentKeys[index], provider.id))
                         ? 'text'
                         : 'password'
                     "
@@ -409,12 +409,12 @@
                     density="compact"
                     variant="outlined"
                     :append-inner-icon="
-                      revealed.has(providerKey(index, providerIndex))
+                      revealed.has(providerKey(agentKeys[index], provider.id))
                         ? 'mdi-eye-off-outline'
                         : 'mdi-eye-outline'
                     "
                     @click:append-inner="
-                      toggleRevealed(providerKey(index, providerIndex))
+                      toggleRevealed(providerKey(agentKeys[index], provider.id))
                     "
                     @update:model-value="
                       patchProvider(index, providerIndex, {
@@ -438,7 +438,7 @@
                     "
                   />
                 </v-col>
-                <v-col cols="12" sm="6">
+                <v-col v-if="entry.type === 'codex'" cols="12" sm="6">
                   <v-select
                     class="coding-agents-editor__provider-wire-api"
                     :model-value="provider.wire_api"
@@ -685,6 +685,27 @@ function commit(next: CodingAgent[]) {
   emit('update:modelValue', next);
 }
 
+/**
+ * A stable key per entry, so a card follows its agent rather than its slot.
+ *
+ * The id names the entry, so it is what a card is keyed on; an entry without
+ * one -- or sharing one with a neighbour, which the warnings above tell the
+ * operator about -- falls back to its position, which is then all it has.  The
+ * reveal state of a preset is keyed off this too, so moving an agent must not
+ * carry an open key along with the slot it used to sit in.
+ */
+function entryKeys(items: { id: string }[]): string[] {
+  const seen = new Map<string, number>();
+  for (const item of items) {
+    seen.set(item.id, (seen.get(item.id) ?? 0) + 1);
+  }
+  return items.map((item, index) =>
+    item.id && seen.get(item.id) === 1 ? item.id : `#${index}`,
+  );
+}
+
+const agentKeys = computed(() => entryKeys(entries.value));
+
 function patchAgent(index: number, patch: Partial<CodingAgent>) {
   commit(
     entries.value.map((entry, i) =>
@@ -699,13 +720,19 @@ function patchProvider(
   patch: Partial<ProviderPreset>,
 ) {
   const agent = entries.value[agentIndex];
+  const previousId = agent.providers[providerIndex]?.id ?? '';
   const providers = agent.providers.map((provider, i) =>
     i === providerIndex ? { ...provider, ...patch } : provider,
   );
-  patchAgent(agentIndex, {
-    providers,
-    active_provider: repointActive(providers, agent.active_provider),
-  });
+  // Renaming the preset that was active keeps it active: it is the same
+  // preset under another name, and falling back to the first one instead would
+  // silently move the run to a provider the operator did not choose.
+  const renamed = patch.id === undefined ? '' : text(patch.id).trim();
+  const active =
+    renamed && agent.active_provider === previousId
+      ? renamed
+      : repointActive(providers, agent.active_provider);
+  patchAgent(agentIndex, { providers, active_provider: active });
 }
 
 /** Keep `active_provider` naming a preset that still exists, as the backend does. */
@@ -824,8 +851,8 @@ function commitNumber(
   patchAgent(index, { [field]: countOr(raw, fallback, minimum) });
 }
 
-function providerKey(agentIndex: number, providerIndex: number): string {
-  return `${agentIndex}:${providerIndex}`;
+function providerKey(agentKey: string, providerId: string): string {
+  return `${agentKey}:${providerId}`;
 }
 
 function toggleRevealed(key: string) {

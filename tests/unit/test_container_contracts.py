@@ -72,6 +72,20 @@ def test_compose_does_not_ship_a_separate_docs_service(compose_name: str) -> Non
     assert "Dockerfile.docs" not in rendered
 
 
+def test_dockerfile_copies_pnpm_workspace_before_fetch() -> None:
+    """pnpm 12 freeze-checks overrides from pnpm-workspace.yaml during fetch."""
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    dashboard_copy_at = dockerfile.index(
+        "COPY dashboard/package.json dashboard/pnpm-lock.yaml dashboard/pnpm-workspace.yaml"
+    )
+    docs_copy_at = dockerfile.index(
+        "COPY docs/package.json docs/pnpm-lock.yaml docs/pnpm-workspace.yaml"
+    )
+    fetch_at = dockerfile.index("pnpm fetch --trust-lockfile")
+    assert dashboard_copy_at < fetch_at
+    assert docs_copy_at < fetch_at
+
+
 def test_dockerfile_playwright_version_matches_requirements() -> None:
     """Image Playwright must match the locked runtime specifier, not downgrade it."""
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")

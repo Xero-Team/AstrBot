@@ -44,8 +44,8 @@ ENV UV_INSTALL_DIR=/usr/local/bin \
     APT_LISTCHANGES_FRONTEND=none
 
 COPY pyproject.toml requirements.txt .python-version ./
-COPY dashboard/package.json dashboard/pnpm-lock.yaml /AstrBot/dashboard/
-COPY docs/package.json docs/pnpm-lock.yaml /AstrBot/docs/
+COPY dashboard/package.json dashboard/pnpm-lock.yaml dashboard/pnpm-workspace.yaml /AstrBot/dashboard/
+COPY docs/package.json docs/pnpm-lock.yaml docs/pnpm-workspace.yaml /AstrBot/docs/
 COPY .docker-local /tmp/docker-local
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \

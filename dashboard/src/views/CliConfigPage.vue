@@ -411,6 +411,8 @@ defineOptions({ name: 'CliConfigPage' });
 
 /** The action the switch route asks for; step-up is issued against it. */
 const WRITE_ACTION = 'coding_cli.config.write';
+/** The action the state route asks for: a read, which is rarely challenged. */
+const READ_ACTION = 'platform.read';
 /** The id the backend uses for the profile that is the running configuration. */
 const SYSTEM_SCOPE = 'default';
 
@@ -549,10 +551,29 @@ function rawProviders(config: OpenConfig): Record<string, unknown>[] {
 async function load() {
   loadFailed.value = false;
   try {
+    // The state call travels the step-up path even though a read is an ordinary
+    // permission: a session that has not proved itself yet is answered with a
+    // challenge, and without this the page would dead-end on a load error with
+    // no way to answer it.
     const [stateResponse, profileResponse] = await Promise.all([
-      codingCliApi.state(),
+      runMutationWithStepUp(
+        (stepUp) =>
+          codingCliApi.state({ headers: stepUp ? stepUpHeaders(stepUp) : {} }),
+        {
+          action: READ_ACTION,
+          resourceType: 'instance',
+          resourceId: SYSTEM_SCOPE,
+        },
+        requestStepUp,
+      ),
       configProfileApi.get(SYSTEM_SCOPE),
     ]);
+    if (!stateResponse) {
+      // The challenge was withdrawn, so there is nothing to show yet.
+      loaded.value = false;
+      loadFailed.value = true;
+      return;
+    }
     clis.value = stateResponse.data?.data?.clis ?? [];
     const payload = profileResponse.data?.data as
       Record<string, unknown> | undefined;

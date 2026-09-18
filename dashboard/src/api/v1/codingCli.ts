@@ -35,8 +35,18 @@ export interface CodingCliStatePayload {
 }
 
 export const codingCliApi = {
-  state() {
-    return typed<CodingCliStatePayload>(openApiV1.getCodingCliGlobalConfig());
+  /**
+   * Read each CLI's own configuration.
+   *
+   * A request config is optional and carries the step-up credential when the
+   * backend asks for one: the read is an ordinary permission, but an operator
+   * whose session has not proved itself yet still has to answer the challenge
+   * before the list can be filled in.
+   */
+  state(requestConfig?: AxiosRequestConfig) {
+    return typed<CodingCliStatePayload>(
+      openApiV1.getCodingCliGlobalConfig(generatedOptions({}, requestConfig)),
+    );
   },
   switchProvider(
     payload: { cli: CodingCliKind; provider_id: string },

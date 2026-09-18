@@ -31,6 +31,11 @@ router = APIRouter(tags=["Coding CLI"])
 
 # Every write into a CLI's own global config asks for this one action.
 WRITE_ACTION = "coding_cli.config.write"
+# Reading what a switch would do asks only for the ordinary config read.  The
+# state names a file path and what the CLI currently holds, never a credential,
+# and the read route cannot answer a step-up challenge: gating it behind the
+# high-risk action above meant the page could not be filled in at all.
+READ_ACTION = "platform.read"
 
 
 async def require_coding_cli_scope(request: Request) -> AuthContext:
@@ -38,7 +43,17 @@ async def require_coding_cli_scope(request: Request) -> AuthContext:
     return await require_scope(request, "config", authorize_action=False)
 
 
-async def authorize_coding_cli(request: Request, auth: AuthContext) -> None:
+async def authorize_coding_cli_read(request: Request, auth: AuthContext) -> None:
+    """Require the ordinary read that viewing the CLI state needs."""
+    await require_resource_action(
+        request,
+        auth,
+        action=READ_ACTION,
+        resource=Resource.instance("default"),
+    )
+
+
+async def authorize_coding_cli_write(request: Request, auth: AuthContext) -> None:
     """Require the high-risk action that switching a CLI's provider needs."""
     await require_resource_action(
         request,
@@ -117,9 +132,15 @@ def _provider_for(cli: str, config: Any, provider_id: str) -> dict:
 
 
 def _config_of(request: Request) -> Any:
-    """Return the running profile, which holds the operator's provider list."""
-    runtime = getattr(request.app.state, "runtime", None)
-    services = getattr(runtime, "services", None)
+    """Return the running profile, which holds the operator's provider list.
+
+    The Dashboard keeps its own services namespace on the app state, and that is
+    where the config profile service is: the core runtime's services carry the
+    authorization service and the other core-owned pieces, but nothing that
+    reads configuration.  Reading the wrong one made every route here answer
+    "Configuration is unavailable" and the page could never fill in its list.
+    """
+    services = getattr(request.app.state, "services", None)
     profiles = getattr(services, "config_profiles", None)
     acm = getattr(profiles, "acm", None)
     configs = getattr(acm, "confs", None)
@@ -134,7 +155,7 @@ async def get_global_config(
     auth: AuthContext = Depends(require_coding_cli_scope),
 ):
     """Report each CLI's own configuration and the providers it can use."""
-    await authorize_coding_cli(request, auth)
+    await authorize_coding_cli_read(request, auth)
     btw = _config_of(request).get("btw", {})
     raw = btw.get("cli_providers") if isinstance(btw, dict) else None
     return ok(
@@ -154,7 +175,7 @@ async def switch_provider(
     auth: AuthContext = Depends(require_coding_cli_scope),
 ):
     """Make one configured provider the CLI's default on this host."""
-    await authorize_coding_cli(request, auth)
+    await authorize_coding_cli_write(request, auth)
     provider = _provider_for(payload.cli, _config_of(request), payload.provider_id)
     try:
         cli_global_config.apply_provider(payload.cli, provider)
@@ -170,7 +191,7 @@ async def remove_global_config(
     auth: AuthContext = Depends(require_coding_cli_scope),
 ):
     """Take AstrBot's configuration back out of the CLI's own file."""
-    await authorize_coding_cli(request, auth)
+    await authorize_coding_cli_write(request, auth)
     if cli not in cli_global_config.CODING_GLOBAL_AGENT_TYPES:
         raise ApiError(f"Unknown coding agent type: {cli!r}")
     try:

@@ -400,11 +400,16 @@
         "filesystem": "文件访问范围",
         "scopes": {
           "workspace": "工作区",
-          "host": "主机文件"
+          "host": "整个环境"
         },
         "scopeHints": {
-          "workspace": "工作区：在受限范围内访问会话工作区、临时目录和技能文件。",
-          "host": "主机文件：可访问 AstrBot 运行账户有权限访问的文件；Docker 部署时指容器内及挂载的文件，并非宿主机全部文件。"
+          "none": "不允许访问任何文件",
+          "workspace": "受限的工作区、临时目录和技能文件。",
+          "host": "AstrBot 所在运行环境的所有文件。"
+        },
+        "scopeDetails": {
+          "account": "1. 可访问 AstrBot 运行账户有权限访问的文件。",
+          "docker": "2. 如果通过 Docker 部署，则仅可访问容器内及挂载的文件，并非宿主机全部文件。"
         },
         "roles": {
           "member": "普通成员",
@@ -418,7 +423,7 @@
         },
         "unsupportedSelection": "当前策略不受支持",
         "runtimeUnknown": "运行环境信息不可用。",
-        "memberWarning": "普通成员已获得联网或主机文件访问权限。",
+        "memberWarning": "普通成员已获得联网或整个环境访问权限。",
         "runtime": {
           "os": "操作系统",
           "arch": "架构",
@@ -617,14 +622,14 @@
         },
         "image_compress_enabled": {
           "description": "启用图片压缩",
-          "hint": "送给模型的图片会转为 JPEG。关闭时仍会转 JPEG，但不会按最长边缩小。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。"
+          "hint": "送给模型的图片会转为 JPEG，且每张输出严格小于 512 KiB。关闭时仍会转 JPEG，但不会按最长边缩小（仍可能为满足 512 KiB 上限而缩小）。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。超过 64 MiB 的原图会在解码前跳过。"
         },
         "image_compress_options": {
           "description": "图片压缩配置",
-          "hint": "控制送给模型的 JPEG 最长边和质量。图片始终转为 JPEG，从不放大；动画最多抽 8 帧。",
+          "hint": "控制送给模型的 JPEG 最长边和质量。图片始终转为 JPEG，从不放大，并在必要时进一步压缩使每张输出严格小于 512 KiB；动画最多抽 8 帧。",
           "max_size": {
-            "description": "最大边长",
-            "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。"
+            "description": "输入图片最大边长",
+            "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。系统会在必要时进一步压缩，使每张输出严格小于 512 KiB。"
           },
           "quality": {
             "description": "JPEG 质量",

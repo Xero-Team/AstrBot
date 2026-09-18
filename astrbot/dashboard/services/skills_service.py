@@ -341,7 +341,7 @@ class SkillsService:
         temp_path = _next_available_temp_path(temp_dir, filename)
 
         try:
-            await save_upload_to_path(file, temp_path)
+            await save_upload_to_path(file, temp_path, root=temp_dir)
             skill_name = skill_mgr.install_skill_from_zip(
                 temp_path,
                 overwrite=False,
@@ -394,7 +394,7 @@ class SkillsService:
                     continue
 
                 temp_path = _next_available_temp_path(temp_dir, filename)
-                await save_upload_to_path(file, temp_path)
+                await save_upload_to_path(file, temp_path, root=temp_dir)
 
                 try:
                     skill_name = skill_mgr.install_skill_from_zip(

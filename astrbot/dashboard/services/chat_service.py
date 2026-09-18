@@ -39,7 +39,7 @@ from astrbot.core.webchat.result_reducer import (
     parse_webchat_attachment,
 )
 from astrbot.core.webchat.run_coordinator import WebChatRun, WebChatRunCoordinator
-from astrbot.dashboard.upload_utils import save_upload_to_path
+from astrbot.dashboard.upload_utils import UploadLimitError, save_upload_to_path
 
 if TYPE_CHECKING:
     from astrbot.core.conversation_mgr import ConversationManager
@@ -48,6 +48,8 @@ if TYPE_CHECKING:
     from astrbot.core.utils.shared_preferences import SharedPreferences
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
+MAX_UPLOAD_FILE_SIZE_MB = 512
+MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
 WEBCHAT_IMAGE_MIME_TYPES = {
     **{
@@ -506,6 +508,11 @@ class ChatService:
         return await self.resolve_attachment_file(attachment_id)
 
     async def save_uploaded_file(self, file: UploadFile) -> dict:
+        declared_size = getattr(file, "size", None) or 0
+        if declared_size > MAX_UPLOAD_FILE_SIZE_BYTES:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         filename = sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
 
@@ -523,10 +530,21 @@ class ChatService:
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
-        await save_upload_to_path(file, file_path)
+        try:
+            await save_upload_to_path(
+                file,
+                file_path,
+                root=attachments_dir,
+                max_bytes=MAX_UPLOAD_FILE_SIZE_BYTES,
+            )
+        except UploadLimitError as exc:
+            file_path.unlink(missing_ok=True)
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            ) from exc
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
-                file_path.read_bytes(),
+                file_path,
                 default_mime_type=None,
             )
             if detected_mime_type:

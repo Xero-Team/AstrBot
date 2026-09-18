@@ -66,6 +66,8 @@ The local Shell tool includes basic blocking for dangerous commands such as `rm 
 
 ### Permission Model
 
+In the local permission table, open the **File access scope** menu to read each option's description. **Workspace** restricts access to the session workspace, temporary directories, and skill files. **Entire environment** (formerly **Host files**) allows access to files permitted by the account running AstrBot. In Docker, this means files inside the container and mounted files, not all files on the Docker host. **Disabled** prevents file access through local Computer Use tools. These descriptions now appear under the corresponding menu options instead of below the table. Hover over or tap the question mark after “All files in the environment where AstrBot runs.” for details about account permissions and Docker file access.
+
 Computer Use uses the unified authorization service. There is no “Require AstrBot admin permission” switch. Typical actions include:
 
 - `tool.computer_use`

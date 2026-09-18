@@ -1149,7 +1149,7 @@ async def test_upload_document_rejects_invalid_input_shapes():
 async def test_upload_document_rejects_missing_kb_after_staging_files(
     monkeypatch, tmp_path
 ):
-    async def fake_save_upload_to_path(file, path, *, max_bytes=None):
+    async def fake_save_upload_to_path(file, path, *, max_bytes=None, root=None):
         path.write_bytes(file.content)
         return len(file.content)
 
@@ -1180,7 +1180,7 @@ async def test_upload_document_cancellation_releases_capacity_and_staging(
 ):
     save_started = asyncio.Event()
 
-    async def blocked_save_upload_to_path(file, path, *, max_bytes=None):
+    async def blocked_save_upload_to_path(file, path, *, max_bytes=None, root=None):
         path.write_bytes(b"partial")
         save_started.set()
         await asyncio.Future()
@@ -1221,7 +1221,7 @@ async def test_upload_document_schedules_background_task_with_sanitized_files(
     scheduled_tasks: list[asyncio.Task] = []
     scheduled_calls: list[dict] = []
 
-    async def fake_save_upload_to_path(file, path, *, max_bytes=None):
+    async def fake_save_upload_to_path(file, path, *, max_bytes=None, root=None):
         path.write_bytes(file.content)
         return len(file.content)
 

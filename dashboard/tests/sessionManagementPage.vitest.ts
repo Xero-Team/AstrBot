@@ -36,8 +36,60 @@ vi.mock('@/utils/platformUtils', () => ({
 }));
 
 const dataTableStub = {
-  template: '<div class="session-table-stub"><slot name="no-data" /></div>',
+  props: ['items'],
+  template: `<div class="session-table-stub">
+    <div
+      v-for="item in items"
+      :key="item.sender_id || item.umo"
+      class="session-table-row"
+    >
+      <slot name="item.rules_overview" :item="item" />
+      <slot name="item.actions" :item="item" />
+    </div>
+    <slot name="no-data" />
+  </div>`,
 };
+
+function senderRuleResponse(item: unknown) {
+  return response({
+    rules: [item],
+    total: 1,
+    available_personas: [],
+    available_chat_providers: [],
+    available_stt_providers: [],
+    available_tts_providers: [],
+    available_plugins: [],
+    available_kbs: [],
+  });
+}
+
+async function switchToSender(wrapper: ReturnType<typeof mountWithVuetify>) {
+  const senderToggle = wrapper
+    .findAll('button')
+    .find((button) => button.text() === 'Sender');
+  expect(senderToggle).toBeDefined();
+  await senderToggle!.trigger('click');
+  await flushPromises();
+}
+
+function findSaveButton(wrapper: ReturnType<typeof mountWithVuetify>) {
+  const save = wrapper
+    .findAllComponents({ name: 'VBtn' })
+    .find((button) => button.text() === 'Save');
+  expect(save).toBeDefined();
+  return save!;
+}
+
+function setSenderLlmMode(
+  wrapper: ReturnType<typeof mountWithVuetify>,
+  value: string,
+) {
+  const select = wrapper
+    .findAllComponents({ name: 'VSelect' })
+    .find((component) => component.props('label') === 'LLM');
+  expect(select).toBeDefined();
+  select!.vm.$emit('update:modelValue', value);
+}
 
 function response(data: unknown) {
   return { data: { status: 'ok', data } };
@@ -102,7 +154,7 @@ describe('SessionManagementPage', () => {
     wrapper.unmount();
   });
 
-  it('loads sender overlays and saves only blocked and llm fields', async () => {
+  it('saves only fields the operator set on a new sender rule', async () => {
     const wrapper = mountWithVuetify(SessionManagementPage, {
       global: {
         stubs: { VDataTableServer: dataTableStub },
@@ -113,12 +165,7 @@ describe('SessionManagementPage', () => {
       expect.objectContaining({ target_type: 'session' }),
     );
 
-    const senderToggle = wrapper
-      .findAll('button')
-      .find((button) => button.text() === 'Sender');
-    expect(senderToggle).toBeDefined();
-    await senderToggle!.trigger('click');
-    await flushPromises();
+    await switchToSender(wrapper);
     expect(api.listRules).toHaveBeenCalledWith(
       expect.objectContaining({ target_type: 'sender' }),
     );
@@ -157,11 +204,14 @@ describe('SessionManagementPage', () => {
     );
     expect(document.body.textContent).not.toContain('Provider Configuration');
 
-    const save = wrapper
-      .findAllComponents({ name: 'VBtn' })
-      .find((button) => button.text() === 'Save');
-    expect(save).toBeDefined();
-    await save!.trigger('click');
+    await findSaveButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(api.upsertRule).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('No changes to save');
+
+    setSenderLlmMode(wrapper, 'true');
+    await wrapper.vm.$nextTick();
+    await findSaveButton(wrapper).trigger('click');
     await flushPromises();
 
     expect(api.upsertRule).toHaveBeenCalledWith({
@@ -169,10 +219,138 @@ describe('SessionManagementPage', () => {
       sender_id: 'im:napcat:bot:99',
       rule_key: 'session_service_config',
       rule_value: {
-        blocked: false,
         llm_enabled: true,
       },
     });
+
+    wrapper.unmount();
+  });
+
+  it('clears a written sender llm back to follow session', async () => {
+    api.listRules.mockImplementation(
+      async (params: { target_type?: string } = {}) =>
+        params.target_type === 'sender'
+          ? senderRuleResponse({
+              target_type: 'sender',
+              sender_id: 'im:napcat:bot:99',
+              rules: {
+                session_service_config: { blocked: true, llm_enabled: true },
+              },
+            })
+          : response({ rules: [], total: 0 }),
+    );
+
+    const wrapper = mountWithVuetify(SessionManagementPage, {
+      global: {
+        stubs: { VDataTableServer: dataTableStub },
+      },
+    });
+    await flushPromises();
+    await switchToSender(wrapper);
+    expect(wrapper.text()).toContain('LLM');
+
+    const edit = wrapper
+      .findAll('button')
+      .find((button) => button.attributes('aria-label') === 'Edit Rules');
+    expect(edit).toBeDefined();
+    await edit!.trigger('click');
+    await flushPromises();
+
+    setSenderLlmMode(wrapper, '__astrbot_follow_session__');
+    await wrapper.vm.$nextTick();
+    await findSaveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(api.upsertRule).toHaveBeenCalledWith({
+      target_type: 'sender',
+      sender_id: 'im:napcat:bot:99',
+      rule_key: 'session_service_config',
+      rule_value: {
+        blocked: true,
+        llm_enabled: null,
+      },
+    });
+
+    wrapper.unmount();
+  });
+
+  it('keeps a blocked-only sender rule from fabricating an llm value', async () => {
+    api.listRules.mockImplementation(
+      async (params: { target_type?: string } = {}) =>
+        params.target_type === 'sender'
+          ? senderRuleResponse({
+              target_type: 'sender',
+              sender_id: 'im:napcat:bot:99',
+              rules: {
+                session_service_config: { blocked: true },
+              },
+            })
+          : response({ rules: [], total: 0 }),
+    );
+
+    const wrapper = mountWithVuetify(SessionManagementPage, {
+      global: {
+        stubs: { VDataTableServer: dataTableStub },
+      },
+    });
+    await flushPromises();
+    await switchToSender(wrapper);
+    expect(wrapper.text()).not.toContain('LLM');
+
+    const edit = wrapper
+      .findAll('button')
+      .find((button) => button.attributes('aria-label') === 'Edit Rules');
+    expect(edit).toBeDefined();
+    await edit!.trigger('click');
+    await flushPromises();
+    await findSaveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(api.upsertRule).toHaveBeenCalledWith({
+      target_type: 'sender',
+      sender_id: 'im:napcat:bot:99',
+      rule_key: 'session_service_config',
+      rule_value: {
+        blocked: true,
+      },
+    });
+
+    wrapper.unmount();
+  });
+
+  it('leaves an explicit blocked false untouched on save', async () => {
+    api.listRules.mockImplementation(
+      async (params: { target_type?: string } = {}) =>
+        params.target_type === 'sender'
+          ? senderRuleResponse({
+              target_type: 'sender',
+              sender_id: 'im:napcat:bot:99',
+              rules: {
+                session_service_config: { blocked: false },
+              },
+            })
+          : response({ rules: [], total: 0 }),
+    );
+
+    const wrapper = mountWithVuetify(SessionManagementPage, {
+      global: {
+        stubs: { VDataTableServer: dataTableStub },
+      },
+    });
+    await flushPromises();
+    await switchToSender(wrapper);
+
+    const edit = wrapper
+      .findAll('button')
+      .find((button) => button.attributes('aria-label') === 'Edit Rules');
+    expect(edit).toBeDefined();
+    await edit!.trigger('click');
+    await flushPromises();
+    await findSaveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(api.upsertRule).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('No changes to save');
 
     wrapper.unmount();
   });

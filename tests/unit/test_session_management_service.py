@@ -848,6 +848,52 @@ async def test_sender_rules_share_preference_rows_and_drop_session_fields(
 
 
 @pytest.mark.asyncio
+async def test_sender_rule_clear_removes_field_and_empty_row(session_service):
+    service, preferences, _providers = session_service
+    sender_id = "im:napcat:bot:99"
+
+    await service.update_session_rule(
+        {
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rule_key": "session_service_config",
+            "rule_value": {"blocked": True, "llm_enabled": True},
+        }
+    )
+    assert preferences.sender_values[(sender_id, "session_service_config")] == {
+        "blocked": True,
+        "llm_enabled": True,
+    }
+
+    await service.update_session_rule(
+        {
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rule_key": "session_service_config",
+            "rule_value": {"llm_enabled": None},
+        }
+    )
+    assert preferences.sender_values[(sender_id, "session_service_config")] == {
+        "blocked": True
+    }
+
+    await service.update_session_rule(
+        {
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rule_key": "session_service_config",
+            "rule_value": {"blocked": None},
+        }
+    )
+    assert (sender_id, "session_service_config") not in preferences.sender_values
+
+    listed = await service.list_session_rules(
+        page=1, page_size=20, search="", target_type="sender"
+    )
+    assert listed["rules"] == []
+
+
+@pytest.mark.asyncio
 async def test_sender_rule_routes_skip_session_resource_authorization(
     session_service,
 ):

@@ -73,6 +73,8 @@
       "title": "Service Configuration",
       "sessionEnabled": "Enable Session",
       "llmEnabled": "Enable LLM",
+      "llmMode": "LLM",
+      "llmFollowSession": "Follow session",
       "ttsEnabled": "Enable TTS",
       "blocked": "Block this sender",
       "sessionBlocked": "Fully block all functionality",

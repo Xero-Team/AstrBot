@@ -582,26 +582,30 @@ class SessionManagementService:
             raise SessionManagementServiceError(
                 f"规则 {rule_key} 需要对象类型的 rule_value"
             )
-        fields: dict[str, bool] = {}
+        fields: dict[str, bool | None] = {}
         for name in _SENDER_OVERLAY_FIELDS:
             if name not in rule_value:
                 continue
             value = rule_value[name]
-            if not isinstance(value, bool):
-                raise SessionManagementServiceError(f"参数 {name} 必须是布尔值")
+            if value is not None and not isinstance(value, bool):
+                raise SessionManagementServiceError(f"参数 {name} 必须是布尔值或 null")
             fields[name] = value
         if not fields:
             raise SessionManagementServiceError(
-                "发送者规则需要 blocked 或 llm_enabled 布尔值"
+                "发送者规则需要 blocked 或 llm_enabled 布尔值或 null"
             )
         existing = await self.preferences.sender_get(
             sender_key, SESSION_SERVICE_CONFIG_KEY, {}
         )
-        await self.preferences.sender_put(
-            sender_key,
-            SESSION_SERVICE_CONFIG_KEY,
-            sender_service_config(existing, **fields),
-        )
+        merged = sender_service_config(existing, **fields)
+        if not merged:
+            await self.preferences.sender_remove(sender_key, SESSION_SERVICE_CONFIG_KEY)
+        else:
+            await self.preferences.sender_put(
+                sender_key,
+                SESSION_SERVICE_CONFIG_KEY,
+                merged,
+            )
         return {
             "message": f"规则 {rule_key} 已更新",
             "sender_id": sender_key,

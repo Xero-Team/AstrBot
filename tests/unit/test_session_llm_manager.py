@@ -9,7 +9,10 @@ from astrbot.core.auth.admission import (
     session_admission_key_from_event,
 )
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.star.session_llm_manager import (
+    SessionServiceManager,
+    sender_service_config,
+)
 from tests.unit.test_waking_check_stage import make_real_event
 
 
@@ -341,6 +344,17 @@ async def test_sender_setters_replace_non_dict_and_drop_extra_keys():
     assert preferences.values[("sender", sender_key, "session_service_config")] == {
         "blocked": True,
         "llm_enabled": False,
+    }
+
+
+def test_sender_service_config_clears_none_fields():
+    existing = {"blocked": True, "llm_enabled": False, "persona_id": "p1"}
+
+    assert sender_service_config(existing, llm_enabled=None) == {"blocked": True}
+    assert sender_service_config(existing, blocked=None, llm_enabled=None) == {}
+    assert sender_service_config(existing, llm_enabled=True) == {
+        "blocked": True,
+        "llm_enabled": True,
     }
 
 

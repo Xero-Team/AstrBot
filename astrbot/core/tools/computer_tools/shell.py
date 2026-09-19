@@ -88,7 +88,7 @@ class ExecuteShellTool(FunctionTool):
                     "description": "Maximum time to wait before returning a managed local session.",
                     "default": 10000,
                     "minimum": 0,
-                    "maximum": 30000,
+                    "maximum": 300000,
                 },
                 "env": {
                     "type": "object",
@@ -254,7 +254,7 @@ class ShellSessionTool(FunctionTool):
                 "yield_time_ms": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 30_000,
+                    "maximum": 300_000,
                     "default": 5_000,
                 },
                 "max_output_chars": {
@@ -301,7 +301,27 @@ class ShellSessionTool(FunctionTool):
             else:
                 if not session_id:
                     return "Error managing shell session: session_id is required."
-                if action == "poll":
+                if action in {"poll", "write", "write_line"}:
+                    written = None
+                    if action in {"write", "write_line"}:
+                        if yield_time_ms < 0 or yield_time_ms > 300_000:
+                            raise ValueError(
+                                "`yield_time_ms` must be between 0 and 300000."
+                            )
+                        if max_output_chars < 1:
+                            raise ValueError(
+                                "`max_output_chars` must be greater than 0."
+                            )
+                        if cursor is not None and cursor < 0:
+                            raise ValueError(
+                                "`cursor` must be greater than or equal to 0."
+                            )
+                        written = await shell.write_session(
+                            owner_id=owner_id,
+                            session_id=session_id,
+                            chars=f"{chars}\n" if action == "write_line" else chars,
+                            sender_id=sender_id,
+                        )
                     result = await shell.poll_session(
                         owner_id=owner_id,
                         session_id=session_id,
@@ -310,13 +330,8 @@ class ShellSessionTool(FunctionTool):
                         max_output_chars=max_output_chars,
                         sender_id=sender_id,
                     )
-                elif action in {"write", "write_line"}:
-                    result = await shell.write_session(
-                        owner_id=owner_id,
-                        session_id=session_id,
-                        chars=f"{chars}\n" if action == "write_line" else chars,
-                        sender_id=sender_id,
-                    )
+                    if written is not None:
+                        result["written_chars"] = written["written_chars"]
                 elif action == "interrupt":
                     result = await shell.interrupt_session(
                         owner_id=owner_id,

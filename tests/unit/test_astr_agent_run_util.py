@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import astrbot.core.astr_agent_run_util as util
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -679,7 +680,10 @@ async def test_run_agent_max_step_disables_tools_and_injects_summary_prompt():
     assert [chain.get_plain_text() for chain in outputs] == ["final"]
     assert runner.req.func_tool is None
     assert len(runner.run_context.messages) == 1
-    assert "工具调用次数已达到上限" in runner.run_context.messages[0].content
+    assert (
+        runner.run_context.messages[0].content
+        == ToolLoopAgentRunner.MAX_STEPS_REACHED_PROMPT
+    )
 
 
 @pytest.mark.asyncio

@@ -502,8 +502,10 @@ class FileEditTool(FunctionTool):
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
-            normalized_old = _decode_escaped_text(old)
-            normalized_new = _decode_escaped_text(new)
+            attempts = [(old, new)]
+            decoded = (_decode_escaped_text(old), _decode_escaped_text(new))
+            if decoded != (old, new):
+                attempts.append(decoded)
             sb = await context.context.context.computer_runtime.get_booter(
                 context.context.context,
                 context.context.event.unified_msg_origin,
@@ -517,18 +519,23 @@ class FileEditTool(FunctionTool):
                     access="edit",
                 )
             try:
-                result = await filesystem.edit_file(
-                    path=normalized_path,
-                    old_string=normalized_old,
-                    new_string=normalized_new,
-                    replace_all=replace_all,
-                    encoding="utf-8",
-                    **(
-                        {"file_descriptor": file_descriptor}
-                        if file_descriptor is not None
-                        else {}
-                    ),
+                result = {"success": False}
+                extra = (
+                    {"file_descriptor": file_descriptor}
+                    if file_descriptor is not None
+                    else {}
                 )
+                for old_string, new_string in attempts:
+                    result = await filesystem.edit_file(
+                        path=normalized_path,
+                        old_string=old_string,
+                        new_string=new_string,
+                        replace_all=replace_all,
+                        encoding="utf-8",
+                        **extra,
+                    )
+                    if result.get("success", False):
+                        break
             finally:
                 if file_descriptor is not None:
                     os.close(file_descriptor)

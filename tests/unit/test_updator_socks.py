@@ -763,17 +763,16 @@ async def test_download_from_repo_url_uses_outbound_download(
 ) -> None:
     import astrbot.core.zip_updator as zip_updator_module
 
-    async def fake_fetch_json(url, policy, **kwargs):
-        del policy, kwargs
-        assert "api.github.com" in url
-        return {"default_branch": "trunk"}
+    async def fail_fetch_json(url, policy, **kwargs):
+        del url, policy, kwargs
+        raise AssertionError("unspecified branch should use GitHub HEAD")
 
     async def fake_download_to_path(url, path, policy, **kwargs):
         del policy, kwargs
-        assert url.endswith("trunk.zip")
+        assert url.endswith("/archive/HEAD.zip")
         Path(path).write_bytes(b"zip-data")
 
-    monkeypatch.setattr(zip_updator_module, "fetch_json", fake_fetch_json)
+    monkeypatch.setattr(zip_updator_module, "fetch_json", fail_fetch_json)
     monkeypatch.setattr(zip_updator_module, "download_to_path", fake_download_to_path)
     target_path = tmp_path / "AstrBot"
     await RepoZipUpdator().download_from_repo_url(

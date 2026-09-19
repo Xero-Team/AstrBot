@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import os
 import re
@@ -20,6 +21,10 @@ from astrbot.core.utils.outbound_http import (
     validate_github_mirror_origin,
 )
 from astrbot.utils.version_comparator import VersionComparator
+
+
+def _log_token(value: object) -> str:
+    return str(value).replace("\r", "").replace("\n", "")
 
 
 class ReleaseInfo:
@@ -69,9 +74,9 @@ class RepoZipUpdator:
         except Exception as exc:
             logger.debug(
                 "获取 GitHub 默认分支失败 %s/%s: %s",
-                author,
-                repo,
-                redact_outbound_url(str(exc)),
+                _log_token(author),
+                _log_token(repo),
+                _log_token(redact_outbound_url(str(exc))),
             )
             return None
 
@@ -101,7 +106,11 @@ class RepoZipUpdator:
         if default_branch:
             return author, repo, default_branch
 
-        logger.info("未能获取 %s/%s 的默认分支，将尝试 main 分支", author, repo)
+        logger.info(
+            "未能获取 %s/%s 的默认分支，将尝试 main 分支",
+            _log_token(author),
+            _log_token(repo),
+        )
         return author, repo, "main"
 
     async def _download_file(
@@ -128,15 +137,23 @@ class RepoZipUpdator:
                 policy,
                 progress_callback=_emit_progress,
             )
-        except Exception as e:
-            logger.error(
-                "下载文件失败: %s -> %s, 错误: %s",
-                redact_outbound_url(url),
-                target_path,
-                e,
-            )
-            if self.rm_on_error and target_path.exists():
-                target_path.unlink()
+        except (asyncio.CancelledError, Exception) as error:
+            if not isinstance(error, asyncio.CancelledError):
+                logger.error(
+                    "下载文件失败: %s -> %s, 错误: %s",
+                    _log_token(redact_outbound_url(url)),
+                    _log_token(target_path),
+                    _log_token(error),
+                )
+            try:
+                target_path.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                logger.warning(
+                    "Failed to remove partial download: %s -> %s: %s",
+                    _log_token(redact_outbound_url(url)),
+                    _log_token(target_path),
+                    _log_token(cleanup_error),
+                )
             raise
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
@@ -253,13 +270,26 @@ class RepoZipUpdator:
     async def download_from_repo_url(
         self, target_path: str, repo_url: str, proxy=""
     ) -> None:
-        author, repo, branch = await self.resolve_github_source_branch(repo_url)
+        author, repo, branch = self.parse_github_url(repo_url)
 
-        logger.info(f"正在下载更新 {repo} ...")
-        logger.info(f"正在从分支 {branch} 下载 {author}/{repo}")
-        release_url = (
-            f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
-        )
+        logger.info("正在下载更新 %s ...", _log_token(repo))
+        if branch:
+            release_url = (
+                f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
+            )
+            logger.info(
+                "正在从分支 %s 下载 %s/%s",
+                _log_token(branch),
+                _log_token(author),
+                _log_token(repo),
+            )
+        else:
+            release_url = f"https://github.com/{author}/{repo}/archive/HEAD.zip"
+            logger.info(
+                "正在从默认引用 HEAD 下载 %s/%s",
+                _log_token(author),
+                _log_token(repo),
+            )
 
         policy = PLUGIN_REPOSITORY
         if proxy:
@@ -268,9 +298,9 @@ class RepoZipUpdator:
             release_url = compose_github_mirror_url(proxy, release_url)
             logger.info(
                 "检查到设置了镜像站，将使用镜像站下载 %s/%s 仓库源码: %s",
-                author,
-                repo,
-                redact_outbound_url(release_url),
+                _log_token(author),
+                _log_token(repo),
+                _log_token(redact_outbound_url(release_url)),
             )
 
         await self._download_file(

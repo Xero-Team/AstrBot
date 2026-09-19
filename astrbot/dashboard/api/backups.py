@@ -16,6 +16,7 @@ from astrbot.dashboard.services.backup_service import (
     BackupService,
     BackupServiceError,
 )
+from astrbot.dashboard.upload_utils import UploadFileAdapter
 
 from .auth import AuthContext, require_scope
 from .error_handling import internal_error_response
@@ -113,17 +114,20 @@ async def upload_backup(
     _auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
-    return await _run(lambda: service.upload_backup(file), prefix="上传备份文件失败")
+    return await _run(
+        lambda: service.upload_backup(UploadFileAdapter(file)),
+        prefix="上传备份文件失败",
+    )
 
 
 @router.post("/backups/upload/init")
 async def init_backup_upload(
     payload: BackupUploadInitRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.upload_init(_model_dict(payload)),
+        lambda: service.upload_init(_model_dict(payload), owner=auth.username),
         prefix="初始化分片上传失败",
     )
 
@@ -133,14 +137,15 @@ async def upload_backup_chunk(
     upload_id: str = Form(...),
     chunk_index: str = Form(...),
     chunk: UploadFile = File(...),
-    _auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
         lambda: service.upload_chunk(
             upload_id=upload_id,
             chunk_index_str=chunk_index,
-            chunk_file=chunk,
+            chunk_file=UploadFileAdapter(chunk),
+            owner=auth.username,
         ),
         prefix="上传分片失败",
     )
@@ -149,11 +154,11 @@ async def upload_backup_chunk(
 @router.post("/backups/upload/complete")
 async def complete_backup_upload(
     payload: BackupUploadSessionRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.upload_complete(_model_dict(payload)),
+        lambda: service.upload_complete(_model_dict(payload), owner=auth.username),
         prefix="完成分片上传失败",
     )
 
@@ -161,12 +166,24 @@ async def complete_backup_upload(
 @router.post("/backups/upload/abort")
 async def abort_backup_upload(
     payload: BackupUploadSessionRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.upload_abort(_model_dict(payload)),
+        lambda: service.upload_abort(_model_dict(payload), owner=auth.username),
         prefix="取消上传失败",
+    )
+
+
+@router.post("/backups/upload/status")
+async def status_backup_upload(
+    payload: BackupUploadSessionRequest,
+    auth: AuthContext = Depends(require_system_scope),
+    service: BackupService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.upload_status(_model_dict(payload), owner=auth.username),
+        prefix="查询上传状态失败",
     )
 
 

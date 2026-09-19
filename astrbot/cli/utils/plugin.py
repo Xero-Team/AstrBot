@@ -107,8 +107,8 @@ def _resolve_download_url(url: str, proxy: str | None = None) -> str:
     if releases:
         return str(releases[0]["zipball_url"])
 
-    click.echo(f"Downloading {author}/{repo} from default branch")
-    return f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
+    click.echo(f"Downloading {author}/{repo} from default reference HEAD")
+    return f"https://github.com/{author}/{repo}/archive/HEAD.zip"
 
 
 def _download_plugin_archive(

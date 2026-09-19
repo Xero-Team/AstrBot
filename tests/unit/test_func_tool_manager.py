@@ -642,3 +642,4 @@ def test_shell_session_schema_supports_line_writes():
 
     tool = ShellSessionTool()
     assert "write_line" in tool.parameters["properties"]["action"]["enum"]
+    assert tool.parameters["properties"]["yield_time_ms"]["maximum"] == 300_000

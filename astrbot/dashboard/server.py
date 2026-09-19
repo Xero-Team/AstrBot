@@ -24,8 +24,69 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.dashboard.request_state import DashboardRequestState
 from astrbot.dashboard.responses import error
+from astrbot.dashboard.services.backup_service import CHUNK_SIZE
+from astrbot.dashboard.services.chat_service import MAX_UPLOAD_FILE_SIZE_BYTES
+from astrbot.dashboard.services.config_service import MAX_FILE_BYTES
 
 from .api.app import create_dashboard_asgi_app
+
+try:
+    from python_multipart.multipart import parse_options_header
+except ImportError:  # pragma: no cover
+    try:
+        from multipart.multipart import parse_options_header
+    except ImportError:
+        parse_options_header = None
+
+_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
+_BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
+    ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files", MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES),
+    (
+        "/api/v1/knowledge-bases/",
+        MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    ),
+)
+_BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+
+def _check_body_limit(
+    path: str,
+    content_length: int | None,
+    content_type: str,
+    *,
+    method: str = "POST",
+    default_limit: int,
+) -> tuple[int, str] | None:
+    """Decide whether an /api request body must be rejected up front.
+
+    Returns:
+        A (status_code, message) rejection, or None to pass through.
+    """
+    if not path.startswith("/api"):
+        return None
+    if content_length is None:
+        if method not in _BODY_METHODS:
+            return None
+        media_type = (
+            parse_options_header(content_type)[0] if parse_options_header else b""
+        )
+        if media_type == b"multipart/form-data":
+            return 411, "Content-Length header is required for uploads"
+        return None
+    limit = default_limit
+    if "/config-files" in path:
+        limit = MAX_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES
+    else:
+        for prefix, route_limit in _BODY_LIMIT_OVERRIDES:
+            if path.startswith(prefix):
+                limit = route_limit
+                break
+    if content_length > limit:
+        return 413, f"Request body exceeds the {limit} bytes limit"
+    return None
+
 
 if os.name == "nt":
     # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
@@ -283,14 +344,31 @@ class AstrBotDashboard:
             static_folder=self.data_path,
         )
         self.asgi_app.state.dashboard_server = self
-        self.asgi_app.state.dashboard_config["MAX_CONTENT_LENGTH"] = (
-            128 * 1024 * 1024
-        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
+        self.asgi_app.state.dashboard_config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024
         self.app = self.asgi_app
 
         @self.asgi_app.middleware("http")
         async def dashboard_auth_middleware(request_, call_next):
             request_.state.dashboard_request_state = DashboardRequestState()
+            content_length_header = request_.headers.get("content-length")
+            try:
+                content_length = (
+                    int(content_length_header) if content_length_header else None
+                )
+            except ValueError:
+                content_length = None
+            rejection = _check_body_limit(
+                request_.url.path,
+                content_length,
+                request_.headers.get("content-type", ""),
+                method=request_.method,
+                default_limit=self.asgi_app.state.dashboard_config[
+                    "MAX_CONTENT_LENGTH"
+                ],
+            )
+            if rejection is not None:
+                status_code, message = rejection
+                return JSONResponse(error(message), status_code=status_code)
             auth_response = await self.auth_middleware(request_)
             if auth_response is not None:
                 return auth_response
@@ -482,6 +560,15 @@ class AstrBotDashboard:
     def run(self):
         ip_addr = []
         dashboard_config = self.runtime.astrbot_config.get("dashboard", {})
+        # Environment beats config for both. Each accepts two names -- the unprefixed
+        # one first, then the ASTRBOT_-prefixed one -- so DASHBOARD_HOST wins over
+        # ASTRBOT_DASHBOARD_HOST if both are set. Unset everywhere, the dashboard binds
+        # 127.0.0.1:6185.
+        #
+        # The host chain is also read by AuthService.can_skip_default_password_auth,
+        # which only allows that skip when the resolved host is 127.0.0.1, localhost
+        # or ::1. So these variables decide where the dashboard listens and, indirectly,
+        # whether the default password gate can be waived.
         port = (
             os.environ.get("DASHBOARD_PORT")
             or os.environ.get("ASTRBOT_DASHBOARD_PORT")

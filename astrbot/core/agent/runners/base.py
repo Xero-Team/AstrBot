@@ -39,7 +39,7 @@ class BaseAgentRunner[TContext]:
         ...
 
     async def step_until_done(
-        self, max_step: int = 30
+        self, max_step: int = 128
     ) -> T.AsyncGenerator[AgentResponse]:
         """Process steps until the agent is done."""
         if max_step <= 0:

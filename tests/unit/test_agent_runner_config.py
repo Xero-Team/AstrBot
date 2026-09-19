@@ -34,7 +34,7 @@ def test_agent_runner_defaults_are_isolated_and_normalized(runner_type: str):
     }
     if runner_type != "local":
         assert second["persona_id"] == "default"
-        assert second["max_steps"] == 30
+        assert second["max_steps"] == 128
         assert second["proxy_mode"] == "inherit"
         assert second["proxy_url"] == ""
         assert "proxy" not in second
@@ -134,7 +134,7 @@ def test_local_legacy_fields_are_fully_migrated():
         ]
     }
     assert _migrate_agent_runner_config(config, default_config)
-    assert config["config_version"] == 3
+    assert config["config_version"] == 4
     assert config["agent_runner"] == {
         "runner_type": "local",
         "config": {
@@ -340,7 +340,7 @@ def test_third_party_provider_config_is_copied_inline(
     assert config["agent_runner"]["runner_type"] == runner_type
     assert runner_config[expected_key] == provider_config[expected_key]
     assert runner_config["persona_id"] == "operator"
-    assert runner_config["max_steps"] == 30
+    assert runner_config["max_steps"] == 128
     assert not {
         "id",
         "type",
@@ -782,6 +782,28 @@ def test_normalize_drops_non_string_fallback_ids():
     )
 
     assert normalized["config"]["model"]["fallback_provider_ids"] == ["keep-me"]
+
+
+@pytest.mark.parametrize("config_version", [2, 3, 4])
+@pytest.mark.parametrize("max_steps", [30, 64])
+def test_agent_step_limit_upgrade_is_persisted_once(config_version, max_steps):
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["config_version"] = config_version
+    if config_version == 2:
+        config.pop("agent_runner")
+        config["provider_settings"]["max_agent_step"] = max_steps
+    else:
+        config["agent_runner"]["config"]["misc"]["max_steps"] = max_steps
+
+    changed = _migrate_agent_runner_config(config)
+    expected_steps = 128 if config_version < 4 and max_steps == 30 else max_steps
+    assert changed is (config_version < 4)
+    assert config["config_version"] == max(config_version, 4)
+    assert config["agent_runner"]["config"]["misc"]["max_steps"] == expected_steps
+
+    config["agent_runner"]["config"]["misc"]["max_steps"] = 30
+    assert not _migrate_agent_runner_config(config)
+    assert config["agent_runner"]["config"]["misc"]["max_steps"] == 30
 
 
 def test_unknown_runner_type_on_load_becomes_local(tmp_path):

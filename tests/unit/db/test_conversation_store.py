@@ -284,6 +284,60 @@ async def test_get_filtered_conversations_supports_keyword_umo_sort_and_session_
 
 
 @pytest.mark.asyncio
+async def test_get_filtered_conversations_exclude_ids_match_umo_or_platform(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.create_conversation(
+        user_id="astrbot:FriendMessage:5",
+        platform_id="astrbot",
+        title="astrbot",
+        content=[{"role": "assistant", "content": "excluded"}],
+        cid="astrbot",
+    )
+    await temp_db.create_conversation(
+        user_id="astrbotweb:GroupMessage:9",
+        platform_id="astrbotweb",
+        title="astrbotweb",
+        content=[{"role": "assistant", "content": "kept"}],
+        cid="astrbotweb",
+    )
+    await temp_db.create_conversation(
+        user_id="astrbot",
+        platform_id="astrbot",
+        title="legacy",
+        content=[{"role": "assistant", "content": "excluded"}],
+        cid="astrbot-legacy",
+    )
+    await temp_db.create_conversation(
+        user_id="qq:FriendMessage:2",
+        platform_id="qq",
+        title="friend",
+        content=[{"role": "assistant", "content": "kept"}],
+        cid="friend",
+    )
+
+    segment_matches, segment_total = await temp_db.get_filtered_conversations(
+        page=1,
+        page_size=10,
+        include_history=False,
+        exclude_ids=["astrbot"],
+    )
+    assert segment_total == 2
+    assert [item.conversation_id for item in segment_matches] == [
+        "friend",
+        "astrbotweb",
+    ]
+
+    _, wildcard_total = await temp_db.get_filtered_conversations(
+        page=1,
+        page_size=10,
+        include_history=False,
+        exclude_ids=["%"],
+    )
+    assert wildcard_total == 4
+
+
+@pytest.mark.asyncio
 async def test_filtered_conversations_can_paginate_complete_session_groups(
     temp_db: SQLiteDatabase,
 ):

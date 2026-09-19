@@ -47,6 +47,7 @@ const baseProps = {
   stagedAudioUrl: '',
   disabled: false,
   enableStreaming: true,
+  enableReasoning: true,
   isRecording: false,
   isRunning: false,
 };

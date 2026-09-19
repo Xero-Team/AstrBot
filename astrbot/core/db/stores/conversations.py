@@ -138,8 +138,21 @@ class ConversationStoreMixin(DatabaseStoreMixin):
             if platforms:
                 conditions.append(col(ConversationV2.platform_id).in_(platforms))
             for exclude_id in kwargs.get("exclude_ids") or []:
+                escaped = (
+                    exclude_id.replace("\\", "\\\\")
+                    .replace("%", r"\%")
+                    .replace("_", r"\_")
+                )
                 conditions.append(
-                    not_(col(ConversationV2.user_id).like(f"{exclude_id}%")),
+                    not_(
+                        or_(
+                            col(ConversationV2.user_id) == exclude_id,
+                            col(ConversationV2.user_id).like(
+                                f"{escaped}:%",
+                                escape="\\",
+                            ),
+                        ),
+                    ),
                 )
             exclude_platforms = kwargs.get("exclude_platforms") or []
             if exclude_platforms:

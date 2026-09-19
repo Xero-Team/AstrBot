@@ -410,8 +410,14 @@ onBeforeUnmount(() => {
 }
 
 .console-displayer-wrapper:fullscreen {
+  --v-theme-on-surface: 255, 255, 255;
   background-color: #1e1e1e;
+  color: #fff;
   padding: 20px;
+}
+
+.console-displayer-wrapper:fullscreen :deep(.v-switch__track) {
+  --v-theme-surface-variant: 163, 163, 163;
 }
 
 .filter-controls {

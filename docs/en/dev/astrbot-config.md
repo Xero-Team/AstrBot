@@ -30,7 +30,7 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 | Key                                               | Purpose                                                                                                                                                                                                                                                         |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config_version`                                  | Current core configuration version, default `3`. Do not downgrade it manually.                                                                                                                                                                                  |
+| `config_version`                                  | Current core configuration version, default `4`. Do not downgrade it manually.                                                                                                                                                                                  |
 | `platform_settings`                               | Cross-platform receive, send, rate-limit, and segmented-reply behavior.                                                                                                                                                                                         |
 | `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                                                                                                                                           |
 | `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                                                                                                                                          |
@@ -133,8 +133,8 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 ### Steps, tools, and proxy
 
 - `agent_runner.runner_type` selects the built-in `local` Agent or Dify, Coze, DashScope, or DeerFlow. Third-party keys and app IDs live in `agent_runner.config`.
-- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `30`, and also applies to current SubAgent executions.
-- `agent_runner.config.max_steps` is the third-party runner step cap, default `30`.
+- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `128`, and also applies to current SubAgent executions. Stored `30` values upgrade once when `config_version` advances to `4`.
+- `agent_runner.config.max_steps` is the third-party runner step cap, default `128`.
 - `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
 - `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode. `skills_like` hides parameters; it does not shrink the tool catalog.
 - `agent_runner.config.misc.sanitize_context_by_modalities` removes unsupported modalities and tool structures according to the current model, changing the history seen by that model.

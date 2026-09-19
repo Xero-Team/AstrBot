@@ -384,6 +384,14 @@
               <v-alert type="error" variant="tonal" class="mb-4">
                 {{ importError }}
               </v-alert>
+              <v-btn
+                v-if="chunkedUploader.canResume.value"
+                color="primary"
+                class="mr-2"
+                @click="resumeImportUpload"
+              >
+                {{ t('features.settings.backup.import.resumeUpload') }}
+              </v-btn>
               <v-btn color="primary" @click="resetImport">
                 {{ t('features.settings.backup.import.retry') }}
               </v-btn>
@@ -558,6 +566,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { backupApi } from '@/api/v1';
+import { useChunkedUpload } from '@/composables/useChunkedUpload';
 import { useI18n } from '@/i18n/composables';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
@@ -597,16 +606,25 @@ const importError = ref('');
 const uploadedFilename = ref(''); // 已上传的文件名
 const checkResult = ref(null); // 预检查结果
 
-// 分片上传状态
-const CONCURRENT_UPLOADS = 5; // 并发上传数
-const uploadId = ref('');
-const chunkSize = ref(0); // 分片大小（从后端获取）
-const uploadProgress = ref({
-  uploaded: 0,
-  total: 0,
-  percent: 0,
-  message: '',
+const chunkedUploader = useChunkedUpload({
+  initUpload: (payload) => backupApi.initUpload(payload),
+  uploadChunk: (payload) =>
+    backupApi.uploadChunk({
+      upload_id: payload.upload_id,
+      chunk_index: payload.chunk_index,
+      chunk: payload.chunk,
+    }),
+  completeUpload: (payload) => backupApi.completeUpload(payload),
+  abortUpload: (payload) => backupApi.abortUpload(payload),
+  statusUpload: (payload) => backupApi.statusUpload(payload),
 });
+const uploadProgress = computed(() => ({
+  uploaded: chunkedUploader.uploadedBytes.value,
+  total: chunkedUploader.totalBytes.value,
+  percent: chunkedUploader.percent.value,
+  message: uploadProgressMessage.value,
+}));
+const uploadProgressMessage = ref('');
 
 // 备份列表
 const loadingList = ref(false);
@@ -754,176 +772,61 @@ const resetExport = () => {
   exportError.value = '';
 };
 
-/**
- * 并发上传分片
- *
- * 使用并发控制同时上传多个分片，提升上传速度。
- * 后端按分片索引命名文件（如 0.part, 1.part），合并时按顺序读取，
- * 因此分片到达顺序不影响最终结果。
- */
-const uploadChunksInParallel = async (
-  file,
-  totalChunks,
-  currentUploadId,
-  currentChunkSize,
-) => {
-  // 跟踪已完成的字节数（使用原子操作避免并发问题）
-  let completedBytes = 0;
-  const chunkSizes = [];
-
-  // 预计算每个分片的大小（使用后端返回的 chunk_size）
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * currentChunkSize;
-    const end = Math.min(start + currentChunkSize, file.size);
-    chunkSizes[i] = end - start;
+const finishUploadedBackup = async (result) => {
+  uploadedFilename.value = result.filename;
+  uploadProgressMessage.value = t('features.settings.backup.import.checking');
+  const checkResponse = await backupApi.check(uploadedFilename.value);
+  if (checkResponse.data.status !== 'ok') {
+    throw new Error(checkResponse.data.message);
   }
-
-  // 上传单个分片的函数
-  const uploadSingleChunk = async (chunkIndex) => {
-    const start = chunkIndex * currentChunkSize;
-    const end = Math.min(start + currentChunkSize, file.size);
-    const chunk = file.slice(start, end);
-
-    const response = await backupApi.uploadChunk({
-      upload_id: currentUploadId,
-      chunk_index: chunkIndex,
-      chunk,
-    });
-
-    if (response.data.status !== 'ok') {
-      throw new Error(response.data.message);
-    }
-
-    // 更新进度（累加已完成字节）
-    completedBytes += chunkSizes[chunkIndex];
-    uploadProgress.value.uploaded = completedBytes;
-    uploadProgress.value.percent = Math.round(
-      (completedBytes / file.size) * 100,
-    );
-
-    return response;
-  };
-
-  // 创建分片索引队列
-  const pendingChunks = Array.from({ length: totalChunks }, (_, i) => i);
-  const activePromises = [];
-
-  // 处理队列中的分片
-  while (pendingChunks.length > 0 || activePromises.length > 0) {
-    // 填充并发槽位
-    while (
-      pendingChunks.length > 0 &&
-      activePromises.length < CONCURRENT_UPLOADS
-    ) {
-      const chunkIndex = pendingChunks.shift();
-      const promise = uploadSingleChunk(chunkIndex).then(() => {
-        // 完成后从活动列表移除
-        const idx = activePromises.indexOf(promise);
-        if (idx > -1) activePromises.splice(idx, 1);
-      });
-      activePromises.push(promise);
-    }
-
-    // 等待至少一个完成
-    if (activePromises.length > 0) {
-      await Promise.race(activePromises);
-    }
+  checkResult.value = checkResponse.data.data;
+  if (!checkResult.value.valid) {
+    importStatus.value = 'failed';
+    importError.value =
+      checkResult.value.error ||
+      t('features.settings.backup.import.invalidBackup');
+    return;
   }
+  importStatus.value = 'confirm';
 };
 
-// 上传并检查
 const uploadAndCheck = async () => {
   if (!importFile.value) return;
 
   importStatus.value = 'uploading';
-  const file = importFile.value;
-
+  uploadProgressMessage.value = t('features.settings.backup.import.uploadInit');
+  const result = await chunkedUploader.start(importFile.value);
+  if (!result) {
+    importStatus.value = 'failed';
+    importError.value = chunkedUploader.errorMessage.value || 'Upload failed';
+    return;
+  }
   try {
-    // 初始化上传进度
-    uploadProgress.value = {
-      uploaded: 0,
-      total: file.size,
-      percent: 0,
-      message: t('features.settings.backup.import.uploadInit'),
-    };
-
-    // 步骤1: 初始化分片上传（后端计算并返回 chunk_size 和 total_chunks）
-    const initResponse = await backupApi.initUpload({
-      filename: file.name,
-      total_size: file.size,
-    });
-
-    if (initResponse.data.status !== 'ok') {
-      throw new Error(initResponse.data.message);
-    }
-
-    uploadId.value = initResponse.data.data.upload_id;
-    chunkSize.value = initResponse.data.data.chunk_size;
-    const totalChunks = initResponse.data.data.total_chunks;
-
-    // 步骤2: 并行分片上传（5个并发连接）
-    uploadProgress.value.message = t(
-      'features.settings.backup.import.uploadingChunks',
-    );
-
-    await uploadChunksInParallel(
-      file,
-      totalChunks,
-      uploadId.value,
-      chunkSize.value,
-    );
-
-    // 步骤3: 完成上传
-    uploadProgress.value.message = t(
+    uploadProgressMessage.value = t(
       'features.settings.backup.import.uploadComplete',
     );
-
-    const completeResponse = await backupApi.completeUpload({
-      upload_id: uploadId.value,
-    });
-
-    if (completeResponse.data.status !== 'ok') {
-      throw new Error(completeResponse.data.message);
-    }
-
-    uploadedFilename.value = completeResponse.data.data.filename;
-
-    // 步骤4: 预检查
-    uploadProgress.value.message = t(
-      'features.settings.backup.import.checking',
-    );
-
-    const checkResponse = await backupApi.check(uploadedFilename.value);
-
-    if (checkResponse.data.status !== 'ok') {
-      throw new Error(checkResponse.data.message);
-    }
-
-    checkResult.value = checkResponse.data.data;
-
-    // 检查是否有效
-    if (!checkResult.value.valid) {
-      importStatus.value = 'failed';
-      importError.value =
-        checkResult.value.error ||
-        t('features.settings.backup.import.invalidBackup');
-      return;
-    }
-
-    // 显示确认对话框
-    importStatus.value = 'confirm';
+    await finishUploadedBackup(result);
   } catch (error) {
-    // 上传失败时尝试清理已上传的分片
-    if (uploadId.value) {
-      try {
-        await backupApi.abortUpload({
-          upload_id: uploadId.value,
-        });
-      } catch (abortError) {
-        console.error('Failed to abort upload:', abortError);
-      }
-    }
+    importStatus.value = 'failed';
+    importError.value =
+      error.response?.data?.message || error.message || 'Upload failed';
+  }
+};
 
+const resumeImportUpload = async () => {
+  importStatus.value = 'uploading';
+  uploadProgressMessage.value = t(
+    'features.settings.backup.import.uploadingChunks',
+  );
+  const result = await chunkedUploader.resume();
+  if (!result) {
+    importStatus.value = 'failed';
+    importError.value = chunkedUploader.errorMessage.value || 'Upload failed';
+    return;
+  }
+  try {
+    await finishUploadedBackup(result);
+  } catch (error) {
     importStatus.value = 'failed';
     importError.value =
       error.response?.data?.message || error.message || 'Upload failed';
@@ -987,15 +890,10 @@ const pollImportProgress = async () => {
 
 // 重置导入状态
 const resetImport = async () => {
-  // 如果有进行中的上传，先取消
-  if (uploadId.value && importStatus.value === 'uploading') {
-    try {
-      await backupApi.abortUpload({
-        upload_id: uploadId.value,
-      });
-    } catch (error) {
-      console.error('Failed to abort upload:', error);
-    }
+  if (importStatus.value === 'uploading') {
+    await chunkedUploader.cancel();
+  } else {
+    chunkedUploader.reset();
   }
 
   importStatus.value = 'idle';
@@ -1005,9 +903,7 @@ const resetImport = async () => {
   importError.value = '';
   uploadedFilename.value = '';
   checkResult.value = null;
-  uploadId.value = '';
-  chunkSize.value = 0;
-  uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: '' };
+  uploadProgressMessage.value = '';
 };
 
 // Download through the authenticated API client so the Dashboard token never

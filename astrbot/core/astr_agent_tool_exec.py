@@ -542,7 +542,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             config.get("agent_runner", {})
             .get("config", {})
             .get("misc", {})
-            .get("max_steps", 30)
+            .get("max_steps", 128)
         )
         from astrbot.core.streaming_override import resolve_streaming_response
 
@@ -883,6 +883,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
+        effective_timeout = tool_call_timeout or run_context.tool_call_timeout
+        if isinstance(tool, ShellSessionTool) and tool_args.get("action") in {
+            "poll",
+            "write",
+            "write_line",
+            "interrupt",
+        }:
+            yield_time_ms = tool_args.get("yield_time_ms", 5_000)
+            if isinstance(yield_time_ms, int) and 0 <= yield_time_ms <= 300_000:
+                effective_timeout = max(effective_timeout, yield_time_ms / 1000 + 5)
+
         wrapper = call_local_llm_tool(
             context=run_context,
             handler=awaitable,
@@ -893,7 +904,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             try:
                 resp = await asyncio.wait_for(
                     anext(wrapper),
-                    timeout=tool_call_timeout or run_context.tool_call_timeout,
+                    timeout=effective_timeout,
                 )
                 if resp is not None:
                     if isinstance(resp, mcp.types.CallToolResult):
@@ -935,7 +946,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         )
             except TimeoutError:
                 raise Exception(
-                    f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
+                    f"tool {tool.name} execution timeout after {effective_timeout} seconds.",
                 )
             except StopAsyncIteration:
                 break

@@ -13,6 +13,8 @@ import { client } from './client.gen';
 import type {
   AbortBackupUploadData,
   AbortBackupUploadResponses,
+  AbortFileUploadData,
+  AbortFileUploadResponses,
   AddChatProjectSessionData,
   AddChatProjectSessionResponses,
   BatchDeleteChatSessionsData,
@@ -33,6 +35,8 @@ import type {
   CleanupStorageResponses,
   CompleteBackupUploadData,
   CompleteBackupUploadResponses,
+  CompleteFileUploadData,
+  CompleteFileUploadResponses,
   CompleteMcpData,
   CompleteMcpOAuthCallbackData,
   CompleteMcpResponses,
@@ -292,6 +296,8 @@ import type {
   ImportKnowledgeDocumentsResponses,
   InitBackupUploadData,
   InitBackupUploadResponses,
+  InitFileUploadData,
+  InitFileUploadResponses,
   InstallPipPackageData,
   InstallPipPackageResponses,
   InstallPluginFromGithubData,
@@ -533,6 +539,10 @@ import type {
   SetupTotpResponses,
   StartMcpOAuthData,
   StartMcpOAuthResponses,
+  StatusBackupUploadData,
+  StatusBackupUploadResponses,
+  StatusFileUploadData,
+  StatusFileUploadResponses,
   StopChatSessionData,
   StopChatSessionResponses,
   StreamLiveLogsData,
@@ -622,6 +632,8 @@ import type {
   UploadBackupResponses,
   UploadDataFileData,
   UploadDataFileResponses,
+  UploadFileChunkData,
+  UploadFileChunkResponses,
   UploadFileData,
   UploadFileResponses,
   UploadKnowledgeDocumentData,
@@ -2837,6 +2849,112 @@ export const uploadFile = <ThrowOnError extends boolean = false>(
     ...options,
     headers: {
       'Content-Type': null,
+      ...options.headers,
+    },
+  });
+
+/**
+ * Initialize chunked file upload
+ */
+export const initFileUpload = <ThrowOnError extends boolean = false>(
+  options: Options<InitFileUploadData, ThrowOnError>,
+): RequestResult<InitFileUploadResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    InitFileUploadResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/files/upload/init',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Upload a file chunk
+ */
+export const uploadFileChunk = <ThrowOnError extends boolean = false>(
+  options: Options<UploadFileChunkData, ThrowOnError>,
+): RequestResult<UploadFileChunkResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    UploadFileChunkResponses,
+    unknown,
+    ThrowOnError
+  >({
+    ...formDataBodySerializer,
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/files/upload/chunk',
+    ...options,
+    headers: {
+      'Content-Type': null,
+      ...options.headers,
+    },
+  });
+
+/**
+ * Complete chunked file upload
+ */
+export const completeFileUpload = <ThrowOnError extends boolean = false>(
+  options: Options<CompleteFileUploadData, ThrowOnError>,
+): RequestResult<CompleteFileUploadResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    CompleteFileUploadResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/files/upload/complete',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Abort chunked file upload
+ */
+export const abortFileUpload = <ThrowOnError extends boolean = false>(
+  options: Options<AbortFileUploadData, ThrowOnError>,
+): RequestResult<AbortFileUploadResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    AbortFileUploadResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/files/upload/abort',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Query chunked file upload status
+ */
+export const statusFileUpload = <ThrowOnError extends boolean = false>(
+  options: Options<StatusFileUploadData, ThrowOnError>,
+): RequestResult<StatusFileUploadResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    StatusFileUploadResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/files/upload/status',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
       ...options.headers,
     },
   });
@@ -6069,6 +6187,27 @@ export const abortBackupUpload = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/backups/upload/abort',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Query chunked backup upload status
+ */
+export const statusBackupUpload = <ThrowOnError extends boolean = false>(
+  options: Options<StatusBackupUploadData, ThrowOnError>,
+): RequestResult<StatusBackupUploadResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    StatusBackupUploadResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/backups/upload/status',
     ...options,
     headers: {
       'Content-Type': 'application/json',

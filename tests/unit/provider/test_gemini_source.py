@@ -7,6 +7,7 @@ import pytest
 from google.genai import types as google_types
 from google.genai.errors import APIError
 
+import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.agent.llm_types import LLMResponse
@@ -1908,3 +1909,137 @@ async def test_gemini_close_httpx_client_swallows_aclose_errors():
     await provider._close_httpx_client(client)
 
     client.aclose.assert_awaited_once()
+
+
+def _gemini_part(*, text=None, thought=None, function_call=None):
+    return SimpleNamespace(
+        text=text,
+        thought=thought,
+        function_call=function_call,
+        inline_data=None,
+        thought_signature=None,
+    )
+
+
+def _gemini_stream_chunk(
+    *,
+    text=None,
+    thought=None,
+    function_call=None,
+    finish_reason=None,
+    response_id="resp-1",
+):
+    parts = []
+    if text is not None:
+        parts.append(_gemini_part(text=text))
+    if thought is not None:
+        parts.append(_gemini_part(text=thought, thought=True))
+    if function_call is not None:
+        parts.append(_gemini_part(function_call=function_call))
+    return SimpleNamespace(
+        candidates=[
+            SimpleNamespace(
+                content=SimpleNamespace(parts=parts),
+                finish_reason=finish_reason,
+            )
+        ],
+        text=text,
+        response_id=response_id,
+        usage_metadata=None,
+    )
+
+
+def _gemini_stream_provider():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.provider_settings = {}
+    provider.model_name = "gemini-3.7-flash"
+    provider.safety_settings = []
+    provider.client = SimpleNamespace(
+        models=SimpleNamespace(generate_content_stream=lambda **kwargs: None)
+    )
+    return provider
+
+
+async def _drain_gemini_stream(provider, monkeypatch, chunks):
+    async def fake_stream():
+        for chunk in chunks:
+            yield chunk
+
+    async def fake_retry(provider_name, request_factory, max_attempts=None):
+        return fake_stream()
+
+    async def fake_prepare_conversation(_payloads):
+        return []
+
+    async def fake_prepare_query_config(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(gemini_source_module, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+    monkeypatch.setattr(provider, "_require_client", lambda: provider.client)
+    monkeypatch.setattr(provider, "get_model", lambda: "gemini-3.7-flash")
+    return [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "messages": [{"role": "user", "content": "what's the weather?"}],
+                "model": "gemini-3.7-flash",
+            },
+            tools=None,
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_keeps_narration_emitted_before_tool_call(monkeypatch):
+    provider = _gemini_stream_provider()
+    tool_call = SimpleNamespace(
+        name="get_weather",
+        args={"city": "Shenyang"},
+        id="call-1",
+        thought_signature=None,
+    )
+
+    responses = await _drain_gemini_stream(
+        provider,
+        monkeypatch,
+        [
+            _gemini_stream_chunk(text="Sure, let me check that for you."),
+            _gemini_stream_chunk(function_call=tool_call),
+        ],
+    )
+
+    final = responses[-1]
+    assert final.is_chunk is False
+    assert final.tools_call_name == ["get_weather"]
+    plain_text = "".join(
+        part.text
+        for part in (final.result_chain.chain or [])
+        if isinstance(part, Comp.Plain)
+    )
+    assert "Sure, let me check that for you." in plain_text
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
+    provider = _gemini_stream_provider()
+    tool_call = SimpleNamespace(
+        name="get_weather",
+        args={"city": "Shenyang"},
+        id="call-1",
+        thought_signature=None,
+    )
+
+    responses = await _drain_gemini_stream(
+        provider,
+        monkeypatch,
+        [
+            _gemini_stream_chunk(thought="weighing options"),
+            _gemini_stream_chunk(function_call=tool_call, thought="deciding to call"),
+        ],
+    )
+
+    final = responses[-1]
+    assert final.reasoning_content == "weighing optionsdeciding to call"

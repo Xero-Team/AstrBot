@@ -5,18 +5,16 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 8b82d03d949c82a5eae26c00be849e042a48bfd4
-  synced_at_utc: 2026-09-18T09:20:53Z
+  commit: b06550567b25d7ef4404bf526e448c869cc5d4ec
+  synced_at_utc: 2026-09-19T09:31:47Z
   sync_method: adapt
-  source_pr: '10108,9669,10120'
+  source_pr: '10123,10129,10131,10133,10132,10101,10051,10112,10075,10080,10116,10135,10095,10098,10090'
   note: >-
-    Reviewed 763a5ee9714b5863f063ee40e976a6644dd1938c..8b82d03d949c82a5eae26c00be849e042a48bfd4
-    (5 commits): adapted #10108, the local file-access menu copy, #9669, and
-    #10120; skipped #10119. Conversation previews keep DashboardStepUp, MDI
-    icons, and DOMPurify; skip ja-JP/ru-RU. File-scope hints land on the fork
-    LocalPermissionMatrix without restoring computer_use_require_admin. OpenAI
-    SDK retries are disabled on chat-completions and responses clients; MIME
-    sniffing, 64 MiB input skip, 512 KiB JPEG output, and 512 MB chat uploads
-    stay on request_preparation/always-JPEG. Do not add image_input.py,
-    montage, or providers/image-formats.md. Focused pytest, vue-tsc, and
-    i18n:check passed.
+    Reviewed 8b82d03d949c82a5eae26c00be849e042a48bfd4..b06550567b25d7ef4404bf526e448c869cc5d4ec
+    (15 commits): adapted #10123, #10129, #10131, #10133, #10101, #10051,
+    #10112, #10075, #10080, #10116, #10135, #10095, and #10090; cherry-picked
+    #10132; skipped #10098. Chunked uploads keep dashboard.upload_utils, the
+    512 MiB chat MIME path, and zh-CN/en-US only. Agent step defaults move to
+    128 via agent_runner_migration.py config_version 4. Skip ja-JP/ru-RU,
+    GitHubRepository, openai_source.py, and image_input.py. OneBot per-segment
+    file_id already exists. Focused pytest, vue-tsc, and i18n:check passed.

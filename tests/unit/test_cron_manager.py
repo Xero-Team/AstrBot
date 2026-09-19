@@ -319,6 +319,7 @@ class TestUpdateJob:
             cron_expression="0 10 * * *",
             enabled=False,  # Disabled to avoid scheduling
         )
+        mock_db.get_cron_job.return_value = sample_cron_job
         mock_db.update_cron_job.return_value = updated_job
 
         result = await cron_manager.update_job("test-job-id", name="Updated Job")
@@ -329,11 +330,24 @@ class TestUpdateJob:
     @pytest.mark.asyncio
     async def test_update_job_not_found(self, cron_manager, mock_db):
         """Test updating a non-existent job."""
+        mock_db.get_cron_job.return_value = None
         mock_db.update_cron_job.return_value = None
 
         result = await cron_manager.update_job("non-existent", name="Updated")
 
         assert result is None
+        mock_db.update_cron_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_job_rejects_invalid_schedule_before_write(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        mock_db.get_cron_job.return_value = sample_cron_job
+
+        with pytest.raises(CronJobSchedulingError):
+            await cron_manager.update_job("test-job-id", cron_expression="not a cron")
+
+        mock_db.update_cron_job.assert_not_called()
 
 
 class TestDeleteJob:
@@ -869,8 +883,8 @@ class TestRunActiveAgentJob:
         ("misc_config", "expected_max_step"),
         [
             pytest.param({"max_steps": 50}, 50, id="configured"),
-            pytest.param({}, 30, id="missing_falls_back_to_default"),
-            pytest.param({"max_steps": True}, 30, id="boolean_falls_back_to_default"),
+            pytest.param({}, 128, id="missing_falls_back_to_default"),
+            pytest.param({"max_steps": True}, 128, id="boolean_falls_back_to_default"),
             pytest.param({"max_steps": "50"}, 50, id="numeric_string_coerced"),
             pytest.param({"max_steps": 0}, 1, id="zero_clamped_to_min"),
         ],

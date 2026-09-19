@@ -404,6 +404,18 @@ async def test_managed_shell_uses_powershell_exec_on_windows(monkeypatch, tmp_pa
     assert "creationflags" in calls[0][1]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("yield_time_ms", [-1, 300_001])
+async def test_managed_shell_rejects_invalid_poll_wait(yield_time_ms):
+    with pytest.raises(ValueError, match="must be between 0 and 300000"):
+        await LocalShellComponent().poll_session(
+            owner_id="owner-a",
+            sender_id="user-a",
+            session_id="missing",
+            yield_time_ms=yield_time_ms,
+        )
+
+
 def test_managed_shell_captures_output_and_supports_incremental_poll(tmp_path):
     async def scenario() -> None:
         shell = LocalShellComponent(session_ttl_seconds=60)

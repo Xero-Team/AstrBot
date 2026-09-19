@@ -29,3 +29,10 @@ def test_sanitize_upload_filename_removes_embedded_null_bytes():
     assert sanitize_upload_filename("\x00leading.txt") == "leading.txt"
     assert sanitize_upload_filename("trailing\x00.txt\x00") == "trailing.txt"
     assert sanitize_upload_filename("mid\x00dle.txt") == "middle.txt"
+
+
+def test_sanitize_upload_filename_strips_log_injection_newlines():
+    assert (
+        sanitize_upload_filename("evil\nINFO injected.txt") == "evilINFO injected.txt"
+    )
+    assert sanitize_upload_filename("evil\r\n.txt") == "evil.txt"

@@ -292,8 +292,8 @@ def local_agent_runtime_from_profile(
         tool_schema_mode = "full"
 
     max_steps = coerce_int_config(
-        misc_config.get("max_steps", 30),
-        default=30,
+        misc_config.get("max_steps", 128),
+        default=128,
         min_value=1,
         field_name="agent_runner.config.misc.max_steps",
     )

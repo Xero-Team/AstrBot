@@ -1299,7 +1299,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30
+        self, max_step: int = 128
     ) -> T.AsyncGenerator[AgentResponse]:
         """Process steps until the agent is done."""
         step_count = 0

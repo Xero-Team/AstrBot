@@ -295,8 +295,8 @@ class LocalShellComponent(ShellComponent):
         """Start a runtime-owned interactive shell session."""
         if not sandboxed and not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
-        if not 0 <= yield_time_ms <= 30_000:
-            raise ValueError("yield_time_ms must be between 0 and 30000")
+        if not 0 <= yield_time_ms <= 300_000:
+            raise ValueError("yield_time_ms must be between 0 and 300000")
         if timeout is not None and timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         max_output_chars = max(1, min(max_output_chars, 100_000))
@@ -466,8 +466,8 @@ class LocalShellComponent(ShellComponent):
         runtime_id: str = "local",
         sender_id: str = "",
     ) -> dict[str, Any]:
-        if not 0 <= yield_time_ms <= 30_000:
-            raise ValueError("yield_time_ms must be between 0 and 30000")
+        if not 0 <= yield_time_ms <= 300_000:
+            raise ValueError("yield_time_ms must be between 0 and 300000")
         session = await self._get_owned_session(
             session_id, owner_id, runtime_id, sender_id
         )

@@ -61,7 +61,7 @@ RUNNER_NO_RESULT_LOG = "Agent Runner did not return final result."
 
 async def run_third_party_agent(
     runner: BaseAgentRunner,
-    max_step: int = 30,
+    max_step: int = 128,
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -205,8 +205,8 @@ class ThirdPartyAgentSubStage:
             source="Third-party runner config",
         )
         self.max_step: int = coerce_int_config(
-            self.runner_config.get("max_steps", 30),
-            default=30,
+            self.runner_config.get("max_steps", 128),
+            default=128,
             min_value=1,
             field_name="max_steps",
             source="Third-party runner config",
@@ -242,7 +242,7 @@ class ThirdPartyAgentSubStage:
         mark_stream_consumed: Callable[[], None],
     ) -> AsyncGenerator[None]:
         aggregator = _RunnerResultAggregator(custom_error_message)
-        max_step = getattr(self, "max_step", 30)
+        max_step = getattr(self, "max_step", 128)
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain]:
             mark_stream_consumed()
@@ -296,7 +296,7 @@ class ThirdPartyAgentSubStage:
         custom_error_message: str | None,
     ) -> AsyncGenerator[None]:
         aggregator = _RunnerResultAggregator(custom_error_message)
-        max_step = getattr(self, "max_step", 30)
+        max_step = getattr(self, "max_step", 128)
         async for chain, is_error in run_third_party_agent(
             runner,
             max_step=max_step,

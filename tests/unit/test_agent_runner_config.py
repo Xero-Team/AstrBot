@@ -34,7 +34,7 @@ def test_agent_runner_defaults_are_isolated_and_normalized(runner_type: str):
     }
     if runner_type != "local":
         assert second["persona_id"] == "default"
-        assert second["max_steps"] == 30
+        assert second["max_steps"] == 128
         assert second["proxy_mode"] == "inherit"
         assert second["proxy_url"] == ""
         assert "proxy" not in second
@@ -340,7 +340,7 @@ def test_third_party_provider_config_is_copied_inline(
     assert config["agent_runner"]["runner_type"] == runner_type
     assert runner_config[expected_key] == provider_config[expected_key]
     assert runner_config["persona_id"] == "operator"
-    assert runner_config["max_steps"] == 30
+    assert runner_config["max_steps"] == 128
     assert not {
         "id",
         "type",

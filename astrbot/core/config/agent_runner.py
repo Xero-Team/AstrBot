@@ -12,7 +12,7 @@ AGENT_RUNNER_TYPES = ("local", "dify", "coze", "dashscope", "deerflow")
 THIRD_PARTY_AGENT_RUNNER_TYPES = AGENT_RUNNER_TYPES[1:]
 
 _THIRD_PARTY_SHARED_DEFAULTS: dict[str, Any] = {
-    "max_steps": 30,
+    "max_steps": 128,
     "persona_id": "default",
     "proxy_mode": "inherit",
     "proxy_url": "",
@@ -40,7 +40,7 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "fallback_max_tokens": 128000,
         },
         "misc": {
-            "max_steps": 30,
+            "max_steps": 128,
             "tool_schema_mode": "full",
             "tool_call_timeout": 120,
             "sanitize_context_by_modalities": False,

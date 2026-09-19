@@ -1,6 +1,10 @@
-from astrbot.api import Subject, sender_admission_key_from_id, star
+from astrbot.api import (
+    Subject,
+    sender_admission_key_from_id,
+    sender_service_config,
+    star,
+)
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.star.session_llm_manager import sender_service_config
 
 from .reply import reply_i18n
 

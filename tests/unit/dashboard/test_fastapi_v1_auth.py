@@ -607,15 +607,23 @@ async def test_v1_knowledge_base_create_validation_uses_api_error_shape(
         json={"embedding_provider_id": "embedding-1"},
         headers=headers,
     )
+    legacy_name_response = await asgi_client.post(
+        "/api/v1/knowledge-bases",
+        json={"name": "Docs", "embedding_provider_id": "embedding-1"},
+        headers=headers,
+    )
     missing_provider_response = await asgi_client.post(
         "/api/v1/knowledge-bases",
-        json={"name": "Docs"},
+        json={"kb_name": "Docs"},
         headers=headers,
     )
 
     assert missing_name_response.status_code == 200
     assert missing_name_response.json()["status"] == "error"
     assert missing_name_response.json()["message"] == "知识库名称不能为空"
+    assert legacy_name_response.status_code == 200
+    assert legacy_name_response.json()["status"] == "error"
+    assert legacy_name_response.json()["message"] == "知识库名称不能为空"
     assert missing_provider_response.status_code == 200
     assert missing_provider_response.json()["status"] == "error"
     assert (

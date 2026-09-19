@@ -34,7 +34,13 @@ class ConcreteEvent(AstrMessageEvent):
         _ = message
 
 
-def make_real_event(*, message_type, group_id="room-a", session_id="room-a"):
+def make_real_event(
+    *,
+    message_type,
+    group_id="room-a",
+    session_id="room-a",
+    platform_id="napcat",
+):
     message = AstrBotMessage()
     message.type = message_type
     message.group_id = group_id
@@ -47,7 +53,9 @@ def make_real_event(*, message_type, group_id="room-a", session_id="room-a"):
     return ConcreteEvent(
         message_str="hello",
         message_obj=message,
-        platform_meta=PlatformMetadata(name="napcat", description="test", id="napcat"),
+        platform_meta=PlatformMetadata(
+            name=platform_id, description="test", id=platform_id
+        ),
         session_id=session_id,
     )
 
@@ -184,7 +192,9 @@ async def make_stage(**settings):
             plugin_catalog=SimpleNamespace(
                 get_command_catalog=lambda *_args: command_catalog,
             ),
-            preferences=SimpleNamespace(get_async=AsyncMock(return_value={})),
+            preferences=SimpleNamespace(
+                get_async=AsyncMock(return_value={"session_enabled": True})
+            ),
             handlers=catalogs.handlers,
             plugins=catalogs.plugins,
         )
@@ -880,6 +890,25 @@ async def test_command_syntax_error_is_not_attributed_to_plugin(monkeypatch):
     assert event.stopped is True
     assert "参数展开" in text
     assert "插件" not in text
+
+
+@pytest.mark.asyncio
+async def test_unwritten_im_session_suppresses_command_diagnostics(monkeypatch):
+    stage = await make_stage()
+    stage.session_services.is_session_enabled = AsyncMock(return_value=False)
+    stage.session_services.is_session_blocked = AsyncMock(return_value=False)
+
+    async def name(self, event, value: str) -> None:
+        pass
+
+    handler, _ = make_command_handler("name", name)
+    install_handlers(stage, monkeypatch, [handler])
+    event = FakeEvent([Plain("/name $HOME")], message_text="/name $HOME")
+
+    await stage.process(event)
+
+    assert event.stopped is True
+    assert event.sent == []
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-from astrbot.api import star
+from astrbot.api import overlay_flag_enabled, star
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n
@@ -16,7 +16,7 @@ class TtsCommands:
             "session_service_config",
             {},
         )
-        enabled = settings.get("tts_enabled", True)
+        enabled = overlay_flag_enabled(settings.get("tts_enabled"), scope_id=umo)
         await reply_i18n(
             self.context,
             event,

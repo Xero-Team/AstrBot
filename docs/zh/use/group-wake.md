@@ -95,7 +95,7 @@ Discord 的用户提及或机器人角色提及**不会**打这个标记，仍�
 
 流水线顺序是：唤醒检查 → [未列入会话和发送者](./platform-settings#未列入会话和发送者) → 会话是否启用 → 入站合并 → 限流 → 内容安全 → 预处理 → 插件或 LLM。
 
-所以「策略已经放行」之后，还可能因为未列入会话或未列入发送者策略、发送者拉黑、自定义规则关掉了该会话、限流或内容安全而没有回复。会话启停见 [自定义规则](./custom-rules)。未匹配的普通文本仍会交给插件的 `EventMessageType.ALL` / `PRIVATE_MESSAGE` 监听。
+所以「策略已经放行」之后，还可能因为未列入会话或未列入发送者策略、发送者拉黑、会话/LLM 默认关闭、自定义规则关掉了该会话、限流或内容安全而没有回复。IM 群聊和私聊在没有覆盖时会话、LLM、TTS 默认关闭，需要 `/bot enable` 再 `/llm enable`。会话启停见 [自定义规则](./custom-rules)。未匹配的普通文本仍会交给插件的 `EventMessageType.ALL` / `PRIVATE_MESSAGE` 监听。
 
 ## 常见误配
 
@@ -105,5 +105,6 @@ Discord 的用户提及或机器人角色提及**不会**打这个标记，仍�
 4. 以为 @ 机器人就会进内置 AI。提及只是消息链标记。
 5. 以为回复机器人等于 @；需要显式打开 `reply_to_bot`。
 6. `unlisted_sessions=deny`，当前群没有会话覆盖。
-7. 自定义规则或 `/llm disable` 关掉了该会话的 LLM。
-8. 该发送者被 `/user block` 拉黑，或 `unlisted_senders=deny` 且没有发送者覆盖。
+7. 新群或 IM 私聊还没 `/bot enable` / `/llm enable`（没有覆盖时默认关闭）。
+8. 自定义规则或 `/llm disable` 关掉了该会话的 LLM。
+9. 该发送者被 `/user block` 拉黑，或 `unlisted_senders=deny` 且没有发送者覆盖。

@@ -95,7 +95,7 @@ Isolation changes **who owns the context**. It does not relax `llm_access.group`
 
 Pipeline order: wake check → [unlisted sessions and senders](./platform-settings#unlisted-sessions-and-senders) → session enabled → coalesce → rate limit → content safety → preprocess → plugin or LLM.
 
-A policy admit can still vanish behind the unlisted-session or unlisted-sender policy, a sender block, a custom rule that disabled the session, rate limits, or content safety. Session on/off is in [Custom rules](./custom-rules). Unmatched ordinary text still reaches plugin `EventMessageType.ALL` / `PRIVATE_MESSAGE` listeners.
+A policy admit can still vanish behind the unlisted-session or unlisted-sender policy, a sender block, the unwritten session/LLM default, a custom rule that disabled the session, rate limits, or content safety. IM groups and direct messages default session, LLM, and TTS off until `/bot enable` then `/llm enable`. Session on/off is in [Custom rules](./custom-rules). Unmatched ordinary text still reaches plugin `EventMessageType.ALL` / `PRIVATE_MESSAGE` listeners.
 
 ## Common misconfigurations
 
@@ -105,5 +105,6 @@ A policy admit can still vanish behind the unlisted-session or unlisted-sender p
 4. Assuming @-ing the bot starts the built-in AI. Mentions are message-chain markers.
 5. Assuming a reply equals a mention; `reply_to_bot` is a separate switch.
 6. `unlisted_sessions=deny` and this group has no session overlay.
-7. A custom rule or `/llm disable` turned LLM off for the session.
-8. That sender is blocked with `/user block`, or `unlisted_senders=deny` and the sender has no overlay.
+7. A new group or IM DM has not been `/bot enable` / `/llm enable` yet (unwritten overlays default off).
+8. A custom rule or `/llm disable` turned LLM off for the session.
+9. That sender is blocked with `/user block`, or `unlisted_senders=deny` and the sender has no overlay.

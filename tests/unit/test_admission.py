@@ -12,6 +12,9 @@ from astrbot.core.auth.admission import (
     compose_admission,
     composed_llm_enabled,
     conversation_kind_from_event,
+    is_webchat_event,
+    is_webchat_scope,
+    overlay_flag_enabled,
     platform_instance_from_event,
     sender_admission_key_from_event,
     sender_admission_key_from_id,
@@ -20,6 +23,7 @@ from astrbot.core.auth.admission import (
     session_admission_key_from_event,
     session_admission_key_from_umo,
     session_overlay_from_config,
+    unwritten_service_enabled,
 )
 from astrbot.core.auth.models import Subject
 from astrbot.core.pipeline.waking_check.stage import (
@@ -263,7 +267,7 @@ def test_sender_overlay_from_config(config, expected):
             UnlistedPolicy.ALLOW,
             UnlistedPolicy.ALLOW,
             True,
-            True,
+            False,
         ),
         (
             "session_open_uid_unwritten",
@@ -272,7 +276,7 @@ def test_sender_overlay_from_config(config, expected):
             UnlistedPolicy.ALLOW,
             UnlistedPolicy.ALLOW,
             True,
-            True,
+            False,
         ),
         (
             "session_llm_off_uid_unwritten",
@@ -335,7 +339,7 @@ def test_sender_overlay_from_config(config, expected):
             UnlistedPolicy.DENY,
             UnlistedPolicy.ALLOW,
             True,
-            True,
+            False,
         ),
         (
             "unlisted_senders_deny_without_uid_allow",
@@ -380,7 +384,7 @@ def test_sender_overlay_from_config(config, expected):
             UnlistedPolicy.ALLOW,
             UnlistedPolicy.ALLOW,
             True,
-            True,
+            False,
         ),
         (
             "invalid_overlay_values_are_unlisted",
@@ -432,3 +436,55 @@ def test_compose_admission_exposes_session_enabled_without_dropping_event():
     )
     assert decision.admit_event is True
     assert decision.session_enabled is False
+
+
+def test_unwritten_service_defaults_webchat_on_im_off():
+    assert unwritten_service_enabled("webchat:FriendMessage:webchat!u!c") is True
+    assert unwritten_service_enabled("session:webchat:private:cid") is True
+    assert unwritten_service_enabled("napcat:GroupMessage:room-a") is False
+    assert unwritten_service_enabled("napcat:FriendMessage:42") is False
+    assert unwritten_service_enabled("session:napcat:group:room-a") is False
+    assert unwritten_service_enabled("") is False
+    assert is_webchat_scope("webchat") is False
+    assert is_webchat_scope("webchat:FriendMessage:x") is True
+    assert is_webchat_scope("session:webchat:private:x") is True
+    assert is_webchat_scope("napcat:FriendMessage:42") is False
+    assert overlay_flag_enabled(None, scope_id="napcat:GroupMessage:1") is False
+    assert overlay_flag_enabled(True, scope_id="napcat:GroupMessage:1") is True
+    assert overlay_flag_enabled("no", scope_id="webchat:FriendMessage:x") is True
+
+    webchat = make_real_event(
+        message_type=MessageType.FRIEND_MESSAGE,
+        group_id="",
+        session_id="webchat!u!c",
+        platform_id="webchat",
+    )
+    assert is_webchat_event(webchat) is True
+    assert (
+        is_webchat_event(make_real_event(message_type=MessageType.GROUP_MESSAGE))
+        is False
+    )
+    named_webchat = SimpleNamespace(
+        get_platform_id=lambda: "napcat",
+        get_platform_name=lambda: "webchat",
+    )
+    assert is_webchat_event(named_webchat) is False
+    blank_id = SimpleNamespace(
+        get_platform_id=lambda: "  ",
+        get_platform_name=lambda: "webchat",
+    )
+    assert is_webchat_event(blank_id) is True
+
+    unwritten = compose_admission(
+        session_overlay_from_config({}),
+        sender_overlay_from_config({}),
+    )
+    assert unwritten.session_enabled is False
+    assert unwritten.admit_llm is False
+    webchat_decision = compose_admission(
+        session_overlay_from_config({}),
+        sender_overlay_from_config({}),
+        unwritten_enabled=True,
+    )
+    assert webchat_decision.session_enabled is True
+    assert webchat_decision.admit_llm is True

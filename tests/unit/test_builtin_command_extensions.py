@@ -1013,9 +1013,24 @@ async def test_tts_commands_report_and_set_session_service_status():
 
 
 def test_bot_flag_enabled_defaults_missing_and_invalid_values():
-    assert _flag_enabled({}, "session_enabled") is True
-    assert _flag_enabled({"session_enabled": False}, "session_enabled") is False
-    assert _flag_enabled({"session_enabled": "no"}, "session_enabled") is True
+    im_umo = "napcat:FriendMessage:42"
+    webchat_umo = "webchat:FriendMessage:webchat!u!c"
+    assert _flag_enabled({}, "session_enabled", scope_id=im_umo) is False
+    assert (
+        _flag_enabled({"session_enabled": False}, "session_enabled", scope_id=im_umo)
+        is False
+    )
+    assert (
+        _flag_enabled({"session_enabled": "no"}, "session_enabled", scope_id=im_umo)
+        is False
+    )
+    assert _flag_enabled({}, "session_enabled", scope_id=webchat_umo) is True
+    assert (
+        _flag_enabled(
+            {"session_enabled": "no"}, "session_enabled", scope_id=webchat_umo
+        )
+        is True
+    )
 
 
 @pytest.mark.asyncio
@@ -1047,7 +1062,7 @@ async def test_bot_commands_report_and_set_session_enabled():
     await command.status(status_event)
     status_text = _plain_text(status_event.result)
     assert "v9.9.9" in status_text
-    assert "Session: enabled" in status_text
+    assert "Session: disabled" in status_text
     assert "LLM: disabled" in status_text
     assert "TTS: enabled" in status_text
     assert "Fully blocked: no" in status_text

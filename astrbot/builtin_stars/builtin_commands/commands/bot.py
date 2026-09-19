@@ -1,4 +1,4 @@
-from astrbot.api import logger, safe_error, star
+from astrbot.api import logger, overlay_flag_enabled, safe_error, star
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n, send_i18n
@@ -7,9 +7,8 @@ from .target import resolve_target_umo
 _SESSION_SERVICE_CONFIG = "session_service_config"
 
 
-def _flag_enabled(settings: dict, key: str) -> bool:
-    value = settings.get(key, True)
-    return value if isinstance(value, bool) else True
+def _flag_enabled(settings: dict, key: str, *, scope_id: str) -> bool:
+    return overlay_flag_enabled(settings.get(key), scope_id=scope_id)
 
 
 class BotCommands:
@@ -49,7 +48,7 @@ class BotCommands:
         off_label = await self.context.i18n.t(event, "bot.status.off")
 
         def label(key: str) -> str:
-            return on_label if _flag_enabled(settings, key) else off_label
+            return on_label if _flag_enabled(settings, key, scope_id=umo) else off_label
 
         await reply_i18n(
             self.context,

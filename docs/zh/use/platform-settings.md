@@ -1,6 +1,6 @@
 # 平台处理
 
-配置文件的 **平台配置** 和 **扩展功能** 里，有一组所有消息平台共用的收发行为。它们在 [唤醒检查](./group-wake) 之后生效：策略已经放行的消息，仍可能被未列入会话或未列入发送者策略、限流或内容安全丢掉。
+配置文件的 **平台配置** 和 **扩展功能** 里，有一组所有消息平台共用的收发行为。它们在 [唤醒检查](./group-wake) 之后生效：策略已经放行的消息，仍可能被未列入会话或未列入发送者策略、会话/LLM 默认关闭、限流或内容安全丢掉。
 
 入口：WebUI **配置文件 → 平台配置**。分段回复在 **扩展功能**。这些字段属于当前配置文件，见 [配置文件](./config-profiles)。
 
@@ -11,7 +11,7 @@
 | `admission.unlisted_sessions` | `allow` | `allow` 放行没有覆盖的会话；`deny` 只放行已有会话覆盖的群或私聊     |
 | `admission.unlisted_senders`  | `allow` | `allow` 放行没有覆盖的发送者；`deny` 只放行已有发送者覆盖的 IM 主体 |
 
-默认 `allow`：新群和新私聊都会进入后续流水线。改成 `deny` 后，只有规范会话键上已有覆盖、或本配置档升级列入集里的会话会被响应。覆盖来自 IM `/llm`、Dashboard [自定义规则](./custom-rules) 写入的 `llm_enabled` / `session_enabled` / `session_blocked`。升级时旧白名单按配置档记入列入集，不会把 `session_enabled` 写到偏好里。
+默认 `allow`：新群和新私聊会通过这一关，但在 `/bot enable` 再 `/llm enable` 之前仍然保持静默，因为没有覆盖时会话、LLM、TTS 默认关闭。改成 `deny` 后，只有规范会话键上已有覆盖、或本配置档升级列入集里的会话会通过这一关。覆盖来自 IM `/bot`、`/llm`、Dashboard [自定义规则](./custom-rules) 写入的 `llm_enabled` / `session_enabled` / `session_blocked`。升级时旧白名单按配置档记入列入集，不会把 `session_enabled` 写到偏好里。
 
 群准入用的是规范会话键（`session:{平台实例}:group:{群 ID}`），不是隔离会话改写后的 UMO。私聊用 `session:{平台实例}:private:{对方 ID}`。发送者覆盖写在 `im:{平台实例}:{机器人账号}:{发送者 ID}` 上，对本机器人实例全局生效。WebChat、OneBot 的 `notice` / `request`，以及当前实例上拥有 `provider.manage` 的发送者，会跳过这一关。默认 `unlisted_senders=allow`：没有发送者覆盖的人仍然放行。改成 `deny` 后，只有已写入 `blocked` 或 `llm_enabled` 的发送者会被列入。Dashboard [自定义规则](./custom-rules) 的发送者目标和 `/user block`、`/user unblock`、`/user llm on|off` 写入同一份发送者覆盖。写入任意 `blocked` 或 `llm_enabled` 都会列入该发送者。
 

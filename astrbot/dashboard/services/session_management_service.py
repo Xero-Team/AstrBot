@@ -7,6 +7,7 @@ from sqlmodel import col, select
 from astrbot import logger
 from astrbot.core.auth.admission import (
     SESSION_SERVICE_CONFIG_KEY,
+    overlay_flag_enabled,
     sender_admission_key_from_id,
     session_admission_key_from_umo,
 )
@@ -247,9 +248,8 @@ class SessionManagementService:
             await self.preferences.session_remove(canonical, SESSION_SERVICE_CONFIG_KEY)
 
     @staticmethod
-    def _session_config_enabled(config: dict, key: str) -> bool:
-        value = config.get(key, True)
-        return value if isinstance(value, bool) else True
+    def _session_config_enabled(config: dict, key: str, *, scope_id: str) -> bool:
+        return overlay_flag_enabled(config.get(key), scope_id=scope_id)
 
     async def list_known_umos(self) -> list[str]:
         async with self.db_helper.get_db() as session:
@@ -789,10 +789,14 @@ class SessionManagementService:
                 svc_config
             )
             session_enabled = self._session_config_enabled(
-                svc_config, "session_enabled"
+                svc_config, "session_enabled", scope_id=umo
             )
-            llm_enabled = self._session_config_enabled(svc_config, "llm_enabled")
-            tts_enabled = self._session_config_enabled(svc_config, "tts_enabled")
+            llm_enabled = self._session_config_enabled(
+                svc_config, "llm_enabled", scope_id=umo
+            )
+            tts_enabled = self._session_config_enabled(
+                svc_config, "tts_enabled", scope_id=umo
+            )
             session_blocked = self._session_config_blocked(svc_config)
 
             if search:

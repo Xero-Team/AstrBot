@@ -544,9 +544,12 @@ def test_public_sdk_and_core_leaf_imports_remain_available() -> None:
     dashboard_sdk = importlib.import_module("astrbot.api.dashboard")
     leaf = importlib.import_module("astrbot.core.platform.astr_message_event")
     session_llm = importlib.import_module("astrbot.core.star.session_llm_manager")
+    admission = importlib.import_module("astrbot.core.auth.admission")
 
     assert sdk.FunctionTool is not None
     assert sdk.sender_service_config is session_llm.sender_service_config
+    assert sdk.overlay_flag_enabled is admission.overlay_flag_enabled
+    assert "overlay_flag_enabled" in sdk.__all__
     assert "sender_service_config" in sdk.__all__
     assert dashboard_sdk.DashboardJsonAction is not None
     assert leaf.AstrMessageEvent is not None

@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import os
 import re
@@ -128,15 +129,23 @@ class RepoZipUpdator:
                 policy,
                 progress_callback=_emit_progress,
             )
-        except Exception as e:
-            logger.error(
-                "下载文件失败: %s -> %s, 错误: %s",
-                redact_outbound_url(url),
-                target_path,
-                e,
-            )
-            if self.rm_on_error and target_path.exists():
-                target_path.unlink()
+        except (asyncio.CancelledError, Exception) as error:
+            if not isinstance(error, asyncio.CancelledError):
+                logger.error(
+                    "下载文件失败: %s -> %s, 错误: %s",
+                    redact_outbound_url(url),
+                    target_path,
+                    error,
+                )
+            try:
+                target_path.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                logger.warning(
+                    "Failed to remove partial download: %s -> %s: %s",
+                    redact_outbound_url(url),
+                    target_path,
+                    cleanup_error,
+                )
             raise
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
@@ -253,13 +262,17 @@ class RepoZipUpdator:
     async def download_from_repo_url(
         self, target_path: str, repo_url: str, proxy=""
     ) -> None:
-        author, repo, branch = await self.resolve_github_source_branch(repo_url)
+        author, repo, branch = self.parse_github_url(repo_url)
 
         logger.info(f"正在下载更新 {repo} ...")
-        logger.info(f"正在从分支 {branch} 下载 {author}/{repo}")
-        release_url = (
-            f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
-        )
+        if branch:
+            release_url = (
+                f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
+            )
+            logger.info("正在从分支 %s 下载 %s/%s", branch, author, repo)
+        else:
+            release_url = f"https://github.com/{author}/{repo}/archive/HEAD.zip"
+            logger.info("正在从默认引用 HEAD 下载 %s/%s", author, repo)
 
         policy = PLUGIN_REPOSITORY
         if proxy:

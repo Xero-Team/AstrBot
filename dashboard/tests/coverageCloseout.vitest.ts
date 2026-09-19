@@ -33,7 +33,7 @@ const api = vi.hoisted(() => {
       removeProjectSession: fn(),
       listProjectSessions: fn(),
     },
-    configRouteApi: { upsert: fn() },
+    configRouteApi: { upsert: fn(), list: fn() },
     personaApi: {
       tree: fn(),
       folders: fn(),
@@ -101,6 +101,7 @@ import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useProjects } from '@/composables/useProjects';
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
 import { useSessions } from '@/composables/useSessions';
+import { getStoredSelectedChatConfigId } from '@/utils/chatConfigBinding';
 import { useCommandActions } from '@/components/extension/componentPanel/composables/useCommandActions';
 import { useCommandFilters } from '@/components/extension/componentPanel/composables/useCommandFilters';
 import { useComponentData } from '@/components/extension/componentPanel/composables/useComponentData';
@@ -683,7 +684,17 @@ describe('coverage closeout', () => {
       data: { data: { session_id: 's2', platform_id: 'webchat' } },
     });
     api.configRouteApi.upsert.mockRejectedValue(new Error('bind'));
+    api.configRouteApi.list.mockResolvedValue({
+      data: {
+        data: {
+          routing: {
+            'webchat:FriendMessage:webchat!guest!s2': 'backend-profile',
+          },
+        },
+      },
+    });
     await sessions.newSession();
+    expect(getStoredSelectedChatConfigId()).toBe('backend-profile');
     api.chatApi.batchDeleteSessions.mockResolvedValue({
       data: { status: 'ok', data: null },
     });

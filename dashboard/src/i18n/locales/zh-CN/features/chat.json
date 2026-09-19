@@ -122,7 +122,8 @@
     "websocket": "WebSocket"
   },
   "config": {
-    "title": "配置文件"
+    "title": "配置文件",
+    "bindFailed": "配置文件绑定失败，已回退到后端当前使用的配置"
   },
   "reasoning": {
     "enabled": "思考内容已开启",

@@ -1,9 +1,13 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { chatApi, configRouteApi } from '@/api/v1';
+import { useToast } from '@/utils/toast';
+import { useModuleI18n } from '@/i18n/composables';
 import {
   buildWebchatUmoDetails,
   getStoredSelectedChatConfigId,
+  resolveConfigIdFromRouting,
+  setStoredSelectedChatConfigId,
 } from '@/utils/chatConfigBinding';
 
 export interface Session {
@@ -25,6 +29,8 @@ function hasStatusCode(error: unknown, statusCode: number): boolean {
 
 export function useSessions(chatboxMode: boolean = false) {
   const router = useRouter();
+  const toast = useToast();
+  const { tm } = useModuleI18n('features/chat');
   const sessions = ref<Session[]>([]);
   const selectedSessions = ref<string[]>([]);
   const currSessionId = ref('');
@@ -51,6 +57,17 @@ export function useSessions(chatboxMode: boolean = false) {
     }
   }
 
+  async function rollbackStoredConfigBinding(umo: string) {
+    try {
+      const response = await configRouteApi.list();
+      const routing = response.data.data?.routing;
+      setStoredSelectedChatConfigId(resolveConfigIdFromRouting(routing, umo));
+    } catch (err) {
+      console.error('Failed to resolve backend config binding', err);
+      setStoredSelectedChatConfigId('default');
+    }
+  }
+
   async function newSession() {
     try {
       const selectedConfigId = getStoredSelectedChatConfigId();
@@ -65,13 +82,15 @@ export function useSessions(chatboxMode: boolean = false) {
         selectedConfigId !== 'default' &&
         platformId === 'webchat'
       ) {
+        const umoDetails = buildWebchatUmoDetails(sessionId);
         try {
-          const umoDetails = buildWebchatUmoDetails(sessionId);
           await configRouteApi.upsert(umoDetails.umo, {
             config_id: selectedConfigId,
           });
         } catch (err) {
           console.error('Failed to bind config to session', err);
+          toast.error(tm('config.bindFailed'));
+          await rollbackStoredConfigBinding(umoDetails.umo);
         }
       }
 

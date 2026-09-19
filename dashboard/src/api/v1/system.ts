@@ -93,6 +93,9 @@ export const backupApi = {
   abortUpload(payload: BackupUploadSessionRequest) {
     return typed<OpenConfig>(openApiV1.abortBackupUpload({ body: payload }));
   },
+  statusUpload(payload: BackupUploadSessionRequest) {
+    return typed<OpenConfig>(openApiV1.statusBackupUpload({ body: payload }));
+  },
   check(filename: string) {
     return typed<OpenConfig>(openApiV1.checkBackup({ path: { filename } }));
   },

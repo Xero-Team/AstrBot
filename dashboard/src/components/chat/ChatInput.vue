@@ -87,6 +87,74 @@
               aria-label="Remove file attachment"
             />
           </div>
+
+          <div
+            v-for="(active, index) in activeUploads"
+            :key="'active-' + index"
+            class="attachment-card file-preview attachment-card--active"
+          >
+            <div
+              class="attachment-icon"
+              :style="{
+                '--attachment-color': activePresentation(active).color,
+              }"
+            >
+              <v-icon
+                :icon="activePresentation(active).icon"
+                size="24"
+              ></v-icon>
+              <span class="attachment-ext">{{
+                activePresentation(active).label
+              }}</span>
+            </div>
+            <span class="attachment-name">{{ active.name }}</span>
+            <span class="attachment-progress-text">{{ active.percent }}%</span>
+            <v-btn
+              @click="$emit('cancelActiveUpload', index)"
+              class="cancel-active-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="grey-darken-1"
+              variant="text"
+            />
+            <div class="attachment-progress-track">
+              <v-progress-linear
+                :model-value="active.percent"
+                color="primary"
+                height="3"
+                rounded
+              />
+            </div>
+          </div>
+
+          <div
+            v-for="(failed, index) in failedUploads"
+            :key="'failed-' + index"
+            class="attachment-card file-preview attachment-card--failed"
+          >
+            <div class="attachment-icon attachment-icon--failed">
+              <v-icon icon="mdi-alert-circle-outline" size="24"></v-icon>
+            </div>
+            <span class="attachment-name" :title="failed.error">{{
+              failed.name
+            }}</span>
+            <v-btn
+              @click="$emit('retryFailedUpload', index)"
+              class="remove-attachment-btn retry-attachment-btn"
+              icon="mdi-refresh"
+              size="x-small"
+              color="primary"
+              variant="tonal"
+            />
+            <v-btn
+              @click="$emit('discardFailedUpload', index)"
+              class="remove-attachment-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="error"
+              variant="tonal"
+            />
+          </div>
         </div>
       </transition>
 
@@ -319,6 +387,10 @@ import ProviderModelMenu from './ProviderModelMenu.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import CommandSuggestion from './CommandSuggestion.vue';
 import { attachmentPresentation } from './attachmentPresentation';
+import type {
+  FailedUploadView,
+  ActiveUploadView,
+} from '@/composables/useMediaHandling';
 import type { Session } from '@/composables/useSessions';
 import {
   buildSuggestionSignature,
@@ -351,6 +423,8 @@ interface Props {
   stagedImagesUrl: string[];
   stagedAudioUrl: string;
   stagedFiles?: StagedFileInfo[];
+  failedUploads?: FailedUploadView[];
+  activeUploads?: ActiveUploadView[];
   disabled: boolean;
   enableStreaming: boolean;
   enableReasoning: boolean;
@@ -372,6 +446,8 @@ const props = withDefaults(defineProps<Props>(), {
   currentSession: null,
   configId: null,
   stagedFiles: () => [],
+  failedUploads: () => [],
+  activeUploads: () => [],
   replyTo: null,
   sendShortcut: 'shift_enter',
   showProviderSelector: true,
@@ -388,6 +464,9 @@ const emit = defineEmits<{
   removeImage: [index: number];
   removeAudio: [];
   removeFile: [index: number];
+  retryFailedUpload: [index: number];
+  discardFailedUpload: [index: number];
+  cancelActiveUpload: [index: number];
   startRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
@@ -548,12 +627,18 @@ const hasStagedAttachments = computed(() => {
   return (
     props.stagedImagesUrl.length > 0 ||
     Boolean(props.stagedAudioUrl) ||
-    Boolean(props.stagedFiles?.length)
+    Boolean(props.stagedFiles?.length) ||
+    Boolean(props.failedUploads?.length) ||
+    Boolean(props.activeUploads?.length)
   );
 });
 
 function filePresentation(file: StagedFileInfo) {
   return attachmentPresentation(file);
+}
+
+function activePresentation(active: ActiveUploadView) {
+  return attachmentPresentation({ original_name: active.name });
 }
 
 // Ctrl+B 长按录音相关
@@ -1231,6 +1316,49 @@ defineExpose({
 .input-container.has-attachments .attachments-preview {
   margin: 0 0 8px;
   padding: 0;
+}
+
+.attachment-card--failed {
+  --attachment-color: rgb(var(--v-theme-error));
+  padding-right: 56px;
+}
+
+.attachment-icon--failed {
+  color: rgb(var(--v-theme-error));
+}
+
+.retry-attachment-btn {
+  right: 30px;
+}
+
+.attachment-card--active {
+  padding-right: 10px;
+}
+
+.attachment-progress-text {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+}
+
+.cancel-active-btn {
+  flex-shrink: 0;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  opacity: 0.7;
+}
+
+.cancel-active-btn:hover {
+  opacity: 1;
+}
+
+.attachment-progress-track {
+  position: absolute;
+  left: 52px;
+  right: 10px;
+  bottom: 3px;
 }
 
 .attachment-card {

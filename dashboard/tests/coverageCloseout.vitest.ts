@@ -495,7 +495,7 @@ describe('coverage closeout', () => {
     const hashed = await media.processAndUploadFile(
       new File(['z'], 'c.bin', { type: 'application/octet-stream' }),
     );
-    expect(hashed?.signature).toMatch(/^sha256:/);
+    expect(hashed?.signature).toMatch(/^sha256m:/);
 
     api.fileApi.upload.mockRejectedValue(new Error('fail'));
     expect(

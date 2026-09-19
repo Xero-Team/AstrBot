@@ -16,8 +16,9 @@ def _make_service(tmp_path: Path) -> BackupService:
     service.chunks_dir = str(tmp_path / ".chunks")
     service.backup_tasks = {}
     service.backup_progress = {}
-    service.upload_sessions = {}
-    service._cleanup_task = None
+    service.chunked_uploads = SimpleNamespace(
+        ensure_cleanup_task_started=lambda: None,
+    )
     service._background_tasks = set()
     return service
 

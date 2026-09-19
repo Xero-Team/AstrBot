@@ -416,6 +416,22 @@ export type FileUploadRequest = {
   file: Blob | File;
 };
 
+export type ChatUploadInitRequest = {
+  filename: string;
+  total_size: number;
+  content_type?: string;
+};
+
+export type ChatUploadSessionRequest = {
+  upload_id: string;
+};
+
+export type ChatChunkUploadRequest = {
+  upload_id: string;
+  chunk_index: number;
+  chunk: Blob | File;
+};
+
 export type AppearanceWallpaperUploadRequest = {
   file: Blob | File;
 };
@@ -3196,6 +3212,91 @@ export type UploadFileResponses = {
 };
 
 export type UploadFileResponse = UploadFileResponses[keyof UploadFileResponses];
+
+export type InitFileUploadData = {
+  body: ChatUploadInitRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/files/upload/init';
+};
+
+export type InitFileUploadResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type InitFileUploadResponse =
+  InitFileUploadResponses[keyof InitFileUploadResponses];
+
+export type UploadFileChunkData = {
+  body: ChatChunkUploadRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/files/upload/chunk';
+};
+
+export type UploadFileChunkResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UploadFileChunkResponse =
+  UploadFileChunkResponses[keyof UploadFileChunkResponses];
+
+export type CompleteFileUploadData = {
+  body: ChatUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/files/upload/complete';
+};
+
+export type CompleteFileUploadResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type CompleteFileUploadResponse =
+  CompleteFileUploadResponses[keyof CompleteFileUploadResponses];
+
+export type AbortFileUploadData = {
+  body: ChatUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/files/upload/abort';
+};
+
+export type AbortFileUploadResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type AbortFileUploadResponse =
+  AbortFileUploadResponses[keyof AbortFileUploadResponses];
+
+export type StatusFileUploadData = {
+  body: ChatUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/files/upload/status';
+};
+
+export type StatusFileUploadResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type StatusFileUploadResponse =
+  StatusFileUploadResponses[keyof StatusFileUploadResponses];
 
 export type ListAppearanceWallpapersData = {
   body?: never;
@@ -6705,6 +6806,23 @@ export type AbortBackupUploadResponses = {
 
 export type AbortBackupUploadResponse =
   AbortBackupUploadResponses[keyof AbortBackupUploadResponses];
+
+export type StatusBackupUploadData = {
+  body: BackupUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/backups/upload/status';
+};
+
+export type StatusBackupUploadResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type StatusBackupUploadResponse =
+  StatusBackupUploadResponses[keyof StatusBackupUploadResponses];
 
 export type GetBackupProgressData = {
   body?: never;

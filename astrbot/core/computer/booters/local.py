@@ -171,7 +171,6 @@ class LocalShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = None,  # noqa: ASYNC109
         timeout_seconds: int | None = 300,
         shell: bool = True,
         background: bool = False,
@@ -233,9 +232,8 @@ class LocalShellComponent(ShellComponent):
                 stderr=subprocess.PIPE,
                 **popen_kwargs,  # nosec B602
             )
-            effective_timeout = timeout if timeout is not None else timeout_seconds
             try:
-                stdout, stderr = proc.communicate(timeout=effective_timeout or 300)
+                stdout, stderr = proc.communicate(timeout=timeout_seconds or 300)
             except subprocess.TimeoutExpired:
                 should_kill_parent = sys.platform != "win32"
                 if sys.platform == "win32":

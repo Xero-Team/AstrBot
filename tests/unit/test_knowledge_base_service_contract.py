@@ -129,39 +129,19 @@ async def test_list_route_uses_default_page_size_when_page_is_explicit():
 
 
 @pytest.mark.asyncio
-async def test_create_kb_accepts_legacy_name_field():
-    kb = make_kb("kb-1", "From Name")
+async def test_create_kb_rejects_legacy_name_field():
     kb_manager = MagicMock()
-    kb_manager.provider_manager.get_provider_by_id = AsyncMock(
-        return_value=FakeEmbeddingProvider()
-    )
-    kb_manager.create_kb = AsyncMock(return_value=SimpleNamespace(kb=kb))
     service = make_service(kb_manager)
 
-    result, message = await service.create_kb(
-        {
-            "name": "From Name",
-            "embedding_provider_id": "embedding-1",
-            "top_k_dense": 12,
-            "top_k_sparse": 8,
-            "top_m_final": 3,
-        }
-    )
+    with pytest.raises(KnowledgeBaseServiceError, match="知识库名称不能为空"):
+        await service.create_kb(
+            {
+                "name": "From Name",
+                "embedding_provider_id": "embedding-1",
+            }
+        )
 
-    assert message == "创建知识库成功"
-    assert result == {"kb_id": "kb-1", "kb_name": "From Name"}
-    kb_manager.create_kb.assert_awaited_once_with(
-        kb_name="From Name",
-        description=None,
-        emoji=None,
-        embedding_provider_id="embedding-1",
-        rerank_provider_id=None,
-        chunk_size=None,
-        chunk_overlap=None,
-        top_k_dense=12,
-        top_k_sparse=8,
-        top_m_final=3,
-    )
+    kb_manager.create_kb.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -206,7 +186,6 @@ async def test_update_kb_allows_explicit_rerank_provider_clear():
 def test_knowledge_base_schemas_match_service_contract():
     create_payload = KnowledgeBaseRequest(
         kb_name="Docs",
-        name="Legacy",
         emoji="book",
         top_k_dense=12,
         top_k_sparse=8,
@@ -235,10 +214,10 @@ def test_knowledge_base_request_omits_unset_none_fields():
     assert payload == {"kb_name": "Docs"}
 
 
-def test_knowledge_base_request_uses_legacy_name_as_input_alias():
+def test_knowledge_base_request_ignores_legacy_name_field():
     payload = KnowledgeBaseRequest(name="Legacy Name").canonical_payload()
 
-    assert payload == {"kb_name": "Legacy Name"}
+    assert payload == {}
 
 
 @pytest.mark.asyncio

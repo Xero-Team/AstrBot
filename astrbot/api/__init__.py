@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from astrbot.core.config.astrbot_config import AstrBotConfig
     from astrbot.core.star.register import register_agent as agent
     from astrbot.core.star.register import register_llm_tool as llm_tool
+    from astrbot.core.star.session_llm_manager import sender_service_config
     from astrbot.core.utils.error_redaction import safe_error
 
 _EXPORTS = {
@@ -51,6 +52,10 @@ _EXPORTS = {
     "sender_admission_key_from_id": (
         "astrbot.core.auth.admission",
         "sender_admission_key_from_id",
+    ),
+    "sender_service_config": (
+        "astrbot.core.star.session_llm_manager",
+        "sender_service_config",
     ),
     "session_admission_key_from_event": (
         "astrbot.core.auth.admission",
@@ -124,5 +129,6 @@ __all__ = [
     "safe_error",
     "sender_admission_key_from_event",
     "sender_admission_key_from_id",
+    "sender_service_config",
     "session_admission_key_from_event",
 ]

@@ -344,10 +344,9 @@ async def test_plugin_updator_install_prefers_download_url(
     async def fake_download_file(
         url: str,
         path: str,
-        timeout_seconds: float = 1800.0,
         **kwargs,
     ):  # noqa: ARG001
-        del timeout_seconds, kwargs
+        del kwargs
         calls["download"] = (url, path)
         Path(path).write_bytes(b"zip-data")
 
@@ -494,10 +493,9 @@ async def test_plugin_updator_update_prefers_download_url_over_repo_url(
     async def fake_download_file(
         url: str,
         path: str,
-        timeout_seconds: float = 1800.0,
         **kwargs,
     ) -> None:
-        del timeout_seconds, kwargs
+        del kwargs
         calls["download"] = (url, path)
 
     async def fail_download_from_repo_url(*args, **kwargs):
@@ -537,10 +535,9 @@ async def test_plugin_updator_update_uses_download_url_without_repo(
     async def fake_download_file(
         url: str,
         path: str,
-        timeout_seconds: float = 1800.0,
         **kwargs,
     ) -> None:
-        del timeout_seconds, kwargs
+        del kwargs
         calls["download"] = (url, path)
 
     async def fail_download_from_repo_url(*args, **kwargs):

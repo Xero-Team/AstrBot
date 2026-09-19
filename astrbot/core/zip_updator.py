@@ -108,11 +108,9 @@ class RepoZipUpdator:
         self,
         url: str,
         path: str,
-        timeout_seconds: float = 1800.0,
         progress_callback=None,
         policy=PLUGIN_DOWNLOAD_URL,
     ) -> None:
-        del timeout_seconds
         target_path = Path(path)
         ensure_dir(target_path.parent)
 

@@ -1,32 +1,14 @@
-from astrbot.api import Subject, sender_admission_key_from_id, star
+from astrbot.api import (
+    Subject,
+    sender_admission_key_from_id,
+    sender_service_config,
+    star,
+)
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_i18n
 
 _SESSION_SERVICE_CONFIG_KEY = "session_service_config"
-
-
-def sender_overlay(existing: object, **fields: bool) -> dict[str, bool]:
-    """Return a sender overlay with only ``blocked`` and ``llm_enabled``.
-
-    Args:
-        existing: Stored preference value, typically a dict.
-        **fields: Overlay fields to write.
-
-    Returns:
-        A mapping that preserves existing bool overlays and applies ``fields``.
-        Extra keys such as persona, TTS, KB, or Provider are dropped.
-    """
-    config: dict[str, bool] = {}
-    if isinstance(existing, dict):
-        blocked = existing.get("blocked")
-        if isinstance(blocked, bool):
-            config["blocked"] = blocked
-        llm_enabled = existing.get("llm_enabled")
-        if isinstance(llm_enabled, bool):
-            config["llm_enabled"] = llm_enabled
-    config.update(fields)
-    return config
 
 
 def sender_key_from_token(event: AstrMessageEvent, token: str) -> str | None:
@@ -104,6 +86,6 @@ class UserCommands:
         await self.context.preferences.sender_put(
             sender_key,
             _SESSION_SERVICE_CONFIG_KEY,
-            sender_overlay(existing, **fields),
+            sender_service_config(existing, **fields),
         )
         await reply_i18n(self.context, event, message_key, sender=sender_key)

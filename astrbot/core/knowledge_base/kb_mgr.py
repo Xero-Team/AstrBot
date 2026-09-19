@@ -128,20 +128,14 @@ class KnowledgeBaseManager:
         """通过名称获取知识库实例
 
         Args:
-            kb_name: 知识库名称或 UUID
+            kb_name: 知识库名称
 
         Returns:
             KBHelper | None: 知识库实例，未找到返回 None
         """
-        # 首先按名称匹配
         for kb_helper in self.kb_insts.values():
             if kb_helper.kb.kb_name == kb_name:
                 return kb_helper
-
-        # 如果没找到，尝试按 UUID 匹配（兼容旧配置）
-        if kb_name in self.kb_insts:
-            return self.kb_insts[kb_name]
-
         return None
 
     async def delete_kb(self, kb_id: str) -> bool:

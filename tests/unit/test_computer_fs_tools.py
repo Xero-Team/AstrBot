@@ -807,3 +807,51 @@ def test_session_temp_roots_are_isolated(tmp_path, monkeypatch):
     assert first
     assert second
     assert set(first).isdisjoint(second)
+
+
+@pytest.mark.asyncio
+async def test_file_edit_matches_source_that_contains_a_literal_escape(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    source = 'def greet():\n    print("hello\\n")\n'
+    write_result = await fs_tools.FileWriteTool().call(
+        _make_context(),
+        path="greet.py",
+        content=source,
+    )
+
+    edit_result = await fs_tools.FileEditTool().call(
+        _make_context(),
+        path="greet.py",
+        old='print("hello\\n")',
+        new='print("goodbye\\n")',
+    )
+
+    assert (
+        "File written successfully" in write_result or "written" in write_result.lower()
+    )
+    assert "Replaced" in edit_result or "replaced" in edit_result.lower()
+    assert (workspace / "greet.py").read_text(encoding="utf-8") == (
+        'def greet():\n    print("goodbye\\n")\n'
+    )
+
+
+@pytest.mark.asyncio
+async def test_file_edit_still_decodes_escapes_when_the_text_does_not_match(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    (workspace / "notes.txt").write_text("alpha\nbeta\n", encoding="utf-8")
+
+    result = await fs_tools.FileEditTool().call(
+        _make_context(),
+        path="notes.txt",
+        old="alpha\\nbeta",
+        new="alpha\\ngamma",
+    )
+
+    assert "Replaced" in result or "replaced" in result.lower()
+    assert (workspace / "notes.txt").read_text(encoding="utf-8") == "alpha\ngamma\n"

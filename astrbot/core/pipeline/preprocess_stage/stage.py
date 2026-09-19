@@ -9,6 +9,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    detect_image_mime_type_async,
     ensure_wav,
     file_uri_to_path,
     is_file_uri,
@@ -70,6 +71,20 @@ class PreProcessStage(Stage):
             return
         event.track_temporary_local_file(str(path))
 
+    @staticmethod
+    def _is_existing_local_image_ref(media_ref: str | None) -> bool:
+        """Return whether an image reference already points at a local file."""
+        if not media_ref:
+            return False
+        if is_file_uri(media_ref):
+            return True
+        if media_ref.startswith(("http://", "https://", "data:", "base64://")):
+            return False
+        try:
+            return Path(media_ref).exists()
+        except OSError:
+            return False
+
     async def _send_pre_ack_emoji(self, event: AstrMessageEvent) -> None:
         """React before processing when the platform configuration allows it."""
         supported = {"telegram", "lark", "discord"}
@@ -127,6 +142,9 @@ class PreProcessStage(Stage):
         is_reply: bool,
     ) -> None:
         """Normalize one media component without deleting usable image attachments."""
+        media_ref = component.url or component.file
+        image_path: str | None = None
+        materialized = False
         try:
             original_path = await component.convert_to_file_path()
             if isinstance(component, Record):
@@ -134,6 +152,19 @@ class PreProcessStage(Stage):
                 media_path = await ensure_wav(original_path)
                 self._track_temp_media(event, media_path)
             else:
+                image_path = original_path
+                materialized = (
+                    not self._is_existing_local_image_ref(media_ref)
+                    and Path(image_path).is_file()
+                )
+                if materialized:
+                    self._track_temp_media(event, image_path)
+                    detected_mime_type = await detect_image_mime_type_async(
+                        image_path,
+                        default_mime_type=None,
+                    )
+                    if detected_mime_type is None:
+                        raise ValueError("image content could not be identified")
                 media_path = original_path
                 event.untrack_temporary_local_file(media_path)
             component.file = media_path
@@ -144,9 +175,10 @@ class PreProcessStage(Stage):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            if isinstance(component, Image) and image_path and not materialized:
+                event.untrack_temporary_local_file(image_path)
             prefix = " in reply chain" if is_reply else ""
             if isinstance(component, Image):
-                media_ref = component.url or component.file
                 logger.warning(
                     "Image processing%s failed for %s: %s",
                     prefix,

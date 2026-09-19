@@ -97,6 +97,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import {
   getStoredDashboardUsername,
   getStoredSelectedChatConfigId,
+  resolveConfigIdFromRouting,
   setStoredSelectedChatConfigId,
 } from '@/utils/chatConfigBinding';
 import { resolveErrorMessage } from '@/utils/errorUtils';
@@ -147,7 +148,7 @@ const selectedConfigId = ref('default');
 const agentRunnerType = ref('local');
 const saving = ref(false);
 const pendingSync = ref(false);
-const routingEntries = ref<Array<{ pattern: string; confId: string }>>([]);
+const routingTable = ref<Record<string, string>>({});
 const configCache = ref<Record<string, string>>({});
 
 const toast = useToast();
@@ -213,38 +214,17 @@ async function fetchConfigList() {
 async function fetchRoutingEntries() {
   try {
     const res = await configRouteApi.list();
-    const routing = res.data.data?.routing || {};
-    routingEntries.value = Object.entries(routing).map(([pattern, confId]) => ({
-      pattern,
-      confId,
-    }));
+    const routing = res.data.data?.routing;
+    routingTable.value =
+      routing && typeof routing === 'object' ? { ...routing } : {};
   } catch (error) {
     console.error('获取配置路由失败', error);
-    routingEntries.value = [];
+    routingTable.value = {};
   }
-}
-
-function matchesPattern(pattern: string, target: string): boolean {
-  const parts = pattern.split(':');
-  const targetParts = target.split(':');
-  if (parts.length !== 3 || targetParts.length !== 3) {
-    return false;
-  }
-  return parts.every(
-    (part, index) => part === '' || part === '*' || part === targetParts[index],
-  );
 }
 
 function resolveConfigId(umo: string | null): string {
-  if (!umo) {
-    return 'default';
-  }
-  for (const entry of routingEntries.value) {
-    if (matchesPattern(entry.pattern, umo)) {
-      return entry.confId;
-    }
-  }
-  return 'default';
+  return resolveConfigIdFromRouting(routingTable.value, umo);
 }
 
 async function getAgentRunnerType(confId: string): Promise<string> {
@@ -276,7 +256,10 @@ async function setSelection(confId: string) {
   });
 }
 
-async function applySelectionToBackend(confId: string): Promise<boolean> {
+async function applySelectionToBackend(
+  confId: string,
+  notify = true,
+): Promise<boolean> {
   if (!targetUmo.value) {
     pendingSync.value = true;
     return true;
@@ -284,21 +267,31 @@ async function applySelectionToBackend(confId: string): Promise<boolean> {
   saving.value = true;
   try {
     await configRouteApi.upsert(targetUmo.value, { config_id: confId });
-    const filtered = routingEntries.value.filter(
-      (entry) => entry.pattern !== targetUmo.value,
-    );
-    if (confId !== 'default') {
-      filtered.push({ pattern: targetUmo.value, confId });
+    const nextRouting = { ...routingTable.value };
+    if (confId === 'default') {
+      delete nextRouting[targetUmo.value];
+    } else {
+      nextRouting[targetUmo.value] = confId;
     }
-    routingEntries.value = filtered;
+    routingTable.value = nextRouting;
     return true;
   } catch (error) {
     console.error('更新配置文件失败', error);
-    toast.error(resolveErrorMessage(error, '配置文件应用失败'));
+    if (notify) {
+      toast.error(resolveErrorMessage(error, '配置文件应用失败'));
+    }
     return false;
   } finally {
     saving.value = false;
   }
+}
+
+async function reconcileSelectionWithBackend(): Promise<string> {
+  await fetchRoutingEntries();
+  const resolved = resolveConfigId(targetUmo.value);
+  await setSelection(resolved);
+  setStoredSelectedChatConfigId(resolved);
+  return resolved;
 }
 
 async function confirmSelection() {
@@ -323,13 +316,18 @@ async function syncSelectionForSession() {
   }
   if (pendingSync.value) {
     pendingSync.value = false;
-    await applySelectionToBackend(selectedConfigId.value);
+    const applied = await applySelectionToBackend(
+      selectedConfigId.value,
+      false,
+    );
+    if (applied) {
+      setStoredSelectedChatConfigId(selectedConfigId.value);
+      return;
+    }
+    await reconcileSelectionWithBackend();
     return;
   }
-  await fetchRoutingEntries();
-  const resolved = resolveConfigId(targetUmo.value);
-  await setSelection(resolved);
-  setStoredSelectedChatConfigId(resolved);
+  await reconcileSelectionWithBackend();
 }
 
 watch(

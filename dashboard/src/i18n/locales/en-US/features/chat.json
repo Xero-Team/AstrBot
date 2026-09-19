@@ -122,7 +122,8 @@
     "websocket": "WebSocket"
   },
   "config": {
-    "title": "Config"
+    "title": "Config",
+    "bindFailed": "Failed to bind the config profile; reverted to the profile the backend currently uses"
   },
   "reasoning": {
     "enabled": "Reasoning enabled",

@@ -9,6 +9,8 @@ const testState = vi.hoisted(() => ({
   configProfileGetMock: vi.fn(),
   configRouteListMock: vi.fn(),
   configRouteUpsertMock: vi.fn(),
+  setStoredSelectedChatConfigIdMock: vi.fn(),
+  storedConfigId: 'default',
   toastErrorMock: vi.fn(),
 }));
 
@@ -29,15 +31,21 @@ vi.mock('@/utils/toast', () => ({
   }),
 }));
 
-vi.mock('@/utils/chatConfigBinding', () => ({
-  getStoredDashboardUsername: () => 'astrbot',
-  getStoredSelectedChatConfigId: () => 'default',
-  setStoredSelectedChatConfigId: vi.fn(),
-}));
+vi.mock('@/utils/chatConfigBinding', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/utils/chatConfigBinding')>();
+  return {
+    ...actual,
+    getStoredDashboardUsername: () => 'astrbot',
+    getStoredSelectedChatConfigId: () => testState.storedConfigId,
+    setStoredSelectedChatConfigId: testState.setStoredSelectedChatConfigIdMock,
+  };
+});
 
 describe('chat dialog layouts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    testState.storedConfigId = 'default';
     testState.configProfileListMock.mockResolvedValue({
       data: {
         data: {
@@ -118,6 +126,58 @@ describe('chat dialog layouts', () => {
       document.body.querySelector('.config-selector-dialog__content'),
     ).not.toBeNull();
 
+    wrapper.unmount();
+  });
+
+  it('reconciles to backend routing when the pending bind fails', async () => {
+    testState.storedConfigId = 'agent';
+    const wrapper = mountWithVuetify(ConfigSelector, {
+      props: {
+        platformId: 'webchat',
+      },
+    });
+    await flushPromises();
+
+    testState.configRouteUpsertMock.mockRejectedValue(new Error('forbidden'));
+    testState.configRouteListMock.mockResolvedValue({
+      data: {
+        data: {
+          routing: {
+            'webchat:FriendMessage:webchat!astrbot!session-2':
+              'backend-profile',
+          },
+        },
+      },
+    });
+
+    await wrapper.setProps({ sessionId: 'session-2' });
+    await flushPromises();
+
+    expect(testState.setStoredSelectedChatConfigIdMock).toHaveBeenCalledWith(
+      'backend-profile',
+    );
+    wrapper.unmount();
+  });
+
+  it('persists the selection when the pending bind succeeds', async () => {
+    testState.storedConfigId = 'agent';
+    const wrapper = mountWithVuetify(ConfigSelector, {
+      props: {
+        platformId: 'webchat',
+      },
+    });
+    await flushPromises();
+
+    await wrapper.setProps({ sessionId: 'session-3' });
+    await flushPromises();
+
+    expect(testState.configRouteUpsertMock).toHaveBeenCalledWith(
+      'webchat:FriendMessage:webchat!astrbot!session-3',
+      { config_id: 'agent' },
+    );
+    expect(testState.setStoredSelectedChatConfigIdMock).toHaveBeenCalledWith(
+      'agent',
+    );
     wrapper.unmount();
   });
 });

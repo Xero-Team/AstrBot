@@ -39,6 +39,7 @@ vi.mock('@/api/v1', () => ({
     createProject: apiMocks.createProject,
     unifiedWebSocketUrl: (token: string) => `ws://example/${token}`,
   },
+  configRouteApi: { upsert: vi.fn(), list: vi.fn() },
   providerApi: { schema: apiMocks.schema, listByProviderType: vi.fn() },
   systemConfigApi: { get: apiMocks.systemGet },
   personaApi: {

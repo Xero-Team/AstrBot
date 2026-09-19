@@ -318,6 +318,43 @@ describe('SessionManagementPage', () => {
     wrapper.unmount();
   });
 
+  it('leaves an explicit blocked false untouched on save', async () => {
+    api.listRules.mockImplementation(
+      async (params: { target_type?: string } = {}) =>
+        params.target_type === 'sender'
+          ? senderRuleResponse({
+              target_type: 'sender',
+              sender_id: 'im:napcat:bot:99',
+              rules: {
+                session_service_config: { blocked: false },
+              },
+            })
+          : response({ rules: [], total: 0 }),
+    );
+
+    const wrapper = mountWithVuetify(SessionManagementPage, {
+      global: {
+        stubs: { VDataTableServer: dataTableStub },
+      },
+    });
+    await flushPromises();
+    await switchToSender(wrapper);
+
+    const edit = wrapper
+      .findAll('button')
+      .find((button) => button.attributes('aria-label') === 'Edit Rules');
+    expect(edit).toBeDefined();
+    await edit!.trigger('click');
+    await flushPromises();
+    await findSaveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(api.upsertRule).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('No changes to save');
+
+    wrapper.unmount();
+  });
+
   it('defaults unwritten IM session services off and WebChat on', async () => {
     api.activeUmos.mockResolvedValue(
       response({

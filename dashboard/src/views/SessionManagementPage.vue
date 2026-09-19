@@ -2402,7 +2402,7 @@ async function saveSenderOverlay(
   const config: Record<string, boolean | null> = {};
   if (senderOverlay.blocked) {
     config.blocked = true;
-  } else if (typeof stored.blocked === 'boolean') {
+  } else if (stored.blocked === true) {
     config.blocked = null;
   }
   if (senderOverlay.llm_enabled !== null) {

@@ -592,7 +592,7 @@ class SessionManagementService:
             fields[name] = value
         if not fields:
             raise SessionManagementServiceError(
-                "发送者规则需要 blocked 或 llm_enabled 布尔值"
+                "发送者规则需要 blocked 或 llm_enabled 布尔值或 null"
             )
         existing = await self.preferences.sender_get(
             sender_key, SESSION_SERVICE_CONFIG_KEY, {}

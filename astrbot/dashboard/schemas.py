@@ -426,7 +426,7 @@ class ImMessageRequest(OpenModel):
 
 
 class KnowledgeBaseRequest(OpenModel):
-    kb_name: str | None = Field(None, alias="name")
+    kb_name: str | None = None
     description: str | None = None
     emoji: str | None = None
     embedding_provider_id: str | None = None
@@ -436,8 +436,6 @@ class KnowledgeBaseRequest(OpenModel):
     top_k_dense: int | None = None
     top_k_sparse: int | None = None
     top_m_final: int | None = None
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     @model_validator(mode="after")
     def validate_chunking(self):
@@ -469,14 +467,11 @@ class KnowledgeBaseRequest(OpenModel):
                 "top_k_sparse",
                 "top_m_final",
             },
-            by_alias=False,
         )
 
 
 class KnowledgeBaseCreateRequest(KnowledgeBaseRequest):
     model_config = ConfigDict(
-        populate_by_name=True,
-        extra="allow",
         json_schema_extra={"required": ["kb_name", "embedding_provider_id"]},
     )
 

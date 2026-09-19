@@ -13,7 +13,6 @@ class ShellComponent(Protocol):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = None,  # noqa: ASYNC109
         timeout_seconds: int | None = 300,
         shell: bool = True,
         background: bool = False,

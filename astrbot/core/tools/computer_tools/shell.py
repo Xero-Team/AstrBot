@@ -204,17 +204,12 @@ class ExecuteShellTool(FunctionTool):
                     local_runtime=local_runtime,
                 )
 
-            requested_timeout = kwargs.get("timeout")
             result = await sb.shell.exec(
                 command,
                 cwd=cwd,
                 background=effective_background,
                 env=env,
-                timeout_seconds=(
-                    requested_timeout
-                    if requested_timeout is not None
-                    else (timeout_seconds or 300)
-                ),
+                timeout_seconds=timeout_seconds or 300,
             )
             if stdout_file:
                 result["stdout"] = (

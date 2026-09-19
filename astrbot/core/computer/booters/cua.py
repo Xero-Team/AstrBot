@@ -300,7 +300,6 @@ class CuaShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = None,  # noqa: ASYNC109
         timeout_seconds: int | None = 30,
         shell: bool = True,
         background: bool = False,
@@ -319,9 +318,8 @@ class CuaShellComponent(ShellComponent):
         kwargs: dict[str, Any] = {}
         if cwd is not None:
             kwargs["cwd"] = cwd
-        effective_timeout = timeout_seconds if timeout_seconds is not None else timeout
-        if effective_timeout is not None:
-            kwargs["timeout"] = effective_timeout
+        if timeout_seconds is not None:
+            kwargs["timeout"] = timeout_seconds
         if env:
             kwargs["env"] = env
         if background:

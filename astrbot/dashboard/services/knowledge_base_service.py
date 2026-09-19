@@ -174,8 +174,7 @@ class KnowledgeBaseService:
     def _canonical_kb_payload(data: object) -> dict[str, Any]:
         """Normalize knowledge base create/update payloads.
 
-        Uses KnowledgeBaseRequest to handle the legacy ``name`` →
-        ``kb_name`` migration while preserving operational fields
+        Uses KnowledgeBaseRequest while preserving operational fields
         like ``kb_id``.
         """
         raw = KnowledgeBaseService._payload(data)

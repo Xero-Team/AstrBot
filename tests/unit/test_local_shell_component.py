@@ -172,7 +172,7 @@ def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatc
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
 
     with pytest.raises(subprocess.TimeoutExpired):
-        asyncio.run(LocalShellComponent().exec("dummy", timeout=1))
+        asyncio.run(LocalShellComponent().exec("dummy", timeout_seconds=1))
 
     assert proc.killed
     assert proc.wait_timeout == 5
@@ -289,7 +289,7 @@ def test_local_shell_component_kills_posix_process_group_on_timeout(monkeypatch)
     )
 
     with pytest.raises(subprocess.TimeoutExpired):
-        asyncio.run(LocalShellComponent().exec("dummy", timeout=1))
+        asyncio.run(LocalShellComponent().exec("dummy", timeout_seconds=1))
 
     assert popen_kwargs["start_new_session"] is True
     assert killed_groups == [(proc.pid, expected_signal)]

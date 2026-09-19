@@ -30,11 +30,11 @@ async def resolve_streaming_response(
         Whether this request should stream.
     """
 
-    pinned = _event_extra(event, RESOLVED_STREAMING_EXTRA)
+    pinned = event.get_extra(RESOLVED_STREAMING_EXTRA)
     if pinned is not None:
         return bool(pinned)
 
-    extra = _event_extra(event, "enable_streaming")
+    extra = event.get_extra("enable_streaming")
     if extra is not None:
         value = bool(extra)
     else:
@@ -57,39 +57,5 @@ async def resolve_streaming_response(
             else:
                 value = False
 
-    _event_set_extra(event, RESOLVED_STREAMING_EXTRA, value)
+    event.set_extra(RESOLVED_STREAMING_EXTRA, value)
     return value
-
-
-def _event_extra(event: Any, key: str, default: Any = None) -> Any:
-    getter = getattr(event, "get_extra", None)
-    if callable(getter):
-        try:
-            return getter(key, default)
-        except TypeError:
-            try:
-                value = getter(key)
-            except Exception:
-                return default
-            return default if value is None else value
-        except Exception:
-            return default
-    extra = getattr(event, "_extra", None)
-    if isinstance(extra, dict):
-        return extra.get(key, default)
-    return default
-
-
-def _event_set_extra(event: Any, key: str, value: Any) -> None:
-    setter = getattr(event, "set_extra", None)
-    if callable(setter):
-        setter(key, value)
-        return
-    extra = getattr(event, "_extra", None)
-    if isinstance(extra, dict):
-        extra[key] = value
-        return
-    try:
-        event._extra = {key: value}
-    except Exception:
-        return

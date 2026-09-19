@@ -123,10 +123,6 @@ class SessionManagementService:
             )
         return sender_key
 
-    @staticmethod
-    def _sender_overlay_value(config: object) -> dict[str, bool]:
-        return sender_service_config(config)
-
     def _sender_ids_from_payload(self, payload: dict[str, Any]) -> list[str]:
         sender_ids: list[str] = []
         seen: set[str] = set()
@@ -419,7 +415,7 @@ class SessionManagementService:
                 if not isinstance(raw_value, dict) or "val" not in raw_value:
                     logger.warning("忽略格式错误的发送者规则: sender_id=%s", sender_id)
                     continue
-                overlay = self._sender_overlay_value(raw_value["val"])
+                overlay = sender_service_config(raw_value["val"])
                 if not overlay:
                     continue
                 sender_rules[sender_id] = overlay

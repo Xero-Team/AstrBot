@@ -341,6 +341,42 @@ async def test_v1_sender_session_rule_uses_sender_preferences(
 
 
 @pytest.mark.asyncio
+async def test_v1_sender_rule_clear_returns_to_follow_session(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+):
+    sender_id = "im:napcat:bot:99"
+    headers = _jwt_headers()
+    store = asgi_app.state.services.sessions.preferences.sender_values
+    await asgi_client.post(
+        "/api/v1/sessions/rules",
+        json={
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rule_key": "session_service_config",
+            "rule_value": {"llm_enabled": True},
+        },
+        headers=headers,
+    )
+    assert store[(sender_id, "session_service_config")] == {"llm_enabled": True}
+
+    cleared = await asgi_client.post(
+        "/api/v1/sessions/rules",
+        json={
+            "target_type": "sender",
+            "sender_id": sender_id,
+            "rule_key": "session_service_config",
+            "rule_value": {"llm_enabled": None},
+        },
+        headers=headers,
+    )
+
+    assert cleared.status_code == 200
+    assert cleared.json()["status"] == "ok"
+    assert (sender_id, "session_service_config") not in store
+
+
+@pytest.mark.asyncio
 async def test_v1_subagent_config_rejects_legacy_enable_field(
     asgi_client: httpx.AsyncClient,
 ):

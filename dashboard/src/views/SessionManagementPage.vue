@@ -123,7 +123,8 @@
                 </v-chip>
                 <v-chip
                   v-if="
-                    'llm_enabled' in (item.rules.session_service_config || {})
+                    typeof item.rules.session_service_config?.llm_enabled ===
+                    'boolean'
                   "
                   size="x-small"
                   color="primary"
@@ -755,10 +756,13 @@
                   />
                 </v-col>
                 <v-col cols="12">
-                  <v-checkbox
-                    v-model="senderOverlay.llm_enabled"
-                    :label="tm('ruleEditor.serviceConfig.llmEnabled')"
-                    color="primary"
+                  <v-select
+                    v-model="senderLlmMode"
+                    :items="senderLlmModeOptions"
+                    item-title="label"
+                    item-value="value"
+                    :label="tm('ruleEditor.serviceConfig.llmMode')"
+                    variant="outlined"
                     hide-details
                   />
                 </v-col>
@@ -1188,6 +1192,7 @@ import {
 } from '@/utils/confirmDialog';
 
 const FOLLOW_CONFIG_VALUE = '__astrbot_follow_config__';
+const FOLLOW_SESSION_VALUE = '__astrbot_follow_session__';
 
 type SnackbarColor = 'success' | 'error';
 type GroupDialogMode = 'create' | 'edit';
@@ -1350,9 +1355,12 @@ const ruleDialog = ref(false);
 const selectedUmo = ref<SessionRuleItem | null>(null);
 const editingRules = ref<SessionRuleSet>({});
 
-const senderOverlay = reactive({
+const senderOverlay = reactive<{
+  blocked: boolean;
+  llm_enabled: boolean | null;
+}>({
   blocked: false,
-  llm_enabled: true,
+  llm_enabled: null,
 });
 
 const serviceConfig = reactive<
@@ -1532,6 +1540,28 @@ const batchScopeOptions = computed<SelectOption<string>[]>(() => {
 const statusOptions = computed<SelectOption<boolean>[]>(() => [
   { label: tm('status.enabled'), value: true },
   { label: tm('status.disabled'), value: false },
+]);
+
+const senderLlmMode = computed({
+  get: () => {
+    if (senderOverlay.llm_enabled === null) {
+      return FOLLOW_SESSION_VALUE;
+    }
+    return senderOverlay.llm_enabled ? 'true' : 'false';
+  },
+  set: (value: string) => {
+    senderOverlay.llm_enabled =
+      value === FOLLOW_SESSION_VALUE ? null : value === 'true';
+  },
+});
+
+const senderLlmModeOptions = computed<SelectOption<string>[]>(() => [
+  {
+    label: tm('ruleEditor.serviceConfig.llmFollowSession'),
+    value: FOLLOW_SESSION_VALUE,
+  },
+  { label: tm('status.enabled'), value: 'true' },
+  { label: tm('status.disabled'), value: 'false' },
 ]);
 
 const canApplyBatch = computed(() => {
@@ -1748,6 +1778,22 @@ function normalizeSessionServiceConfig(
   };
 }
 
+function normalizeSenderServiceConfig(raw: unknown): SessionServiceConfig {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const source = raw as Record<string, unknown>;
+  const config: SessionServiceConfig = {};
+  if (typeof source.blocked === 'boolean') {
+    config.blocked = source.blocked;
+  }
+  if (typeof source.llm_enabled === 'boolean') {
+    config.llm_enabled = source.llm_enabled;
+  }
+  return config;
+}
+
 function normalizeSessionPluginConfig(raw: unknown): SessionPluginConfig {
   if (!raw || typeof raw !== 'object') {
     return {};
@@ -1781,7 +1827,11 @@ function toRuleValue(
   return value as unknown as DynamicConfig;
 }
 
-function normalizeRuleSet(raw: unknown, umo = ''): SessionRuleSet {
+function normalizeRuleSet(
+  raw: unknown,
+  umo = '',
+  sender = false,
+): SessionRuleSet {
   if (!raw || typeof raw !== 'object') {
     return {};
   }
@@ -1789,10 +1839,9 @@ function normalizeRuleSet(raw: unknown, umo = ''): SessionRuleSet {
   const source = raw as Record<string, unknown>;
   return {
     ...source,
-    session_service_config: normalizeSessionServiceConfig(
-      source.session_service_config,
-      umo,
-    ),
+    session_service_config: sender
+      ? normalizeSenderServiceConfig(source.session_service_config)
+      : normalizeSessionServiceConfig(source.session_service_config, umo),
     session_plugin_config: normalizeSessionPluginConfig(
       source.session_plugin_config,
     ),
@@ -1870,7 +1919,7 @@ function normalizeRuleItem(raw: unknown): SessionRuleItem | null {
       auto_name: '',
       user_alias: '',
       display_name: senderId,
-      rules: normalizeRuleSet(source.rules),
+      rules: normalizeRuleSet(source.rules, '', true),
     };
   }
 
@@ -2313,7 +2362,8 @@ function openRuleEditor(item: SessionRuleItem) {
   serviceConfig.custom_name = sessionAliasName(item);
   serviceConfig.persona_id = svcConfig.persona_id || null;
   senderOverlay.blocked = svcConfig.blocked === true;
-  senderOverlay.llm_enabled = svcConfig.llm_enabled !== false;
+  senderOverlay.llm_enabled =
+    typeof svcConfig.llm_enabled === 'boolean' ? svcConfig.llm_enabled : null;
 
   providerConfig.chat_completion =
     editingRules.value.provider_perf_chat_completion || FOLLOW_CONFIG_VALUE;
@@ -2343,16 +2393,31 @@ function closeRuleEditor() {
 async function saveSenderOverlay(
   item: SessionRuleItem & { sender_id: string },
 ) {
+  if (!isSenderSubjectId(item.sender_id)) {
+    showError(tm('addRule.senderIdError'));
+    return;
+  }
+
+  const stored = editingRules.value.session_service_config || {};
+  const config: Record<string, boolean | null> = {};
+  if (senderOverlay.blocked) {
+    config.blocked = true;
+  } else if (typeof stored.blocked === 'boolean') {
+    config.blocked = null;
+  }
+  if (senderOverlay.llm_enabled !== null) {
+    config.llm_enabled = senderOverlay.llm_enabled;
+  } else if (typeof stored.llm_enabled === 'boolean') {
+    config.llm_enabled = null;
+  }
+
+  if (Object.keys(config).length === 0) {
+    showSuccess(tm('messages.noChanges'));
+    return;
+  }
+
   saving.value = true;
   try {
-    const config = {
-      blocked: senderOverlay.blocked,
-      llm_enabled: senderOverlay.llm_enabled,
-    };
-    if (!isSenderSubjectId(item.sender_id)) {
-      showError(tm('addRule.senderIdError'));
-      return;
-    }
     const response = await sessionApi.upsertRule({
       target_type: 'sender',
       sender_id: item.sender_id,
@@ -2367,19 +2432,26 @@ async function saveSenderOverlay(
       normalizeString(
         (response.data.data as { sender_id?: unknown } | undefined)?.sender_id,
       ) || item.sender_id;
-    editingRules.value.session_service_config = config;
+    const storedConfig: SessionServiceConfig = {};
+    if (typeof config.blocked === 'boolean') {
+      storedConfig.blocked = config.blocked;
+    }
+    if (typeof config.llm_enabled === 'boolean') {
+      storedConfig.llm_enabled = config.llm_enabled;
+    }
+    editingRules.value.session_service_config = storedConfig;
     const existing = rulesList.value.find((row) => row.sender_id === savedId);
     if (existing) {
-      existing.rules = { session_service_config: config };
+      existing.rules = { session_service_config: storedConfig };
     } else {
       rulesList.value.push(
-        buildSenderItem(savedId, { session_service_config: config }),
+        buildSenderItem(savedId, { session_service_config: storedConfig }),
       );
     }
     selectedUmo.value = {
       ...item,
       sender_id: savedId,
-      rules: { session_service_config: config },
+      rules: { session_service_config: storedConfig },
     };
     showSuccess(tm('messages.saveSuccess'));
   } catch {

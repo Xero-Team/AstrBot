@@ -16,12 +16,13 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
-def sender_service_config(existing: object, **fields: bool) -> dict[str, bool]:
+def sender_service_config(existing: object, **fields: bool | None) -> dict[str, bool]:
     """Return a sender overlay with only ``blocked`` and ``llm_enabled``.
 
     Args:
         existing: Stored preference value, typically a dict.
-        **fields: Overlay fields to write.
+        **fields: Overlay fields to write. ``None`` clears the field so it
+            returns to "unwritten / follow the session".
 
     Returns:
         A mapping that preserves existing bool overlays and applies ``fields``.
@@ -35,7 +36,11 @@ def sender_service_config(existing: object, **fields: bool) -> dict[str, bool]:
         llm_enabled = existing.get("llm_enabled")
         if isinstance(llm_enabled, bool):
             config["llm_enabled"] = llm_enabled
-    config.update(fields)
+    for name, value in fields.items():
+        if value is None:
+            config.pop(name, None)
+        else:
+            config[name] = value
     return config
 
 

@@ -40,6 +40,8 @@ Sender overlays live on `scope=sender` with `scope_id=Subject.im.id` (`im:{platf
 
 The **Sender** target on this page and `/user block`, `/user unblock`, and `/user llm on|off` read and write the same preference row. Dashboard requires the full `im:` subject ID; chat `/user` can also mint a raw sender id from the current session. See [Built-in commands](./command). Save applies immediately; a restart is unnecessary. Deleting the row unlists that sender.
 
+An unwritten `llm_enabled` follows the session. The Dashboard sender editor offers follow session, enabled, and disabled, stores only what you set, and leaves `blocked` unwritten unless you check it, so saving an untouched rule does not change admission. Returning a written value to follow session removes the field; deleting the rule removes the whole row.
+
 ### Plugin rules (`session_plugin_config`)
 
 Disable selected plugins for this UMO. Plugins not listed remain enabled. When all three layers exist:

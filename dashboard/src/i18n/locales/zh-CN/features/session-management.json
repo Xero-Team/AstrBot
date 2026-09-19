@@ -73,6 +73,8 @@
       "title": "服务配置",
       "sessionEnabled": "启用该消息会话来源的消息处理",
       "llmEnabled": "启用 LLM",
+      "llmMode": "LLM 状态",
+      "llmFollowSession": "跟随会话",
       "ttsEnabled": "启用 TTS",
       "blocked": "拉黑该发送者",
       "sessionBlocked": "完全禁用该会话的所有功能",

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
     from astrbot.core.auth import AuthContext, Decision, Resource, Role, Subject
     from astrbot.core.auth.admission import (
+        overlay_flag_enabled,
         sender_admission_key_from_event,
         sender_admission_key_from_id,
         session_admission_key_from_event,
@@ -45,6 +46,10 @@ _EXPORTS = {
     "Resource": ("astrbot.core.auth", "Resource"),
     "Role": ("astrbot.core.auth", "Role"),
     "Subject": ("astrbot.core.auth", "Subject"),
+    "overlay_flag_enabled": (
+        "astrbot.core.auth.admission",
+        "overlay_flag_enabled",
+    ),
     "sender_admission_key_from_event": (
         "astrbot.core.auth.admission",
         "sender_admission_key_from_event",
@@ -126,6 +131,7 @@ __all__ = [
     "btw_work_latest_status",
     "llm_tool",
     "logger",
+    "overlay_flag_enabled",
     "safe_error",
     "sender_admission_key_from_event",
     "sender_admission_key_from_id",

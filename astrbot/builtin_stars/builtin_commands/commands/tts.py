@@ -1,6 +1,5 @@
-from astrbot.api import star
+from astrbot.api import overlay_flag_enabled, star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.auth.admission import overlay_flag_enabled
 
 from .reply import reply_i18n
 

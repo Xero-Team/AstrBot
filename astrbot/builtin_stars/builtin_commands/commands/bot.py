@@ -1,6 +1,5 @@
-from astrbot.api import logger, safe_error, star
+from astrbot.api import logger, overlay_flag_enabled, safe_error, star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.auth.admission import overlay_flag_enabled
 
 from .reply import reply_i18n, send_i18n
 from .target import resolve_target_umo

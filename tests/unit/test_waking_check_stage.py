@@ -898,7 +898,8 @@ async def test_unwritten_im_session_suppresses_command_diagnostics(monkeypatch):
     stage.session_services.is_session_enabled = AsyncMock(return_value=False)
     stage.session_services.is_session_blocked = AsyncMock(return_value=False)
 
-    async def name(self, event, value: str) -> None: ...
+    async def name(self, event, value: str) -> None:
+        pass
 
     handler, _ = make_command_handler("name", name)
     install_handlers(stage, monkeypatch, [handler])

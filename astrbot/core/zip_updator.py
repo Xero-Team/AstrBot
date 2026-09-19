@@ -23,6 +23,10 @@ from astrbot.core.utils.outbound_http import (
 from astrbot.utils.version_comparator import VersionComparator
 
 
+def _log_token(value: object) -> str:
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 class ReleaseInfo:
     version: str
     published_at: str
@@ -133,18 +137,18 @@ class RepoZipUpdator:
             if not isinstance(error, asyncio.CancelledError):
                 logger.error(
                     "下载文件失败: %s -> %s, 错误: %s",
-                    redact_outbound_url(url),
-                    target_path,
-                    error,
+                    _log_token(redact_outbound_url(url)),
+                    _log_token(target_path),
+                    _log_token(error),
                 )
             try:
                 target_path.unlink(missing_ok=True)
             except OSError as cleanup_error:
                 logger.warning(
                     "Failed to remove partial download: %s -> %s: %s",
-                    redact_outbound_url(url),
-                    target_path,
-                    cleanup_error,
+                    _log_token(redact_outbound_url(url)),
+                    _log_token(target_path),
+                    _log_token(cleanup_error),
                 )
             raise
 
@@ -264,15 +268,24 @@ class RepoZipUpdator:
     ) -> None:
         author, repo, branch = self.parse_github_url(repo_url)
 
-        logger.info(f"正在下载更新 {repo} ...")
+        logger.info("正在下载更新 %s ...", _log_token(repo))
         if branch:
             release_url = (
                 f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
             )
-            logger.info("正在从分支 %s 下载 %s/%s", branch, author, repo)
+            logger.info(
+                "正在从分支 %s 下载 %s/%s",
+                _log_token(branch),
+                _log_token(author),
+                _log_token(repo),
+            )
         else:
             release_url = f"https://github.com/{author}/{repo}/archive/HEAD.zip"
-            logger.info("正在从默认引用 HEAD 下载 %s/%s", author, repo)
+            logger.info(
+                "正在从默认引用 HEAD 下载 %s/%s",
+                _log_token(author),
+                _log_token(repo),
+            )
 
         policy = PLUGIN_REPOSITORY
         if proxy:

@@ -730,7 +730,7 @@ async def test_normal_completion_without_max_step(
     # 验证没有最大步数警告消息（注意：实际注入的是user角色的消息）
     user_messages = [m for m in runner.run_context.messages if m.role == "user"]
     max_step_messages = [
-        m for m in user_messages if "工具调用次数已达到上限" in m.content
+        m for m in user_messages if "Agent step budget exhausted" in m.content
     ]
     assert len(max_step_messages) == 0, "正常完成时不应该有步数限制消息"
 

@@ -114,8 +114,9 @@
               class="cancel-active-btn"
               icon="mdi-close"
               size="x-small"
-              color="grey-darken-1"
+              color="secondary"
               variant="text"
+              aria-label="Cancel upload"
             />
             <div class="attachment-progress-track">
               <v-progress-linear
@@ -145,6 +146,7 @@
               size="x-small"
               color="primary"
               variant="tonal"
+              aria-label="Retry failed upload"
             />
             <v-btn
               @click="$emit('discardFailedUpload', index)"
@@ -153,6 +155,7 @@
               size="x-small"
               color="error"
               variant="tonal"
+              aria-label="Discard failed upload"
             />
           </div>
         </div>

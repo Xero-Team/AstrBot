@@ -9,9 +9,7 @@ from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any
-
-from starlette.datastructures import UploadFile
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from astrbot import logger
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
@@ -63,6 +61,12 @@ WEBCHAT_IMAGE_MIME_TYPES = {
     },
     ".jpeg": "image/jpeg",
 }
+
+
+class _SaveableUpload(Protocol):
+    async def save(
+        self, destination: str | Path, *, max_bytes: int | None = None
+    ) -> int: ...
 
 
 class LocalUploadFile:
@@ -532,7 +536,7 @@ class ChatService:
     ) -> tuple[str, str | None]:
         return await self.resolve_attachment_file(attachment_id)
 
-    async def save_uploaded_file(self, file: UploadFile) -> dict:
+    async def save_uploaded_file(self, file: Any) -> dict:
         declared_size = getattr(file, "size", None) or 0
         if declared_size > MAX_UPLOAD_FILE_SIZE_BYTES:
             raise ChatServiceError(
@@ -556,9 +560,10 @@ class ChatService:
             raise ChatServiceError("Invalid filename")
 
         try:
-            saver = getattr(file, "save", None)
-            if callable(saver):
-                await saver(file_path, max_bytes=MAX_UPLOAD_FILE_SIZE_BYTES)
+            if hasattr(file, "save"):
+                await cast(_SaveableUpload, file).save(
+                    file_path, max_bytes=MAX_UPLOAD_FILE_SIZE_BYTES
+                )
             else:
                 await save_upload_to_path(
                     file,

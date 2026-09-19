@@ -102,7 +102,7 @@ class XinferenceRerankProvider(RerankProvider):
             raise RuntimeError("Xinference rerank model is not initialized")
         try:
             response = await self.model.rerank(
-                cast("list[str | dict[str, Any]]", documents),
+                cast(list[str | dict[str, Any]], documents),
                 query,
                 top_n,
             )

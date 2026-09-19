@@ -27,7 +27,7 @@ You do not need a profile per group:
 1. **Custom rules**: disable TTS for one UMO, or pin chat / STT / TTS models. Rules outrank the profile. See [Custom rules](./custom-rules).
 2. **Commands**: `/provider list` shows LLM, STT, and TTS. `/provider set stt <index>` and `/provider set tts <index>` switch the current session. Requires `provider.use`. See [Built-in commands](./command#providers-and-models).
 
-With no rule, the session follows the profile: if the profile enabled STT/TTS, the session processes it.
+With no rule, IM session TTS defaults off until `/tts enable` or a custom rule turns it on. The profile speech switches still have to be on, or the session will not speak. Dashboard WebChat session TTS still defaults on.
 
 ## Setup order
 

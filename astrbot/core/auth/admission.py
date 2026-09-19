@@ -18,6 +18,7 @@ SESSION_SERVICE_CONFIG_KEY = "session_service_config"
 ADMISSION_LISTED_SESSIONS_KEY = "admission_listed_sessions"
 _SESSION_LISTED_FIELDS = ("session_enabled", "session_blocked", "llm_enabled")
 _UNIQUE_SESSION_GROUP_SEPARATORS = ("%", "_")
+_WEBCHAT_PLATFORM = "webchat"
 
 
 class UnlistedPolicy(StrEnum):
@@ -302,6 +303,75 @@ def sender_admission_key_from_id(token: str) -> str | None:
         return None
 
 
+def is_webchat_scope(scope_id: str) -> bool:
+    """Return whether a UMO or canonical session key belongs to WebChat.
+
+    Args:
+        scope_id: Unified message origin or ``session:{platform}:...`` key.
+
+    Returns:
+        True only for the built-in WebChat platform.
+    """
+
+    entry = str(scope_id or "").strip()
+    if not entry:
+        return False
+    if entry.startswith("session:"):
+        parts = entry.split(":", 3)
+        return len(parts) >= 2 and parts[1] == _WEBCHAT_PLATFORM
+    platform, sep, _rest = entry.partition(":")
+    return bool(sep) and platform == _WEBCHAT_PLATFORM
+
+
+def is_webchat_event(event: AdmissionEvent) -> bool:
+    """Return whether an inbound event belongs to WebChat.
+
+    Args:
+        event: Inbound event exposing platform accessors.
+
+    Returns:
+        True when the platform id or name is ``webchat``.
+    """
+
+    get_platform_id = getattr(event, "get_platform_id", None)
+    platform_id = get_platform_id() if callable(get_platform_id) else None
+    if platform_id == _WEBCHAT_PLATFORM:
+        return True
+    return event.get_platform_name() == _WEBCHAT_PLATFORM
+
+
+def unwritten_service_enabled(scope_id: str) -> bool:
+    """Return the unwritten session/LLM/TTS default for a scope.
+
+    IM groups and direct messages default off. WebChat defaults on so the
+    Dashboard chat surface keeps working without a service overlay.
+
+    Args:
+        scope_id: Unified message origin or canonical session key.
+
+    Returns:
+        True only for WebChat scopes.
+    """
+
+    return is_webchat_scope(scope_id)
+
+
+def overlay_flag_enabled(value: object, *, scope_id: str) -> bool:
+    """Resolve a stored service flag, using the unwritten default when absent.
+
+    Args:
+        value: Stored overlay value.
+        scope_id: Unified message origin or canonical session key.
+
+    Returns:
+        The bool overlay when written; otherwise the unwritten default.
+    """
+
+    if isinstance(value, bool):
+        return value
+    return unwritten_service_enabled(scope_id)
+
+
 def session_overlay_from_config(config: object) -> SessionAdmissionOverlay:
     """Parse a ``session_service_config`` mapping into a session overlay.
 
@@ -353,22 +423,27 @@ def sender_overlay_from_config(config: object) -> SenderAdmissionOverlay:
 def composed_llm_enabled(
     session: SessionAdmissionOverlay,
     sender: SenderAdmissionOverlay,
+    *,
+    unwritten_enabled: bool = False,
 ) -> bool:
     """Return the LLM overlay after sender specificity, ignoring event drops.
 
-    Unwritten session LLM defaults to enabled. An unwritten sender follows the
-    session. A written sender value wins, including VIP enable over a disabled
-    session.
+    Unwritten session LLM defaults to ``unwritten_enabled`` (off for IM, on
+    for WebChat callers). An unwritten sender follows the session. A written
+    sender value wins, including VIP enable over a disabled session.
 
     Args:
         session: UMO overlay.
         sender: UID overlay.
+        unwritten_enabled: Default when the session LLM overlay is absent.
 
     Returns:
         Whether built-in LLM is enabled by overlays alone.
     """
 
-    session_llm = True if session.llm_enabled is None else session.llm_enabled
+    session_llm = (
+        unwritten_enabled if session.llm_enabled is None else session.llm_enabled
+    )
     if sender.llm_enabled is None:
         return session_llm
     return sender.llm_enabled
@@ -380,6 +455,7 @@ def compose_admission(
     *,
     unlisted_sessions: UnlistedPolicy | str = UnlistedPolicy.ALLOW,
     unlisted_senders: UnlistedPolicy | str = UnlistedPolicy.ALLOW,
+    unwritten_enabled: bool = False,
 ) -> AdmissionDecision:
     """Compose session and sender overlays into one admission decision.
 
@@ -393,6 +469,7 @@ def compose_admission(
         sender: UID overlay.
         unlisted_sessions: Policy when the session has no overlay.
         unlisted_senders: Policy when the sender has no allow overlay.
+        unwritten_enabled: Default when session/LLM overlays are absent.
 
     Returns:
         Event and LLM admission plus the resolved session/sender flags.
@@ -401,7 +478,9 @@ def compose_admission(
     session_policy = UnlistedPolicy(unlisted_sessions)
     sender_policy = UnlistedPolicy(unlisted_senders)
     session_enabled = (
-        True if session.session_enabled is None else session.session_enabled
+        unwritten_enabled
+        if session.session_enabled is None
+        else session.session_enabled
     )
     session_blocked = session.session_blocked
     sender_blocked = sender.blocked
@@ -412,7 +491,8 @@ def compose_admission(
     refused = session_blocked or sender_blocked or session_denied or sender_denied
     return AdmissionDecision(
         admit_event=not refused,
-        admit_llm=not refused and composed_llm_enabled(session, sender),
+        admit_llm=not refused
+        and composed_llm_enabled(session, sender, unwritten_enabled=unwritten_enabled),
         session_enabled=session_enabled,
         session_blocked=session_blocked,
         sender_blocked=sender_blocked,

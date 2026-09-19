@@ -46,12 +46,12 @@ def _manager(preferences: _Preferences | None = None) -> SessionServiceManager:
 @pytest.mark.parametrize(
     ("umo_config", "enabled", "blocked", "llm"),
     [
-        ({}, True, False, True),
+        ({}, False, False, False),
         ({"session_enabled": True, "llm_enabled": True}, True, False, True),
-        ({"session_enabled": False}, False, False, True),
-        ({"session_blocked": True}, True, True, True),
-        ({"llm_enabled": False}, True, False, False),
-        ({"session_blocked": "yes", "llm_enabled": "no"}, True, False, True),
+        ({"session_enabled": False}, False, False, False),
+        ({"session_blocked": True}, False, True, False),
+        ({"llm_enabled": False}, False, False, False),
+        ({"session_blocked": "yes", "llm_enabled": "no"}, False, False, False),
     ],
 )
 async def test_empty_uid_matches_current_session_switches(
@@ -128,8 +128,8 @@ async def test_sender_blocked_overlay_does_not_change_empty_session_llm():
     manager = _manager(preferences)
 
     assert await manager.is_sender_blocked(event) is True
-    assert await manager.should_process_llm_request(event) is True
-    assert await manager.is_session_enabled(event.unified_msg_origin) is True
+    assert await manager.should_process_llm_request(event) is False
+    assert await manager.is_session_enabled(event.unified_msg_origin) is False
 
 
 @pytest.mark.asyncio
@@ -148,9 +148,9 @@ async def test_non_dict_service_config_is_treated_as_empty():
     ] = ["blocked"]
     manager = _manager(preferences)
 
-    assert await manager.is_session_enabled(event.unified_msg_origin) is True
+    assert await manager.is_session_enabled(event.unified_msg_origin) is False
     assert await manager.is_session_blocked(event.unified_msg_origin) is False
-    assert await manager.should_process_llm_request(event) is True
+    assert await manager.should_process_llm_request(event) is False
     assert await manager.is_sender_blocked(event) is False
 
 
@@ -191,15 +191,15 @@ async def test_tts_non_dict_and_invalid_values_default_enabled():
     )
     manager = _manager(preferences)
 
-    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is True
-    assert await manager.should_process_tts_request(event) is True
+    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is False
+    assert await manager.should_process_tts_request(event) is False
 
     preferences.values[("umo", event.unified_msg_origin, "session_service_config")] = {
         "tts_enabled": "no",
         "llm_enabled": False,
     }
-    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is True
-    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is True
+    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is False
+    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is False
 
     await manager.set_tts_status_for_session(event.unified_msg_origin, False)
     assert preferences.values[
@@ -222,6 +222,13 @@ async def test_umo_llm_overlay_is_inert_for_event_admission():
     preferences.values[("umo", event.unified_msg_origin, "session_service_config")] = {
         "llm_enabled": False
     }
+    preferences.values[
+        (
+            "umo",
+            session_admission_key_from_event(event),
+            "session_service_config",
+        )
+    ] = {"llm_enabled": True}
     manager = _manager(preferences)
 
     assert await manager.should_process_llm_request(event) is True
@@ -335,6 +342,23 @@ async def test_sender_setters_replace_non_dict_and_drop_extra_keys():
         "blocked": True,
         "llm_enabled": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_webchat_unwritten_service_flags_default_enabled():
+    event = make_real_event(
+        message_type=MessageType.FRIEND_MESSAGE,
+        group_id="",
+        session_id="webchat!user!cid",
+        platform_id="webchat",
+    )
+    manager = _manager()
+
+    assert await manager.is_session_enabled(event.unified_msg_origin) is True
+    assert await manager.is_tts_enabled_for_session(event.unified_msg_origin) is True
+    assert await manager.is_llm_enabled_for_session(event.unified_msg_origin) is True
+    assert await manager.should_process_llm_request(event) is True
+    assert await manager.should_process_tts_request(event) is True
 
 
 @pytest.mark.asyncio

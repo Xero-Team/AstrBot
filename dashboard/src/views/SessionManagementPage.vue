@@ -1640,6 +1640,18 @@ function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function isWebchatScope(scopeId: string): boolean {
+  const parts = scopeId.split(':');
+  if (parts[0] === 'session') {
+    return parts[1] === 'webchat';
+  }
+  return parts[0] === 'webchat';
+}
+
+function unwrittenServiceEnabled(scopeId: string): boolean {
+  return Boolean(scopeId) && isWebchatScope(scopeId);
+}
+
 function normalizeNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -1711,17 +1723,21 @@ function normalizeKnowledgeBaseOption(
   };
 }
 
-function normalizeSessionServiceConfig(raw: unknown): SessionServiceConfig {
+function normalizeSessionServiceConfig(
+  raw: unknown,
+  umo = '',
+): SessionServiceConfig {
   if (!raw || typeof raw !== 'object') {
     return {};
   }
 
   const source = raw as Record<string, unknown>;
+  const fallback = unwrittenServiceEnabled(umo);
   return {
     ...source,
-    session_enabled: normalizeBoolean(source.session_enabled, true),
-    llm_enabled: normalizeBoolean(source.llm_enabled, true),
-    tts_enabled: normalizeBoolean(source.tts_enabled, true),
+    session_enabled: normalizeBoolean(source.session_enabled, fallback),
+    llm_enabled: normalizeBoolean(source.llm_enabled, fallback),
+    tts_enabled: normalizeBoolean(source.tts_enabled, fallback),
     session_blocked: normalizeBoolean(source.session_blocked, false),
     custom_name: normalizeString(source.custom_name) || undefined,
     persona_id: normalizeString(source.persona_id) || null,
@@ -1761,7 +1777,7 @@ function toRuleValue(
   return value as unknown as DynamicConfig;
 }
 
-function normalizeRuleSet(raw: unknown): SessionRuleSet {
+function normalizeRuleSet(raw: unknown, umo = ''): SessionRuleSet {
   if (!raw || typeof raw !== 'object') {
     return {};
   }
@@ -1771,6 +1787,7 @@ function normalizeRuleSet(raw: unknown): SessionRuleSet {
     ...source,
     session_service_config: normalizeSessionServiceConfig(
       source.session_service_config,
+      umo,
     ),
     session_plugin_config: normalizeSessionPluginConfig(
       source.session_plugin_config,
@@ -1823,7 +1840,7 @@ function normalizeUmoInfo(
     display_name: normalizeString(source.display_name) || umo,
     rules:
       source.rules && typeof source.rules === 'object'
-        ? normalizeRuleSet(source.rules)
+        ? normalizeRuleSet(source.rules, umo)
         : undefined,
   };
 }
@@ -1861,7 +1878,7 @@ function normalizeRuleItem(raw: unknown): SessionRuleItem | null {
   return {
     ...info,
     target_type: 'session',
-    rules: normalizeRuleSet(source.rules),
+    rules: normalizeRuleSet(source.rules, info.umo),
   };
 }
 
@@ -2275,9 +2292,19 @@ function openRuleEditor(item: SessionRuleItem) {
   editingRules.value = item.rules || {};
 
   const svcConfig = editingRules.value.session_service_config || {};
-  serviceConfig.session_enabled = svcConfig.session_enabled !== false;
-  serviceConfig.llm_enabled = svcConfig.llm_enabled !== false;
-  serviceConfig.tts_enabled = svcConfig.tts_enabled !== false;
+  const serviceFallback = unwrittenServiceEnabled(item.umo);
+  serviceConfig.session_enabled = normalizeBoolean(
+    svcConfig.session_enabled,
+    serviceFallback,
+  );
+  serviceConfig.llm_enabled = normalizeBoolean(
+    svcConfig.llm_enabled,
+    serviceFallback,
+  );
+  serviceConfig.tts_enabled = normalizeBoolean(
+    svcConfig.tts_enabled,
+    serviceFallback,
+  );
   serviceConfig.session_blocked = svcConfig.session_blocked === true;
   serviceConfig.custom_name = sessionAliasName(item);
   serviceConfig.persona_id = svcConfig.persona_id || null;
@@ -2696,11 +2723,23 @@ async function saveQuickEditName() {
   try {
     const existingConfig =
       quickEditNameTarget.value.rules?.session_service_config || {};
+    const serviceFallback = unwrittenServiceEnabled(
+      quickEditNameTarget.value.umo,
+    );
     const config: SessionServiceConfig = {
       ...existingConfig,
-      session_enabled: existingConfig.session_enabled !== false,
-      llm_enabled: existingConfig.llm_enabled !== false,
-      tts_enabled: existingConfig.tts_enabled !== false,
+      session_enabled: normalizeBoolean(
+        existingConfig.session_enabled,
+        serviceFallback,
+      ),
+      llm_enabled: normalizeBoolean(
+        existingConfig.llm_enabled,
+        serviceFallback,
+      ),
+      tts_enabled: normalizeBoolean(
+        existingConfig.tts_enabled,
+        serviceFallback,
+      ),
       session_blocked: existingConfig.session_blocked === true,
       custom_name: quickEditNameValue.value,
     };

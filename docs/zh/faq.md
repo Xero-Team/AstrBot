@@ -103,7 +103,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 群聊中机器人不回复
 
-为避免群消息泛滥，普通消息需要满足配置档的 `llm_access.group` 策略（默认是 `prefix`，`llm_access.prefixes` 默认值为 `["/"]`）。私聊默认同样是 `prefix`。`@` 不会单独放行内置 AI。如需把“回复机器人”作为额外触发条件，请启用 `llm_access.reply_to_bot`。完整策略、隔离会话和唤醒之后仍可能被未列入会话或未列入发送者策略丢掉的说明见 [群聊何时会理我](/use/group-wake)。同时检查：
+为避免群消息泛滥，普通消息需要满足配置档的 `llm_access.group` 策略（默认是 `prefix`，`llm_access.prefixes` 默认值为 `["/"]`）。私聊默认同样是 `prefix`。IM 群聊和私聊在没有覆盖时会话、LLM、TTS 默认关闭，需要 `/bot enable` 再 `/llm enable`。`@` 不会单独放行内置 AI。如需把“回复机器人”作为额外触发条件，请启用 `llm_access.reply_to_bot`。完整策略、隔离会话和唤醒之后仍可能被未列入会话或未列入发送者策略丢掉的说明见 [群聊何时会理我](/use/group-wake)。同时检查：
 
 - 当前配置档是否绑定到该消息会话，见 [配置文件](/use/config-profiles)；
 - 平台和 Provider 是否启用；

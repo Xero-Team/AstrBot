@@ -242,10 +242,11 @@ async def test_rules_and_status_tolerate_malformed_preference_values(
         "provider_perf_chat_completion": "provider-private"
     }
     assert status_by_umo[group_umo]["llm_enabled"] is False
-    assert status_by_umo[private_umo]["session_enabled"] is True
+    assert status_by_umo[group_umo]["session_enabled"] is False
+    assert status_by_umo[private_umo]["session_enabled"] is False
     assert status_by_umo[private_umo]["chat_provider"] == "provider-private"
     assert status_by_umo[malformed_fields_umo]["custom_name"] == ""
-    assert status_by_umo[malformed_fields_umo]["session_enabled"] is True
+    assert status_by_umo[malformed_fields_umo]["session_enabled"] is False
     assert statuses["platforms"] == ["discord", "qq", "telegram"]
     assert no_match_rules["total"] == 0
     assert no_match_statuses["total"] == 0

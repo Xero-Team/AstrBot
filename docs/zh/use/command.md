@@ -53,7 +53,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/bot leave`：提示退群确认。需要 `session.manage`，且只能在群聊中使用。
 - `/bot leave --confirm` 或 `/bot leave -c`：确认后退出当前群。当前平台未声明 `leave_group` 时会拒绝。
 
-`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是目标 UMO（与 `/llm` 相同）。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。`/bot status` 还会显示完全禁用状态。`/session block [this|UMO]` 和 `/session unblock [this|UMO]` 由 `instance_operator` 及以上权限使用，完全禁用目标会话的所有功能；完全禁用后只放行 `/bot status` 和 `/session unblock`。裸 `/bot` 只显示子指令树。
+`enable` 和 `disable` 都是幂等操作，写入已有的 `session_enabled`，作用范围是目标 UMO。IM 群聊和私聊在没有覆盖时默认关闭，需要先 `/bot enable`，再 `/llm enable`（会话关闭时 `/llm` 不透传）。Dashboard WebChat 仍默认开启。会话关闭后，流水线会停止普通事件，但仍放行 `/bot status` 和 `/bot enable`，以便从聊天重新打开。`/bot status` 还会显示完全禁用状态。`/session block [this|UMO]` 和 `/session unblock [this|UMO]` 由 `instance_operator` 及以上权限使用，完全禁用目标会话的所有功能；完全禁用后只放行 `/bot status` 和 `/session unblock`。裸 `/bot` 只显示子指令树。
 
 ### 会话信息
 
@@ -135,7 +135,7 @@ LINE 等需要公网媒体 URL 的目标要求配置可访问的 HTTPS `callback
 - `/llm enable`：启用当前会话的 LLM 聊天。
 - `/llm disable`：停用当前会话的 LLM 聊天。
 
-这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/llm` 只控制是否启用 LLM，与流式模式无关。IM 里写入的是规范会话键，因此隔离会话开启时会关掉整个群的 LLM。Dashboard 自定义规则会把 LLM 开关双写到同一把规范键。
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。IM 没有覆盖时 LLM 默认关闭。`/llm` 只控制是否启用 LLM，与流式模式无关。IM 里写入的是规范会话键，因此隔离会话开启时会关掉整个群的 LLM。Dashboard 自定义规则会把 LLM 开关双写到同一把规范键。
 
 ### 发送者准入
 
@@ -152,7 +152,7 @@ LINE 等需要公网媒体 URL 的目标要求配置可访问的 HTTPS `callback
 - `/tts enable`：启用当前会话的 TTS。
 - `/tts disable`：停用当前会话的 TTS。
 
-这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。`/bot status` 可以同时查看会话、LLM 和 TTS 开关。
+这些指令需要 `session.manage`。`enable` 和 `disable` 都是幂等操作。IM 没有覆盖时 TTS 默认关闭。`/bot status` 可以同时查看会话、LLM 和 TTS 开关。
 
 ### 会话流式输出
 

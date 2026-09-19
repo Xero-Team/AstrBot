@@ -1,5 +1,6 @@
 from astrbot.api import session_admission_key_from_event, star
 from astrbot.api.event import AstrMessageEvent
+from astrbot.core.auth.admission import overlay_flag_enabled
 
 from .reply import reply_i18n
 
@@ -16,7 +17,10 @@ class ChatCommands:
             "session_service_config",
             {},
         )
-        enabled = settings.get("llm_enabled", True)
+        enabled = overlay_flag_enabled(
+            settings.get("llm_enabled"),
+            scope_id=session_key,
+        )
         await reply_i18n(
             self.context,
             event,

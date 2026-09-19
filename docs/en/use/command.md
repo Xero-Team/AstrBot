@@ -53,7 +53,7 @@ Enabled command paths, aliases, descendants, and non-empty LLM prefix roots shar
 - `/bot leave`: Prompt for leave confirmation. Requires `session.manage` and only works in group chats.
 - `/bot leave --confirm` or `/bot leave -c`: Leave the current group after confirmation. Rejected when the platform does not declare `leave_group`.
 
-Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the target UMO, same scope as `/llm`. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. `/bot status` also reports the full-block state. `/session block [this|UMO]` and `/session unblock [this|UMO]` require `instance_operator` or above and fully block or restore all functionality for the target session; a fully blocked session only allows `/bot status` and `/session unblock`. A bare `/bot` only shows the subcommand tree.
+Both `enable` and `disable` are idempotent. They write the existing `session_enabled` flag for the target UMO. IM groups and direct messages default off when no overlay exists; turn the session on with `/bot enable`, then `/llm enable` (`/llm` does not pass through a disabled session). Dashboard WebChat still defaults on. When the session is disabled, the pipeline stops ordinary events but still allows `/bot status` and `/bot enable` so the session can be turned back on from chat. `/bot status` also reports the full-block state. `/session block [this|UMO]` and `/session unblock [this|UMO]` require `instance_operator` or above and fully block or restore all functionality for the target session; a fully blocked session only allows `/bot status` and `/session unblock`. A bare `/bot` only shows the subcommand tree.
 
 ### Session Information
 
@@ -135,7 +135,7 @@ These commands require `provider.use`. Cross-session assignment also requires `s
 - `/llm enable`: Enable LLM chat for the current session.
 - `/llm disable`: Disable LLM chat for the current session.
 
-These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/llm` only controls whether the LLM is enabled; it does not change streaming mode. IM writes the canonical session key, so isolated sessions disable LLM for the whole group. Dashboard custom rules dual-write the LLM switch onto the same canonical key.
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. Unwritten IM LLM overlays default off. `/llm` only controls whether the LLM is enabled; it does not change streaming mode. IM writes the canonical session key, so isolated sessions disable LLM for the whole group. Dashboard custom rules dual-write the LLM switch onto the same canonical key.
 
 ### Sender admission
 
@@ -152,7 +152,7 @@ These commands require `session.manage`. Both `enable` and `disable` are idempot
 - `/tts enable`: Enable TTS for the current session.
 - `/tts disable`: Disable TTS for the current session.
 
-These commands require `session.manage`. Both `enable` and `disable` are idempotent. `/bot status` shows the session, LLM, and TTS switches together.
+These commands require `session.manage`. Both `enable` and `disable` are idempotent. Unwritten IM TTS overlays default off. `/bot status` shows the session, LLM, and TTS switches together.
 
 ### Session streaming
 

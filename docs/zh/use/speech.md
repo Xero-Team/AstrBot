@@ -27,7 +27,7 @@ Provider 类型和密钥见 [服务提供商配置](/providers/llm#tts-与-eleve
 1. **自定义规则**：为指定 UMO 关闭 TTS，或指定聊天 / STT / TTS 模型。规则高于配置文件。见 [自定义规则](./custom-rules)。
 2. **指令**：`/provider list` 查看 LLM、STT、TTS；`/provider set stt <序号>`、`/provider set tts <序号>` 切换当前会话。需要 `provider.use`。见 [内置指令](./command#provider-与模型)。
 
-未写规则时，会话默认跟随配置文件：配置文件开了 STT/TTS，会话就处理。
+未写规则时，IM 会话的 TTS 开关默认关闭，需要 `/tts enable` 或自定义规则打开。配置文件的语音总开关仍然要开，否则即使会话打开也不会播报。Dashboard WebChat 的会话 TTS 仍默认开启。
 
 ## 使用顺序
 

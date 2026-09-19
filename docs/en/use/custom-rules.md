@@ -15,7 +15,7 @@ Open **Custom rules**. Choose **Session** or **Sender** at the top of the page. 
 | Block one person in a shared group, or enable LLM for one person         | Custom rule (sender) or `/user`               |
 | Temporarily silence the current session                                  | `/bot disable` or session on/off on this page |
 
-Rules outrank the profile. If a rule disables LLM, enabling it on the profile does nothing. With no rule, the session defaults to everything enabled (legacy compatibility).
+Rules outrank the profile. If a rule disables LLM, enabling it on the profile does nothing. With no rule, IM groups and direct messages default session, LLM, and TTS off. Dashboard WebChat still defaults on.
 
 ## Rule types
 

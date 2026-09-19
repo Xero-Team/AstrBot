@@ -4,6 +4,8 @@ from astrbot import logger
 from astrbot.core.auth.admission import (
     SESSION_SERVICE_CONFIG_KEY,
     composed_llm_enabled,
+    is_webchat_event,
+    overlay_flag_enabled,
     sender_admission_key_from_event,
     sender_overlay_from_config,
     session_admission_key_from_event,
@@ -81,10 +83,11 @@ class SessionServiceManager:
             bool: True表示启用，False表示禁用
 
         """
+        scope_id = self._llm_scope_id(session_id)
         overlay = session_overlay_from_config(
-            await self._service_config("umo", self._llm_scope_id(session_id))
+            await self._service_config("umo", scope_id)
         )
-        return True if overlay.llm_enabled is None else overlay.llm_enabled
+        return overlay_flag_enabled(overlay.llm_enabled, scope_id=scope_id)
 
     async def set_llm_status_for_session(self, session_id: str, enabled: bool) -> None:
         """设置LLM在指定会话中的启停状态
@@ -124,7 +127,11 @@ class SessionServiceManager:
         sender_overlay = sender_overlay_from_config(
             await self._service_config("sender", sender_admission_key_from_event(event))
         )
-        return composed_llm_enabled(session_overlay, sender_overlay)
+        return composed_llm_enabled(
+            session_overlay,
+            sender_overlay,
+            unwritten_enabled=is_webchat_event(event),
+        )
 
     # =============================================================================
     # TTS 相关方法
@@ -141,7 +148,7 @@ class SessionServiceManager:
 
         """
         tts_enabled = (await self._service_config("umo", session_id)).get("tts_enabled")
-        return tts_enabled if isinstance(tts_enabled, bool) else True
+        return overlay_flag_enabled(tts_enabled, scope_id=session_id)
 
     async def set_tts_status_for_session(self, session_id: str, enabled: bool) -> None:
         """设置TTS在指定会话中的启停状态
@@ -194,7 +201,7 @@ class SessionServiceManager:
         overlay = session_overlay_from_config(
             await self._service_config("umo", session_id)
         )
-        return True if overlay.session_enabled is None else overlay.session_enabled
+        return overlay_flag_enabled(overlay.session_enabled, scope_id=session_id)
 
     async def is_session_blocked(self, session_id: str) -> bool:
         """Check whether all functionality is blocked for a session."""

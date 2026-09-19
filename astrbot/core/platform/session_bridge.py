@@ -58,6 +58,8 @@ MIN_WATCH_TTL_SECONDS = 1
 DEFAULT_WATCH_TTL_SECONDS = 12 * 60 * 60
 MAX_WATCH_TTL_SECONDS = 10 * 24 * 60 * 60
 DEFAULT_MAX_PAIRS_PER_SUBJECT = 8
+MAX_FORWARD_ATTEMPTS = 3
+FORWARD_RETRY_DELAY_SECONDS = 0.25
 
 if TYPE_CHECKING:
     from astrbot.core.auth.service import AuthorizationService
@@ -567,61 +569,104 @@ class SessionBridgeManager:
             watches = self._state.grants_observing(origin)
         await self._notify_expired_watches(expired)
         for key, grant in watches:
-            watch = grant.watch
-            try:
-                if not self._get_capabilities(watch.source_umo).available:
-                    continue
-                await self._authorize(
-                    grant.subject, grant.context, watch.source_umo, "session.watch"
-                )
-                await self._authorize(
-                    grant.subject, grant.context, watch.target_umo, "session.watch"
-                )
-                if not await self._passes_filter(grant, envelope):
-                    continue
-                async with self._lock:
-                    if not self._grant_active(key, grant, time()):
-                        continue
-                    dedup = (watch.source_umo, origin, envelope.source_message_id or "")
-                    if envelope.source_message_id:
-                        if dedup in self._forwarded:
-                            continue
-                        self._forwarded[dedup] = None
-                        if len(self._forwarded) > 8192:
-                            self._forwarded.popitem(last=False)
-                locale = await self._locale_for(watch.source_umo)
-                content = envelope.content
-                if grant.header:
-                    content = (
-                        PortablePart(
-                            ContentKind.TEXT,
-                            render_source_header(
-                                envelope,
-                                self._platform_family(watch.source_umo),
-                                locale,
-                            ),
+            await self._forward_to_watch(key, grant, envelope)
+
+    async def _forward_to_watch(
+        self, key: GrantKey, grant: WatchGrant, envelope: MessageEnvelope
+    ) -> None:
+        """Deliver one envelope to one watch, leasing the dedup key for it."""
+        watch = grant.watch
+        origin = envelope.source_umo
+        claim: tuple[str, str, str] | None = None
+        try:
+            if not self._get_capabilities(watch.source_umo).available:
+                return
+            await self._authorize(
+                grant.subject, grant.context, watch.source_umo, "session.watch"
+            )
+            await self._authorize(
+                grant.subject, grant.context, watch.target_umo, "session.watch"
+            )
+            if not await self._passes_filter(grant, envelope):
+                return
+            async with self._lock:
+                if not self._grant_active(key, grant, time()):
+                    return
+                if envelope.source_message_id:
+                    claim = (watch.source_umo, origin, envelope.source_message_id)
+                    if claim in self._forwarded:
+                        return
+                    self._forwarded[claim] = None
+                    if len(self._forwarded) > 8192:
+                        self._forwarded.popitem(last=False)
+            locale = await self._locale_for(watch.source_umo)
+            content = envelope.content
+            if grant.header:
+                content = (
+                    PortablePart(
+                        ContentKind.TEXT,
+                        render_source_header(
+                            envelope,
+                            self._platform_family(watch.source_umo),
+                            locale,
                         ),
-                        *envelope.content,
-                    )
-                forwarded = replace(envelope, content=content)
-                receipt = await self._deliver(
-                    watch.source_umo,
-                    forwarded,
-                    lambda: self._check_watch(grant),
-                    locale=locale,
+                    ),
+                    *envelope.content,
                 )
-                if receipt.status != "accepted":
-                    logger.warning(
-                        "Session bridge submission status: %s", receipt.status
-                    )
-            except PermissionError:
-                async with self._lock:
-                    await self._state.delete_rule(grant.watch.rule_id)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                # Transport exceptions may contain credentials or private URLs.
-                logger.warning("Session bridge delivery failed")
+            forwarded = replace(envelope, content=content)
+            receipt = await self._forward_with_retry(watch, grant, forwarded, locale)
+            if not receipt.accepted_attempts:
+                await self._release_forward(claim)
+            if receipt.status != "accepted":
+                logger.warning("Session bridge submission status: %s", receipt.status)
+        except PermissionError:
+            await self._release_forward(claim)
+            async with self._lock:
+                await self._state.delete_rule(grant.watch.rule_id)
+        except asyncio.CancelledError:
+            await self._release_forward(claim)
+            raise
+        except Exception:
+            # Transport exceptions may contain credentials or private URLs.
+            await self._release_forward(claim)
+            logger.warning("Session bridge delivery failed")
+
+    async def _forward_with_retry(
+        self,
+        watch: SessionWatch,
+        grant: WatchGrant,
+        envelope: MessageEnvelope,
+        locale: str,
+    ) -> DeliveryReceipt:
+        """Retry transient platform failures without duplicating the claim."""
+        receipt = await self._deliver(
+            watch.source_umo,
+            envelope,
+            lambda: self._check_watch(grant),
+            locale=locale,
+        )
+        attempt = 1
+        while (
+            attempt < MAX_FORWARD_ATTEMPTS
+            and not receipt.accepted_attempts
+            and receipt.status in {"failed", "unknown"}
+        ):
+            await asyncio.sleep(FORWARD_RETRY_DELAY_SECONDS * attempt)
+            receipt = await self._deliver(
+                watch.source_umo,
+                envelope,
+                lambda: self._check_watch(grant),
+                locale=locale,
+            )
+            attempt += 1
+        return receipt
+
+    async def _release_forward(self, claim: tuple[str, str, str] | None) -> None:
+        """Drop an undelivered dedup claim so a later observe can retry."""
+        if claim is None:
+            return
+        async with self._lock:
+            self._forwarded.pop(claim, None)
 
     async def _passes_filter(
         self, grant: WatchGrant, envelope: MessageEnvelope

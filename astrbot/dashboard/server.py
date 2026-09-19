@@ -560,6 +560,15 @@ class AstrBotDashboard:
     def run(self):
         ip_addr = []
         dashboard_config = self.runtime.astrbot_config.get("dashboard", {})
+        # Environment beats config for both. Each accepts two names -- the unprefixed
+        # one first, then the ASTRBOT_-prefixed one -- so DASHBOARD_HOST wins over
+        # ASTRBOT_DASHBOARD_HOST if both are set. Unset everywhere, the dashboard binds
+        # 127.0.0.1:6185.
+        #
+        # The host chain is also read by AuthService.can_skip_default_password_auth,
+        # which only allows that skip when the resolved host is 127.0.0.1, localhost
+        # or ::1. So these variables decide where the dashboard listens and, indirectly,
+        # whether the default password gate can be waived.
         port = (
             os.environ.get("DASHBOARD_PORT")
             or os.environ.get("ASTRBOT_DASHBOARD_PORT")

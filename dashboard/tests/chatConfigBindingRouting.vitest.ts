@@ -48,6 +48,30 @@ describe('resolveConfigIdFromRouting', () => {
     ).toBe('default');
   });
 
+  it('treats invalid ranges as never-matching instead of throwing', () => {
+    expect(() =>
+      resolveConfigIdFromRouting(
+        { 'webchat:FriendMessage:[b-a]': 'broken' },
+        webchatUmo,
+      ),
+    ).not.toThrow();
+    expect(
+      resolveConfigIdFromRouting(
+        { 'webchat:FriendMessage:[b-a]': 'broken' },
+        webchatUmo,
+      ),
+    ).toBe('default');
+  });
+
+  it('matches consecutive stars like a single star', () => {
+    expect(
+      resolveConfigIdFromRouting(
+        { 'webchat:FriendMessage:***': 'starred' },
+        webchatUmo,
+      ),
+    ).toBe('starred');
+  });
+
   it('matches newlines like the backend DOTALL glob translation', () => {
     expect(
       resolveConfigIdFromRouting(

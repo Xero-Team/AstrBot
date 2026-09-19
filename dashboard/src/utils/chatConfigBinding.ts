@@ -86,6 +86,9 @@ function globToRegExp(pattern: string): RegExp {
     index += 1;
     if (char === '*') {
       source += '.*';
+      while (pattern[index] === '*') {
+        index += 1;
+      }
     } else if (char === '?') {
       source += '.';
     } else if (char === '[') {
@@ -120,7 +123,13 @@ function globToRegExp(pattern: string): RegExp {
 }
 
 function globMatch(value: string, pattern: string): boolean {
-  return globToRegExp(pattern).test(value);
+  try {
+    return globToRegExp(pattern).test(value);
+  } catch {
+    // Python's fnmatch treats invalid ranges (for example ``[b-a]``) as a
+    // never-matching class, while JavaScript's RegExp constructor throws.
+    return false;
+  }
 }
 
 type SegmentPriority = [number, number];

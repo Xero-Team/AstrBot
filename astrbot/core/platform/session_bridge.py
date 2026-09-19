@@ -569,8 +569,13 @@ class SessionBridgeManager:
             expired = await self._state.purge(time())
             watches = self._state.grants_observing(origin)
         await self._notify_expired_watches(expired)
-        for key, grant in watches:
-            await self._forward_to_watch(key, grant, envelope)
+        if watches:
+            await asyncio.gather(
+                *(
+                    self._forward_to_watch(key, grant, envelope)
+                    for key, grant in watches
+                )
+            )
 
     async def _forward_to_watch(
         self, key: GrantKey, grant: WatchGrant, envelope: MessageEnvelope

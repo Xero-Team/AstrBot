@@ -952,6 +952,41 @@ async def test_same_destination_deliveries_keep_arrival_order():
 
 
 @pytest.mark.asyncio
+async def test_observe_delivers_to_watches_without_head_of_line_blocking():
+    import asyncio
+
+    manager, _, sender = _manager()
+    await manager.watch(_event(umo="x:FriendMessage:one"), "origin:GroupMessage:room")
+    await manager.watch(_event(umo="y:FriendMessage:one"), "origin:GroupMessage:room")
+
+    release = asyncio.Event()
+    y_delivered = asyncio.Event()
+
+    async def send(session, _chain):
+        if session.platform_id == "x":
+            await release.wait()
+        if session.platform_id == "y":
+            y_delivered.set()
+        return PlatformSendResult(
+            session.platform_id, True, session.session_id, message_ids=("sent",)
+        )
+
+    sender.side_effect = send
+    task = asyncio.create_task(
+        manager.observe(
+            MessageEnvelope(
+                PlatformRouteIdentity("origin", MessageType.GROUP_MESSAGE, "room"),
+                content=(PortablePart(ContentKind.TEXT, "hello"),),
+            )
+        )
+    )
+    await asyncio.wait_for(y_delivered.wait(), 1)
+    release.set()
+    await task
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
 async def test_own_bot_echo_is_not_forwarded():
     manager, _, send = _manager()
     await manager.watch(_event(), "target:GroupMessage:room")

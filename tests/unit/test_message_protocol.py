@@ -857,7 +857,7 @@ async def test_unwatch_cancels_a_queued_delivery():
         return SimpleNamespace(allowed=True)
 
     authorization.authorize.side_effect = authorize
-    async with manager._delivery_lock:
+    async with manager._delivery_locks.acquire_lock("source:FriendMessage:sender"):
         task = asyncio.create_task(
             manager.observe(
                 MessageEnvelope(

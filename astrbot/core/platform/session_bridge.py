@@ -19,6 +19,7 @@ from astrbot.core.auth.models import (
     Subject,
 )
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.session_lock import SessionLockManager
 
 from .message_delivery import plan_message_delivery
 from .message_i18n import DEFAULT_LOCALE, localize, localize_kind, normalize_locale
@@ -110,7 +111,7 @@ class SessionBridgeManager:
         self._forwarded: OrderedDict[tuple[str, str, str], None] = OrderedDict()
         self._message_ids: OrderedDict[tuple[str, str, str], str] = OrderedDict()
         self._lock = asyncio.Lock()
-        self._delivery_lock = asyncio.Lock()
+        self._delivery_locks = SessionLockManager()
 
     @staticmethod
     def _actor(event: AstrMessageEvent) -> tuple[Subject, AuthContext]:
@@ -767,7 +768,12 @@ class SessionBridgeManager:
         *,
         locale: str = DEFAULT_LOCALE,
     ) -> DeliveryReceipt:
-        async with self._delivery_lock:
+        """Serialize delivery per destination while other targets stay parallel.
+
+        The destination lock is held across media materialization so per-target
+        arrival order is preserved; unrelated destinations never wait on it.
+        """
+        async with self._delivery_locks.acquire_lock(target_umo):
             await check_authority()
             return await self._materialize_and_submit(
                 target_umo, envelope, check_authority, locale=locale

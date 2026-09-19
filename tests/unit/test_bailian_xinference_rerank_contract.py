@@ -215,9 +215,18 @@ async def test_xinference_hides_model_errors_from_logs(caplog) -> None:
     )
 
     with caplog.at_level(logging.ERROR, logger="astrbot"):
-        assert await provider.rerank("query", ["document"]) == []
+        with pytest.raises(RuntimeError):
+            await provider.rerank("query", ["document"])
 
     _assert_no_sensitive_values(caplog.text)
+
+
+@pytest.mark.asyncio
+async def test_xinference_raises_when_model_is_not_initialized() -> None:
+    provider = _xinference_provider(_XinferenceClient({}), None)
+
+    with pytest.raises(RuntimeError, match="not initialized"):
+        await provider.rerank("query", ["document"])
 
 
 @pytest.mark.asyncio

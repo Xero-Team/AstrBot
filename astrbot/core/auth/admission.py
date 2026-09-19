@@ -330,14 +330,10 @@ def is_webchat_event(event: AdmissionEvent) -> bool:
         event: Inbound event exposing platform accessors.
 
     Returns:
-        True when the platform id or name is ``webchat``.
+        True when the resolved platform instance id is ``webchat``.
     """
 
-    get_platform_id = getattr(event, "get_platform_id", None)
-    platform_id = get_platform_id() if callable(get_platform_id) else None
-    if platform_id == _WEBCHAT_PLATFORM:
-        return True
-    return event.get_platform_name() == _WEBCHAT_PLATFORM
+    return platform_instance_from_event(event) == _WEBCHAT_PLATFORM
 
 
 def unwritten_service_enabled(scope_id: str) -> bool:

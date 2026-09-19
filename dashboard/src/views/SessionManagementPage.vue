@@ -1366,9 +1366,9 @@ const serviceConfig = reactive<
     persona_id: string | null;
   }
 >({
-  session_enabled: true,
-  llm_enabled: true,
-  tts_enabled: true,
+  session_enabled: false,
+  llm_enabled: false,
+  tts_enabled: false,
   session_blocked: false,
   custom_name: '',
   persona_id: null,
@@ -1641,11 +1641,15 @@ function normalizeBoolean(value: unknown, fallback: boolean): boolean {
 }
 
 function isWebchatScope(scopeId: string): boolean {
-  const parts = scopeId.split(':');
-  if (parts[0] === 'session') {
-    return parts[1] === 'webchat';
+  const entry = scopeId.trim();
+  if (!entry) {
+    return false;
   }
-  return parts[0] === 'webchat';
+  if (entry.startsWith('session:')) {
+    return entry.split(':')[1] === 'webchat';
+  }
+  const separator = entry.indexOf(':');
+  return separator > 0 && entry.slice(0, separator) === 'webchat';
 }
 
 function unwrittenServiceEnabled(scopeId: string): boolean {

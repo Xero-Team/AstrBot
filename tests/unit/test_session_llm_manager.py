@@ -179,7 +179,7 @@ async def test_setters_replace_non_dict_service_config():
 
 
 @pytest.mark.asyncio
-async def test_tts_non_dict_and_invalid_values_default_enabled():
+async def test_tts_non_dict_and_invalid_values_default_disabled():
     event = make_real_event(
         message_type=MessageType.GROUP_MESSAGE,
         group_id="room-a",

@@ -38,9 +38,15 @@ class FakeEvent:
         self.stopped = True
 
 
-async def _make_stage(*, session_enabled: bool) -> SessionStatusCheckStage:
+async def _make_stage(
+    *,
+    session_enabled: bool | None = None,
+    config: dict | None = None,
+) -> SessionStatusCheckStage:
+    if config is None:
+        config = {} if session_enabled is None else {"session_enabled": session_enabled}
     preferences = SimpleNamespace(
-        get_async=AsyncMock(return_value={"session_enabled": session_enabled}),
+        get_async=AsyncMock(return_value=config),
     )
     conv_mgr = SimpleNamespace(
         get_curr_conversation_id=AsyncMock(return_value="conv-1"),
@@ -122,6 +128,27 @@ async def test_initialize_requires_preferences():
 async def test_enabled_session_does_not_stop_event():
     stage = await _make_stage(session_enabled=True)
     event = FakeEvent()
+    await stage.process(event)
+    assert event.stopped is False
+    stage.conv_mgr.new_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unwritten_im_session_stops_event():
+    stage = await _make_stage(config={})
+    event = FakeEvent()
+    await stage.process(event)
+    assert event.stopped is True
+    stage.conv_mgr.new_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unwritten_webchat_session_does_not_stop_event():
+    stage = await _make_stage(config={})
+    event = FakeEvent(
+        umo="webchat:FriendMessage:webchat!u!c",
+        platform_id="webchat",
+    )
     await stage.process(event)
     assert event.stopped is False
     stage.conv_mgr.new_conversation.assert_not_awaited()

@@ -176,4 +176,103 @@ describe('SessionManagementPage', () => {
 
     wrapper.unmount();
   });
+
+  it('defaults unwritten IM session services off and WebChat on', async () => {
+    api.activeUmos.mockResolvedValue(
+      response({
+        umos: [
+          'napcat:GroupMessage:room-a',
+          'webchat:FriendMessage:webchat!u!c',
+        ],
+        umo_infos: [],
+      }),
+    );
+
+    async function openNewSessionRule(umo: string) {
+      const wrapper = mountWithVuetify(SessionManagementPage, {
+        global: {
+          stubs: { VDataTableServer: dataTableStub },
+        },
+      });
+      await flushPromises();
+      const addRule = wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Add Rule');
+      expect(addRule).toBeDefined();
+      await addRule!.trigger('click');
+      await flushPromises();
+      const umoField = wrapper
+        .findAllComponents({ name: 'VAutocomplete' })
+        .find((field) => field.props('label') === 'Select Session');
+      expect(umoField).toBeDefined();
+      await umoField!.setValue(umo);
+      await flushPromises();
+      const next = wrapper
+        .findAllComponents({ name: 'VBtn' })
+        .find((button) => button.text() === 'Next');
+      expect(next).toBeDefined();
+      await next!.trigger('click');
+      await flushPromises();
+      return wrapper;
+    }
+
+    function checkboxValue(
+      wrapper: ReturnType<typeof mountWithVuetify>,
+      label: string,
+    ) {
+      return wrapper
+        .findAllComponents({ name: 'VCheckbox' })
+        .find((box) => box.props('label') === label)
+        ?.props('modelValue');
+    }
+
+    const imWrapper = await openNewSessionRule('napcat:GroupMessage:room-a');
+    expect(checkboxValue(imWrapper, 'Enable Session')).toBe(false);
+    expect(checkboxValue(imWrapper, 'Enable LLM')).toBe(false);
+    expect(checkboxValue(imWrapper, 'Enable TTS')).toBe(false);
+    const imSave = imWrapper
+      .findAllComponents({ name: 'VBtn' })
+      .find((button) => button.text() === 'Save');
+    expect(imSave).toBeDefined();
+    await imSave!.trigger('click');
+    await flushPromises();
+    expect(api.upsertRule).toHaveBeenCalledWith({
+      umo: 'napcat:GroupMessage:room-a',
+      rule_key: 'session_service_config',
+      rule_value: {
+        session_enabled: false,
+        llm_enabled: false,
+        tts_enabled: false,
+        session_blocked: false,
+        custom_name: '',
+      },
+    });
+    imWrapper.unmount();
+
+    api.upsertRule.mockClear();
+    const webchatWrapper = await openNewSessionRule(
+      'webchat:FriendMessage:webchat!u!c',
+    );
+    expect(checkboxValue(webchatWrapper, 'Enable Session')).toBe(true);
+    expect(checkboxValue(webchatWrapper, 'Enable LLM')).toBe(true);
+    expect(checkboxValue(webchatWrapper, 'Enable TTS')).toBe(true);
+    const webchatSave = webchatWrapper
+      .findAllComponents({ name: 'VBtn' })
+      .find((button) => button.text() === 'Save');
+    expect(webchatSave).toBeDefined();
+    await webchatSave!.trigger('click');
+    await flushPromises();
+    expect(api.upsertRule).toHaveBeenCalledWith({
+      umo: 'webchat:FriendMessage:webchat!u!c',
+      rule_key: 'session_service_config',
+      rule_value: {
+        session_enabled: true,
+        llm_enabled: true,
+        tts_enabled: true,
+        session_blocked: false,
+        custom_name: '',
+      },
+    });
+    webchatWrapper.unmount();
+  });
 });

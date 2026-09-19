@@ -445,6 +445,7 @@ def test_unwritten_service_defaults_webchat_on_im_off():
     assert unwritten_service_enabled("napcat:FriendMessage:42") is False
     assert unwritten_service_enabled("session:napcat:group:room-a") is False
     assert unwritten_service_enabled("") is False
+    assert is_webchat_scope("webchat") is False
     assert is_webchat_scope("webchat:FriendMessage:x") is True
     assert is_webchat_scope("session:webchat:private:x") is True
     assert is_webchat_scope("napcat:FriendMessage:42") is False
@@ -463,6 +464,16 @@ def test_unwritten_service_defaults_webchat_on_im_off():
         is_webchat_event(make_real_event(message_type=MessageType.GROUP_MESSAGE))
         is False
     )
+    named_webchat = SimpleNamespace(
+        get_platform_id=lambda: "napcat",
+        get_platform_name=lambda: "webchat",
+    )
+    assert is_webchat_event(named_webchat) is False
+    blank_id = SimpleNamespace(
+        get_platform_id=lambda: "  ",
+        get_platform_name=lambda: "webchat",
+    )
+    assert is_webchat_event(blank_id) is True
 
     unwritten = compose_admission(
         session_overlay_from_config({}),

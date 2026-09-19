@@ -311,6 +311,7 @@ class AzureTTSProvider(TTSProvider):
         super().__init__(provider_config, provider_settings)
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)
+        self._synthesis_lock = asyncio.Lock()
 
     def _parse_provider(
         self, key_value: str, config: dict
@@ -342,8 +343,8 @@ class AzureTTSProvider(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         try:
-            if isinstance(self.provider, OTTSProvider):
-                async with self.provider as provider:
+            async with self._synthesis_lock, self.provider as provider:
+                if isinstance(provider, OTTSProvider):
                     return await provider.get_audio(
                         text,
                         {
@@ -354,7 +355,6 @@ class AzureTTSProvider(TTSProvider):
                             "volume": self.provider_config.get("azure_tts_volume"),
                         },
                     )
-            async with self.provider as provider:
                 return await provider.get_audio(text)
         except asyncio.CancelledError:
             raise

@@ -19,6 +19,7 @@ from astrbot.core.platform.route_identity import PlatformRouteIdentity
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.session_bridge import (
     DEFAULT_WATCH_TTL_SECONDS,
+    MAX_FORWARD_ATTEMPTS,
     MAX_WATCH_TTL_SECONDS,
     MIN_WATCH_TTL_SECONDS,
     SessionBridgeManager,
@@ -1596,4 +1597,153 @@ async def test_observe_delivers_nodes_when_target_supports_forward():
     assert all(
         not any(isinstance(part, Nodes) for part in chain.chain) for chain in sent
     )
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_failed_forward_releases_dedup_claim(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
+    )
+    calls = 0
+
+    async def send(session, chain):
+        nonlocal calls
+        calls += 1
+        return PlatformSendResult(
+            session.platform_id, False, str(session), status="failed"
+        )
+
+    store = FakeSessionBridgeStore()
+    manager, _, _ = _manager(send, store=store)
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="dedup-fail")
+
+    await manager.observe(envelope)
+    assert calls == MAX_FORWARD_ATTEMPTS
+    assert manager._forwarded == {}
+    assert await store.get_session_bridge_rule(watch.rule_id) is not None
+
+    await manager.observe(envelope)
+    assert calls == MAX_FORWARD_ATTEMPTS * 2
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_accepted_forward_keeps_dedup_claim():
+    calls = 0
+
+    async def send(session, chain):
+        nonlocal calls
+        calls += 1
+        return PlatformSendResult(
+            session.platform_id, True, str(session), message_ids=("sent",)
+        )
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="dedup-ok")
+
+    await manager.observe(envelope)
+    await manager.observe(envelope)
+    assert calls == 1
+    assert manager._forwarded
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_transient_failure_retries_then_succeeds(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
+    )
+    calls = 0
+
+    async def send(session, chain):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return PlatformSendResult(
+                session.platform_id, False, str(session), status="unknown"
+            )
+        return PlatformSendResult(
+            session.platform_id, True, str(session), message_ids=("sent",)
+        )
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="retry-ok")
+
+    await manager.observe(envelope)
+    assert calls == 2
+    assert manager._forwarded
+
+    attempts_after_success = calls
+    await manager.observe(envelope)
+    assert calls == attempts_after_success
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_forward_retry_exhausted_releases_claim(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
+    )
+    calls = 0
+
+    async def send(session, chain):
+        nonlocal calls
+        calls += 1
+        return PlatformSendResult(
+            session.platform_id, False, str(session), status="unknown"
+        )
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="retry-gone")
+
+    await manager.observe(envelope)
+    assert calls == MAX_FORWARD_ATTEMPTS
+    assert manager._forwarded == {}
+
+    await manager.observe(envelope)
+    assert calls == MAX_FORWARD_ATTEMPTS * 2
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_forward_retry_stops_on_revoked_authority(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
+    )
+    calls = 0
+    revoked = False
+
+    async def authorize(subject, action, resource, context):
+        if revoked:
+            raise PermissionError("revoked")
+        return SimpleNamespace(allowed=True, effective_role=None)
+
+    async def send(session, chain):
+        nonlocal calls, revoked
+        calls += 1
+        revoked = True
+        return PlatformSendResult(
+            session.platform_id, False, str(session), status="unknown"
+        )
+
+    store = FakeSessionBridgeStore()
+    manager, authorization, _ = _manager(send, store=store)
+    authorization.authorize = authorize
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="retry-revoked")
+
+    await manager.observe(envelope)
+    assert calls == 1
+    assert manager._forwarded == {}
+    assert await store.get_session_bridge_rule(watch.rule_id) is None
     await manager.terminate()

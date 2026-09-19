@@ -1,22 +1,91 @@
 import { ref, computed } from 'vue';
+import { resolveErrorMessage } from '@/utils/errorUtils';
+
+export interface ChunkedUploadEnvelope<T = unknown> {
+  data?: {
+    status?: string;
+    message?: string | null;
+    data?: T;
+  };
+}
 
 export interface ChunkedUploadApi {
-  initUpload(payload: { filename: string; total_size: number }): Promise<any>;
+  initUpload(payload: {
+    filename: string;
+    total_size: number;
+  }): Promise<ChunkedUploadEnvelope>;
   uploadChunk(payload: {
     upload_id: string;
     chunk_index: number;
     chunk: Blob;
-  }): Promise<any>;
-  completeUpload(payload: { upload_id: string }): Promise<any>;
-  abortUpload(payload: { upload_id: string }): Promise<any>;
-  statusUpload(payload: { upload_id: string }): Promise<any>;
+  }): Promise<ChunkedUploadEnvelope>;
+  completeUpload(payload: {
+    upload_id: string;
+  }): Promise<ChunkedUploadEnvelope>;
+  abortUpload(payload: { upload_id: string }): Promise<ChunkedUploadEnvelope>;
+  statusUpload(payload: { upload_id: string }): Promise<ChunkedUploadEnvelope>;
 }
 
 export type ChunkedUploadStatus = 'idle' | 'uploading' | 'error' | 'done';
 export type ChunkedUploadPhase = 'init' | 'chunks' | 'complete';
 
+interface ChunkedUploadInitData {
+  upload_id: string;
+  chunk_size: number;
+  total_chunks: number;
+}
+
 const CONCURRENT_UPLOADS = 5;
 const CHUNK_MAX_ATTEMPTS = 3;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function envelopeData(response: ChunkedUploadEnvelope): unknown {
+  if (response.data?.status !== 'ok') {
+    throw new Error(response.data?.message || 'Upload failed');
+  }
+  return response.data.data;
+}
+
+function asInitData(data: unknown): ChunkedUploadInitData {
+  if (!isRecord(data)) {
+    throw new Error('Upload failed');
+  }
+  const {
+    upload_id: uploadId,
+    chunk_size: chunkSize,
+    total_chunks: totalChunks,
+  } = data;
+  if (
+    typeof uploadId !== 'string' ||
+    typeof chunkSize !== 'number' ||
+    typeof totalChunks !== 'number'
+  ) {
+    throw new Error('Upload failed');
+  }
+  return {
+    upload_id: uploadId,
+    chunk_size: chunkSize,
+    total_chunks: totalChunks,
+  };
+}
+
+function asReceivedChunks(data: unknown): number[] {
+  if (!isRecord(data) || !Array.isArray(data.received_chunks)) {
+    return [];
+  }
+  return data.received_chunks.filter(
+    (index): index is number => typeof index === 'number',
+  );
+}
+
+function toError(err: unknown): Error {
+  return err instanceof Error
+    ? err
+    : new Error(resolveErrorMessage(err, 'Upload failed'));
+}
 
 export function useChunkedUpload(api: ChunkedUploadApi) {
   const status = ref<ChunkedUploadStatus>('idle');
@@ -40,22 +109,14 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
   let cancelled = false;
   let runGeneration = 0;
 
-  function envelopeData(response: any): any {
-    if (response.data?.status !== 'ok') {
-      throw new Error(response.data?.message || 'Upload failed');
-    }
-    return response.data.data;
-  }
-
-  function toMessage(err: any): string {
-    return err?.response?.data?.message || err?.message || 'Upload failed';
-  }
-
   function planChunks() {
+    if (!file) {
+      throw new Error('Upload failed');
+    }
     chunkSizes = [];
     for (let i = 0; i < totalChunks; i++) {
       const start = i * chunkSize;
-      chunkSizes[i] = Math.min(start + chunkSize, file!.size) - start;
+      chunkSizes[i] = Math.min(start + chunkSize, file.size) - start;
     }
   }
 
@@ -64,9 +125,12 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     sessionId: string,
     generation: number,
   ) {
+    if (!file) {
+      throw new Error('Upload failed');
+    }
     const start = chunkIndex * chunkSize;
-    const chunk = file!.slice(start, start + chunkSize);
-    let lastError: any;
+    const chunk = file.slice(start, start + chunkSize);
+    let lastError: unknown;
     for (let attempt = 0; attempt < CHUNK_MAX_ATTEMPTS; attempt++) {
       if (cancelled) throw new Error('cancelled');
       try {
@@ -78,14 +142,14 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
           }),
         );
         if (generation === runGeneration) {
-          uploadedBytes.value += chunkSizes[chunkIndex];
+          uploadedBytes.value += chunkSizes[chunkIndex] ?? 0;
         }
         return;
       } catch (err) {
         lastError = err;
       }
     }
-    throw lastError;
+    throw toError(lastError);
   }
 
   async function runPool(
@@ -95,21 +159,24 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
   ) {
     const pending = [...indexes];
     const active: Promise<void>[] = [];
-    let failure: any = null;
+    let failure: unknown = null;
     while (
       !failure &&
       !cancelled &&
       (pending.length > 0 || active.length > 0)
     ) {
       while (pending.length > 0 && active.length < CONCURRENT_UPLOADS) {
-        const chunkIndex = pending.shift()!;
+        const chunkIndex = pending.shift();
+        if (chunkIndex === undefined) break;
         const promise = uploadOneChunk(
           chunkIndex,
           sessionId,
           generation,
         ).finally(() => {
           const idx = active.indexOf(promise);
-          if (idx > -1) active.splice(idx, 1);
+          if (idx > -1) {
+            void active.splice(idx, 1);
+          }
         });
         active.push(promise);
       }
@@ -123,13 +190,18 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     }
     if (active.length > 0) await Promise.allSettled(active);
     if (cancelled) throw new Error('cancelled');
-    if (failure) throw failure;
+    if (failure) throw toError(failure);
   }
 
   async function initSession() {
+    if (!file) {
+      throw new Error('Upload failed');
+    }
     phase.value = 'init';
-    const data = envelopeData(
-      await api.initUpload({ filename: file!.name, total_size: file!.size }),
+    const data = asInitData(
+      envelopeData(
+        await api.initUpload({ filename: file.name, total_size: file.size }),
+      ),
     );
     uploadId = data.upload_id;
     chunkSize = data.chunk_size;
@@ -147,7 +219,24 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     return result;
   }
 
-  async function start(f: File): Promise<any> {
+  function handleFailure(err: unknown): undefined {
+    if (cancelled || (err instanceof Error && err.message === 'cancelled')) {
+      const id = uploadId;
+      reset();
+      if (id) {
+        void api.abortUpload({ upload_id: id }).catch((abortErr: unknown) => {
+          console.error('Failed to abort upload:', abortErr);
+        });
+      }
+      return undefined;
+    }
+    if (phase.value === 'complete') uploadId = '';
+    status.value = 'error';
+    errorMessage.value = resolveErrorMessage(err, 'Upload failed');
+    return undefined;
+  }
+
+  async function start(f: File): Promise<unknown> {
     file = f;
     cancelled = false;
     status.value = 'uploading';
@@ -165,11 +254,12 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
       status.value = 'done';
       return result;
     } catch (err) {
-      return handleFailure(err);
+      handleFailure(err);
+      return undefined;
     }
   }
 
-  async function resume(): Promise<any> {
+  async function resume(): Promise<unknown> {
     if (!file) return undefined;
     cancelled = false;
     status.value = 'uploading';
@@ -178,10 +268,9 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
       let received: number[] = [];
       if (uploadId) {
         try {
-          const data = envelopeData(
-            await api.statusUpload({ upload_id: uploadId }),
+          received = asReceivedChunks(
+            envelopeData(await api.statusUpload({ upload_id: uploadId })),
           );
-          received = data.received_chunks;
         } catch {
           uploadId = '';
         }
@@ -190,7 +279,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
         await initSession();
       } else {
         uploadedBytes.value = received.reduce(
-          (sum, i) => sum + chunkSizes[i],
+          (sum, i) => sum + (chunkSizes[i] ?? 0),
           0,
         );
       }
@@ -203,25 +292,9 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
       status.value = 'done';
       return result;
     } catch (err) {
-      return handleFailure(err);
-    }
-  }
-
-  function handleFailure(err: any): undefined {
-    if (cancelled || err?.message === 'cancelled') {
-      const id = uploadId;
-      reset();
-      if (id) {
-        void api
-          .abortUpload({ upload_id: id })
-          .catch((e) => console.error('Failed to abort upload:', e));
-      }
+      handleFailure(err);
       return undefined;
     }
-    if (phase.value === 'complete') uploadId = '';
-    status.value = 'error';
-    errorMessage.value = toMessage(err);
-    return undefined;
   }
 
   async function cancel() {

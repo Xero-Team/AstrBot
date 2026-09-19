@@ -62,7 +62,15 @@ const api = vi.hoisted(() => {
       setParallelEnabled: fn(),
     },
     commandApi: { list: fn(), update: fn() },
-    fileApi: { getByName: fn(), upload: fn() },
+    fileApi: {
+      getByName: fn(),
+      upload: fn(),
+      initUpload: fn(),
+      uploadChunk: fn(),
+      completeUpload: fn(),
+      abortUpload: fn(),
+      statusUpload: fn(),
+    },
     authorizationApi: { stepUp: fn(), webChatStepUp: fn() },
   };
 });
@@ -563,6 +571,79 @@ describe('coverage closeout', () => {
     const second = media.processAndUploadFile(pendingFile);
     expect(await second).toBeUndefined();
     expect(await first).toBeTruthy();
+  });
+
+  it('covers chunked staged uploads, retry, cancel, and discard', async () => {
+    const largeFile = new File(['big'], 'big.bin', {
+      type: 'application/octet-stream',
+    });
+    Object.defineProperty(largeFile, 'size', { value: 32 * 1024 * 1024 });
+    api.fileApi.initUpload.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          upload_id: 'u1',
+          chunk_size: 32 * 1024 * 1024,
+          total_chunks: 1,
+        },
+      },
+    });
+    api.fileApi.uploadChunk.mockResolvedValue({
+      data: { status: 'ok', data: {} },
+    });
+    api.fileApi.completeUpload.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: { attachment_id: 'c1', filename: 'big.bin', type: 'file' },
+      },
+    });
+    api.fileApi.abortUpload.mockResolvedValue({
+      data: { status: 'ok', data: {} },
+    });
+    api.fileApi.statusUpload.mockResolvedValue({
+      data: { status: 'ok', data: { received_chunks: [] } },
+    });
+
+    const media = useMediaHandling();
+    const staged = await media.processAndUploadFile(largeFile);
+    expect(staged?.attachment_id).toBe('c1');
+    expect(api.fileApi.initUpload).toHaveBeenCalled();
+
+    api.fileApi.completeUpload.mockResolvedValueOnce({
+      data: { status: 'error', message: 'merge failed', data: {} },
+    });
+    const failedFile = new File(['big2'], 'big2.bin', {
+      type: 'application/octet-stream',
+    });
+    Object.defineProperty(failedFile, 'size', { value: 32 * 1024 * 1024 });
+    expect(await media.processAndUploadFile(failedFile)).toBeUndefined();
+    expect(media.failedUploadViews.value).toHaveLength(1);
+
+    api.fileApi.completeUpload.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: { attachment_id: 'c2', filename: 'big2.bin', type: 'file' },
+      },
+    });
+    const retried = await media.retryFailedUpload(0);
+    expect(retried?.attachment_id).toBe('c2');
+    expect(media.failedUploadViews.value).toHaveLength(0);
+
+    expect(await media.retryFailedUpload(9)).toBeUndefined();
+    media.cancelActiveUpload(9);
+    await media.discardFailedUpload(9);
+
+    api.fileApi.completeUpload.mockResolvedValueOnce({
+      data: { status: 'error', message: 'again', data: {} },
+    });
+    const discardFile = new File(['big3'], 'big3.bin', {
+      type: 'application/octet-stream',
+    });
+    Object.defineProperty(discardFile, 'size', { value: 32 * 1024 * 1024 });
+    expect(await media.processAndUploadFile(discardFile)).toBeUndefined();
+    expect(media.failedUploadViews.value).toHaveLength(1);
+    await media.discardFailedUpload(0);
+    expect(media.failedUploadViews.value).toHaveLength(0);
   });
 
   it('covers conversation lookup, project selection, and session payload guards', async () => {

@@ -1,5 +1,6 @@
-import { ref, shallowRef, computed } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 import { fileApi } from '@/api/v1';
+import type { UploadedFileData } from '@/api/v1/types';
 import { useChunkedUpload } from '@/composables/useChunkedUpload';
 
 const CHUNKED_UPLOAD_THRESHOLD = 32 * 1024 * 1024;
@@ -65,7 +66,9 @@ export function useMediaHandling() {
         );
       }
       const combined = new Uint8Array(blockHashes.length * 32);
-      blockHashes.forEach((h, i) => combined.set(h, i * 32));
+      blockHashes.forEach((h, i) => {
+        combined.set(h, i * 32);
+      });
       const digest = await crypto.subtle.digest('SHA-256', combined);
       const hash = Array.from(new Uint8Array(digest))
         .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -101,9 +104,26 @@ export function useMediaHandling() {
     }
   }
 
+  function asUploadedFileData(data: unknown): UploadedFileData | undefined {
+    if (!data || typeof data !== 'object') return undefined;
+    const record = data as Record<string, unknown>;
+    if (
+      typeof record.attachment_id !== 'string' ||
+      typeof record.filename !== 'string' ||
+      typeof record.type !== 'string'
+    ) {
+      return undefined;
+    }
+    return {
+      attachment_id: record.attachment_id,
+      filename: record.filename,
+      type: record.type,
+    };
+  }
+
   function stageUploaded(
     file: File,
-    data: any,
+    data: UploadedFileData,
     signature: string,
   ): StagedFileInfo {
     const stagedFile = {
@@ -161,8 +181,9 @@ export function useMediaHandling() {
     activeUploads.value = [...activeUploads.value, entry];
     const result = await uploader.start(file);
     activeUploads.value = activeUploads.value.filter((e) => e !== entry);
-    if (result) {
-      return stageUploaded(file, result, signature);
+    const payload = asUploadedFileData(result);
+    if (payload) {
+      return stageUploaded(file, payload, signature);
     }
     if (uploader.status.value === 'error') {
       failedUploads.value = [...failedUploads.value, entry];
@@ -191,7 +212,9 @@ export function useMediaHandling() {
       }
       return undefined;
     }
-    return stageUploaded(entry.file, result, entry.signature);
+    const payload = asUploadedFileData(result);
+    if (!payload) return undefined;
+    return stageUploaded(entry.file, payload, entry.signature);
   }
 
   async function discardFailedUpload(index: number) {

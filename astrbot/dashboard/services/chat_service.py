@@ -66,7 +66,8 @@ WEBCHAT_IMAGE_MIME_TYPES = {
 class _SaveableUpload(Protocol):
     async def save(
         self, destination: str | Path, *, max_bytes: int | None = None
-    ) -> int: ...
+    ) -> int:
+        raise NotImplementedError
 
 
 class LocalUploadFile:

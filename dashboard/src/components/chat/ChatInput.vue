@@ -456,6 +456,7 @@ const props = withDefaults(defineProps<Props>(), {
   showProviderSelector: true,
   tokenUsage: null,
   webChatToolsEnabled: false,
+  enableReasoning: true,
 });
 
 const emit = defineEmits<{

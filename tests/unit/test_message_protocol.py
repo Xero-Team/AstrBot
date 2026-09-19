@@ -875,6 +875,83 @@ async def test_unwatch_cancels_a_queued_delivery():
 
 
 @pytest.mark.asyncio
+async def test_slow_destination_does_not_block_other_destination(tmp_path):
+    import asyncio
+
+    from astrbot.core.message.components import Image, Plain
+
+    manager, _, _ = _manager()
+    media = tmp_path / "image.png"
+    media.write_bytes(b"image")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_resolve():
+        started.set()
+        await release.wait()
+        return str(media)
+
+    image = Image()
+    image.set_source_resolver(slow_resolve)
+    slow = _event(
+        components=[Plain("/send target:GroupMessage:x "), image],
+    )
+    fast = _event(components=[Plain("/send target:GroupMessage:y hello")])
+
+    slow_task = asyncio.create_task(manager.send(slow, "target:GroupMessage:x"))
+    await asyncio.wait_for(started.wait(), 1)
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(asyncio.shield(slow_task), 0.05)
+
+    receipt = await asyncio.wait_for(manager.send(fast, "target:GroupMessage:y"), 1)
+    assert receipt.status == "accepted"
+
+    release.set()
+    await slow_task
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_same_destination_deliveries_keep_arrival_order():
+    import asyncio
+
+    from astrbot.core.message.components import Plain
+
+    events: list[str] = []
+    first_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def send(_session, chain):
+        text = chain.get_plain_text()
+        events.append(f"start:{text}")
+        if text == "first":
+            first_started.set()
+            await release.wait()
+        events.append(f"end:{text}")
+        return PlatformSendResult("target", True, "target", message_ids=("sent",))
+
+    manager, _, _ = _manager(AsyncMock(side_effect=send))
+    first = _event(components=[Plain("/send target:GroupMessage:room first")])
+    second = _event(components=[Plain("/send target:GroupMessage:room second")])
+
+    first_task = asyncio.create_task(manager.send(first, "target:GroupMessage:room"))
+    await asyncio.wait_for(first_started.wait(), 1)
+    second_task = asyncio.create_task(manager.send(second, "target:GroupMessage:room"))
+    await asyncio.sleep(0)
+    assert events == ["start:first"]
+
+    release.set()
+    await asyncio.gather(first_task, second_task)
+    assert events == [
+        "start:first",
+        "end:first",
+        "start:second",
+        "end:second",
+    ]
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
 async def test_own_bot_echo_is_not_forwarded():
     manager, _, send = _manager()
     await manager.watch(_event(), "target:GroupMessage:room")

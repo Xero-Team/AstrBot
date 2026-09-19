@@ -1680,8 +1680,9 @@ async def test_transient_failure_retries_then_succeeds(monkeypatch):
     assert calls == 2
     assert manager._forwarded
 
+    attempts_after_success = calls
     await manager.observe(envelope)
-    assert calls == 2
+    assert calls == attempts_after_success
     await manager.terminate()
 
 

@@ -907,7 +907,7 @@ async def test_slow_destination_does_not_block_other_destination(tmp_path):
     assert receipt.status == "accepted"
 
     release.set()
-    await slow_task
+    assert (await slow_task).status == "accepted"
     await manager.terminate()
 
 
@@ -982,7 +982,7 @@ async def test_observe_delivers_to_watches_without_head_of_line_blocking():
     )
     await asyncio.wait_for(y_delivered.wait(), 1)
     release.set()
-    await task
+    assert await task is None
     await manager.terminate()
 
 

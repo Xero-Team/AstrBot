@@ -116,7 +116,7 @@ function globToRegExp(pattern: string): RegExp {
     }
   }
   source += '$';
-  return new RegExp(source);
+  return new RegExp(source, 's');
 }
 
 function globMatch(value: string, pattern: string): boolean {

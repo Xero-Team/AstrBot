@@ -48,6 +48,21 @@ describe('resolveConfigIdFromRouting', () => {
     ).toBe('default');
   });
 
+  it('matches newlines like the backend DOTALL glob translation', () => {
+    expect(
+      resolveConfigIdFromRouting(
+        { 'webchat:FriendMessage:*': 'catch-all' },
+        'webchat:FriendMessage:line\nbreak',
+      ),
+    ).toBe('catch-all');
+    expect(
+      resolveConfigIdFromRouting(
+        { 'webchat:FriendMessage:line?break': 'question' },
+        'webchat:FriendMessage:line\nbreak',
+      ),
+    ).toBe('question');
+  });
+
   it('preserves colons inside the session segment', () => {
     const routing = {
       'webchat:FriendMessage:webchat!astrbot!session-1:thread': 'thread',

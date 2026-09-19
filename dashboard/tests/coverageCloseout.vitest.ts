@@ -695,6 +695,13 @@ describe('coverage closeout', () => {
     });
     await sessions.newSession();
     expect(getStoredSelectedChatConfigId()).toBe('backend-profile');
+    localStorage.setItem('chat.selectedConfigId', 'profile-1');
+    api.chatApi.createSession.mockResolvedValue({
+      data: { data: { session_id: 's3', platform_id: 'webchat' } },
+    });
+    api.configRouteApi.list.mockRejectedValue(new Error('offline'));
+    await sessions.newSession();
+    expect(getStoredSelectedChatConfigId()).toBe('default');
     api.chatApi.batchDeleteSessions.mockResolvedValue({
       data: { status: 'ok', data: null },
     });

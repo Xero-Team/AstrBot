@@ -619,6 +619,46 @@ async def test_max_step_final_request_includes_limit_prompt(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("max_steps", [1, 15, 16])
+async def test_small_step_budgets_and_reset(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    max_steps,
+):
+    mock_provider.max_calls_before_normal_response = 1000
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    async for _ in runner.step_until_done(max_steps):
+        pass
+    tools = [m for m in runner.run_context.messages if m.role == "tool"]
+    for percent in (80, 90, 95):
+        assert sum(
+            f"[SYSTEM NOTICE: Agent step budget {percent}%]" in str(m.content)
+            for m in tools
+        ) == (1 if max_steps >= 16 else 0)
+    assert "tool-call round limit in AstrBot WebUI" in str(tools[-1].content)
+    assert mock_provider.call_count == max_steps + 1
+    assert runner._step_budget_notified
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    assert runner._step_budget_used == 0
+    assert runner._step_budget_notified == set()
+
+
+@pytest.mark.asyncio
 async def test_tool_loop_next_request_includes_tool_result(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):

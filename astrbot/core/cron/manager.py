@@ -204,6 +204,12 @@ class CronJobManager:
         return job
 
     async def update_job(self, job_id: str, **kwargs) -> CronJob | None:
+        current_job = await self.db.get_cron_job(job_id)
+        if not current_job:
+            return None
+        candidate = current_job.model_copy(update=kwargs)
+        if candidate.enabled:
+            self._build_trigger(candidate)
         job = await self.db.update_cron_job(job_id, **kwargs)
         if not job:
             return None
@@ -224,10 +230,18 @@ class CronJobManager:
         if self.scheduler.get_job(job_id):
             self.scheduler.remove_job(job_id)
 
-    def _schedule_job(self, job: CronJob) -> None:
-        if not self._started:
-            self.scheduler.start()
-            self._started = True
+    def _build_trigger(self, job: CronJob) -> CronTrigger | DateTrigger:
+        """Validate a job's timing without modifying stored or scheduled jobs.
+
+        Args:
+            job: Candidate job definition, including one-shot payload fields.
+
+        Returns:
+            A trigger using the same timezone and weekday rules as scheduling.
+
+        Raises:
+            CronJobSchedulingError: If the schedule cannot be parsed.
+        """
         try:
             tzinfo = None
             if job.timezone:
@@ -249,23 +263,30 @@ class CronJobManager:
                 run_at = datetime.fromisoformat(run_at_str)
                 if run_at.tzinfo is None and tzinfo is not None:
                     run_at = run_at.replace(tzinfo=tzinfo)
-                trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
-            else:
-                if not job.cron_expression:
-                    raise ValueError("recurring job missing cron_expression")
-                minute, hour, day, month, day_of_week = job.cron_expression.split()
-                normalized_cron_expression = " ".join(
-                    [
-                        minute,
-                        hour,
-                        day,
-                        month,
-                        _normalize_crontab_day_of_week(day_of_week),
-                    ]
-                )
-                trigger = CronTrigger.from_crontab(
-                    normalized_cron_expression, timezone=tzinfo
-                )
+                return DateTrigger(run_date=run_at, timezone=tzinfo)
+            if not job.cron_expression:
+                raise ValueError("recurring job missing cron_expression")
+            minute, hour, day, month, day_of_week = job.cron_expression.split()
+            normalized_cron_expression = " ".join(
+                [
+                    minute,
+                    hour,
+                    day,
+                    month,
+                    _normalize_crontab_day_of_week(day_of_week),
+                ]
+            )
+            return CronTrigger.from_crontab(normalized_cron_expression, timezone=tzinfo)
+        except (ValueError, TypeError) as e:
+            logger.exception("Failed to build trigger for cron job %s", job.job_id)
+            raise CronJobSchedulingError(str(e)) from e
+
+    def _schedule_job(self, job: CronJob) -> None:
+        if not self._started:
+            self.scheduler.start()
+            self._started = True
+        try:
+            trigger = self._build_trigger(job)
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,

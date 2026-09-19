@@ -319,6 +319,7 @@ class TestUpdateJob:
             cron_expression="0 10 * * *",
             enabled=False,  # Disabled to avoid scheduling
         )
+        mock_db.get_cron_job.return_value = sample_cron_job
         mock_db.update_cron_job.return_value = updated_job
 
         result = await cron_manager.update_job("test-job-id", name="Updated Job")
@@ -329,11 +330,24 @@ class TestUpdateJob:
     @pytest.mark.asyncio
     async def test_update_job_not_found(self, cron_manager, mock_db):
         """Test updating a non-existent job."""
+        mock_db.get_cron_job.return_value = None
         mock_db.update_cron_job.return_value = None
 
         result = await cron_manager.update_job("non-existent", name="Updated")
 
         assert result is None
+        mock_db.update_cron_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_job_rejects_invalid_schedule_before_write(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        mock_db.get_cron_job.return_value = sample_cron_job
+
+        with pytest.raises(CronJobSchedulingError):
+            await cron_manager.update_job("test-job-id", cron_expression="not a cron")
+
+        mock_db.update_cron_job.assert_not_called()
 
 
 class TestDeleteJob:

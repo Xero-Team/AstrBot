@@ -30,7 +30,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 | 键                                                | 用途                                                                                                                                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `config_version`                                  | 当前核心配置结构版本，默认 `3`，不要手动降级。                                                                                                                     |
+| `config_version`                                  | 当前核心配置结构版本，默认 `4`，不要手动降级。                                                                                                                     |
 | `platform_settings`                               | 所有消息平台共用的收发、限流和分段回复行为。                                                                                                                       |
 | `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                                                                                               |
 | `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                                                                                                 |
@@ -135,7 +135,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 ### 步数、工具与代理
 
 - `agent_runner.runner_type`：`local` 使用内置 Agent；也可选择 Dify、Coze、DashScope 或 DeerFlow。第三方 Runner 的密钥和应用 ID 写在 `agent_runner.config` 中。
-- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `128`，也适用于当前子代理执行。
+- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `128`，也适用于当前子代理执行。已保存的 `30` 会在 `config_version` 升到 `4` 时升级一次。
 - `agent_runner.config.max_steps`：第三方 Runner 的 step 上限，默认 `128`。
 - `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
 - `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema，只藏参数，不改变工具目录。

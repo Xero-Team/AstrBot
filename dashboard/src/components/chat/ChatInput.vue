@@ -116,7 +116,7 @@
               size="x-small"
               color="secondary"
               variant="text"
-              aria-label="Cancel upload"
+              :aria-label="tm('input.cancelUpload')"
             />
             <div class="attachment-progress-track">
               <v-progress-linear
@@ -146,7 +146,7 @@
               size="x-small"
               color="primary"
               variant="tonal"
-              aria-label="Retry failed upload"
+              :aria-label="tm('input.retryFailedUpload')"
             />
             <v-btn
               @click="$emit('discardFailedUpload', index)"
@@ -155,7 +155,7 @@
               size="x-small"
               color="error"
               variant="tonal"
-              aria-label="Discard failed upload"
+              :aria-label="tm('input.discardFailedUpload')"
             />
           </div>
         </div>

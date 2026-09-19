@@ -92,7 +92,13 @@ def sanitize_upload_filename(filename: str | None) -> str:
     if not filename:
         return f"{uuid.uuid4()!s}"
     normalized = filename.replace("\\", "/")
-    name = PurePosixPath(normalized).name.replace("\x00", "").strip()
+    name = (
+        PurePosixPath(normalized)
+        .name.replace("\x00", "")
+        .replace("\r", "")
+        .replace("\n", "")
+        .strip()
+    )
     if name in ("", ".", ".."):
         return f"{uuid.uuid4()!s}"
     return name

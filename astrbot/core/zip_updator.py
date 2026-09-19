@@ -74,9 +74,9 @@ class RepoZipUpdator:
         except Exception as exc:
             logger.debug(
                 "获取 GitHub 默认分支失败 %s/%s: %s",
-                author,
-                repo,
-                redact_outbound_url(str(exc)),
+                _log_token(author),
+                _log_token(repo),
+                _log_token(redact_outbound_url(str(exc))),
             )
             return None
 
@@ -106,7 +106,11 @@ class RepoZipUpdator:
         if default_branch:
             return author, repo, default_branch
 
-        logger.info("未能获取 %s/%s 的默认分支，将尝试 main 分支", author, repo)
+        logger.info(
+            "未能获取 %s/%s 的默认分支，将尝试 main 分支",
+            _log_token(author),
+            _log_token(repo),
+        )
         return author, repo, "main"
 
     async def _download_file(
@@ -294,9 +298,9 @@ class RepoZipUpdator:
             release_url = compose_github_mirror_url(proxy, release_url)
             logger.info(
                 "检查到设置了镜像站，将使用镜像站下载 %s/%s 仓库源码: %s",
-                author,
-                repo,
-                redact_outbound_url(release_url),
+                _log_token(author),
+                _log_token(repo),
+                _log_token(redact_outbound_url(release_url)),
             )
 
         await self._download_file(

@@ -28,6 +28,10 @@ DEFAULT_EXPIRE_SECONDS = 3600
 CLEANUP_INTERVAL_SECONDS = 300
 
 
+def _log_token(value: object) -> str:
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 class ChunkedUploadError(Exception):
     pass
 
@@ -119,9 +123,9 @@ class ChunkedUploadService:
             "Chunked upload session started: id=%s, owner=%s, purpose=%s, "
             "file=%s, chunks=%s",
             upload_id,
-            owner,
-            purpose,
-            filename,
+            _log_token(owner),
+            _log_token(purpose),
+            _log_token(filename),
             session.total_chunks,
         )
         return session

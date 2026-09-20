@@ -995,18 +995,15 @@ class SessionBridgeStore(Protocol):
         origin_umo: str,
         source_message_id: str,
         dest_message_id: str | None,
-    ) -> None:
-        raise NotImplementedError
+    ) -> None: ...
 
     async def list_session_bridge_deliveries(
         self, limit: int
-    ) -> list[SessionBridgeDelivery]:
-        raise NotImplementedError
+    ) -> list[SessionBridgeDelivery]: ...
 
     async def prune_session_bridge_deliveries(
         self, *, keep: int, retention_seconds: int
-    ) -> int:
-        raise NotImplementedError
+    ) -> int: ...
 
 
 @runtime_checkable

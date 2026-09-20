@@ -78,7 +78,10 @@ from astrbot.core.tool_catalog import (
     resolve_catalog_surface,
 )
 from astrbot.core.tools.computer_tools import (
+    LOCAL_NETWORK_POLICY_NOTICE,
+    get_local_permission_policy,
     normalize_umo_for_workspace,
+    resolve_local_permission_role,
 )
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.utils.astrbot_path import (
@@ -589,12 +592,25 @@ def _apply_workspace_extra_prompt(
     )
 
 
-def _apply_local_env_tools(
+async def _apply_local_env_tools(
     req: ProviderRequest,
     plugin_context: CoreExecutionContext,
+    event: AstrMessageEvent,
 ) -> None:
-    _ = plugin_context
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
+    run_context = AgentContextWrapper(
+        context=AstrAgentContext(context=plugin_context, event=event)
+    )
+    await resolve_local_permission_role(run_context)
+    local_policy = get_local_permission_policy(run_context)
+    if (
+        local_policy.allow_execution
+        and not local_policy.allow_network
+        and LOCAL_NETWORK_POLICY_NOTICE not in (req.system_prompt or "")
+    ):
+        req.system_prompt = (
+            f"{req.system_prompt or ''}\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
+        )
 
 
 def _apply_btw_work_loop_prompt(
@@ -1736,7 +1752,7 @@ async def _prepare_request_for_agent(
             plugin_context.computer_runtime.get_session_booter(req.session_id),
         )
     elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req, plugin_context)
+        await _apply_local_env_tools(req, plugin_context, event)
     return True
 
 

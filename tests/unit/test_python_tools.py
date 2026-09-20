@@ -190,9 +190,7 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_local_python_reports_disabled_network_policy(tmp_path, monkeypatch):
-    from astrbot.core.tools.computer_tools import util as computer_util
-
+async def test_local_python_omits_network_policy_notice(tmp_path, monkeypatch):
     python_exec = AsyncMock(
         return_value={
             "data": {
@@ -246,5 +244,8 @@ async def test_local_python_reports_disabled_network_policy(tmp_path, monkeypatc
 
     result = await LocalPythonTool().call(context, code="print('ok')")
     output = [part.text for part in result.content]
-    assert computer_util.LOCAL_NETWORK_POLICY_NOTICE in output
-    assert "ok" in output
+    assert output == ["ok"]
+
+    python_exec.side_effect = RuntimeError("execution failed")
+    result = await LocalPythonTool().call(context, code="print('ok')")
+    assert result == "Error executing code: execution failed"

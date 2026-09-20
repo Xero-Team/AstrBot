@@ -5,16 +5,18 @@ upstream:
   branch: master
 
 last_synced:
-  commit: b06550567b25d7ef4404bf526e448c869cc5d4ec
-  synced_at_utc: 2026-09-19T09:31:47Z
+  commit: 6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334
+  synced_at_utc: 2026-09-20T10:39:09Z
   sync_method: adapt
-  source_pr: '10123,10129,10131,10133,10132,10101,10051,10112,10075,10080,10116,10135,10095,10098,10090'
+  source_pr: '10134'
   note: >-
-    Reviewed 8b82d03d949c82a5eae26c00be849e042a48bfd4..b06550567b25d7ef4404bf526e448c869cc5d4ec
-    (15 commits): adapted #10123, #10129, #10131, #10133, #10101, #10051,
-    #10112, #10075, #10080, #10116, #10135, #10095, and #10090; cherry-picked
-    #10132; skipped #10098. Chunked uploads keep dashboard.upload_utils, the
-    512 MiB chat MIME path, and zh-CN/en-US only. Agent step defaults move to
-    128 via agent_runner_migration.py config_version 4. Skip ja-JP/ru-RU,
-    GitHubRepository, openai_source.py, and image_input.py. OneBot per-segment
-    file_id already exists. Focused pytest, vue-tsc, and i18n:check passed.
+    Reviewed b06550567b25d7ef4404bf526e448c869cc5d4ec..6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334
+    (1 commit): adapted #10134. The local network policy notice moves from
+    Shell/Python tool results into the system prompt. Applied in
+    CoreExecutionContext.tool_loop_agent (fork replacement for
+    astrbot/core/star/context.py) and _apply_local_env_tools inside
+    _prepare_request_for_agent rather than build_main_agent; the caller role is
+    resolved via resolve_local_permission_role because fork policy resolution is
+    authorization-based. This supersedes the #10096 adaptation that kept
+    policy_notice in results. Focused pytest and pyright passed; only the
+    pre-existing bubblewrap sandbox tests fail in this environment.

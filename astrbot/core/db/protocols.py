@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         PlatformStat,
         Preference,
         ProviderStat,
+        SessionBridgeDelivery,
         SessionBridgeRule,
         SessionProjectRelation,
         UmoAlias,
@@ -986,6 +987,26 @@ class SessionBridgeStore(Protocol):
     async def delete_session_bridge_connects_for_listener(
         self, subject_id: str, source_umo: str
     ) -> None: ...
+
+    async def insert_session_bridge_delivery(
+        self,
+        *,
+        dest_umo: str,
+        origin_umo: str,
+        source_message_id: str,
+        dest_message_id: str | None,
+    ) -> None:
+        raise NotImplementedError
+
+    async def list_session_bridge_deliveries(
+        self, limit: int
+    ) -> list[SessionBridgeDelivery]:
+        raise NotImplementedError
+
+    async def prune_session_bridge_deliveries(
+        self, *, keep: int, retention_seconds: int
+    ) -> int:
+        raise NotImplementedError
 
 
 @runtime_checkable

@@ -182,3 +182,118 @@ async def test_insert_session_bridge_pair_rolls_back_partial_replace(
         )
     assert await temp_db.get_session_bridge_rule(watch.rule_id) is not None
     assert await temp_db.get_session_bridge_rule(reverse.rule_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_insert_session_bridge_delivery_is_idempotent(temp_db: SQLiteDatabase):
+    await temp_db.initialize()
+    key = {
+        "dest_umo": "source:FriendMessage:sender",
+        "origin_umo": "target:GroupMessage:room",
+        "source_message_id": "msg-1",
+    }
+
+    await temp_db.insert_session_bridge_delivery(**key, dest_message_id="sent-1")
+    await temp_db.insert_session_bridge_delivery(**key, dest_message_id="sent-1")
+
+    rows = await temp_db.list_session_bridge_deliveries(10)
+    assert len(rows) == 1
+    assert rows[0].dest_message_id == "sent-1"
+
+
+@pytest.mark.asyncio
+async def test_list_session_bridge_deliveries_returns_newest_first(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.initialize()
+    for index in range(3):
+        await temp_db.insert_session_bridge_delivery(
+            dest_umo=f"source:FriendMessage:{index}",
+            origin_umo="target:GroupMessage:room",
+            source_message_id=f"msg-{index}",
+            dest_message_id=None,
+        )
+
+    rows = await temp_db.list_session_bridge_deliveries(2)
+    assert [row.source_message_id for row in rows] == ["msg-2", "msg-1"]
+
+
+@pytest.mark.asyncio
+async def test_prune_session_bridge_deliveries_respects_keep_and_retention(
+    temp_db: SQLiteDatabase,
+):
+
+    await temp_db.initialize()
+    for index in range(4):
+        await temp_db.insert_session_bridge_delivery(
+            dest_umo=f"source:FriendMessage:{index}",
+            origin_umo="target:GroupMessage:room",
+            source_message_id=f"msg-{index}",
+            dest_message_id=None,
+        )
+
+    removed = await temp_db.prune_session_bridge_deliveries(
+        keep=2, retention_seconds=3 * 24 * 60 * 60
+    )
+
+    assert removed == 2
+    rows = await temp_db.list_session_bridge_deliveries(10)
+    assert {row.source_message_id for row in rows} == {"msg-2", "msg-3"}
+
+
+@pytest.mark.asyncio
+async def test_prune_session_bridge_deliveries_drops_expired_rows(
+    temp_db: SQLiteDatabase,
+):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlmodel import col, update
+
+    from astrbot.core.db.po import SessionBridgeDelivery
+
+    await temp_db.initialize()
+    await temp_db.insert_session_bridge_delivery(
+        dest_umo="source:FriendMessage:old",
+        origin_umo="target:GroupMessage:room",
+        source_message_id="msg-old",
+        dest_message_id=None,
+    )
+    await temp_db.insert_session_bridge_delivery(
+        dest_umo="source:FriendMessage:new",
+        origin_umo="target:GroupMessage:room",
+        source_message_id="msg-new",
+        dest_message_id=None,
+    )
+    cutoff = datetime.now(UTC) - timedelta(days=2)
+    async with temp_db.get_db() as session:
+        await session.execute(
+            update(SessionBridgeDelivery)
+            .where(col(SessionBridgeDelivery.source_message_id) == "msg-old")
+            .values(created_at=cutoff)
+        )
+        await session.commit()
+
+    removed = await temp_db.prune_session_bridge_deliveries(
+        keep=10, retention_seconds=60
+    )
+
+    assert removed == 1
+    rows = await temp_db.list_session_bridge_deliveries(10)
+    assert [row.source_message_id for row in rows] == ["msg-new"]
+
+
+@pytest.mark.asyncio
+async def test_prune_session_bridge_deliveries_no_overlap(temp_db: SQLiteDatabase):
+    await temp_db.initialize()
+    await temp_db.insert_session_bridge_delivery(
+        dest_umo="source:FriendMessage:only",
+        origin_umo="target:GroupMessage:room",
+        source_message_id="msg-only",
+        dest_message_id=None,
+    )
+
+    assert (
+        await temp_db.prune_session_bridge_deliveries(keep=10, retention_seconds=3600)
+        == 0
+    )
+    assert len(await temp_db.list_session_bridge_deliveries(10)) == 1

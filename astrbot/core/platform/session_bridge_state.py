@@ -96,6 +96,11 @@ class SessionBridgeState:
         self._connect_by_listener: dict[tuple[str, str], GrantKey] = {}
         self._expiry_tasks: dict[GrantKey, asyncio.Task[None]] = {}
 
+    @property
+    def store(self) -> SessionBridgeStore:
+        """Return the underlying persistence owner for shared manager access."""
+        return self._store
+
     def count_kind(self, subject_id: str, kind: str) -> int:
         return sum(
             1

@@ -1523,6 +1523,48 @@ async def test_terminate_cancels_queued_edge_delivery():
 
 
 @pytest.mark.asyncio
+async def test_send_ignores_edge_filter_while_observe_is_filtered():
+    """Pin the inbound-only scope of match/except filters.
+
+    Filters govern forwarded messages from the observed session. ``/send``
+    runs the opposite direction (listener -> observed) and projects the caller
+    as the envelope source, so applying the same document there would score the
+    operator instead of the observed speakers. Issue #249 decided to keep
+    filters inbound-only; this test fails if someone later repoints the filter
+    onto ``/send``.
+    """
+    from astrbot.core.message.components import Plain
+    from astrbot.core.star.plugin_context import SessionBridgeCapability
+
+    sent = []
+
+    async def send(session, chain):
+        sent.append((str(session), chain.get_plain_text()))
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    target = "target:GroupMessage:room"
+    capability = SessionBridgeCapability(manager)
+    link = await capability.connect(event, target)
+    await manager.append_filter(event, link.rule_id, "except", "text", "ping")
+
+    await manager.observe(
+        _observed_envelope(content=(PortablePart(ContentKind.TEXT, "ping"),))
+    )
+    assert sent == []
+
+    send_event = _event(components=[Plain("/send ping")])
+    receipt = await capability.send(send_event, target, target_in_header=False)
+    assert receipt.status == "accepted"
+    assert sent[-1] == (target, "ping")
+
+    await capability.disconnect(event)
+    assert await capability.connection(event) is None
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
 async def test_filter_missing_sender_and_pair_edges_independent():
     sent = []
 

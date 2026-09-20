@@ -41,7 +41,7 @@
     "session.unpair.ok": "Removed both pair edges.",
     "session.unpair.missing": "No pair in this session.",
     "session.unpair.ambiguous": "This session has more than one pair. Specify the other UMO.",
-    "session.filter.usage": "Usage: /session filter <rule_id> [match|except] [subject|role|text] <value>, or /session filter <rule_id> clear [match|except|all]. Omit extra tokens to show the current filter. clear without a side equals all. text uses the rest of the line as a Python re.search pattern.",
+    "session.filter.usage": "Usage: /session filter <rule_id> [match|except] [subject|role|text] <value>, or /session filter <rule_id> clear [match|except|all]. Omit extra tokens to show the current filter. clear without a side equals all. text uses the rest of the line as a Python re.search pattern. The filter constrains forwarded messages only, not /send.",
     "session.filter.missing": "No matching session-bridge rule.",
     "session.filter.invalid_role": "Role must be guest, member, session_admin, session_owner, instance_operator, operator, or root.",
     "session.filter.invalid_pattern": "The text pattern must be a valid Python re expression of at most 256 characters.",

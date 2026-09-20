@@ -77,11 +77,11 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/session unpair [UMO]`：删除共享 `pair_id` 的两条边，需要 `session.read`。恰好一对且当前会话是其中一端时可省略 UMO；0 对提示没有；多于一对必须带 UMO。
 - `/session links`：列出可见的监听、连接和 pair，包含 `rule_id`、类型和剩余时间或无期限；pair 额外显示 `pair_id`。权限与 `watches` 相同（`session.read`）。创建者只看到自己的规则；当前会话配置上的 `instance_operator` 额外看到两端任一配置 id 属于当前会话配置的规则；`operator` / `root` 看到全部。
 - `/session unlink <rule_id>`：按 12 位小写十六进制 id 撤销一条监听或连接。创建者可撤自己的规则（角色被撤后仍可）。本配置 `instance_operator` 可撤两端任一配置属于当前会话配置的规则；`operator` / `root` 可撤全部。目标是 `kind=pair` 时拒绝并提示使用 `unpair`，两条边都还在。
-- `/session filter <rule_id>`：查看一条有向边的 match/except 过滤。权限与 `links` 相同（`session.read` 加运营附加范围）。
+- `/session filter <rule_id>`：查看一条有向边的 match/except 过滤。过滤只约束**转发**的消息，不约束 `/send`。权限与 `links` 相同（`session.read` 加运营附加范围）。
 - `/session filter <rule_id> match|except subject|role|text <值>`：向该边追加一条过滤。同一维度为 OR，维度之间为 AND，命中 except 则丢弃。`text` 把行内剩余内容当作 Python `re.search` 模式（最长 256 字符，默认 Unicode 且大小写敏感，忽略大小写用 `(?i)`）。非法模式在保存时拒绝。`role` 是发送者在**源会话**上的 AstrBot 授权角色（`guest` / `member` / `session_admin` / `session_owner` / `instance_operator` / `operator` / `root`），不是平台群身份。查不到当 `guest`。每一维最多 16 条。创建者在撤权后仍可改自己的边，运营附加范围与 `unlink` 相同。pair 的两条边可分别过滤，拆对仍走 `unpair`。
 - `/session filter <rule_id> clear [match|except|all]`：清空一侧或两侧。省略范围等于 `all`。`clear` 清的是整个 match 或 except 侧，不能单删一条；要改就先 `clear` 再加。
-- `/send <UMO> [内容]`：借助目标平台的 Bot 账号发送文字和同一条消息中的附件，需要 `session.send`。可以只附图片而不填写正文；不会占用 `reply` 指令。
-- `/send [内容]`：在 `/session connect` 之后，不写 UMO 也会发往已连接的目标会话。可以只附图片。`pair` 不会成为 `/send` 的默认目标。
+- `/send <UMO> [内容]`：借助目标平台的 Bot 账号发送文字和同一条消息中的附件，需要 `session.send`。可以只附图片而不填写正文；不会占用 `reply` 指令。`match`/`except` 只约束转发，**不适用于 `/send`**。
+- `/send [内容]`：在 `/session connect` 之后，不写 UMO 也会发往已连接的目标会话。可以只附图片。`pair` 不会成为 `/send` 的默认目标。目标边上的 `match`/`except` 同样不约束本指令。
 
 监听、连接、配对和发送要求当前身份拥有同一配置下的 `instance_operator` 权限。群管理员、私聊会话所有者身份不能替代它。监听内容对接收会话的所有成员可见；仅转发开始监听之后收到的消息，不读取历史。空的 match 与 except 会转发全部真人消息。`watch` / `connect` / `pair` 创建指令不解析过滤 flag，事后用 `/session filter` 设置。主体过滤用 `Subject.im` 重建：平台实例取源路由 `platform_id`，`bot_account_id` 取源适配器 `self_id`，`sender_id` 取 `SenderSnapshot.id`。正文只拼接 `PortablePart` 文本，忽略媒体和 `NativeContent`；纯媒体在写了 `match.text` 时不转，只写 `except.text` 则放行。规则写入 SQLite，进程重启后未过期的监听、全部连接和全部 pair 仍在；过期监听会在启动或到期时清除并通知监听端。每人最多 16 条监听、16 条连接和 8 对 pair。每次转发都会重新检查权限，撤权后停止投递。瞬时投递失败（平台明确拒绝或状态未知，且没有任何分段被接受）会自动重试，首次失败后最多再重试 2 次；只有至少一次被平台接受才算转发成功，因此单次故障不会永久丢失消息，但状态未知时重试可能重复投递（至少一次语义）。对同一对会话再次 `/session watch` 会保留 `rule_id` 并重置时长。同一方向的 watch 与 connect 会互相替换。任一条目标方向已是 pair 时，`watch` / `connect` 会拒绝并提示先 `unpair`，不会拆成半对。
 

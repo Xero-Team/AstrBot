@@ -41,7 +41,7 @@
     "session.unpair.ok": "已删除该 pair 的两条边。",
     "session.unpair.missing": "当前会话没有 pair。",
     "session.unpair.ambiguous": "当前会话有多对 pair，请补上对端 UMO。",
-    "session.filter.usage": "用法：/session filter <rule_id> [match|except] [subject|role|text] <值>，或 /session filter <rule_id> clear [match|except|all]。省略其余参数可查看当前过滤。clear 省略范围等于 all。text 把行内剩余内容当作 Python re.search 模式。",
+    "session.filter.usage": "用法：/session filter <rule_id> [match|except] [subject|role|text] <值>，或 /session filter <rule_id> clear [match|except|all]。省略其余参数可查看当前过滤。clear 省略范围等于 all。text 把行内剩余内容当作 Python re.search 模式。过滤只约束转发的消息，不约束 /send。",
     "session.filter.missing": "没有找到对应的会话桥接规则。",
     "session.filter.invalid_role": "角色必须是 guest、member、session_admin、session_owner、instance_operator、operator 或 root。",
     "session.filter.invalid_pattern": "正文模式必须是不超过 256 个字符的合法 Python re 表达式。",

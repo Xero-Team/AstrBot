@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from time import monotonic
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from astrbot.core.message.message_event_result import MessageChain
@@ -45,6 +46,9 @@ PLATFORM_ACTION_METHOD_NAMES = (
 
 logger = logging.getLogger("astrbot")
 
+# A best-effort forwarding path must not flood the log when it is saturated.
+_ENVELOPE_DROP_LOG_INTERVAL_SECONDS = 30.0
+
 
 class PlatformStatus(Enum):
     """平台运行状态"""
@@ -71,6 +75,13 @@ class Platform(abc.ABC):
     MESSAGE_CAPABILITIES: ClassVar[MessageDeliveryCapabilities] = (
         MessageDeliveryCapabilities()
     )
+    # Ingress is synchronous and must never block on an async observer, so
+    # observer dispatch is best effort: at most this many observer tasks run
+    # concurrently per adapter. Forwarding beyond the bound is dropped, but the
+    # drop is counted and logged at a throttled rate (never silent). Backlog
+    # buffering and durability belong to the observer itself, not this generic
+    # fan-out layer.
+    ENVELOPE_OBSERVER_CAPACITY: ClassVar[int] = 128
 
     @classmethod
     def declared_supported_actions(cls) -> list[str]:
@@ -111,6 +122,9 @@ class Platform(abc.ABC):
         self._envelope_observers: set[Callable[[MessageEnvelope], Awaitable[None]]] = (
             set()
         )
+        self._event_queue_full_drops = 0
+        self._envelope_capacity_drops = 0
+        self._envelope_drop_logged_at = 0.0
 
         # 平台运行状态
         self._status: PlatformStatus = PlatformStatus.PENDING
@@ -184,6 +198,7 @@ class Platform(abc.ABC):
             if self.last_error
             else None,
             "unified_webhook": self.unified_webhook(),
+            "dispatch_stats": self.envelope_dispatch_stats(),
             "meta": meta_info,
         }
 
@@ -327,34 +342,68 @@ class Platform(abc.ABC):
         try:
             self._event_queue.put_nowait(event)
         except QueueFull:
+            self._event_queue_full_drops += 1
             logger.warning(
-                "Event queue full; dropping event from %s",
+                "Event queue full; dropping event from %s (total dropped: %d)",
                 event.unified_msg_origin,
+                self._event_queue_full_drops,
             )
             return False
         if self._envelope_observers:
-            if len(self._envelope_tasks) >= 128:
-                logger.warning("Envelope observer capacity reached; forwarding skipped")
-                return True
-            try:
-                envelope = envelope_from_event(event)
-            except Exception:
-                logger.warning("Failed to project event for envelope observers")
-            else:
-                for observer in tuple(self._envelope_observers):
-                    if len(self._envelope_tasks) >= 128:
-                        logger.warning(
-                            "Envelope observer capacity reached; forwarding skipped"
-                        )
-                        break
-                    task = create_tracked_task(
-                        self._background_tasks,
-                        observer(envelope),
-                        name=f"envelope-observer:{self.meta().id}",
-                    )
-                    self._envelope_tasks.add(task)
-                    task.add_done_callback(self._envelope_tasks.discard)
+            self._dispatch_envelope(event)
         return True
+
+    def _dispatch_envelope(self, event: AstrMessageEvent) -> None:
+        """Forward one ingress envelope to every registered observer.
+
+        The capacity is checked once per event and every observer is dispatched
+        together, so an event is never forwarded to only a subset of observers.
+        """
+        observers = tuple(self._envelope_observers)
+        if len(self._envelope_tasks) + len(observers) > self.ENVELOPE_OBSERVER_CAPACITY:
+            self._envelope_capacity_drops += 1
+            self._log_envelope_capacity_drop()
+            return
+        try:
+            envelope = envelope_from_event(event)
+        except Exception:
+            logger.warning("Failed to project event for envelope observers")
+            return
+        for observer in observers:
+            task = create_tracked_task(
+                self._background_tasks,
+                observer(envelope),
+                name=f"envelope-observer:{self.meta().id}",
+            )
+            self._envelope_tasks.add(task)
+            task.add_done_callback(self._envelope_tasks.discard)
+
+    def _log_envelope_capacity_drop(self) -> None:
+        """Log forwarding drops at most once per interval to avoid flooding."""
+        now = monotonic()
+        if now - self._envelope_drop_logged_at < _ENVELOPE_DROP_LOG_INTERVAL_SECONDS:
+            return
+        self._envelope_drop_logged_at = now
+        logger.warning(
+            "Envelope observer capacity (%d) reached for adapter %s; forwarding "
+            "skipped (in-flight: %d, total forwarding drops: %d)",
+            self.ENVELOPE_OBSERVER_CAPACITY,
+            self.meta().id,
+            len(self._envelope_tasks),
+            self._envelope_capacity_drops,
+        )
+
+    def envelope_dispatch_stats(self) -> dict[str, int]:
+        """Return cumulative ingress and forwarding drop counters.
+
+        These counters make best-effort forwarding loss observable to
+        diagnostics and tests instead of only emitting a log line.
+        """
+        return {
+            "event_queue_full_drops": self._event_queue_full_drops,
+            "envelope_capacity_drops": self._envelope_capacity_drops,
+            "envelope_tasks_inflight": len(self._envelope_tasks),
+        }
 
     def add_envelope_observer(
         self,

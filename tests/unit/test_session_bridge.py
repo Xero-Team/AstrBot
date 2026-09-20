@@ -1403,6 +1403,70 @@ async def test_filter_uses_adapter_self_id_not_default():
 
 
 @pytest.mark.asyncio
+async def test_observe_preserves_burst_order_per_destination():
+    import asyncio
+
+    order: list[str] = []
+
+    async def send(session, chain):
+        order.append(chain.get_plain_text())
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, authorization, _ = _manager(send)
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    await manager.append_filter(event, watch.rule_id, "match", "roles", "member")
+
+    async def authorize(subject, action, resource, context):
+        if action == "session.read" and subject.id.endswith(":1"):
+            await asyncio.sleep(0.05)
+        return SimpleNamespace(allowed=True, effective_role=Role.MEMBER)
+
+    authorization.authorize = AsyncMock(side_effect=authorize)
+
+    first = _observed_envelope(
+        sender="1", content=(PortablePart(ContentKind.TEXT, "first"),)
+    )
+    second = _observed_envelope(
+        sender="2", content=(PortablePart(ContentKind.TEXT, "second"),)
+    )
+    await asyncio.gather(manager.observe(first), manager.observe(second))
+
+    assert len(order) == 2
+    assert order[0].endswith("first")
+    assert order[1].endswith("second")
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_terminate_cancels_queued_edge_delivery():
+    import asyncio
+
+    manager, _, send = _manager()
+    await manager.watch(_event(), "target:GroupMessage:room")
+    release = asyncio.Event()
+
+    async def blocking_send(session, chain):
+        await release.wait()
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    send.side_effect = blocking_send
+    task = asyncio.create_task(
+        manager.observe(
+            MessageEnvelope(
+                PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
+                content=(PortablePart(ContentKind.TEXT, "queued"),),
+            )
+        )
+    )
+    await asyncio.sleep(0.01)
+    await manager.terminate()
+    assert await asyncio.wait_for(task, 1) is None
+    assert manager._edge_workers == {}
+    assert manager._edge_queues == {}
+
+
+@pytest.mark.asyncio
 async def test_filter_missing_sender_and_pair_edges_independent():
     sent = []
 

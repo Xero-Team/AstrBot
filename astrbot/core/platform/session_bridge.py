@@ -6,7 +6,7 @@ import asyncio
 import math
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from time import time
 from typing import TYPE_CHECKING
 
@@ -64,6 +64,16 @@ FORWARD_RETRY_DELAY_SECONDS = 0.25
 MAX_DELIVERIES_KEPT = 8192
 DELIVERY_RETENTION_SECONDS = 3 * 24 * 60 * 60
 
+
+@dataclass(frozen=True, slots=True)
+class _EdgeJob:
+    """One queued forward for a single origin→listener bridge edge."""
+
+    key: GrantKey
+    envelope: MessageEnvelope
+    done: asyncio.Future[None]
+
+
 if TYPE_CHECKING:
     from astrbot.core.auth.service import AuthorizationService
     from astrbot.core.db.po.session_bridge import SessionBridgeRule
@@ -114,6 +124,8 @@ class SessionBridgeManager:
         self._message_ids: OrderedDict[tuple[str, str, str], str] = OrderedDict()
         self._lock = asyncio.Lock()
         self._delivery_locks = SessionLockManager()
+        self._edge_queues: dict[tuple[str, str], asyncio.Queue[_EdgeJob]] = {}
+        self._edge_workers: dict[tuple[str, str], asyncio.Task[None]] = {}
 
     @staticmethod
     def _actor(event: AstrMessageEvent) -> tuple[Subject, AuthContext]:
@@ -563,21 +575,84 @@ class SessionBridgeManager:
         )
 
     async def observe(self, envelope: MessageEnvelope) -> None:
-        """Forward ingress snapshots, removing expired or revoked watches."""
+        """Forward ingress snapshots, removing expired or revoked watches.
+
+        Jobs are enqueued on a per-edge FIFO before the first ``await`` so
+        arrival order is pinned: a later ingress task cannot overtake an earlier
+        one while asynchronous authorization or filter work runs.
+        """
         if envelope.is_self_message:
             return
         origin = envelope.source_umo
+        # The snapshot is read before any await, so no other coroutine can
+        # mutate the grant index during this synchronous span.
+        watches = self._state.grants_observing(origin)
+        pending = self._enqueue_edge_jobs(origin, watches, envelope)
         async with self._lock:
             expired = await self._state.purge(time())
-            watches = self._state.grants_observing(origin)
         await self._notify_expired_watches(expired)
-        if watches:
-            await asyncio.gather(
-                *(
-                    self._forward_to_watch(key, grant, envelope)
-                    for key, grant in watches
-                )
-            )
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    def _enqueue_edge_jobs(
+        self,
+        origin: str,
+        watches: tuple[tuple[GrantKey, WatchGrant], ...],
+        envelope: MessageEnvelope,
+    ) -> list[asyncio.Future[None]]:
+        """Queue one job per edge in synchronous arrival order."""
+        loop = asyncio.get_running_loop()
+        pending: list[asyncio.Future[None]] = []
+        for key, grant in watches:
+            queue = self._edge_queue((origin, grant.watch.source_umo))
+            done: asyncio.Future[None] = loop.create_future()
+            queue.put_nowait(_EdgeJob(key, envelope, done))
+            pending.append(done)
+        return pending
+
+    def _edge_queue(self, edge: tuple[str, str]) -> asyncio.Queue[_EdgeJob]:
+        """Return the live FIFO for one edge, starting its worker on demand."""
+        worker = self._edge_workers.get(edge)
+        if worker is not None and not worker.done():
+            return self._edge_queues[edge]
+        queue: asyncio.Queue[_EdgeJob] = asyncio.Queue()
+        task = asyncio.get_running_loop().create_task(
+            self._drain_edge(edge, queue),
+            name=f"session-bridge-edge:{edge[0]}->{edge[1]}",
+        )
+        self._edge_queues[edge] = queue
+        self._edge_workers[edge] = task
+        return queue
+
+    async def _drain_edge(
+        self, edge: tuple[str, str], queue: asyncio.Queue[_EdgeJob]
+    ) -> None:
+        """Deliver one edge's queued jobs in order, then retire when idle."""
+        try:
+            while True:
+                job = await queue.get()
+                try:
+                    grant = self._state.get(job.key)
+                    if grant is not None:
+                        await self._forward_to_watch(job.key, grant, job.envelope)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.warning("Session bridge delivery failed")
+                finally:
+                    if not job.done.done():
+                        job.done.set_result(None)
+                    queue.task_done()
+                if queue.empty():
+                    break
+        finally:
+            while not queue.empty():
+                queued = queue.get_nowait()
+                if not queued.done.done():
+                    queued.done.cancel()
+            if self._edge_queues.get(edge) is queue:
+                self._edge_queues.pop(edge, None)
+                self._edge_workers.pop(edge, None)
 
     async def _forward_to_watch(
         self, key: GrantKey, grant: WatchGrant, envelope: MessageEnvelope
@@ -1109,7 +1184,7 @@ class SessionBridgeManager:
         return self._state.grant_from_row(row, subject, grant_context)
 
     async def terminate(self) -> None:
-        """Cancel expiry tasks and drop in-memory state.
+        """Cancel expiry tasks and edge workers, then drop in-memory state.
 
         The delivery ledger rows survive: rules stay durable on purpose, and
         dropping them would reintroduce the restart issues from issue #245.
@@ -1119,10 +1194,19 @@ class SessionBridgeManager:
             self._state.clear_grants()
             self._forwarded.clear()
             self._message_ids.clear()
-        for task in tasks:
+            for queue in self._edge_queues.values():
+                while not queue.empty():
+                    job = queue.get_nowait()
+                    if not job.done.done():
+                        job.done.cancel()
+            workers = list(self._edge_workers.values())
+            self._edge_queues.clear()
+            self._edge_workers.clear()
+        pending = [*tasks, *workers]
+        for task in pending:
             task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 __all__ = [

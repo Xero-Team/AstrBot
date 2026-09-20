@@ -6,7 +6,7 @@ import asyncio
 import math
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from time import time
 from typing import TYPE_CHECKING
 
@@ -63,6 +63,7 @@ MAX_FORWARD_ATTEMPTS = 3
 FORWARD_RETRY_DELAY_SECONDS = 0.25
 MAX_DELIVERIES_KEPT = 8192
 DELIVERY_RETENTION_SECONDS = 3 * 24 * 60 * 60
+MAX_RULE_ERRORS_KEPT = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +72,72 @@ class SessionBridgeQuota:
 
     current: int
     limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class SessionBridgeRuleHealth:
+    """Bounded last-error record for one failing session-bridge rule."""
+
+    rule_id: str
+    source_umo: str
+    target_umo: str
+    failures: int
+    last_status: str
+    last_error: str
+    last_error_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class SessionBridgeHealth:
+    """Read-only snapshot of this runtime's session-bridge forwarding health.
+
+    Counters are cumulative since the manager was created. Per-rule errors are
+    bounded so a burst of failures cannot grow memory without limit.
+    """
+
+    started_at: float
+    accepted: int
+    partial: int
+    failed: int
+    unknown: int
+    skipped: int
+    skipped_filtered: int
+    skipped_duplicate: int
+    skipped_inactive: int
+    skipped_unavailable: int
+    authorization_denied: int
+    expiry_notice_failures: int
+    ledger_failures: int
+    restore_failures: int
+    pending_forwards: int
+    last_success_at: float | None
+    last_error_at: float | None
+    rule_errors: tuple[SessionBridgeRuleHealth, ...]
+
+
+@dataclass(slots=True)
+class _DeliveryHealth:
+    """Mutable delivery-health accumulator owned by one manager."""
+
+    started_at: float = field(default_factory=time)
+    accepted: int = 0
+    partial: int = 0
+    failed: int = 0
+    unknown: int = 0
+    skipped: int = 0
+    skipped_filtered: int = 0
+    skipped_duplicate: int = 0
+    skipped_inactive: int = 0
+    skipped_unavailable: int = 0
+    authorization_denied: int = 0
+    expiry_notice_failures: int = 0
+    ledger_failures: int = 0
+    restore_failures: int = 0
+    last_success_at: float | None = None
+    last_error_at: float | None = None
+    rule_errors: OrderedDict[str, SessionBridgeRuleHealth] = field(
+        default_factory=OrderedDict
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +201,7 @@ class SessionBridgeManager:
         self._delivery_locks = SessionLockManager()
         self._edge_queues: dict[tuple[str, str], asyncio.Queue[_EdgeJob]] = {}
         self._edge_workers: dict[tuple[str, str], asyncio.Task[None]] = {}
+        self._health = _DeliveryHealth()
 
     @staticmethod
     def _actor(event: AstrMessageEvent) -> tuple[Subject, AuthContext]:
@@ -303,6 +371,107 @@ class SessionBridgeManager:
                     self._max_pairs_per_subject,
                 ),
             }
+
+    def _note_skip(self, reason: str) -> None:
+        """Count one forwarding that was intentionally not delivered."""
+        state = self._health
+        state.skipped += 1
+        if reason == "filtered":
+            state.skipped_filtered += 1
+        elif reason == "duplicate":
+            state.skipped_duplicate += 1
+        elif reason == "inactive":
+            state.skipped_inactive += 1
+        elif reason == "unavailable":
+            state.skipped_unavailable += 1
+
+    def _note_rule_error(
+        self,
+        watch: SessionWatch,
+        status: str,
+        summary: str,
+        *,
+        now: float | None = None,
+    ) -> None:
+        """Record a bounded, most-recent-first error for one rule."""
+        state = self._health
+        at = time() if now is None else now
+        state.last_error_at = at
+        previous = state.rule_errors.pop(watch.rule_id, None)
+        state.rule_errors[watch.rule_id] = SessionBridgeRuleHealth(
+            rule_id=watch.rule_id,
+            source_umo=watch.source_umo,
+            target_umo=watch.target_umo,
+            failures=(previous.failures if previous is not None else 0) + 1,
+            last_status=status,
+            last_error=summary,
+            last_error_at=at,
+        )
+        while len(state.rule_errors) > MAX_RULE_ERRORS_KEPT:
+            state.rule_errors.popitem(last=False)
+
+    def _note_delivery(self, watch: SessionWatch, receipt: DeliveryReceipt) -> None:
+        """Count one completed delivery outcome and its per-rule failure."""
+        state = self._health
+        now = time()
+        status = receipt.status
+        if status == "accepted":
+            state.accepted += 1
+            state.last_success_at = now
+            return
+        if status == "partial":
+            state.partial += 1
+        elif status == "failed":
+            state.failed += 1
+        elif status == "unknown":
+            state.unknown += 1
+        else:
+            state.skipped += 1
+        if status in {"partial", "failed", "unknown"}:
+            self._note_rule_error(
+                watch, status, receipt.error_summary or f"Delivery {status}"
+            )
+
+    def _note_unexpected_failure(self) -> None:
+        """Count an edge worker failure that carried no usable rule record."""
+        self._health.failed += 1
+        self._health.last_error_at = time()
+
+    def health(self) -> SessionBridgeHealth:
+        """Return a read-only snapshot of this manager's delivery health."""
+        state = self._health
+        return SessionBridgeHealth(
+            started_at=state.started_at,
+            accepted=state.accepted,
+            partial=state.partial,
+            failed=state.failed,
+            unknown=state.unknown,
+            skipped=state.skipped,
+            skipped_filtered=state.skipped_filtered,
+            skipped_duplicate=state.skipped_duplicate,
+            skipped_inactive=state.skipped_inactive,
+            skipped_unavailable=state.skipped_unavailable,
+            authorization_denied=state.authorization_denied,
+            expiry_notice_failures=state.expiry_notice_failures,
+            ledger_failures=state.ledger_failures,
+            restore_failures=state.restore_failures,
+            pending_forwards=sum(queue.qsize() for queue in self._edge_queues.values()),
+            last_success_at=state.last_success_at,
+            last_error_at=state.last_error_at,
+            rule_errors=tuple(state.rule_errors.values()),
+        )
+
+    async def health_for(self, event: AstrMessageEvent) -> SessionBridgeHealth:
+        """Return health with per-rule errors limited to visible rules."""
+        visible = await self.list_links(event)
+        visible_ids = {watch.rule_id for watch, _ in visible}
+        snapshot = self.health()
+        return replace(
+            snapshot,
+            rule_errors=tuple(
+                item for item in snapshot.rule_errors if item.rule_id in visible_ids
+            ),
+        )
 
     def _require_loaded_proactive(self, umo: str) -> None:
         capabilities = self._get_capabilities(umo)
@@ -667,6 +836,7 @@ class SessionBridgeManager:
                 except asyncio.CancelledError:
                     raise
                 except Exception:
+                    self._note_unexpected_failure()
                     logger.warning("Session bridge delivery failed")
                 finally:
                     if not job.done.done():
@@ -692,6 +862,7 @@ class SessionBridgeManager:
         claim: tuple[str, str, str] | None = None
         try:
             if not self._get_capabilities(watch.source_umo).available:
+                self._note_skip("unavailable")
                 return
             await self._authorize(
                 grant.subject, grant.context, watch.source_umo, "session.watch"
@@ -700,13 +871,16 @@ class SessionBridgeManager:
                 grant.subject, grant.context, watch.target_umo, "session.watch"
             )
             if not await self._passes_filter(grant, envelope):
+                self._note_skip("filtered")
                 return
             async with self._lock:
                 if not self._grant_active(key, grant, time()):
+                    self._note_skip("inactive")
                     return
                 if envelope.source_message_id:
                     claim = (watch.source_umo, origin, envelope.source_message_id)
                     if claim in self._forwarded:
+                        self._note_skip("duplicate")
                         return
                     self._forwarded[claim] = None
                     if len(self._forwarded) > 8192:
@@ -735,9 +909,12 @@ class SessionBridgeManager:
                     receipt.message_ids[0] if receipt.message_ids else None
                 )
                 await self._persist_delivery(claim, dest_message_id)
+            self._note_delivery(watch, receipt)
             if receipt.status != "accepted":
                 logger.warning("Session bridge submission status: %s", receipt.status)
         except PermissionError:
+            self._health.authorization_denied += 1
+            self._note_rule_error(watch, "denied", "Authorization revoked")
             await self._release_forward(claim)
             async with self._lock:
                 await self._state.delete_rule(grant.watch.rule_id)
@@ -746,6 +923,8 @@ class SessionBridgeManager:
             raise
         except Exception:
             # Transport exceptions may contain credentials or private URLs.
+            self._health.failed += 1
+            self._note_rule_error(watch, "failed", "Delivery failed")
             await self._release_forward(claim)
             logger.warning("Session bridge delivery failed")
 
@@ -805,6 +984,7 @@ class SessionBridgeManager:
         except asyncio.CancelledError:
             raise
         except Exception:
+            self._health.ledger_failures += 1
             logger.warning("Session bridge delivery ledger write failed")
 
     async def _passes_filter(
@@ -1082,6 +1262,7 @@ class SessionBridgeManager:
         except asyncio.CancelledError:
             raise
         except Exception:
+            self._health.expiry_notice_failures += 1
             logger.warning("Session watch expiry notice failed")
 
     async def restore(self) -> None:
@@ -1144,6 +1325,7 @@ class SessionBridgeManager:
         except asyncio.CancelledError:
             raise
         except Exception:
+            self._health.ledger_failures += 1
             logger.warning("Session bridge delivery ledger read failed")
             return
         for row in reversed(rows):
@@ -1197,6 +1379,7 @@ class SessionBridgeManager:
             await self._state.discard_stored_rule(row.rule_id)
             return None
         except Exception:
+            self._health.restore_failures += 1
             logger.warning("Session bridge restore skipped a rule")
             return None
         grant_context = AuthContext(

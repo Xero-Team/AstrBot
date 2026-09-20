@@ -668,3 +668,38 @@ class SessionCommands:
             await reply_i18n(self.context, event, "session.send.invalid")
             return
         await reply_i18n(self.context, event, f"session.send.{result.status}")
+
+    async def health(self, event: AstrMessageEvent) -> None:
+        """Show session-bridge delivery counters and recent rule failures."""
+        health = await self.context.bridges.health(event)
+        if health.rule_errors:
+            errors = "\n".join(
+                [
+                    await self.context.i18n.t(
+                        event,
+                        "session.health.rule",
+                        rule_id=item.rule_id,
+                        source=item.source_umo,
+                        target=item.target_umo,
+                        failures=item.failures,
+                        status=item.last_status,
+                        message=item.last_error,
+                    )
+                    for item in health.rule_errors
+                ]
+            )
+        else:
+            errors = await self.context.i18n.t(event, "session.health.errors_none")
+        await reply_i18n(
+            self.context,
+            event,
+            "session.health.body",
+            accepted=health.accepted,
+            partial=health.partial,
+            failed=health.failed,
+            unknown=health.unknown,
+            skipped=health.skipped,
+            denied=health.authorization_denied,
+            pending=health.pending_forwards,
+            errors=errors,
+        )

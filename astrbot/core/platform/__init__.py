@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         DEFAULT_WATCH_TTL_SECONDS,
         MAX_WATCH_TTL_SECONDS,
         MIN_WATCH_TTL_SECONDS,
+        SessionBridgeHealth,
         SessionBridgeManager,
         SessionBridgeQuota,
         SessionWatch,
@@ -108,6 +109,10 @@ _PROTOCOL_EXPORTS = {
         "astrbot.core.platform.session_bridge",
         "SessionBridgeQuota",
     ),
+    "SessionBridgeHealth": (
+        "astrbot.core.platform.session_bridge",
+        "SessionBridgeHealth",
+    ),
     "DEFAULT_WATCH_TTL_SECONDS": (
         "astrbot.core.platform.session_bridge",
         "DEFAULT_WATCH_TTL_SECONDS",
@@ -162,6 +167,7 @@ __all__ = [
     "SessionBridgeManager",
     "SessionWatch",
     "SessionBridgeQuota",
+    "SessionBridgeHealth",
     "DEFAULT_WATCH_TTL_SECONDS",
     "MAX_WATCH_TTL_SECONDS",
     "MIN_WATCH_TTL_SECONDS",

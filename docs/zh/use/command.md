@@ -80,6 +80,7 @@ Orbit 不执行变量、命令、算术或波浪号展开，也不执行 glob、
 - `/session filter <rule_id>`：查看一条有向边的 match/except 过滤。过滤只约束**转发**的消息，不约束 `/send`。权限与 `links` 相同（`session.read` 加运营附加范围）。
 - `/session filter <rule_id> match|except subject|role|text <值>`：向该边追加一条过滤。同一维度为 OR，维度之间为 AND，命中 except 则丢弃。`text` 把行内剩余内容当作 Python `re.search` 模式（最长 256 字符，默认 Unicode 且大小写敏感，忽略大小写用 `(?i)`）。非法模式在保存时拒绝。`role` 是发送者在**源会话**上的 AstrBot 授权角色（`guest` / `member` / `session_admin` / `session_owner` / `instance_operator` / `operator` / `root`），不是平台群身份。查不到当 `guest`。每一维最多 16 条。创建者在撤权后仍可改自己的边，运营附加范围与 `unlink` 相同。pair 的两条边可分别过滤，拆对仍走 `unpair`。
 - `/session filter <rule_id> clear [match|except|all]`：清空一侧或两侧。省略范围等于 `all`。`clear` 清的是整个 match 或 except 侧，不能单删一条；要改就先 `clear` 再加。
+- `/session health`：查看会话桥接的投递健康快照，需要 `session.read`。显示累计的接受/部分/失败/未知/跳过/撤权计数、当前排队待转发数，以及可见规则的最近失败记录（每条规则只保留最近一次状态与错误摘要，规则数有上限）。计数器是运行时范围的累计值；失败规则只列出当前主体可见的规则。
 - `/send <UMO> [内容]`：借助目标平台的 Bot 账号发送文字和同一条消息中的附件，需要 `session.send`。可以只附图片而不填写正文；不会占用 `reply` 指令。`match`/`except` 只约束转发，**不适用于 `/send`**。
 - `/send [内容]`：在 `/session connect` 之后，不写 UMO 也会发往已连接的目标会话。可以只附图片。`pair` 不会成为 `/send` 的默认目标。目标边上的 `match`/`except` 同样不约束本指令。
 

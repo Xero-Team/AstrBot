@@ -625,10 +625,14 @@ class SessionBridgeManager:
             receipt = await self._forward_with_retry(watch, grant, forwarded, locale)
             if not receipt.accepted_attempts:
                 await self._release_forward(claim)
-            elif claim is not None and receipt.message_ids:
+            elif claim is not None:
                 # The claim becomes a durable delivery record so the dedup
-                # key and quote-id map survive a restart (issue #245).
-                await self._persist_delivery(claim, receipt.message_ids[0])
+                # key survives a restart even when the platform returns no
+                # message id; a returned id also restores quote resolution.
+                dest_message_id = (
+                    receipt.message_ids[0] if receipt.message_ids else None
+                )
+                await self._persist_delivery(claim, dest_message_id)
             if receipt.status != "accepted":
                 logger.warning("Session bridge submission status: %s", receipt.status)
         except PermissionError:
@@ -1040,14 +1044,17 @@ class SessionBridgeManager:
         except Exception:
             logger.warning("Session bridge delivery ledger read failed")
             return
-        for row in rows:
-            if row.dest_message_id is None:
-                continue
+        for row in reversed(rows):
             self._forwarded[(row.dest_umo, row.origin_umo, row.source_message_id)] = (
                 None
             )
+            if row.dest_message_id is None:
+                continue
             self._message_ids[(row.origin_umo, row.source_message_id, row.dest_umo)] = (
                 row.dest_message_id
+            )
+            self._message_ids[(row.dest_umo, row.dest_message_id, row.origin_umo)] = (
+                row.source_message_id
             )
 
     def _grant_for_notice(self, row: SessionBridgeRule) -> WatchGrant:

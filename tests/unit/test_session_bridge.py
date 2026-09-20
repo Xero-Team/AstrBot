@@ -1743,6 +1743,36 @@ async def test_accepted_forward_persists_delivery_ledger():
 
 
 @pytest.mark.asyncio
+async def test_accepted_forward_without_message_id_persists_dedup_only():
+    async def send(session, chain):
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    store = FakeSessionBridgeStore()
+    manager, _, _ = _manager(send, store=store)
+    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_observed_envelope(message_id="ledger-no-id"))
+    await manager.terminate()
+
+    assert len(store.deliveries) == 1
+    assert store.deliveries[0].dest_message_id is None
+
+    restored, _, _ = _manager(store=store)
+    await restored.restore()
+    assert (
+        restored._forwarded[
+            ("source:FriendMessage:sender", "target:GroupMessage:room", "ledger-no-id")
+        ]
+        is None
+    )
+    assert (
+        "target:GroupMessage:room",
+        "ledger-no-id",
+        "source:FriendMessage:sender",
+    ) not in restored._message_ids
+    await restored.terminate()
+
+
+@pytest.mark.asyncio
 async def test_failed_forward_does_not_persist_delivery(monkeypatch):
     monkeypatch.setattr(
         "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
@@ -1846,6 +1876,27 @@ async def test_restore_rehydrates_delivery_ledger_and_resolves_quote():
     from astrbot.core.message.components import Reply
 
     assert isinstance(chain.chain[0], Reply) and chain.chain[0].id == "in-source-id"
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_rebuilds_reverse_quote_mapping():
+    store = FakeSessionBridgeStore()
+    store.seed_delivery(
+        dest_umo="source:FriendMessage:sender",
+        origin_umo="target:GroupMessage:room",
+        source_message_id="in-target-id",
+        dest_message_id="in-source-id",
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+
+    assert (
+        manager._message_ids[
+            ("source:FriendMessage:sender", "in-source-id", "target:GroupMessage:room")
+        ]
+        == "in-target-id"
+    )
     await manager.terminate()
 
 

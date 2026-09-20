@@ -54,7 +54,11 @@ class SessionBridgeDelivery(SQLModel, table=True):
 
     __tablename__ = "session_bridge_deliveries"  # type: ignore
 
-    id: int = Field(primary_key=True, default=None)
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
     dest_umo: str = Field(nullable=False, max_length=512)
     origin_umo: str = Field(nullable=False, max_length=512)
     source_message_id: str = Field(nullable=False, max_length=512)

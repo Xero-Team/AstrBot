@@ -83,7 +83,7 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
 - `clear_filter(event, rule_id, side)`：清空一条边的一侧或全部过滤，`side` 为 `match`/`except`/`all`。
 - `quota_usage(event)`：返回当前主体各类别的用量与上限，类型是 `dict[str, SessionBridgeQuota]`；`SessionBridgeQuota` 可从 `astrbot.api.platform` 导入。
 
-这些方法会再次调用 `authorize()`，要求 `session.watch` 或 `session.send`，且两个会话属于同一配置。监听、连接和 pair 会持久化，重启后未过期的规则仍在。`remaining_seconds` 按墙钟计算，无期限返回 `0`。不要自己构造 `SessionBridgeManager`。`SessionWatch`、`SessionBridgeQuota` 和时长常量可从 `astrbot.api.platform` 导入。`pair` 是两条共享 `pair_id` 的有向边：对岸看到的是目标侧 Bot 账号，并带上与 watch 相同的本地化来源头，不伪造源平台身份，不绑定 `/send`，拆对只能 `unpair`。当前没有 Dashboard 管理面，插件也不应假设存在对应 HTTP API。
+跨会话的创建与投递（`watch`、`connect`、`send`、`pair`）会再次调用 `authorize()`，要求 `session.watch` 或 `session.send`，且两个会话属于同一配置；其余读写操作只作用于当前主体拥有或 operator 可见的规则，不要求目标侧权限。监听、连接和 pair 会持久化，重启后未过期的规则仍在。`remaining_seconds` 按墙钟计算，无期限返回 `0`。不要自己构造 `SessionBridgeManager`。`SessionWatch`、`SessionBridgeQuota` 和时长常量可从 `astrbot.api.platform` 导入。`pair` 是两条共享 `pair_id` 的有向边：对岸看到的是目标侧 Bot 账号，并带上与 watch 相同的本地化来源头，不伪造源平台身份，不绑定 `/send`，拆对只能 `unpair`。当前没有 Dashboard 管理面，插件也不应假设存在对应 HTTP API。
 
 ## 富媒体消息链
 

@@ -91,18 +91,19 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
 - `clear_filter(event, rule_id, side)`: clear one side or both, with `side` as `match`/`except`/`all`.
 - `quota_usage(event)`: return per-kind usage and cap for the actor as `dict[str, SessionBridgeQuota]`; import `SessionBridgeQuota` from `astrbot.api.platform`.
 
-These methods call `authorize()` again. They require `session.watch` or
-`session.send`, and both sessions must share a configuration. Watches,
-links, and pairs persist in SQLite, so unexpired rules survive process
-restart. `remaining_seconds` uses the wall clock; unbounded links return `0`.
-Do not construct `SessionBridgeManager` yourself. Import `SessionWatch`,
-`SessionBridgeQuota`, and the duration constants from `astrbot.api.platform`.
-A pair is two directed
-edges that share a `pair_id`: the far side sees the destination Bot
-account with the same localized source header as a watch, the source
-platform identity is not forged, `/send` is not bound, and splitting
-the pair requires `unpair`. There is no Dashboard management surface,
-and plugins must not assume a matching HTTP API.
+Operations that reach another session (`watch`, `connect`, `send`, `pair`)
+call `authorize()` again and require `session.watch` or `session.send`; both
+sessions must share a configuration. The other reads and writes only touch
+rules the actor owns or can see as an operator, so they need no target
+permission. Watches, links, and pairs persist in SQLite, so unexpired rules
+survive process restart. `remaining_seconds` uses the wall clock; unbounded
+links return `0`. Do not construct `SessionBridgeManager` yourself. Import
+`SessionWatch`, `SessionBridgeQuota`, and the duration constants from
+`astrbot.api.platform`. A pair is two directed edges that share a `pair_id`:
+the far side sees the destination Bot account with the same localized source
+header as a watch, the source platform identity is not forged, `/send` is not
+bound, and splitting the pair requires `unpair`. There is no Dashboard
+management surface, and plugins must not assume a matching HTTP API.
 
 ## Rich-Media Chains
 

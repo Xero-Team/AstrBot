@@ -19,6 +19,7 @@ from astrbot.core.platform import (
     PortablePart,
     QuoteReference,
     SenderSnapshot,
+    SessionBridgeQuota,
     SessionWatch,
 )
 from astrbot.core.platform.register import register_platform_adapter
@@ -39,6 +40,7 @@ __all__ = [
     "MediaReference",
     "QuoteReference",
     "SenderSnapshot",
+    "SessionBridgeQuota",
     "SessionWatch",
     "MessageSession",
     "MessageType",

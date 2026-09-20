@@ -82,15 +82,22 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
 - `disconnect(event)`: drop that link.
 - `connection(event)`: return the current unbounded link, or `None`.
 - `send(event, target_umo, *, target_in_header=True)`: deliver the current message body and attachments after stripping the command header; returns `DeliveryReceipt`. Linked `/send` without a UMO passes `target_in_header=False`.
+- `pair(event, target_umo)`: create two reverse edges that share a `pair_id` between the current session and target; returns two `SessionWatch` values. Both sides require `session.watch`.
+- `unpair(event, target_umo=None)`: remove both edges that share the pair id owned by the actor. Omitting `target_umo` requires the current session to touch a single pair.
+- `list_links(event)`: list the watch, connect, and pair edges visible to the actor as `(SessionWatch, kind)` tuples, where `kind` is `watch`/`connect`/`pair`; visibility follows the operator role.
+- `unlink(event, rule_id)`: remove a watch or connect by public id; a pair edge cannot be removed this way and requires `unpair`. Creator and operator rules apply.
+- `get_filter(event, rule_id)`: read the `match`/`except` filters visible for one edge as `(match, except)`, or `None` when unauthorized or missing.
+- `append_filter(event, rule_id, side, dimension, value)`: append one `match` or `except` value; returns the updated `(match, except)`. `side` is `match`/`except`; `dimension` is `subjects`/`roles`/`text`.
+- `clear_filter(event, rule_id, side)`: clear one side or both, with `side` as `match`/`except`/`all`.
+- `quota_usage(event)`: return per-kind usage and cap for the actor as `dict[str, SessionBridgeQuota]`; import `SessionBridgeQuota` from `astrbot.api.platform`.
 
 These methods call `authorize()` again. They require `session.watch` or
 `session.send`, and both sessions must share a configuration. Watches,
 links, and pairs persist in SQLite, so unexpired rules survive process
 restart. `remaining_seconds` uses the wall clock; unbounded links return `0`.
-Do not construct `SessionBridgeManager` yourself. Import `SessionWatch` and
-the duration constants from `astrbot.api.platform`. `links` / `unlink` /
-`pair` / `unpair` / `filter` are IM commands only in this stage;
-`SessionBridgeCapability` does not expose them. A pair is two directed
+Do not construct `SessionBridgeManager` yourself. Import `SessionWatch`,
+`SessionBridgeQuota`, and the duration constants from `astrbot.api.platform`.
+A pair is two directed
 edges that share a `pair_id`: the far side sees the destination Bot
 account with the same localized source header as a watch, the source
 platform identity is not forged, `/send` is not bound, and splitting

@@ -26,6 +26,7 @@ WATCH_RUNTIME_LIMIT = "Runtime watch limit exceeded"
 CONNECT_LIMIT = "Connect limit exceeded"
 CONNECT_RUNTIME_LIMIT = "Runtime connect limit exceeded"
 PAIR_AMBIGUOUS = "Multiple pairs require a UMO"
+MAX_RUNTIME_RULES_PER_KIND = 1024
 GrantKey = tuple[str, str, str]
 
 
@@ -240,7 +241,7 @@ class SessionBridgeState:
             return grant
         if self.count_kind(subject.id, "watch") >= max_per_subject:
             raise ValueError(WATCH_LIMIT)
-        if self.total_kind("watch") >= 1024:
+        if self.total_kind("watch") >= MAX_RUNTIME_RULES_PER_KIND:
             raise ValueError(WATCH_RUNTIME_LIMIT)
         if stored is not None:
             await self._delete_row(stored.rule_id, key)
@@ -286,7 +287,7 @@ class SessionBridgeState:
         if not had_connect:
             if self.count_kind(subject.id, "connect") >= max_per_subject:
                 raise ValueError(CONNECT_LIMIT)
-            if self.total_kind("connect") >= 1024:
+            if self.total_kind("connect") >= MAX_RUNTIME_RULES_PER_KIND:
                 raise ValueError(CONNECT_RUNTIME_LIMIT)
         occupant = stored
         await self._store.delete_session_bridge_connects_for_listener(
@@ -351,7 +352,7 @@ class SessionBridgeState:
         removing_edges = sum(
             1 for row in (forward, reverse) if row is not None and row.kind == "pair"
         )
-        if self.total_kind("pair") - removing_edges + 2 > 1024:
+        if self.total_kind("pair") - removing_edges + 2 > MAX_RUNTIME_RULES_PER_KIND:
             raise ValueError(PAIR_RUNTIME_LIMIT)
         pair_id = secrets.token_hex(6)
         forward_row, reverse_row = await self._store.insert_session_bridge_pair(

@@ -805,10 +805,51 @@ async def test_connect_limit_does_not_drop_existing_watch():
     other = _event("source:FriendMessage:other")
     await manager.connect(other, "target:GroupMessage:two")
     watch = await manager.watch(event, "target:GroupMessage:one", ttl_seconds=30)
-    with pytest.raises(ValueError, match="Watch limit exceeded"):
+    with pytest.raises(ValueError, match="Connect limit exceeded"):
         await manager.connect(event, "target:GroupMessage:one")
     listed = await manager.list_watches(event)
     assert [item.rule_id for item in listed] == [watch.rule_id]
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_connect_limit_reports_connect_sentinel():
+    manager, _, _ = _manager(max_watches_per_subject=1)
+    event = _event()
+    other = _event("source:FriendMessage:other")
+    await manager.connect(other, "target:GroupMessage:one")
+    with pytest.raises(ValueError, match="Connect limit exceeded"):
+        await manager.connect(event, "target:GroupMessage:two")
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_runtime_watch_limit_reports_runtime_sentinel():
+    manager, _, _ = _manager()
+    event = _event()
+    manager._state.total_kind = lambda kind: 1024
+    with pytest.raises(ValueError, match="Runtime watch limit exceeded"):
+        await manager.watch(event, "target:GroupMessage:one", ttl_seconds=30)
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_runtime_connect_limit_reports_runtime_sentinel():
+    manager, _, _ = _manager()
+    event = _event()
+    manager._state.total_kind = lambda kind: 1024
+    with pytest.raises(ValueError, match="Runtime connect limit exceeded"):
+        await manager.connect(event, "target:GroupMessage:one")
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_runtime_pair_limit_reports_runtime_sentinel():
+    manager, _, _ = _manager()
+    event = _event()
+    manager._state.total_kind = lambda kind: 1024
+    with pytest.raises(ValueError, match="Runtime pair limit exceeded"):
+        await manager.pair(event, "target:GroupMessage:one")
     await manager.terminate()
 
 

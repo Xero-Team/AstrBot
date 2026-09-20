@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 PAIR_OCCUPIED = "Direction is occupied by a pair"
 PAIR_UNLINK_REFUSED = "Pair edges cannot be unlinked"
 PAIR_LIMIT = "Pair limit exceeded"
+PAIR_RUNTIME_LIMIT = "Runtime pair limit exceeded"
+WATCH_LIMIT = "Watch limit exceeded"
+WATCH_RUNTIME_LIMIT = "Runtime watch limit exceeded"
+CONNECT_LIMIT = "Connect limit exceeded"
+CONNECT_RUNTIME_LIMIT = "Runtime connect limit exceeded"
 PAIR_AMBIGUOUS = "Multiple pairs require a UMO"
 GrantKey = tuple[str, str, str]
 
@@ -234,9 +239,9 @@ class SessionBridgeState:
             self._index(grant)
             return grant
         if self.count_kind(subject.id, "watch") >= max_per_subject:
-            raise ValueError("Watch limit exceeded")
+            raise ValueError(WATCH_LIMIT)
         if self.total_kind("watch") >= 1024:
-            raise ValueError("Runtime watch limit exceeded")
+            raise ValueError(WATCH_RUNTIME_LIMIT)
         if stored is not None:
             await self._delete_row(stored.rule_id, key)
         row = await self._store.insert_session_bridge_rule(
@@ -280,9 +285,9 @@ class SessionBridgeState:
         had_connect = listener in self._connect_by_listener
         if not had_connect:
             if self.count_kind(subject.id, "connect") >= max_per_subject:
-                raise ValueError("Watch limit exceeded")
+                raise ValueError(CONNECT_LIMIT)
             if self.total_kind("connect") >= 1024:
-                raise ValueError("Runtime watch limit exceeded")
+                raise ValueError(CONNECT_RUNTIME_LIMIT)
         occupant = stored
         await self._store.delete_session_bridge_connects_for_listener(
             subject.id, source_umo
@@ -347,7 +352,7 @@ class SessionBridgeState:
             1 for row in (forward, reverse) if row is not None and row.kind == "pair"
         )
         if self.total_kind("pair") - removing_edges + 2 > 1024:
-            raise ValueError("Runtime pair limit exceeded")
+            raise ValueError(PAIR_RUNTIME_LIMIT)
         pair_id = secrets.token_hex(6)
         forward_row, reverse_row = await self._store.insert_session_bridge_pair(
             subject_id=subject.id,

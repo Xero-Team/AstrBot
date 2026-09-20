@@ -84,7 +84,6 @@ class WatchGrant:
     kind: str
     source_config_id: str
     target_config_id: str
-    header: bool = True
     pair_id: str | None = None
     match: dict = field(default_factory=dict)
     except_: dict = field(default_factory=dict)
@@ -517,7 +516,6 @@ class SessionBridgeState:
             row.kind,
             row.source_config_id,
             row.target_config_id,
-            row.header,
             row.pair_id,
             coerce_filter_side(row.match),
             coerce_filter_side(row.except_),

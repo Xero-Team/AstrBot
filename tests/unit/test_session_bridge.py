@@ -124,7 +124,6 @@ class FakeSessionBridgeStore:
 
     def seed(self, **fields) -> SimpleNamespace:
         payload = {
-            "header": True,
             "pair_id": None,
             "match": {},
             "except_": {},
@@ -153,7 +152,6 @@ class FakeSessionBridgeStore:
             target_umo=kwargs["target_umo"],
             source_config_id=kwargs["source_config_id"],
             target_config_id=kwargs["target_config_id"],
-            header=kwargs.get("header", True),
             pair_id=kwargs.get("pair_id"),
             match=kwargs.get("match") or {},
             except_=kwargs.get("except_") or {},
@@ -178,7 +176,6 @@ class FakeSessionBridgeStore:
                 target_config_id=kwargs["target_config_id"],
                 kind="pair",
                 expires_at=None,
-                header=True,
                 pair_id=pair_id,
             )
             right = await self.insert_session_bridge_rule(
@@ -189,7 +186,6 @@ class FakeSessionBridgeStore:
                 target_config_id=kwargs["source_config_id"],
                 kind="pair",
                 expires_at=None,
-                header=True,
                 pair_id=pair_id,
             )
             return left, right
@@ -886,7 +882,6 @@ def _seed_pair(
         target_config_id="default",
         kind="pair",
         expires_at=None,
-        header=False,
         pair_id=pair_id,
     )
     store.seed(
@@ -898,7 +893,6 @@ def _seed_pair(
         target_config_id="default",
         kind="pair",
         expires_at=None,
-        header=False,
         pair_id=pair_id,
     )
 
@@ -1303,7 +1297,6 @@ async def test_restore_drops_orphan_pair_edge():
         target_config_id="default",
         kind="pair",
         expires_at=None,
-        header=False,
         pair_id="pairidabcdef",
     )
     manager, _, _ = _manager(store=store)

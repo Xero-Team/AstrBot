@@ -45,7 +45,6 @@ async def test_insert_session_bridge_rule_writes_s1_defaults(
     assert watch.rule_id == watch.rule_id.lower()
     assert watch.rule_id.isalnum()
     assert int(watch.rule_id, 16) >= 0
-    assert watch.header is True
     assert watch.pair_id is None
     assert watch.match == {}
     assert watch.except_ == {}
@@ -148,8 +147,6 @@ async def test_insert_session_bridge_pair_replaces_both_directions(
     )
     assert left.kind == "pair"
     assert right.kind == "pair"
-    assert left.header is True
-    assert right.header is True
     assert left.pair_id == right.pair_id == "pairidabcdef"
     assert left.source_umo == watch.source_umo
     assert right.source_umo == watch.target_umo

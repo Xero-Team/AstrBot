@@ -21,10 +21,12 @@ from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.session_bridge import (
     DEFAULT_WATCH_TTL_SECONDS,
     MAX_FORWARD_ATTEMPTS,
+    MAX_RULE_ERRORS_KEPT,
     MAX_WATCH_TTL_SECONDS,
     MIN_WATCH_TTL_SECONDS,
     SessionBridgeManager,
     SessionBridgeQuota,
+    SessionWatch,
 )
 
 
@@ -2270,3 +2272,152 @@ async def test_forward_retry_stops_on_revoked_authority(monkeypatch):
     assert manager._forwarded == {}
     assert await store.get_session_bridge_rule(watch.rule_id) is None
     await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_health_counts_accepted_delivery():
+    manager, _, _ = _manager()
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_observed_envelope(message_id="health-ok"))
+
+    health = manager.health()
+    assert health.accepted == 1
+    assert health.failed == 0
+    assert health.rule_errors == ()
+    assert health.last_success_at is not None
+    assert health.pending_forwards == 0
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_health_counts_failed_delivery_and_rule_error(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
+    )
+
+    async def send(session, chain):
+        return PlatformSendResult(
+            session.platform_id, False, str(session), status="failed"
+        )
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_observed_envelope(message_id="health-fail"))
+
+    health = manager.health()
+    assert health.failed == 1
+    assert health.accepted == 0
+    assert health.last_error_at is not None
+    assert len(health.rule_errors) == 1
+    entry = health.rule_errors[0]
+    assert entry.rule_id == watch.rule_id
+    assert entry.source_umo == watch.source_umo
+    assert entry.target_umo == watch.target_umo
+    assert entry.failures == 1
+    assert entry.last_status == "failed"
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_health_counts_skipped_duplicate_and_filtered():
+    manager, _, _ = _manager()
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="health-dup")
+    await manager.observe(envelope)
+    await manager.observe(envelope)
+    # A revoked-by-filter forward is a skip, not a failure.
+    await manager.append_filter(event, watch.rule_id, "except", "text", "hello")
+    await manager.observe(_observed_envelope(message_id="health-filtered"))
+
+    health = manager.health()
+    assert health.accepted == 1
+    assert health.skipped == 2
+    assert health.skipped_duplicate == 1
+    assert health.skipped_filtered == 1
+    assert health.failed == 0
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_health_counts_authorization_denied_and_deletes_rule():
+    manager, authorization, _ = _manager()
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    authorization.authorize = AsyncMock(
+        return_value=SimpleNamespace(allowed=False, effective_role=None)
+    )
+    await manager.observe(_observed_envelope(message_id="health-denied"))
+
+    health = manager.health()
+    assert health.authorization_denied == 1
+    assert health.failed == 0
+    assert [item.last_status for item in health.rule_errors] == ["denied"]
+    assert await manager._state.stored_rule(watch.rule_id) is None
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_health_for_hides_errors_for_unlinked_rules(monkeypatch):
+    from astrbot.core.star.plugin_context import SessionBridgeCapability
+
+    monkeypatch.setattr(
+        "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
+    )
+
+    async def send(session, chain):
+        return PlatformSendResult(
+            session.platform_id, False, str(session), status="unknown"
+        )
+
+    manager, _, _ = _manager(send)
+    event = _event()
+    watch = await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_observed_envelope(message_id="health-hidden"))
+    assert manager.health().rule_errors
+
+    await manager.unlink(event, watch.rule_id)
+    capability = SessionBridgeCapability(manager)
+    visible = await capability.health(event)
+    assert visible.rule_errors == ()
+    # Counters stay runtime-wide even when the rule is gone.
+    assert visible.unknown == 1
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_health_counts_unexpected_edge_worker_failure(monkeypatch):
+    manager, _, _ = _manager()
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+
+    async def boom(key, grant, envelope):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(manager, "_forward_to_watch", boom)
+    await manager.observe(_observed_envelope(message_id="worker-boom"))
+
+    health = manager.health()
+    assert health.failed == 1
+    assert health.last_error_at is not None
+    await manager.terminate()
+
+
+def test_health_rule_errors_are_bounded():
+    manager, _, _ = _manager()
+    for index in range(MAX_RULE_ERRORS_KEPT + 5):
+        watch = SessionWatch(
+            "source:FriendMessage:listener",
+            "target:GroupMessage:room",
+            "im:subject",
+            None,
+            f"{index:012x}",
+        )
+        manager._note_rule_error(watch, "failed", "boom")
+
+    health = manager.health()
+    assert len(health.rule_errors) == MAX_RULE_ERRORS_KEPT
+    assert health.rule_errors[0].rule_id == f"{5:012x}"
+    assert health.rule_errors[-1].rule_id == f"{MAX_RULE_ERRORS_KEPT + 4:012x}"

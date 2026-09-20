@@ -90,6 +90,7 @@ async def watch_room(self, event: AstrMessageEvent, target_umo: str):
 - `append_filter(event, rule_id, side, dimension, value)`: append one `match` or `except` value; returns the updated `(match, except)`. `side` is `match`/`except`; `dimension` is `subjects`/`roles`/`text`.
 - `clear_filter(event, rule_id, side)`: clear one side or both, with `side` as `match`/`except`/`all`.
 - `quota_usage(event)`: return per-kind usage and cap for the actor as `dict[str, SessionBridgeQuota]`; import `SessionBridgeQuota` from `astrbot.api.platform`.
+- `health(event)`: return the `SessionBridgeHealth` snapshot visible to the actor, with runtime-cumulative accepted/partial/failed/unknown/skipped/deauthorized counters, the number of forwards queued right now, and a bounded per-rule last-error record. Counters are runtime-wide; per-rule records are limited to rules the actor can see. Import `SessionBridgeHealth` from `astrbot.api.platform`.
 
 Operations that reach another session (`watch`, `connect`, `send`, `pair`)
 call `authorize()` again and require `session.watch` or `session.send`; both
@@ -98,8 +99,8 @@ rules the actor owns or can see as an operator, so they need no target
 permission. Watches, links, and pairs persist in SQLite, so unexpired rules
 survive process restart. `remaining_seconds` uses the wall clock; unbounded
 links return `0`. Do not construct `SessionBridgeManager` yourself. Import
-`SessionWatch`, `SessionBridgeQuota`, and the duration constants from
-`astrbot.api.platform`. A pair is two directed edges that share a `pair_id`:
+`SessionWatch`, `SessionBridgeQuota`, `SessionBridgeHealth`, and the duration
+constants from `astrbot.api.platform`. A pair is two directed edges that share a `pair_id`:
 the far side sees the destination Bot account with the same localized source
 header as a watch, the source platform identity is not forged, `/send` is not
 bound, and splitting the pair requires `unpair`. There is no Dashboard

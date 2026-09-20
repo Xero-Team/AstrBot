@@ -25,6 +25,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSe
 from astrbot.core.platform.onebot_capability import OneBotCapability
 from astrbot.core.platform.send_result import DeliveryReceipt, PlatformSendResult
 from astrbot.core.platform.session_bridge import (
+    SessionBridgeHealth,
     SessionBridgeManager,
     SessionBridgeQuota,
     SessionWatch,
@@ -280,6 +281,10 @@ class SessionBridgeCapability:
     ) -> dict[str, SessionBridgeQuota]:
         """Return per-kind usage and cap for the event's trusted actor."""
         return await self._manager.quota_usage(event)
+
+    async def health(self, event: AstrMessageEvent) -> SessionBridgeHealth:
+        """Return forwarding health visible to the event's trusted actor."""
+        return await self._manager.health_for(event)
 
 
 class ModelCapability:

@@ -188,6 +188,12 @@ class Main(star.Star):
         """Show or change match/except filters on one session-bridge edge."""
         await self.session_c.filter_rule(event, spec)
 
+    @filter.permission("session.read")
+    @session.command("health")
+    async def session_health(self, event: AstrMessageEvent) -> None:
+        """Show session-bridge delivery health and recent rule failures."""
+        await self.session_c.health(event)
+
     @filter.permission("session.block")
     @session.command("block")
     async def session_block(

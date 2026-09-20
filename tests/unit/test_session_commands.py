@@ -363,3 +363,76 @@ async def test_session_commands_filter_show_append_and_clear():
         event, "abcdef123456", "match", "text", "hello world"
     )
     manager.clear_filter.assert_awaited_once_with(event, "abcdef123456", "all")
+
+
+@pytest.mark.asyncio
+async def test_session_commands_health_reports_counters_and_errors():
+    replies: list[tuple[str, dict]] = []
+
+    async def translate(_event, key, **kwargs):
+        replies.append((key, kwargs))
+        return key
+
+    health = SimpleNamespace(
+        accepted=3,
+        partial=1,
+        failed=2,
+        unknown=0,
+        skipped=4,
+        authorization_denied=1,
+        pending_forwards=2,
+        rule_errors=(
+            SimpleNamespace(
+                rule_id="abcdef123456",
+                source_umo="source:FriendMessage:sender",
+                target_umo="target:GroupMessage:room",
+                failures=2,
+                last_status="failed",
+                last_error="boom",
+            ),
+        ),
+    )
+    context = SimpleNamespace(
+        bridges=SimpleNamespace(health=AsyncMock(return_value=health)),
+        i18n=SimpleNamespace(t=translate),
+    )
+    event = _event()
+    await SessionCommands(context).health(event)
+
+    assert [key for key, _ in replies] == ["session.health.rule", "session.health.body"]
+    assert replies[0][1]["rule_id"] == "abcdef123456"
+    assert replies[0][1]["failures"] == 2
+    body = replies[1][1]
+    assert body["failed"] == 2
+    assert body["denied"] == 1
+    assert body["pending"] == 2
+    assert body["errors"] == "session.health.rule"
+    context.bridges.health.assert_awaited_once_with(event)
+
+
+@pytest.mark.asyncio
+async def test_session_commands_health_reports_no_failing_rules():
+    replies: list[tuple[str, dict]] = []
+
+    async def translate(_event, key, **kwargs):
+        replies.append((key, kwargs))
+        return key
+
+    health = SimpleNamespace(
+        accepted=0,
+        partial=0,
+        failed=0,
+        unknown=0,
+        skipped=0,
+        authorization_denied=0,
+        pending_forwards=0,
+        rule_errors=(),
+    )
+    context = SimpleNamespace(
+        bridges=SimpleNamespace(health=AsyncMock(return_value=health)),
+        i18n=SimpleNamespace(t=translate),
+    )
+    await SessionCommands(context).health(_event())
+
+    assert replies[0][0] == "session.health.errors_none"
+    assert replies[1][1]["errors"] == "session.health.errors_none"

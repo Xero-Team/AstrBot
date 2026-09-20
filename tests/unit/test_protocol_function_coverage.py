@@ -87,7 +87,9 @@ async def test_database_protocol_stubs_are_callable():
                     if inspect.isawaitable(result):
                         await result
                 except NotImplementedError:
-                    pass
+                    # Protocol stubs may be effectful; the call is what we assert.
+                    invoked += 1
+                    continue
                 invoked += 1
             else:
                 try:

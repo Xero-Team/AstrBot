@@ -232,12 +232,12 @@ async def test_session_bridge_rules_have_required_columns_and_direction_unique(
         "target_config_id",
         "kind",
         "expires_at",
-        "header",
         "pair_id",
         "match",
         "except",
     ):
         assert name in columns
+    assert "header" not in columns
     assert columns["rule_id"]["nullable"] is False
     assert columns["kind"]["nullable"] is False
     assert ("subject_id", "source_umo", "target_umo") in uniques

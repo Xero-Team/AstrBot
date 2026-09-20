@@ -23,7 +23,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
         target_config_id: str,
         kind: str,
         expires_at: int | None = None,
-        header: bool = True,
         pair_id: str | None = None,
         match: dict | None = None,
         except_: dict | None = None,
@@ -39,7 +38,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
             target_config_id: Config id of the observed session at write time.
             kind: Edge kind. Writes ``watch``, ``connect``, or ``pair``.
             expires_at: Wall-clock UTC unix seconds, or None for unbounded edges.
-            header: Whether deliveries include a source header. Pair writes True.
             pair_id: Shared 12-hex id for a pair. Watch and connect write None.
             match: Inclusive filter document. S1 writes ``{}``.
             except_: Exclusive filter document. S1 writes ``{}``.
@@ -71,7 +69,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
                             target_config_id=target_config_id,
                             kind=kind,
                             expires_at=expires_at,
-                            header=header,
                             pair_id=pair_id,
                             match=match_payload,
                             except_=except_payload,
@@ -147,7 +144,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
                             target_config_id=target_config_id,
                             kind="pair",
                             expires_at=None,
-                            header=True,
                             pair_id=pair_id,
                             match={},
                             except_={},
@@ -161,7 +157,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
                             target_config_id=source_config_id,
                             kind="pair",
                             expires_at=None,
-                            header=True,
                             pair_id=pair_id,
                             match={},
                             except_={},
@@ -286,7 +281,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
         target_umo: str | None | object = _RULE_FIELD_NOT_SET,
         source_config_id: str | None | object = _RULE_FIELD_NOT_SET,
         target_config_id: str | None | object = _RULE_FIELD_NOT_SET,
-        header: bool | None | object = _RULE_FIELD_NOT_SET,
         pair_id: str | None | object = _RULE_FIELD_NOT_SET,
         match: dict | None | object = _RULE_FIELD_NOT_SET,
         except_: dict | None | object = _RULE_FIELD_NOT_SET,
@@ -300,7 +294,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
             target_umo: Replacement observed session.
             source_config_id: Replacement listener config id.
             target_config_id: Replacement observed-session config id.
-            header: Replacement header flag.
             pair_id: Replacement pair id.
             match: Replacement inclusive filter document.
             except_: Replacement exclusive filter document.
@@ -315,7 +308,6 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
             "target_umo": target_umo,
             "source_config_id": source_config_id,
             "target_config_id": target_config_id,
-            "header": header,
             "pair_id": pair_id,
             "match": match,
             "except_": except_,

@@ -712,19 +712,17 @@ class SessionBridgeManager:
                     if len(self._forwarded) > 8192:
                         self._forwarded.popitem(last=False)
             locale = await self._locale_for(watch.source_umo)
-            content = envelope.content
-            if grant.header:
-                content = (
-                    PortablePart(
-                        ContentKind.TEXT,
-                        render_source_header(
-                            envelope,
-                            self._platform_family(watch.source_umo),
-                            locale,
-                        ),
+            content = (
+                PortablePart(
+                    ContentKind.TEXT,
+                    render_source_header(
+                        envelope,
+                        self._platform_family(watch.source_umo),
+                        locale,
                     ),
-                    *envelope.content,
-                )
+                ),
+                *envelope.content,
+            )
             forwarded = replace(envelope, content=content)
             receipt = await self._forward_with_retry(watch, grant, forwarded, locale)
             if not receipt.accepted_attempts:

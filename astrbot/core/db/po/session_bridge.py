@@ -25,7 +25,6 @@ class SessionBridgeRule(TimestampMixin, SQLModel, table=True):
     target_config_id: str = Field(nullable=False, max_length=128, index=True)
     kind: str = Field(nullable=False, max_length=32, index=True)
     expires_at: int | None = Field(default=None)
-    header: bool = Field(default=True, nullable=False)
     pair_id: str | None = Field(default=None, max_length=12)
     match: dict = Field(default_factory=dict, sa_type=JSON, nullable=False)
     except_: dict = Field(

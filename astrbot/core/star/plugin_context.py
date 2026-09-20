@@ -24,7 +24,11 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform.onebot_capability import OneBotCapability
 from astrbot.core.platform.send_result import DeliveryReceipt, PlatformSendResult
-from astrbot.core.platform.session_bridge import SessionBridgeManager, SessionWatch
+from astrbot.core.platform.session_bridge import (
+    SessionBridgeManager,
+    SessionBridgeQuota,
+    SessionWatch,
+)
 from astrbot.core.platform.telegram_capability import TelegramCapability
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import (
@@ -225,6 +229,57 @@ class SessionBridgeCapability:
         return await self._manager.send(
             event, target_umo, target_in_header=target_in_header
         )
+
+    async def pair(
+        self, event: AstrMessageEvent, target_umo: str
+    ) -> tuple[SessionWatch, SessionWatch]:
+        """Authorize and create two reverse edges between the current session and target."""
+        return await self._manager.pair(event, target_umo)
+
+    async def unpair(
+        self, event: AstrMessageEvent, target_umo: str | None = None
+    ) -> bool:
+        """Remove both pair edges owned by the event's trusted actor."""
+        return await self._manager.unpair(event, target_umo)
+
+    async def list_links(
+        self, event: AstrMessageEvent
+    ) -> tuple[tuple[SessionWatch, str], ...]:
+        """List watch, connect, and pair edges visible to the event's actor."""
+        return await self._manager.list_links(event)
+
+    async def unlink(self, event: AstrMessageEvent, rule_id: str) -> bool:
+        """Remove a watch or connect by public id under creator or operator rules."""
+        return await self._manager.unlink(event, rule_id)
+
+    async def get_filter(
+        self, event: AstrMessageEvent, rule_id: str
+    ) -> tuple[dict, dict] | None:
+        """Return the match/except filters visible to the event's actor."""
+        return await self._manager.get_filter(event, rule_id)
+
+    async def append_filter(
+        self,
+        event: AstrMessageEvent,
+        rule_id: str,
+        side: str,
+        dimension: str,
+        value: str,
+    ) -> tuple[dict, dict] | None:
+        """Append one match or except value onto an edge owned by the actor."""
+        return await self._manager.append_filter(event, rule_id, side, dimension, value)
+
+    async def clear_filter(
+        self, event: AstrMessageEvent, rule_id: str, side: str
+    ) -> tuple[dict, dict] | None:
+        """Clear match, except, or both sides of an edge owned by the actor."""
+        return await self._manager.clear_filter(event, rule_id, side)
+
+    async def quota_usage(
+        self, event: AstrMessageEvent
+    ) -> dict[str, SessionBridgeQuota]:
+        """Return per-kind usage and cap for the event's trusted actor."""
+        return await self._manager.quota_usage(event)
 
 
 class ModelCapability:

@@ -465,6 +465,63 @@ async def test_connect_forwards_without_expiry_and_send_uses_link():
 
 
 @pytest.mark.asyncio
+async def test_bridge_capability_management_wrappers_delegate():
+    from astrbot.core.star.plugin_context import SessionBridgeCapability
+
+    manager, authorization, _ = _manager()
+    event = _event()
+    target = "target:GroupMessage:room"
+    capability = SessionBridgeCapability(manager)
+
+    left, right = await capability.pair(event, target)
+    assert left.target_umo == target
+    assert right.source_umo == target
+    assert [call.args[2].umo for call in authorization.authorize.await_args_list] == [
+        event.unified_msg_origin,
+        target,
+    ]
+
+    links = await capability.list_links(event)
+    assert {watch.rule_id for watch, _ in links} == {left.rule_id, right.rule_id}
+    assert {kind for _, kind in links} == {"pair"}
+
+    with pytest.raises(ValueError, match="Pair edges cannot be unlinked"):
+        await capability.unlink(event, left.rule_id)
+
+    assert await capability.append_filter(
+        event, left.rule_id, "match", "text", "ping"
+    ) == ({"text": ["ping"]}, {})
+    assert await capability.get_filter(event, left.rule_id) == ({"text": ["ping"]}, {})
+    assert await capability.clear_filter(event, left.rule_id, "all") == ({}, {})
+
+    usage = await capability.quota_usage(event)
+    assert usage["pair"] == SessionBridgeQuota(1, 8)
+
+    assert await capability.unpair(event, target)
+    assert await capability.list_links(event) == ()
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_bridge_capability_wrappers_propagate_manager_errors():
+    from astrbot.core.star.plugin_context import SessionBridgeCapability
+
+    manager, _, _ = _manager()
+    capability = SessionBridgeCapability(manager)
+    manager.pair = AsyncMock(side_effect=PermissionError("denied"))
+    with pytest.raises(PermissionError):
+        await capability.pair(_event(), "target:GroupMessage:room")
+    await manager.terminate()
+
+
+def test_session_bridge_quota_is_a_public_export():
+    import astrbot.api.platform as api_platform
+
+    assert "SessionBridgeQuota" in api_platform.__all__
+    assert api_platform.SessionBridgeQuota is SessionBridgeQuota
+
+
+@pytest.mark.asyncio
 async def test_same_watch_direction_keeps_rule_id_and_resets_ttl():
     manager, _, _ = _manager()
     event = _event()

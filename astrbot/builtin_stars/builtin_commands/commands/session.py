@@ -307,7 +307,7 @@ class SessionCommands:
 
     async def _reply_quota_limit(self, event: AstrMessageEvent, kind: str) -> None:
         """Reply with the live per-subject cap and current usage for one kind."""
-        usage = await self.context.bridges._manager.quota_usage(event)
+        usage = await self.context.bridges.quota_usage(event)
         item = usage[kind]
         await reply_i18n(
             self.context,
@@ -460,7 +460,7 @@ class SessionCommands:
     async def links(self, event: AstrMessageEvent) -> None:
         """List watch, connect, and pair edges visible to the current actor."""
         try:
-            items = await self.context.bridges._manager.list_links(event)
+            items = await self.context.bridges.list_links(event)
         except PermissionError:
             await reply_i18n(self.context, event, "session.bridge.denied")
             return
@@ -496,7 +496,7 @@ class SessionCommands:
         """Remove a watch or connect by public id."""
         try:
             rule_id = parse_unlink_spec(spec)
-            removed = await self.context.bridges._manager.unlink(event, rule_id)
+            removed = await self.context.bridges.unlink(event, rule_id)
         except ValueError as exc:
             if str(exc) == "Pair edges cannot be unlinked":
                 await reply_i18n(self.context, event, "session.unlink.pair")
@@ -516,7 +516,7 @@ class SessionCommands:
         """Create a pair between the current session and a target."""
         try:
             target_umo = parse_pair_spec(spec)
-            left, right = await self.context.bridges._manager.pair(event, target_umo)
+            left, right = await self.context.bridges.pair(event, target_umo)
         except PermissionError:
             await reply_i18n(self.context, event, "session.bridge.denied")
             return
@@ -551,7 +551,7 @@ class SessionCommands:
         """Remove both pair edges that share a pair id."""
         try:
             target_umo = parse_unpair_spec(spec)
-            removed = await self.context.bridges._manager.unpair(event, target_umo)
+            removed = await self.context.bridges.unpair(event, target_umo)
         except ValueError as exc:
             if str(exc) == "Multiple pairs require a UMO":
                 await reply_i18n(self.context, event, "session.unpair.ambiguous")
@@ -581,13 +581,13 @@ class SessionCommands:
         """Show or change match/except filters on one directed edge."""
         try:
             parsed = parse_filter_spec(spec)
-            manager = self.context.bridges._manager
+            bridges = self.context.bridges
             if parsed.action == "show":
-                result = await manager.get_filter(event, parsed.rule_id)
+                result = await bridges.get_filter(event, parsed.rule_id)
             elif parsed.action == "clear":
-                result = await manager.clear_filter(event, parsed.rule_id, parsed.side)
+                result = await bridges.clear_filter(event, parsed.rule_id, parsed.side)
             else:
-                result = await manager.append_filter(
+                result = await bridges.append_filter(
                     event,
                     parsed.rule_id,
                     parsed.side,

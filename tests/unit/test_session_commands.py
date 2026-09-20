@@ -113,7 +113,7 @@ async def test_session_commands_links_and_unlink():
         unlink=AsyncMock(return_value=True),
     )
     context = SimpleNamespace(
-        bridges=SimpleNamespace(_manager=manager),
+        bridges=manager,
         i18n=SimpleNamespace(t=translate),
     )
     commands = SessionCommands(context)
@@ -171,7 +171,7 @@ async def test_session_commands_pair_unpair_and_unlink_pair():
         unlink=AsyncMock(side_effect=ValueError("Pair edges cannot be unlinked")),
     )
     context = SimpleNamespace(
-        bridges=SimpleNamespace(_manager=manager),
+        bridges=manager,
         i18n=SimpleNamespace(t=translate),
     )
     commands = SessionCommands(context)
@@ -237,7 +237,8 @@ async def test_session_commands_report_quota_limits():
         bridges=SimpleNamespace(
             watch=AsyncMock(side_effect=ValueError("Watch limit exceeded")),
             connect=AsyncMock(side_effect=ValueError("Connect limit exceeded")),
-            _manager=manager,
+            pair=manager.pair,
+            quota_usage=manager.quota_usage,
         ),
         i18n=SimpleNamespace(t=translate),
     )
@@ -265,9 +266,7 @@ async def test_session_commands_report_runtime_limit():
         bridges=SimpleNamespace(
             watch=AsyncMock(side_effect=ValueError("Runtime watch limit exceeded")),
             connect=AsyncMock(side_effect=ValueError("Runtime connect limit exceeded")),
-            _manager=SimpleNamespace(
-                pair=AsyncMock(side_effect=ValueError("Runtime pair limit exceeded"))
-            ),
+            pair=AsyncMock(side_effect=ValueError("Runtime pair limit exceeded")),
         ),
         i18n=SimpleNamespace(t=translate),
     )
@@ -332,7 +331,7 @@ async def test_session_commands_filter_show_append_and_clear():
         return key
 
     context = SimpleNamespace(
-        bridges=SimpleNamespace(_manager=manager),
+        bridges=manager,
         i18n=SimpleNamespace(t=translate),
     )
     commands = SessionCommands(context)

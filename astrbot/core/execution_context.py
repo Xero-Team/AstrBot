@@ -435,6 +435,12 @@ class CoreExecutionContext:
             MainAgentBuildConfig,
             prepare_event_attachments,
         )
+        from astrbot.core.tools.computer_tools.util import (
+            LOCAL_NETWORK_POLICY_NOTICE,
+            get_local_permission_policy,
+            is_local_runtime,
+            resolve_local_permission_role,
+        )
 
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
@@ -485,6 +491,32 @@ class CoreExecutionContext:
                 context=self,
                 event=event,
             )
+        run_context = AgentContextWrapper(
+            context=agent_context,
+            tool_call_timeout=tool_call_timeout,
+        )
+        if (
+            tools
+            and any(
+                (tool := tools.get_tool(name)) is not None and tool.active
+                for name in (
+                    "astrbot_execute_shell",
+                    "astrbot_shell_session",
+                    "astrbot_execute_python",
+                )
+            )
+            and is_local_runtime(run_context)
+        ):
+            await resolve_local_permission_role(run_context)
+            local_policy = get_local_permission_policy(run_context)
+            if (
+                local_policy.allow_execution
+                and not local_policy.allow_network
+                and LOCAL_NETWORK_POLICY_NOTICE not in (request.system_prompt or "")
+            ):
+                request.system_prompt = (
+                    f"{request.system_prompt or ''}\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
+                )
         agent_runner = ToolLoopAgentRunner(self.tool_image_cache)
         tool_executor = FunctionToolExecutor()
 
@@ -506,10 +538,7 @@ class CoreExecutionContext:
         await agent_runner.reset(
             provider=prov,
             request=request,
-            run_context=AgentContextWrapper(
-                context=agent_context,
-                tool_call_timeout=tool_call_timeout,
-            ),
+            run_context=run_context,
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
             streaming=streaming,

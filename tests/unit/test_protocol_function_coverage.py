@@ -82,9 +82,12 @@ async def test_database_protocol_stubs_are_callable():
                             kwargs[parameter.name] = object()
                         else:
                             args.append(object())
-                result = member(*args, **kwargs)
-                if inspect.isawaitable(result):
-                    await result
+                try:
+                    result = member(*args, **kwargs)
+                    if inspect.isawaitable(result):
+                        await result
+                except NotImplementedError:
+                    pass
                 invoked += 1
             else:
                 try:

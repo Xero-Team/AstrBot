@@ -335,6 +335,12 @@ class SessionCommands:
             if str(exc) == "Direction is occupied by a pair":
                 await reply_i18n(self.context, event, "session.watch.occupied")
                 return
+            if str(exc) == "Watch limit exceeded":
+                await reply_i18n(self.context, event, "session.watch.limit")
+                return
+            if str(exc) == "Runtime watch limit exceeded":
+                await reply_i18n(self.context, event, "session.bridge.runtime_limit")
+                return
             await reply_i18n(self.context, event, "session.watch.failed")
             return
         except LookupError:
@@ -424,6 +430,12 @@ class SessionCommands:
             if str(exc) == "Direction is occupied by a pair":
                 await reply_i18n(self.context, event, "session.connect.occupied")
                 return
+            if str(exc) == "Connect limit exceeded":
+                await reply_i18n(self.context, event, "session.connect.limit")
+                return
+            if str(exc) == "Runtime connect limit exceeded":
+                await reply_i18n(self.context, event, "session.bridge.runtime_limit")
+                return
             await reply_i18n(self.context, event, "session.connect.failed")
             return
         await reply_i18n(
@@ -502,6 +514,12 @@ class SessionCommands:
                 return
             if str(exc) == "Invalid pair arguments":
                 await reply_i18n(self.context, event, "session.pair.usage")
+                return
+            if str(exc) == "Pair limit exceeded":
+                await reply_i18n(self.context, event, "session.pair.limit")
+                return
+            if str(exc) == "Runtime pair limit exceeded":
+                await reply_i18n(self.context, event, "session.bridge.runtime_limit")
                 return
             await reply_i18n(self.context, event, "session.pair.failed")
             return

@@ -216,6 +216,62 @@ async def test_session_commands_watch_connect_report_pair_occupied():
     assert replies == ["session.watch.occupied", "session.connect.occupied"]
 
 
+@pytest.mark.asyncio
+async def test_session_commands_report_quota_limits():
+    replies: list[str] = []
+
+    async def translate(_event, key, **_kwargs):
+        replies.append(key)
+        return key
+
+    context = SimpleNamespace(
+        bridges=SimpleNamespace(
+            watch=AsyncMock(side_effect=ValueError("Watch limit exceeded")),
+            connect=AsyncMock(side_effect=ValueError("Connect limit exceeded")),
+            _manager=SimpleNamespace(
+                pair=AsyncMock(side_effect=ValueError("Pair limit exceeded"))
+            ),
+        ),
+        i18n=SimpleNamespace(t=translate),
+    )
+    commands = SessionCommands(context)
+    event = _event()
+    await commands.watch(event, "target:GroupMessage:room")
+    await commands.connect(event, "target:GroupMessage:room")
+    await commands.pair(event, "target:GroupMessage:room")
+    assert replies == [
+        "session.watch.limit",
+        "session.connect.limit",
+        "session.pair.limit",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_session_commands_report_runtime_limit():
+    replies: list[str] = []
+
+    async def translate(_event, key, **_kwargs):
+        replies.append(key)
+        return key
+
+    context = SimpleNamespace(
+        bridges=SimpleNamespace(
+            watch=AsyncMock(side_effect=ValueError("Runtime watch limit exceeded")),
+            connect=AsyncMock(side_effect=ValueError("Runtime connect limit exceeded")),
+            _manager=SimpleNamespace(
+                pair=AsyncMock(side_effect=ValueError("Runtime pair limit exceeded"))
+            ),
+        ),
+        i18n=SimpleNamespace(t=translate),
+    )
+    commands = SessionCommands(context)
+    event = _event()
+    await commands.watch(event, "target:GroupMessage:room")
+    await commands.connect(event, "target:GroupMessage:room")
+    await commands.pair(event, "target:GroupMessage:room")
+    assert replies == ["session.bridge.runtime_limit"] * 3
+
+
 def test_parse_watch_spec_rejects_filter_flags():
     current = "source:FriendMessage:sender"
     with pytest.raises(ValueError, match="Invalid watch arguments"):

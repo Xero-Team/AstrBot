@@ -66,6 +66,14 @@ DELIVERY_RETENTION_SECONDS = 3 * 24 * 60 * 60
 
 
 @dataclass(frozen=True, slots=True)
+class SessionBridgeQuota:
+    """Live usage and configured cap for one session-bridge kind."""
+
+    current: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
 class _EdgeJob:
     """One queued forward for a single origin→listener bridge edge."""
 
@@ -274,6 +282,27 @@ class SessionBridgeManager:
         async with self._lock:
             grant = self._state.connect_for(subject.id, listener)
         return grant.watch if grant is not None else None
+
+    async def quota_usage(
+        self, event: AstrMessageEvent
+    ) -> dict[str, SessionBridgeQuota]:
+        """Return per-kind usage and cap for the event's trusted subject."""
+        subject, _ = self._actor(event)
+        async with self._lock:
+            return {
+                "watch": SessionBridgeQuota(
+                    self._state.count_kind(subject.id, "watch"),
+                    self._max_watches_per_subject,
+                ),
+                "connect": SessionBridgeQuota(
+                    self._state.count_kind(subject.id, "connect"),
+                    self._max_watches_per_subject,
+                ),
+                "pair": SessionBridgeQuota(
+                    self._state.count_pairs(subject.id),
+                    self._max_pairs_per_subject,
+                ),
+            }
 
     def _require_loaded_proactive(self, umo: str) -> None:
         capabilities = self._get_capabilities(umo)

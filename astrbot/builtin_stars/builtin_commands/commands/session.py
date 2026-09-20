@@ -305,6 +305,18 @@ class SessionCommands:
             umo=umo,
         )
 
+    async def _reply_quota_limit(self, event: AstrMessageEvent, kind: str) -> None:
+        """Reply with the live per-subject cap and current usage for one kind."""
+        usage = await self.context.bridges._manager.quota_usage(event)
+        item = usage[kind]
+        await reply_i18n(
+            self.context,
+            event,
+            f"session.{kind}.limit",
+            current=item.current,
+            limit=item.limit,
+        )
+
     async def watch(self, event: AstrMessageEvent, spec: str) -> None:
         """Watch another session under the trusted actor's authority."""
         try:
@@ -336,7 +348,7 @@ class SessionCommands:
                 await reply_i18n(self.context, event, "session.watch.occupied")
                 return
             if str(exc) == "Watch limit exceeded":
-                await reply_i18n(self.context, event, "session.watch.limit")
+                await self._reply_quota_limit(event, "watch")
                 return
             if str(exc) == "Runtime watch limit exceeded":
                 await reply_i18n(self.context, event, "session.bridge.runtime_limit")
@@ -431,7 +443,7 @@ class SessionCommands:
                 await reply_i18n(self.context, event, "session.connect.occupied")
                 return
             if str(exc) == "Connect limit exceeded":
-                await reply_i18n(self.context, event, "session.connect.limit")
+                await self._reply_quota_limit(event, "connect")
                 return
             if str(exc) == "Runtime connect limit exceeded":
                 await reply_i18n(self.context, event, "session.bridge.runtime_limit")
@@ -516,7 +528,7 @@ class SessionCommands:
                 await reply_i18n(self.context, event, "session.pair.usage")
                 return
             if str(exc) == "Pair limit exceeded":
-                await reply_i18n(self.context, event, "session.pair.limit")
+                await self._reply_quota_limit(event, "pair")
                 return
             if str(exc) == "Runtime pair limit exceeded":
                 await reply_i18n(self.context, event, "session.bridge.runtime_limit")

@@ -218,19 +218,26 @@ async def test_session_commands_watch_connect_report_pair_occupied():
 
 @pytest.mark.asyncio
 async def test_session_commands_report_quota_limits():
-    replies: list[str] = []
+    calls: list[tuple[str, dict]] = []
 
-    async def translate(_event, key, **_kwargs):
-        replies.append(key)
+    async def translate(_event, key, **kwargs):
+        calls.append((key, kwargs))
         return key
 
+    quotas = {
+        "watch": SimpleNamespace(current=16, limit=16),
+        "connect": SimpleNamespace(current=16, limit=16),
+        "pair": SimpleNamespace(current=8, limit=8),
+    }
+    manager = SimpleNamespace(
+        pair=AsyncMock(side_effect=ValueError("Pair limit exceeded")),
+        quota_usage=AsyncMock(return_value=quotas),
+    )
     context = SimpleNamespace(
         bridges=SimpleNamespace(
             watch=AsyncMock(side_effect=ValueError("Watch limit exceeded")),
             connect=AsyncMock(side_effect=ValueError("Connect limit exceeded")),
-            _manager=SimpleNamespace(
-                pair=AsyncMock(side_effect=ValueError("Pair limit exceeded"))
-            ),
+            _manager=manager,
         ),
         i18n=SimpleNamespace(t=translate),
     )
@@ -239,10 +246,10 @@ async def test_session_commands_report_quota_limits():
     await commands.watch(event, "target:GroupMessage:room")
     await commands.connect(event, "target:GroupMessage:room")
     await commands.pair(event, "target:GroupMessage:room")
-    assert replies == [
-        "session.watch.limit",
-        "session.connect.limit",
-        "session.pair.limit",
+    assert calls == [
+        ("session.watch.limit", {"current": 16, "limit": 16}),
+        ("session.connect.limit", {"current": 16, "limit": 16}),
+        ("session.pair.limit", {"current": 8, "limit": 8}),
     ]
 
 

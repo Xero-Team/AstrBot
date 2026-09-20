@@ -24,6 +24,7 @@ from astrbot.core.platform.session_bridge import (
     MAX_WATCH_TTL_SECONDS,
     MIN_WATCH_TTL_SECONDS,
     SessionBridgeManager,
+    SessionBridgeQuota,
 )
 
 
@@ -850,6 +851,20 @@ async def test_runtime_pair_limit_reports_runtime_sentinel():
     manager._state.total_kind = lambda kind: 1024
     with pytest.raises(ValueError, match="Runtime pair limit exceeded"):
         await manager.pair(event, "target:GroupMessage:one")
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_quota_usage_reports_configured_limits():
+    manager, _, _ = _manager(max_watches_per_subject=2, max_pairs_per_subject=1)
+    event = _event()
+    other = _event("source:FriendMessage:other", sender="other")
+    await manager.watch(event, "target:GroupMessage:one", ttl_seconds=30)
+    await manager.connect(other, "target:GroupMessage:two")
+    usage = await manager.quota_usage(event)
+    assert usage["watch"] == SessionBridgeQuota(1, 2)
+    assert usage["connect"] == SessionBridgeQuota(0, 2)
+    assert usage["pair"] == SessionBridgeQuota(0, 1)
     await manager.terminate()
 
 

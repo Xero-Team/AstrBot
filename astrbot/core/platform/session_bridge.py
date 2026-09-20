@@ -61,6 +61,8 @@ MAX_WATCH_TTL_SECONDS = 10 * 24 * 60 * 60
 DEFAULT_MAX_PAIRS_PER_SUBJECT = 8
 MAX_FORWARD_ATTEMPTS = 3
 FORWARD_RETRY_DELAY_SECONDS = 0.25
+MAX_DELIVERIES_KEPT = 8192
+DELIVERY_RETENTION_SECONDS = 3 * 24 * 60 * 60
 
 if TYPE_CHECKING:
     from astrbot.core.auth.service import AuthorizationService
@@ -623,6 +625,10 @@ class SessionBridgeManager:
             receipt = await self._forward_with_retry(watch, grant, forwarded, locale)
             if not receipt.accepted_attempts:
                 await self._release_forward(claim)
+            elif claim is not None and receipt.message_ids:
+                # The claim becomes a durable delivery record so the dedup
+                # key and quote-id map survive a restart (issue #245).
+                await self._persist_delivery(claim, receipt.message_ids[0])
             if receipt.status != "accepted":
                 logger.warning("Session bridge submission status: %s", receipt.status)
         except PermissionError:
@@ -673,6 +679,27 @@ class SessionBridgeManager:
             return
         async with self._lock:
             self._forwarded.pop(claim, None)
+
+    async def _persist_delivery(
+        self, claim: tuple[str, str, str], dest_message_id: str | None
+    ) -> None:
+        """Write one successful delivery to the durable ledger.
+
+        A ledger failure must never turn an accepted delivery into an error:
+        only the in-memory dedup and quote maps decide live behavior.
+        """
+        dest_umo, origin, source_message_id = claim
+        try:
+            await self._state.store.insert_session_bridge_delivery(
+                dest_umo=dest_umo,
+                origin_umo=origin,
+                source_message_id=source_message_id,
+                dest_message_id=dest_message_id,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Session bridge delivery ledger write failed")
 
     async def _passes_filter(
         self, grant: WatchGrant, envelope: MessageEnvelope
@@ -952,7 +979,12 @@ class SessionBridgeManager:
             logger.warning("Session watch expiry notice failed")
 
     async def restore(self) -> None:
-        """Reload persisted edges, dropping expired or unauthorized rows."""
+        """Reload persisted rules and delivery records, dropping stale rows.
+
+        The delivery ledger restores the dedup keys and quote-id map so a
+        restart neither duplicates accepted forwards nor breaks reply links.
+        """
+        await self._restore_deliveries()
         rows = await self._state.list_stored_rules()
         now = time()
         expired: list[WatchGrant] = []
@@ -992,6 +1024,31 @@ class SessionBridgeManager:
                     self._state.store_key(grant.watch), grant, self._expire_watch
                 )
         await self._notify_expired_watches(tuple(expired))
+
+    async def _restore_deliveries(self) -> None:
+        """Reload recent deliveries and prune stale or beyond-cap rows."""
+        try:
+            await self._state.store.prune_session_bridge_deliveries(
+                keep=MAX_DELIVERIES_KEPT,
+                retention_seconds=DELIVERY_RETENTION_SECONDS,
+            )
+            rows = await self._state.store.list_session_bridge_deliveries(
+                MAX_DELIVERIES_KEPT
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Session bridge delivery ledger read failed")
+            return
+        for row in rows:
+            if row.dest_message_id is None:
+                continue
+            self._forwarded[(row.dest_umo, row.origin_umo, row.source_message_id)] = (
+                None
+            )
+            self._message_ids[(row.origin_umo, row.source_message_id, row.dest_umo)] = (
+                row.dest_message_id
+            )
 
     def _grant_for_notice(self, row: SessionBridgeRule) -> WatchGrant:
         subject = Subject.from_id(row.subject_id)
@@ -1045,7 +1102,11 @@ class SessionBridgeManager:
         return self._state.grant_from_row(row, subject, grant_context)
 
     async def terminate(self) -> None:
-        """Cancel expiry tasks and drop in-memory watches."""
+        """Cancel expiry tasks and drop in-memory state.
+
+        The delivery ledger rows survive: rules stay durable on purpose, and
+        dropping them would reintroduce the restart issues from issue #245.
+        """
         async with self._lock:
             tasks = self._state.take_expiry_tasks()
             self._state.clear_grants()

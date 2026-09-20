@@ -12,6 +12,7 @@ from astrbot.core.platform.message_protocol import (
     MessageDeliveryCapabilities,
     MessageEnvelope,
     PortablePart,
+    QuoteReference,
     SenderSnapshot,
 )
 from astrbot.core.platform.message_type import MessageType
@@ -61,6 +62,64 @@ class FakeSessionBridgeStore:
         self.rows: dict[str, SimpleNamespace] = {}
         self.by_direction: dict[tuple[str, str, str], str] = {}
         self.fail_pair_insert = False
+        self.deliveries: list[SimpleNamespace] = []
+        self.delivery_seq = 0
+        self.fail_delivery_insert = False
+
+    def seed_delivery(
+        self,
+        *,
+        dest_umo: str,
+        origin_umo: str,
+        source_message_id: str,
+        dest_message_id: str | None = None,
+        **extra,
+    ) -> SimpleNamespace:
+        self.delivery_seq += 1
+        row = SimpleNamespace(
+            id=self.delivery_seq,
+            dest_umo=dest_umo,
+            origin_umo=origin_umo,
+            source_message_id=source_message_id,
+            dest_message_id=dest_message_id,
+            **extra,
+        )
+        self.deliveries.append(row)
+        return row
+
+    async def insert_session_bridge_delivery(
+        self,
+        *,
+        dest_umo: str,
+        origin_umo: str,
+        source_message_id: str,
+        dest_message_id: str | None,
+    ):
+        if self.fail_delivery_insert:
+            raise RuntimeError("delivery insert")
+        for row in self.deliveries:
+            if (
+                row.dest_umo == dest_umo
+                and row.origin_umo == origin_umo
+                and row.source_message_id == source_message_id
+            ):
+                return
+        self.seed_delivery(
+            dest_umo=dest_umo,
+            origin_umo=origin_umo,
+            source_message_id=source_message_id,
+            dest_message_id=dest_message_id,
+        )
+
+    async def list_session_bridge_deliveries(self, limit: int):
+        return list(reversed(self.deliveries[-limit:])) if limit else []
+
+    async def prune_session_bridge_deliveries(
+        self, *, keep: int, retention_seconds: int
+    ):
+        before = len(self.deliveries)
+        self.deliveries = self.deliveries[-keep:]
+        return before - len(self.deliveries)
 
     def seed(self, **fields) -> SimpleNamespace:
         payload = {
@@ -1650,6 +1709,207 @@ async def test_accepted_forward_keeps_dedup_claim():
     await manager.observe(envelope)
     assert calls == 1
     assert manager._forwarded
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_accepted_forward_persists_delivery_ledger():
+    calls = 0
+
+    async def send(session, chain):
+        nonlocal calls
+        calls += 1
+        return PlatformSendResult(
+            session.platform_id, True, str(session), message_ids=("sent",)
+        )
+
+    store = FakeSessionBridgeStore()
+    manager, _, _ = _manager(send, store=store)
+    event = _event()
+    await manager.watch(event, "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="ledger-ok")
+
+    await manager.observe(envelope)
+    assert calls == 1
+    assert manager._forwarded
+    await manager.terminate()
+
+    assert len(store.deliveries) == 1
+    row = store.deliveries[0]
+    assert row.dest_umo == event.unified_msg_origin
+    assert row.origin_umo == "target:GroupMessage:room"
+    assert row.source_message_id == "ledger-ok"
+    assert row.dest_message_id == "sent"
+
+
+@pytest.mark.asyncio
+async def test_failed_forward_does_not_persist_delivery(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.session_bridge.FORWARD_RETRY_DELAY_SECONDS", 0
+    )
+
+    async def send(session, chain):
+        return PlatformSendResult(
+            session.platform_id, False, str(session), status="failed"
+        )
+
+    store = FakeSessionBridgeStore()
+    manager, _, _ = _manager(send, store=store)
+    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_observed_envelope(message_id="ledger-fail"))
+    await manager.terminate()
+
+    assert store.deliveries == []
+
+
+@pytest.mark.asyncio
+async def test_ledger_failure_does_not_break_delivery():
+    ops = []
+
+    async def send(session, chain):
+        ops.append("send")
+        return PlatformSendResult(
+            session.platform_id, True, str(session), message_ids=("sent",)
+        )
+
+    store = FakeSessionBridgeStore()
+    store.fail_delivery_insert = True
+    manager, _, _ = _manager(send, store=store)
+    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
+    envelope = _observed_envelope(message_id="ledger-broken")
+
+    await manager.observe(envelope)
+    assert ops == ["send"]
+    assert manager._forwarded
+    assert manager._message_ids
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_rehydrates_delivery_ledger_and_resolves_quote():
+    store = FakeSessionBridgeStore()
+    store.seed_delivery(
+        dest_umo="source:FriendMessage:sender",
+        origin_umo="target:GroupMessage:room",
+        source_message_id="in-target-id",
+        dest_message_id="in-source-id",
+    )
+    store.seed(
+        rule_id="waaaaaaaaaaaa",
+        subject_id="im:source:bot:actor",
+        source_umo="source:FriendMessage:sender",
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time() + 3600),
+    )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+
+    quote_key = (
+        "target:GroupMessage:room",
+        "in-target-id",
+        "source:FriendMessage:sender",
+    )
+    assert manager._forwarded[(quote_key[2], quote_key[0], quote_key[1])] is None
+    assert manager._message_ids[quote_key] == "in-source-id"
+
+    # A new reply quoting the pre-restart target message resolves the id.
+    sent = []
+    envelope = MessageEnvelope(
+        PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
+        source_message_id="after-restart",
+        quote=QuoteReference(
+            source_route=PlatformRouteIdentity(
+                "target", MessageType.GROUP_MESSAGE, "room"
+            ),
+            message_id="in-target-id",
+        ),
+        content=(PortablePart(ContentKind.TEXT, "the reply"),),
+    )
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(
+            session.platform_id, True, str(session), message_ids=("sent",)
+        )
+
+    manager._send_message = send
+    sent.clear()
+    await manager._submit(
+        "source:FriendMessage:sender",
+        envelope,
+        AsyncMock(return_value=None),
+    )
+    chain = sent[0]
+    from astrbot.core.message.components import Reply
+
+    assert isinstance(chain.chain[0], Reply) and chain.chain[0].id == "in-source-id"
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_caps_deliveries_to_keep_limit(monkeypatch):
+    monkeypatch.setattr("astrbot.core.platform.session_bridge.MAX_DELIVERIES_KEPT", 3)
+    store = FakeSessionBridgeStore()
+    for index in range(5):
+        store.seed_delivery(
+            dest_umo=f"source:FriendMessage:{index}",
+            origin_umo="target:GroupMessage:room",
+            source_message_id=f"msg-{index}",
+            dest_message_id=f"sent-{index}",
+        )
+    manager, _, _ = _manager(store=store)
+    await manager.restore()
+
+    assert len(store.deliveries) == 3
+    assert all(
+        manager._message_ids.get(
+            (
+                "target:GroupMessage:room",
+                f"msg-{index}",
+                f"source:FriendMessage:{index}",
+            )
+        )
+        == f"sent-{index}"
+        for index in range(2, 5)
+    )
+    assert (
+        manager._message_ids.get(
+            ("target:GroupMessage:room", "msg-0", "source:FriendMessage:0")
+        )
+        is None
+    )
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_restore_ignores_ledger_read_failure():
+    store = FakeSessionBridgeStore()
+    store.seed(
+        rule_id="waabbbbbbbb",
+        subject_id="im:source:bot:actor",
+        source_umo="source:FriendMessage:sender",
+        target_umo="target:GroupMessage:room",
+        source_config_id="default",
+        target_config_id="default",
+        kind="watch",
+        expires_at=int(time() + 3600),
+    )
+
+    class BrokenDeliveryStore(FakeSessionBridgeStore):
+        async def list_session_bridge_deliveries(self, limit: int):
+            raise RuntimeError("boom")
+
+        async def prune_session_bridge_deliveries(self, **kwargs):
+            raise RuntimeError("boom")
+
+    broken = BrokenDeliveryStore()
+    broken.rows = store.rows
+    manager, _, _ = _manager(store=broken)
+    await manager.restore()
+    assert manager._state.total_kind("watch")
     await manager.terminate()
 
 

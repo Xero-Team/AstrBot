@@ -435,7 +435,7 @@ class CoreExecutionContext:
             MainAgentBuildConfig,
             prepare_event_attachments,
         )
-        from astrbot.core.tools.computer_tools.util import (
+        from astrbot.core.tools.computer_tools import (
             LOCAL_NETWORK_POLICY_NOTICE,
             get_local_permission_policy,
             is_local_runtime,

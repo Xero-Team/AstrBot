@@ -78,11 +78,9 @@ from astrbot.core.tool_catalog import (
     resolve_catalog_surface,
 )
 from astrbot.core.tools.computer_tools import (
-    normalize_umo_for_workspace,
-)
-from astrbot.core.tools.computer_tools.util import (
     LOCAL_NETWORK_POLICY_NOTICE,
     get_local_permission_policy,
+    normalize_umo_for_workspace,
     resolve_local_permission_role,
 )
 from astrbot.core.tools.function_tool_manager import FunctionToolManager

@@ -1,10 +1,11 @@
 import secrets
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select, update
 
-from astrbot.core.db.po import SessionBridgeRule
+from astrbot.core.db.po import SessionBridgeDelivery, SessionBridgeRule
 from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 _RULE_ID_ATTEMPTS = 8
@@ -365,3 +366,80 @@ class SessionBridgeStoreMixin(DatabaseStoreMixin):
                         col(SessionBridgeRule.kind) == "connect",
                     )
                 )
+
+    async def insert_session_bridge_delivery(
+        self,
+        *,
+        dest_umo: str,
+        origin_umo: str,
+        source_message_id: str,
+        dest_message_id: str | None,
+    ) -> None:
+        """Record one successful delivery, tolerating an existing row.
+
+        The write is idempotent: the unique delivery key decides whether the
+        row already exists, and a duplicate is a no-op instead of an error so
+        repeated deliveries of the same source message cannot explode inserts.
+        """
+        try:
+            async with store_session(self) as session:
+                session: AsyncSession
+                async with session.begin():
+                    existing = await session.execute(
+                        select(1).where(
+                            col(SessionBridgeDelivery.dest_umo) == dest_umo,
+                            col(SessionBridgeDelivery.origin_umo) == origin_umo,
+                            col(SessionBridgeDelivery.source_message_id)
+                            == source_message_id,
+                        )
+                    )
+                    if existing.first() is not None:
+                        return
+                    session.add(
+                        SessionBridgeDelivery(
+                            dest_umo=dest_umo,
+                            origin_umo=origin_umo,
+                            source_message_id=source_message_id,
+                            dest_message_id=dest_message_id,
+                        )
+                    )
+        except IntegrityError:
+            return
+
+    async def list_session_bridge_deliveries(
+        self, limit: int
+    ) -> list[SessionBridgeDelivery]:
+        """Return the newest ``limit`` recorded deliveries."""
+        async with store_session(self) as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(SessionBridgeDelivery)
+                .order_by(col(SessionBridgeDelivery.id).desc())
+                .limit(max(0, limit))
+            )
+            return list(result.scalars().all())
+
+    async def prune_session_bridge_deliveries(
+        self, *, keep: int, retention_seconds: int
+    ) -> int:
+        """Drop deliveries older than the retention window or beyond ``keep``.
+
+        Returns:
+            The number of deleted rows.
+        """
+        cutoff = datetime.now(UTC) - timedelta(seconds=max(0, retention_seconds))
+        kept_ids = (
+            select(SessionBridgeDelivery.id)
+            .order_by(col(SessionBridgeDelivery.id).desc())
+            .limit(max(0, keep))
+        )
+        async with store_session(self) as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(SessionBridgeDelivery).where(
+                        (col(SessionBridgeDelivery.created_at) < cutoff)
+                        | col(SessionBridgeDelivery.id).not_in(kept_ids)
+                    )
+                )
+                return int(getattr(result, "rowcount", 0) or 0)

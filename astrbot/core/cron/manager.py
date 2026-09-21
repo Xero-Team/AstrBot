@@ -451,6 +451,10 @@ class CronJobManager:
 
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
+        enabled_plugins_name = cfg.get("plugin_set", ["*"])
+        cron_event.plugins_name = (
+            None if enabled_plugins_name == ["*"] else enabled_plugins_name
+        )
 
         config, max_agent_step = local_agent_runtime_from_profile(
             cfg,

@@ -194,6 +194,21 @@ AstrBot 与 NapCat 位于同一个 Docker 网络。使用 `MODE=ws` 时，请在
 
 如果保留 Compose 原有的 `MODE=astrbot`，则不要创建独立 `NapCat` 平台。请创建 `OneBot v11` 平台，将 `ws_reverse_host` 设为 `0.0.0.0`，端口保持 `6199`。`6199` 只需在内部 Docker 网络可达，不需要发布到宿主机。如需鉴权，同样要在第一次生成配置后从 Compose 删除 `MODE`，再在 NapCat 与 AstrBot 两端设置相同 token。
 
+## 在 Docker 中配置 HTTP 代理
+
+AstrBot 的 HTTP 代理在 WebUI：`设置 → 网络 → 代理与依赖源 → HTTP 代理`。填写的地址由 AstrBot 容器内部访问，因此 `http://127.0.0.1:7890` 会连到 AstrBot 容器自己，而不是宿主机或其他容器。
+
+代理跑在宿主机、或另一个容器并把端口映射到宿主机时：
+
+- Mac / Windows（Docker Desktop）：`http://host.docker.internal:7890`
+- Linux：`http://172.17.0.1:7890`（把 `172.17.0.1` 换成本机 docker0 网关）
+
+AstrBot 与代理在同一 Docker 网络时，用容器名，例如 `http://clash:7890`。
+
+Clash 一类软件常见 HTTP `7890`、SOCKS `7891`，按实际协议写 `http://` 或 `socks5://`。代理装在宿主机时，必须监听 Docker 可达的宿主机接口（如 `0.0.0.0` 或 Docker 网关接口），不能只绑 `127.0.0.1`；同时把代理端口映射到宿主机。
+
+该项就是 [`http_proxy`](/dev/astrbot-config) 描述的全局出站路由，不是容器的 `HTTP_PROXY` 环境变量。
+
 ## 首次登录和更新
 
 首次启动时，AstrBot 会在日志中打印 WebUI 地址和随机初始密码，默认用户名为 `astrbot`。登录后请立即修改密码。

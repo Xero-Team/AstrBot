@@ -210,6 +210,21 @@ AstrBot and NapCat share an internal Docker network. With `MODE=ws`, create the 
 
 If you retain the Compose file's original `MODE=astrbot`, do not create the dedicated `NapCat` platform. Create `OneBot v11`, set `ws_reverse_host` to `0.0.0.0`, and keep port `6199`. It only needs to be reachable on the internal Docker network and does not need to be published to the host. For authentication, likewise remove `MODE` after the initial configuration is generated, then set the same token in NapCat and AstrBot.
 
+## Configure an HTTP Proxy in Docker
+
+Set the HTTP proxy in the WebUI under `Settings → Network → Proxy & Dependency Sources → HTTP Proxy`. AstrBot reaches that address from inside its own container, so `http://127.0.0.1:7890` points at the AstrBot container itself rather than the host or another container.
+
+If the proxy runs on the host, or in another container with the port published to the host:
+
+- Mac / Windows (Docker Desktop): `http://host.docker.internal:7890`
+- Linux: `http://172.17.0.1:7890` (replace `172.17.0.1` with your docker0 gateway if it differs)
+
+If AstrBot and the proxy share a Docker network, use the proxy container name, for example `http://clash:7890`.
+
+Clash-style clients commonly use HTTP on `7890` and SOCKS on `7891`. Use `http://` or `socks5://` to match the protocol. A host-installed proxy must listen on a host interface reachable from Docker, such as `0.0.0.0` or the Docker gateway interface, rather than only `127.0.0.1`; publish the proxy port to the host.
+
+This setting is the global outbound route described in [`http_proxy`](/en/dev/astrbot-config). It is not the container's `HTTP_PROXY` environment variable.
+
 ## First Login and Updates
 
 On first startup, AstrBot prints the WebUI address and a random initial password in its logs. The default username is `astrbot`. Change the password immediately after logging in.

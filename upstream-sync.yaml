@@ -5,18 +5,23 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334
-  synced_at_utc: 2026-09-20T10:39:09Z
+  commit: 95e98b8aed75d56713666eff39e31bafffd95426
+  synced_at_utc: 2026-09-21T17:13:20Z
   sync_method: adapt
-  source_pr: '10134'
+  source_pr: '10162, 10163, 10156'
   note: >-
-    Reviewed b06550567b25d7ef4404bf526e448c869cc5d4ec..6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334
-    (1 commit): adapted #10134. The local network policy notice moves from
-    Shell/Python tool results into the system prompt. Applied in
-    CoreExecutionContext.tool_loop_agent (fork replacement for
-    astrbot/core/star/context.py) and _apply_local_env_tools inside
-    _prepare_request_for_agent rather than build_main_agent; the caller role is
-    resolved via resolve_local_permission_role because fork policy resolution is
-    authorization-based. This supersedes the #10096 adaptation that kept
-    policy_notice in results. Focused pytest and pyright passed; only the
-    pre-existing bubblewrap sandbox tests fail in this environment.
+    Reviewed 6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334..95e98b8aed75d56713666eff39e31bafffd95426
+    (4 commits): adapted #10162 (Docker outbound HTTP proxy docs, bilingual,
+    re-authored for the fork's source-build doc layout), #10163 (apply session
+    plugin_set filters to cron agent events via CronMessageEvent.plugins_name in
+    CronJobManager._woke_main_agent), and #10156 (resolve the authenticated WebUI
+    version from the served asset directory through a shared
+    _resolve_dashboard_version helper). Skipped #10118: the fork already exposes
+    distinct conversation reset/create commands under session.manage and
+    intentionally does not create a local conversation for third-party runners,
+    matching the recorded #10004 skip. The upstream UpdateService portion of
+    #10156 does not apply because the fork removed the dashboard self-update
+    path. No upstream version change in this interval, so no version or changelog
+    update. Focused pytest, Ruff, and Prettier checks passed; the sibling
+    background-wake path in astr_agent_tool_exec.py has the same plugins_name gap
+    and is left for a separate change.

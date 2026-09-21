@@ -40,13 +40,14 @@
       </v-card-text>
       <v-card-actions class="project-dialog-card__actions">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="handleCancel">{{
+        <v-btn variant="text" :disabled="saving" @click="handleCancel">{{
           t('core.common.cancel')
         }}</v-btn>
         <v-btn
           variant="text"
           color="primary"
-          :disabled="!form.title.trim()"
+          :loading="saving"
+          :disabled="saving || !form.title.trim()"
           @click="handleSave"
           >{{ t('core.common.save') }}</v-btn
         >
@@ -77,11 +78,13 @@ export interface ProjectFormData {
 interface Props {
   modelValue: boolean;
   project?: Project | null;
+  saving?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: false,
   project: null,
+  saving: false,
 });
 
 const emit = defineEmits<{
@@ -135,13 +138,11 @@ function handleCancel() {
 }
 
 function handleSave() {
-  if (!form.value.title.trim()) {
+  if (props.saving || !form.value.title.trim()) {
     return;
   }
 
   emit('save', { ...form.value }, props.project?.project_id);
-  isOpen.value = false;
-  emit('update:modelValue', false);
 }
 </script>
 

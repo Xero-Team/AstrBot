@@ -532,6 +532,7 @@
     <ProjectDialog
       v-model="projectDialogOpen"
       :project="editingProject"
+      :saving="savingProject"
       @save="saveProject"
     />
     <v-dialog v-model="sessionTitleDialogOpen" max-width="420">
@@ -722,6 +723,7 @@ interface TokenProviderConfig extends ProviderMetadataSource {
 const activeWorkspace = ref<WorkspaceView>('chat');
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
+const savingProject = ref(false);
 const sessionTitleDialogOpen = ref(false);
 const sessionTitleDraft = ref('');
 const editingSessionTitleId = ref('');
@@ -1219,7 +1221,8 @@ async function loadProjectSessions(projectId = selectedProjectId.value) {
 }
 
 async function handleDeleteProject(projectId: string) {
-  await deleteProjectById(projectId);
+  const ok = await deleteProjectById(projectId);
+  if (!ok) return;
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
     projectSessions.value = [];
@@ -1295,17 +1298,27 @@ async function deleteProjectSession(sessionId: string) {
 }
 
 async function saveProject(formData: ProjectFormData, projectId?: string) {
-  if (projectId) {
-    await updateProject(
-      projectId,
-      formData.title,
-      formData.emoji,
-      formData.description,
-    );
-    return;
+  savingProject.value = true;
+  try {
+    const ok = projectId
+      ? await updateProject(
+          projectId,
+          formData.title,
+          formData.emoji,
+          formData.description,
+        )
+      : await createProject(
+          formData.title,
+          formData.emoji,
+          formData.description,
+        );
+    if (ok) {
+      projectDialogOpen.value = false;
+      editingProject.value = null;
+    }
+  } finally {
+    savingProject.value = false;
   }
-
-  await createProject(formData.title, formData.emoji, formData.description);
 }
 
 async function selectSession(sessionId: string, pushRoute = true) {

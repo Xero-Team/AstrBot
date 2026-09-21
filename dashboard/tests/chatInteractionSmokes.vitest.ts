@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
+import ProjectDialog from '@/components/chat/ProjectDialog.vue';
 import ProjectList from '@/components/chat/ProjectList.vue';
 import ToolCallItem from '@/components/chat/message_list_comps/ToolCallItem.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
@@ -96,6 +97,36 @@ describe('chat interaction smokes', () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it('keeps the project dialog open and disables actions while saving', async () => {
+    const wrapper = mountWithVuetify(ProjectDialog, {
+      props: { modelValue: true, saving: false },
+    });
+    await flushPromises();
+
+    const titleInput = Array.from(
+      document.body.querySelectorAll('input'),
+    )[1] as HTMLInputElement;
+    titleInput.value = 'New project';
+    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushPromises();
+
+    const saveButton = Array.from(
+      document.body.querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('Save'));
+    expect(saveButton).toBeTruthy();
+    saveButton?.click();
+    await flushPromises();
+
+    expect(wrapper.emitted('save')).toHaveLength(1);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+
+    await wrapper.setProps({ saving: true });
+    await flushPromises();
+    expect(saveButton?.disabled).toBe(true);
+
+    wrapper.unmount();
   });
 
   it('toggles ToolCallItem inline details without transition warnings', async () => {

@@ -103,8 +103,13 @@ links return `0`. Do not construct `SessionBridgeManager` yourself. Import
 constants from `astrbot.api.platform`. A pair is two directed edges that share a `pair_id`:
 the far side sees the destination Bot account with the same localized source
 header as a watch, the source platform identity is not forged, `/send` is not
-bound, and splitting the pair requires `unpair`. There is no Dashboard
-management surface, and plugins must not assume a matching HTTP API.
+bound, and splitting the pair requires `unpair`. Forwarding happens at ingress,
+outside the pipeline, so `/bot disable`, `/session block`, admission, rate
+limiting, and content safety neither stop nor retract it; the bridge's own
+per-delivery re-authorization, shared config, self-message loop prevention,
+`match`/`except`, and target adapter capabilities are what bound it. There is
+no Dashboard management surface, and plugins must not assume a matching HTTP
+API.
 
 ## Rich-Media Chains
 

@@ -763,6 +763,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     )
     context = SimpleNamespace(
         get_config=lambda **_kwargs: {
+            "plugin_set": ["allowed"],
             "provider_settings": provider_settings,
             "agent_runner": {
                 "runner_type": "local",

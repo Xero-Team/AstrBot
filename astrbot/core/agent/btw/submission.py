@@ -99,6 +99,7 @@ def work_event_for(
     )
     work_event.subject = getattr(event, "subject", None)
     work_event.resource = getattr(event, "resource", None)
+    work_event.plugins_name = getattr(event, "plugins_name", None)
     auth_context = getattr(event, "auth_context", None)
     if auth_context is not None:
         # A background work run is a new event.  Do not carry a consumed

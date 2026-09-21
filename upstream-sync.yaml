@@ -22,6 +22,4 @@ last_synced:
     matching the recorded #10004 skip. The upstream UpdateService portion of
     #10156 does not apply because the fork removed the dashboard self-update
     path. No upstream version change in this interval, so no version or changelog
-    update. Focused pytest, Ruff, and Prettier checks passed; the sibling
-    background-wake path in astr_agent_tool_exec.py has the same plugins_name gap
-    and is left for a separate change.
+    update. Focused pytest, Ruff, and Prettier checks passed. The fork also applies the same plugin_set filter to the fork-only background-wake path in astr_agent_tool_exec.py and the BTW work event in btw/submission.py so every synthetic agent event honors the session policy.

@@ -46,6 +46,7 @@ def _requesting_event(*, config_id: str = "default"):
         platform_member_role="instance_operator",
         platform_role_source="config",
         platform_role_expires_at=None,
+        plugins_name=["allowed"],
         auth_context=AuthContext(
             subject=subject,
             source="webchat",

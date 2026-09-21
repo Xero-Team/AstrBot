@@ -366,6 +366,7 @@ def create_dashboard_asgi_app(
             plugin_catalog=runtime.catalogs.plugins,
             platform_manager=runtime.platform_manager,
             runtime=computer_runtime_info,
+            dashboard_static_folder=static_folder,
         ),
         subagents=SubAgentService(
             runtime.astrbot_config,

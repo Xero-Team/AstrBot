@@ -832,6 +832,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     assert request.contexts == history
     assert "ok {{prompt}}" in request.system_prompt
     assert "{{background_task_result}}" not in request.system_prompt
+    assert captured["event"].plugins_name == ["allowed"]
     cron_context = captured["event"].auth_context
     assert cron_context is not event.auth_context
     assert cron_context.request_id != event.auth_context.request_id

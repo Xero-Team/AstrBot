@@ -561,7 +561,9 @@ class AstrBotCoreLifecycle:
         )
         self._register_cleanup("platform manager", self.platform_manager.terminate)
         # Observe normalized ingress before pipeline processing so runtime-owned
-        # bridges can project an immutable snapshot from the first event.
+        # bridges can project an immutable snapshot from the first event. Bridge
+        # delivery is decided here, so pipeline stages (admission, session
+        # status, rate limit, content safety) neither gate nor retract a forward.
         assert self.execution_context is not None
         self._register_cleanup(
             "session bridge",

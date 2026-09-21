@@ -80,7 +80,7 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 ## Settings
 
-System-wide settings have moved from the old Config → System Config route to **Settings** at the bottom of the sidebar. The page groups General, Appearance, Network, Security, Maintenance, and OpenAPI settings. System changes are saved automatically and a restart notice appears when required.
+System-wide settings have moved from the old Config → System Config route to **Settings** at the bottom of the sidebar. The page groups General, Appearance, Network, Security, Maintenance, and OpenAPI settings. The `Network` group holds the HTTP proxy, Python package sources, and GitHub mirror; for the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker#configure-an-http-proxy-in-docker). System changes are saved automatically and a restart notice appears when required.
 
 Config profiles still control routed Agent, model, message-processing, and plugin behavior. Do not confuse profile settings with the system-level network and security controls under Settings.
 

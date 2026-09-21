@@ -774,6 +774,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 metadata=metadata,
             )
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
+        enabled_plugins_name = cfg.get("plugin_set", ["*"])
+        cron_event.plugins_name = (
+            None if enabled_plugins_name == ["*"] else enabled_plugins_name
+        )
         from astrbot.core.streaming_override import resolve_streaming_response
 
         config, max_agent_step = local_agent_runtime_from_profile(

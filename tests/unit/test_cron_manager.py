@@ -880,6 +880,63 @@ class TestRunActiveAgentJob:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
+        ("session_config", "expected_plugins"),
+        [
+            ({"plugin_set": ["allowed"]}, ["allowed"]),
+            ({"plugin_set": []}, []),
+            ({"plugin_set": ["*"]}, None),
+            ({}, None),
+        ],
+        ids=["whitelist", "empty", "wildcard", "default"],
+    )
+    async def test_woke_main_agent_applies_session_plugin_filters(
+        self, cron_manager, session_config, expected_plugins
+    ):
+        """Test cron agents honor the session plugin_set filter."""
+        ctx = MagicMock()
+        ctx.get_config.return_value = session_config
+        cron_manager.ctx = ctx
+        captured = {}
+
+        class FakeRunner:
+            def step_until_done(self, max_step):
+                async def gen():
+                    if False:
+                        yield None
+
+                return gen()
+
+            def get_final_llm_resp(self):
+                return None
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["event"] = event
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=MagicMock(history="[]")),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        assert captured["event"].plugins_name == expected_plugins
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
         ("misc_config", "expected_max_step"),
         [
             pytest.param({"max_steps": 50}, 50, id="configured"),

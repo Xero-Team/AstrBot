@@ -59,6 +59,7 @@ class StatService:
         plugin_catalog: PluginRegistry,
         platform_manager: PlatformManager,
         runtime: dict | None = None,
+        dashboard_static_folder: str | None = None,
     ) -> None:
         self.db_helper = db_helper
         self.core_control = core_control
@@ -69,6 +70,7 @@ class StatService:
         self.plugin_catalog = plugin_catalog
         self.platform_manager = platform_manager
         self.storage_cleaner = StorageCleaner(config)
+        self.dashboard_static_folder = dashboard_static_folder
         self.runtime = (
             runtime if runtime is not None else detect_local_runtime_info(probe=True)
         )
@@ -120,12 +122,37 @@ class StatService:
         md5_pwd_hint = is_md5_dashboard_password(password)
         return {
             "version": VERSION,
-            "dashboard_version": await get_dashboard_version(),
+            "dashboard_version": await self._resolve_dashboard_version(),
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
             "runtime": self.runtime,
         }
+
+    async def _resolve_dashboard_version(
+        self,
+        dashboard_static_folder: str | None = None,
+    ) -> str | None:
+        """Resolve the WebUI version from the served assets, then fall back.
+
+        Args:
+            dashboard_static_folder: Static WebUI dist directory currently served,
+                overriding the directory configured on the service.
+
+        Returns:
+            The version declared by the served dist, or the resolved runtime
+            version when no served dist is known.
+        """
+        folder = (
+            dashboard_static_folder
+            if dashboard_static_folder is not None
+            else self.dashboard_static_folder
+        )
+        if folder:
+            version = get_dashboard_dist_version(Path(folder))
+            if version is not None:
+                return version
+        return await get_dashboard_version()
 
     async def get_public_versions(
         self,
@@ -167,12 +194,9 @@ class StatService:
 
         dashboard_version = None
         try:
-            if dashboard_static_folder:
-                dashboard_version = get_dashboard_dist_version(
-                    Path(dashboard_static_folder)
-                )
-            if dashboard_version is None:
-                dashboard_version = await get_dashboard_version()
+            dashboard_version = await self._resolve_dashboard_version(
+                dashboard_static_folder
+            )
         except Exception as exc:
             logger.warning("Failed to read public WebUI version: %s", exc)
 

@@ -46,6 +46,7 @@ def _requesting_event(*, config_id: str = "default"):
         platform_member_role="instance_operator",
         platform_role_source="config",
         platform_role_expires_at=None,
+        plugins_name=["allowed"],
         auth_context=AuthContext(
             subject=subject,
             source="webchat",
@@ -102,6 +103,7 @@ def test_work_event_mirrors_identity_without_a_consumed_proof():
     assert work_event.platform_role_source == "config"
     assert work_event.resource is event.resource
     assert work_event.subject is event.subject
+    assert work_event.plugins_name == ["allowed"]
     assert work_event.auth_context.request_id != event.auth_context.request_id
     assert work_event.auth_context.step_up_token is None
     assert work_event.auth_context.metadata == {"dashboard_session_id": "sid-1"}

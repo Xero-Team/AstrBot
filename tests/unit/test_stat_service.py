@@ -2,6 +2,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -163,6 +164,69 @@ def test_stat_service_get_first_notice_uses_only_supported_locales(
     assert service.get_first_notice("zh-CN") == {"content": "Chinese notice"}
     assert service.get_first_notice("en-US") == {"content": "English notice"}
     assert service.get_first_notice(None) == {"content": "Chinese notice"}
+
+
+@pytest.mark.asyncio
+async def test_stat_service_get_version_reads_served_dashboard_folder(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """The authenticated version endpoint reports the served WebUI version."""
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "assets" / "version").write_text("9.9.9", encoding="utf-8")
+
+    monkeypatch.setattr(
+        stat_service, "is_password_storage_upgraded", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        stat_service, "get_dashboard_password_hash", lambda *args, **kwargs: ""
+    )
+    monkeypatch.setattr(
+        stat_service, "is_md5_dashboard_password", lambda *args, **kwargs: False
+    )
+    monkeypatch.setattr(StatService, "is_default_cred", AsyncMock(return_value=False))
+    fallback = AsyncMock(return_value="0.0.1")
+    monkeypatch.setattr(stat_service, "get_dashboard_version", fallback)
+
+    service = StatService(
+        SimpleNamespace(),
+        SimpleNamespace(),
+        {"dashboard": {"username": "astrbot"}},
+        demo_mode=False,
+        start_time=0,
+        html_renderer=SimpleNamespace(get_runtime_stats=lambda: {}),
+        plugin_catalog=SimpleNamespace(all=lambda: ()),
+        platform_manager=SimpleNamespace(get_platform_count=lambda: 1),
+        dashboard_static_folder=str(dist),
+    )
+
+    assert (await service.get_version())["dashboard_version"] == "9.9.9"
+    fallback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stat_service_public_versions_prefers_served_folder(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """The public version endpoint uses the served dist and falls back when absent."""
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "assets" / "version").write_text("8.8.8", encoding="utf-8")
+
+    monkeypatch.setattr(stat_service, "get_astrbot_path", lambda: str(tmp_path))
+    fallback = AsyncMock(return_value="0.0.1")
+    monkeypatch.setattr(stat_service, "get_dashboard_version", fallback)
+
+    service = object.__new__(StatService)
+    service.dashboard_static_folder = None
+
+    served = await service.get_public_versions(str(dist))
+    assert served["webui_version"] == "8.8.8"
+    fallback.assert_not_awaited()
+
+    resolved = await service.get_public_versions()
+    assert resolved["webui_version"] == "0.0.1"
+    fallback.assert_awaited_once()
 
 
 def test_running_time_components_and_timestamp_coercion():

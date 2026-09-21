@@ -663,7 +663,7 @@ describe('coverage closeout', () => {
 
     const projects = useProjects();
     api.chatApi.createProject.mockRejectedValue(new Error('fail'));
-    expect(await projects.createProject('x')).toBeUndefined();
+    expect(await projects.createProject('x')).toBe(false);
     projects.selectedProjectId.value = 'p1';
     api.chatApi.deleteProject.mockResolvedValue({ data: { status: 'ok' } });
     api.chatApi.listProjects.mockResolvedValue({

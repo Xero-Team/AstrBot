@@ -149,7 +149,10 @@
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
     "noSessions": "No conversations in this project",
-    "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
+    "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted.",
+    "createFailed": "Failed to create project",
+    "updateFailed": "Failed to update project",
+    "deleteFailed": "Failed to delete project"
   },
   "workspace": {
     "title": "Workspace",

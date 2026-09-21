@@ -1,10 +1,19 @@
 import { ref } from 'vue';
 import { chatApi } from '@/api/v1';
 import type { Project } from '@/components/chat/ProjectList.vue';
+import { useModuleI18n } from '@/i18n/composables';
+import { resolveErrorMessage } from '@/utils/errorUtils';
+import { useToast } from '@/utils/toast';
+
+interface MutationResponse {
+  data: { status: string; message?: string | null };
+}
 
 export function useProjects() {
   const projects = ref<Project[]>([]);
   const selectedProjectId = ref<string | null>(null);
+  const toast = useToast();
+  const { tm } = useModuleI18n('features/chat');
 
   async function getProjects() {
     try {
@@ -17,24 +26,34 @@ export function useProjects() {
     }
   }
 
+  async function mutate(
+    action: () => Promise<MutationResponse>,
+    fallbackMessage: string,
+  ): Promise<boolean> {
+    try {
+      const res = await action();
+      if (res.data.status !== 'ok') {
+        toast.error(res.data.message || fallbackMessage);
+        return false;
+      }
+      await getProjects();
+      return true;
+    } catch (error) {
+      console.error(fallbackMessage, error);
+      toast.error(resolveErrorMessage(error, fallbackMessage));
+      return false;
+    }
+  }
+
   async function createProject(
     title: string,
     emoji?: string,
     description?: string,
-  ) {
-    try {
-      const res = await chatApi.createProject({
-        title,
-        emoji: emoji || '📁',
-        description,
-      });
-      if (res.data.status === 'ok') {
-        await getProjects();
-        return res.data.data;
-      }
-    } catch (error) {
-      console.error('Failed to create project:', error);
-    }
+  ): Promise<boolean> {
+    return mutate(
+      () => chatApi.createProject({ title, emoji: emoji || '📁', description }),
+      tm('project.createFailed'),
+    );
   }
 
   async function updateProject(
@@ -42,33 +61,22 @@ export function useProjects() {
     title?: string,
     emoji?: string,
     description?: string,
-  ) {
-    try {
-      const res = await chatApi.updateProject(projectId, {
-        title,
-        emoji,
-        description,
-      });
-      if (res.data.status === 'ok') {
-        await getProjects();
-      }
-    } catch (error) {
-      console.error('Failed to update project:', error);
-    }
+  ): Promise<boolean> {
+    return mutate(
+      () => chatApi.updateProject(projectId, { title, emoji, description }),
+      tm('project.updateFailed'),
+    );
   }
 
-  async function deleteProject(projectId: string) {
-    try {
-      const res = await chatApi.deleteProject(projectId);
-      if (res.data.status === 'ok') {
-        await getProjects();
-        if (selectedProjectId.value === projectId) {
-          selectedProjectId.value = null;
-        }
-      }
-    } catch (error) {
-      console.error('Failed to delete project:', error);
+  async function deleteProject(projectId: string): Promise<boolean> {
+    const ok = await mutate(
+      () => chatApi.deleteProject(projectId),
+      tm('project.deleteFailed'),
+    );
+    if (ok && selectedProjectId.value === projectId) {
+      selectedProjectId.value = null;
     }
+    return ok;
   }
 
   async function addSessionToProject(sessionId: string, projectId: string) {

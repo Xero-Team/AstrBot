@@ -90,9 +90,9 @@ def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> lis
 
 def _workspace_root(umo: str) -> Path:
     normalized_umo = normalize_umo_for_workspace(umo)
-    return (
-        Path(computer_util.get_astrbot_workspaces_path()) / normalized_umo
-    ).resolve(strict=False)
+    return (Path(computer_util.get_astrbot_workspaces_path()) / normalized_umo).resolve(
+        strict=False
+    )
 
 
 def _plugin_skill_roots() -> tuple[Path, ...]:

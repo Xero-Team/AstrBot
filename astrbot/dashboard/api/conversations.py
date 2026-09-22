@@ -11,6 +11,7 @@ from astrbot.dashboard.schemas import (
     ConversationExportRequest,
     ConversationMessagesReplaceRequest,
     ConversationPatchRequest,
+    model_dict,
 )
 from astrbot.dashboard.services.conversation_service import (
     ConversationExport,
@@ -52,10 +53,6 @@ async def require_data_scope(request: Request) -> AuthContext:
         resource=resource,
     )
     return auth
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    return payload.model_dump(exclude_none=True)
 
 
 def _raise_conversation_error(exc: ConversationServiceError) -> None:
@@ -190,7 +187,7 @@ async def export_conversations(
         action="data.export_all",
         resource=Resource.named("conversation", "export"),
     )
-    return await _export_conversations(_model_dict(payload), service)
+    return await _export_conversations(model_dict(payload), service)
 
 
 @router.post("/conversations/batch-delete")
@@ -210,7 +207,7 @@ async def batch_delete_conversations(
                 action="data.manage",
                 resource=object_resource("conversation", user_id, conversation_id),
             )
-    return await _run(lambda: service.delete_conversation(_model_dict(payload)))
+    return await _run(lambda: service.delete_conversation(model_dict(payload)))
 
 
 @router.put("/conversations/{conversation_id:path}/messages")
@@ -221,7 +218,7 @@ async def replace_conversation_messages(
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     body_user_id = body.pop("user_id", None) or user_id
     if body_user_id != user_id:
         raise ApiError("user_id does not match query parameter", status_code=400)
@@ -256,7 +253,7 @@ async def update_conversation(
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     body_user_id = body.pop("user_id", None) or user_id
     if body_user_id != user_id:
         raise ApiError("user_id does not match query parameter", status_code=400)

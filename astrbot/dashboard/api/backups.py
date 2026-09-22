@@ -11,6 +11,7 @@ from astrbot.dashboard.schemas import (
     BackupRenameRequest,
     BackupUploadInitRequest,
     BackupUploadSessionRequest,
+    model_dict,
 )
 from astrbot.dashboard.services.backup_service import (
     BackupService,
@@ -38,10 +39,6 @@ def get_service(request: Request) -> BackupService:
 
 async def require_system_scope(request: Request) -> AuthContext:
     return await require_scope(request, "system")
-
-
-def _model_dict(payload) -> dict:
-    return payload.model_dump(exclude_none=True)
 
 
 def _ok_result(result):
@@ -127,7 +124,7 @@ async def init_backup_upload(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.upload_init(_model_dict(payload), owner=auth.username),
+        lambda: service.upload_init(model_dict(payload), owner=auth.username),
         prefix="初始化分片上传失败",
     )
 
@@ -158,7 +155,7 @@ async def complete_backup_upload(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.upload_complete(_model_dict(payload), owner=auth.username),
+        lambda: service.upload_complete(model_dict(payload), owner=auth.username),
         prefix="完成分片上传失败",
     )
 
@@ -170,7 +167,7 @@ async def abort_backup_upload(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.upload_abort(_model_dict(payload), owner=auth.username),
+        lambda: service.upload_abort(model_dict(payload), owner=auth.username),
         prefix="取消上传失败",
     )
 
@@ -182,7 +179,7 @@ async def status_backup_upload(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.upload_status(_model_dict(payload), owner=auth.username),
+        lambda: service.upload_status(model_dict(payload), owner=auth.username),
         prefix="查询上传状态失败",
     )
 
@@ -217,7 +214,7 @@ async def rename_backup(
 ):
     return await _run(
         lambda: service.rename_backup(
-            {"filename": _safe_backup_filename(filename), **_model_dict(payload)}
+            {"filename": _safe_backup_filename(filename), **model_dict(payload)}
         ),
         prefix="重命名备份失败",
     )
@@ -256,7 +253,7 @@ async def import_backup(
 ):
     return await _run(
         lambda: service.import_backup(
-            {"filename": _safe_backup_filename(filename), **_model_dict(payload)}
+            {"filename": _safe_backup_filename(filename), **model_dict(payload)}
         ),
         prefix="导入备份失败",
     )

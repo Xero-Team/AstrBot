@@ -29,7 +29,6 @@ from ._kb_helper_cleaning import (
     clean_and_rechunk_content,
     compact_chunks,
     get_cleaning_provider,
-    repair_and_translate_chunk_with_retry,
     repair_chunks_with_provider,
 )
 from ._kb_helper_url_import import (
@@ -78,20 +77,6 @@ class RateLimiter:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         return await self._inner.__aexit__(exc_type, exc_val, exc_tb)
-
-
-async def _repair_and_translate_chunk_with_retry(
-    chunk: str,
-    repair_llm_service: LLMProvider,
-    rate_limiter: RateLimiter,
-    max_retries: int = 2,
-) -> list[str]:
-    return await repair_and_translate_chunk_with_retry(
-        chunk=chunk,
-        repair_llm_service=repair_llm_service,
-        rate_limiter=rate_limiter._inner,
-        max_retries=max_retries,
-    )
 
 
 def _compact_chunks(chunks: list[str]) -> list[str]:

@@ -27,14 +27,6 @@ class WecomPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self._client = client
 
-    @staticmethod
-    async def send_with_client(
-        client: WeChatClient,
-        message: MessageChain,
-        user_name: str,
-    ) -> None:
-        pass
-
     async def split_plain(self, plain: str) -> list[str]:
         """将长文本分割成多个小文本, 每个小文本长度不超过 2048 字符
 

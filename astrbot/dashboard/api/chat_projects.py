@@ -5,7 +5,10 @@ from fastapi.responses import FileResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
-from astrbot.dashboard.schemas import ChatProjectRequest
+from astrbot.dashboard.schemas import (
+    ChatProjectRequest,
+    model_dict,
+)
 from astrbot.dashboard.services.chatui_project_service import (
     ChatUIProjectService,
     ChatUIProjectServiceError,
@@ -22,10 +25,6 @@ def get_service(request: Request) -> ChatUIProjectService:
 
 async def require_chat_scope(request: Request) -> AuthContext:
     return await require_scope(request, "chat")
-
-
-def _model_dict(payload) -> dict:
-    return payload.model_dump(exclude_none=True)
 
 
 async def _run(operation):
@@ -51,7 +50,7 @@ async def create_chat_project(
     service: ChatUIProjectService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.create_project(auth.username, _model_dict(payload))
+        lambda: service.create_project(auth.username, model_dict(payload))
     )
 
 
@@ -74,7 +73,7 @@ async def update_chat_project(
     return await _run(
         lambda: service.update_project(
             auth.username,
-            {"project_id": project_id, **_model_dict(payload)},
+            {"project_id": project_id, **model_dict(payload)},
         )
     )
 

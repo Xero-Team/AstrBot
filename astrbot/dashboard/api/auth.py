@@ -354,10 +354,6 @@ def _extract_dashboard_jwt_with_source(
     return None, None
 
 
-def _extract_dashboard_jwt(request: Request) -> str | None:
-    return _extract_dashboard_jwt_with_source(request)[0]
-
-
 def _dashboard_token_validator(request: Request) -> DashboardTokenValidator:
     return request.app.state.dashboard_token_validator
 
@@ -780,10 +776,6 @@ async def _login(
         request,
         result,
     )
-
-
-async def _setup_status(service: AuthService):
-    return _auth_service_response_from_result(await service.setup_status())
 
 
 def _auth_service_response_from_result(result: AuthServiceResult) -> JSONResponse:

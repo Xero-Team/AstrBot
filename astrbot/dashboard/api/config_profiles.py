@@ -1,15 +1,14 @@
-from typing import Any
-
 from fastapi import APIRouter, Depends, Request
 
 from astrbot.core.auth.models import Resource
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ok
 from astrbot.dashboard.schemas import (
     ConfigContentRequest,
     ConfigProfileCreateRequest,
     ConfigRoutesReplaceRequest,
     ConfigRouteUpsertRequest,
     RenameRequest,
+    model_dict,
 )
 from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
@@ -42,22 +41,6 @@ def get_display_service(request: Request) -> ConfigDisplayService:
 
 def get_file_service(request: Request) -> ConfigFileService:
     return request.app.state.services.config_files
-
-
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _alias_error(message: str):
-    return error(message)
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    return payload.model_dump(exclude_none=True)
 
 
 async def _authorize_config_resource(
@@ -176,7 +159,7 @@ async def update_config_profile(
     service: ConfigProfileService = Depends(get_service),
 ):
     await _authorize_config_resource(request, auth, config_id=config_id, write=True)
-    posted_config = _model_dict(payload)
+    posted_config = model_dict(payload)
     await _authorize_config_credentials_if_changed(
         request,
         auth,
@@ -256,7 +239,7 @@ async def update_system_config(
     service: ConfigProfileService = Depends(get_service),
 ):
     await _authorize_config_resource(request, auth, config_id="default", write=True)
-    posted_config = _model_dict(payload)
+    posted_config = model_dict(payload)
     await _authorize_config_credentials_if_changed(
         request,
         auth,

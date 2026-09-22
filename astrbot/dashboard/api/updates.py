@@ -5,7 +5,10 @@ from astrbot import logger
 from astrbot.core.auth.models import Resource
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.schemas import PipInstallRequest
+from astrbot.dashboard.schemas import (
+    PipInstallRequest,
+    model_dict,
+)
 from astrbot.dashboard.services.update_service import (
     UpdateService,
     UpdateServiceError,
@@ -43,10 +46,6 @@ async def require_system_pip_install_scope(request: Request) -> AuthContext:
         action="system.pip_install",
         resource_id="pip-install",
     )
-
-
-def _model_dict(payload) -> dict:
-    return payload.model_dump(exclude_none=True)
 
 
 def _result_payload(result: UpdateServiceResult) -> dict:
@@ -93,4 +92,4 @@ async def install_pip_package(
     _auth: AuthContext = Depends(require_system_pip_install_scope),
     service: UpdateService = Depends(get_service),
 ):
-    return await _run(lambda: service.install_pip_package(_model_dict(payload)))
+    return await _run(lambda: service.install_pip_package(model_dict(payload)))

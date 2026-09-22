@@ -30,18 +30,6 @@ def _raise_log_error(exc: LogServiceError) -> None:
     raise ApiError(str(exc)) from exc
 
 
-def _log_stream_response(last_event_id: str | None, service: LogService):
-    return StreamingResponse(
-        service.stream_log_events(last_event_id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Transfer-Encoding": "chunked",
-        },
-    )
-
-
 def _get_log_history(
     service: LogService,
     *,

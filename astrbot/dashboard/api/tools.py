@@ -12,6 +12,8 @@ from astrbot.dashboard.schemas import (
     McpServerRequest,
     ModelScopeSyncRequest,
     ToolEnabledRequest,
+    model_dict,
+    reject_forbidden_keys,
 )
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
 
@@ -36,14 +38,10 @@ async def require_mcp_write_scope(request: Request) -> AuthContext:
     return await require_scope(request, "mcp", action_override="tool.mcp_write")
 
 
-def _model_dict(payload: McpServerRequest) -> dict[str, Any]:
-    return payload.model_dump(exclude_none=True)
-
-
 def _reject_legacy_server_config_fields(config: dict[str, Any]) -> dict[str, Any]:
-    legacy_fields = [
-        key
-        for key in (
+    reject_forbidden_keys(
+        config,
+        (
             "enabled",
             "mcpServers",
             "mcp_server_config",
@@ -53,12 +51,10 @@ def _reject_legacy_server_config_fields(config: dict[str, Any]) -> dict[str, Any
             "session_read_timeout",
             "timeout",
             "config",
-        )
-        if key in config
-    ]
-    if legacy_fields:
-        fields = ", ".join(sorted(legacy_fields))
-        raise ApiError(f"Legacy MCP config fields are not supported: {fields}")
+        ),
+        label="Legacy MCP config fields are not supported",
+        error=ApiError,
+    )
     return config
 
 
@@ -224,7 +220,7 @@ async def create_mcp_server(
     _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
-    return await _create_mcp_server(_model_dict(payload), service)
+    return await _create_mcp_server(model_dict(payload), service)
 
 
 @router.patch("/mcp/servers/{server_name:path}/enabled")
@@ -250,7 +246,7 @@ async def test_mcp_server(
     _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
-    body = _model_dict(payload) if payload is not None else {}
+    body = model_dict(payload) if payload is not None else {}
     return await _test_mcp_server(server_name, body, service)
 
 
@@ -384,7 +380,7 @@ async def update_mcp_server(
     _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     return await _update_mcp_server(server_name, body, service)
 
 

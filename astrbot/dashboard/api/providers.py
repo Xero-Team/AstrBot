@@ -7,6 +7,8 @@ from astrbot.dashboard.schemas import (
     ProviderConfigRequest,
     ProviderEmbeddingDimensionRequest,
     ProviderSourceRequest,
+    model_dict,
+    reject_forbidden_keys,
 )
 from astrbot.dashboard.services.config_service import (
     REDACTED_SECRET_PLACEHOLDER,
@@ -31,18 +33,12 @@ def _reject_legacy_provider_query_params(
     request: Request,
     *forbidden: str,
 ) -> None:
-    legacy_fields = [key for key in forbidden if key in request.query_params]
-    if legacy_fields:
-        fields = ", ".join(sorted(legacy_fields))
-        raise ApiError(f"Legacy provider query parameters are not supported: {fields}")
-
-
-def _model_dict(payload) -> dict:
-    if payload is None:
-        return {}
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_none=True)
-    return payload if isinstance(payload, dict) else {}
+    reject_forbidden_keys(
+        request.query_params,
+        forbidden,
+        label="Legacy provider query parameters are not supported",
+        error=ApiError,
+    )
 
 
 def _provider_config_for_dimension(
@@ -397,7 +393,7 @@ async def get_embedding_dimension(
     auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     await _authorize_provider_resource(
         request, auth, resource_type="provider", resource_id=provider_id
     )

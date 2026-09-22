@@ -127,10 +127,6 @@ def _parse_frontmatter_description(text: str) -> str:
     return parse_skill_frontmatter(text).description
 
 
-def _read_skill_description(skill_md: Path) -> str:
-    return _read_skill_frontmatter(skill_md).description
-
-
 def _read_skill_frontmatter(skill_md: Path):
     from astrbot.core.skills._skill_frontmatter import (
         SkillFrontmatter,

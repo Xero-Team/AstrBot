@@ -15,9 +15,11 @@ from astrbot.core.backup import (
     MAIN_DB_MODELS,
     ImportPreCheckResult,
 )
+from astrbot.core.backup._importer_platform_stats import (
+    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
+)
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
-    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     AstrBotImporter,
     DatabaseClearError,
     ImportResult,

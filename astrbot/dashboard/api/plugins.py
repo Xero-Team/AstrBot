@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
 from astrbot import logger
@@ -18,6 +16,8 @@ from astrbot.dashboard.schemas import (
     PluginUninstallRequest,
     PluginUpdateRequest,
     PluginUrlInstallRequest,
+    model_dict,
+    reject_forbidden_keys,
 )
 from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
@@ -73,18 +73,12 @@ async def require_plugin_id_scope(
 
 
 def _reject_legacy_plugin_query_params(request: Request, *forbidden: str) -> None:
-    legacy_fields = [key for key in forbidden if key in request.query_params]
-    if legacy_fields:
-        fields = ", ".join(sorted(legacy_fields))
-        raise ApiError(f"Legacy plugin query parameters are not supported: {fields}")
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    if payload is None:
-        return {}
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_none=True)
-    return payload if isinstance(payload, dict) else {}
+    reject_forbidden_keys(
+        request.query_params,
+        forbidden,
+        label="Legacy plugin query parameters are not supported",
+        error=ApiError,
+    )
 
 
 def _normalize_github_repository(repository: str) -> str:
@@ -260,7 +254,7 @@ async def create_plugin_source(
     service: PluginService = Depends(get_service),
 ):
     return ok(
-        {"sources": await service.create_custom_source(_model_dict(payload))},
+        {"sources": await service.create_custom_source(model_dict(payload))},
         message="保存成功",
     )
 
@@ -272,7 +266,7 @@ async def replace_plugin_sources(
     service: PluginService = Depends(get_service),
 ):
     return ok(
-        {"sources": await service.replace_custom_sources(_model_dict(payload))},
+        {"sources": await service.replace_custom_sources(model_dict(payload))},
         message="保存成功",
     )
 
@@ -313,7 +307,7 @@ async def uninstall_failed_plugin(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     return await _run_service(
         service.uninstall_failed_plugin({"dir_name": plugin_id, **body}),
         log_label="/api/v1/plugins/failed/{plugin_id}",
@@ -374,7 +368,7 @@ async def update_plugin_config(
     _auth: AuthContext = Depends(require_plugin_id_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     config = body.get("config")
     config = config if isinstance(config, dict) else body
     await service.save_plugin_configs(config, plugin_id)
@@ -433,7 +427,7 @@ async def delete_plugin_config_file(
     _auth: AuthContext = Depends(require_plugin_id_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     service.delete_config_file(
         scope="plugin",
         name=plugin_id,
@@ -485,7 +479,7 @@ async def bind_plugin_source(
     _auth: AuthContext = Depends(require_plugin_id_scope),
     service: PluginService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     return await _run_service(
         service.bind_plugin_market_source({"name": plugin_id, **body}),
         log_label="/api/plugin/source",
@@ -514,7 +508,7 @@ async def update_plugin(
     _auth: AuthContext = Depends(require_plugin_install_scope),
     service: PluginService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     return await _run_service(
         service.update_plugin({"name": plugin_id, **body}),
         log_label="/api/v1/plugins/{plugin_id}/update",
@@ -544,7 +538,7 @@ async def uninstall_plugin(
     _auth: AuthContext = Depends(require_plugin_id_scope),
     service: PluginService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_dict(payload)
     return await _run_service(
         service.uninstall_plugin({"name": plugin_id, **body}),
         log_label="/api/v1/plugins/{plugin_id}",

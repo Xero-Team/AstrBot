@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
@@ -9,7 +7,10 @@ from astrbot.core.platform.webhook_server import (
 )
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
-from astrbot.dashboard.schemas import BotRegistrationRequest
+from astrbot.dashboard.schemas import (
+    BotRegistrationRequest,
+    model_dict,
+)
 from astrbot.dashboard.services.platform_service import (
     PlatformService,
     PlatformServiceError,
@@ -30,10 +31,6 @@ async def require_config_scope(request: Request) -> AuthContext:
 
 def _raise_platform_error(exc: PlatformServiceError) -> None:
     raise ApiError(str(exc), status_code=exc.status_code) from exc
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    return payload.model_dump(exclude_none=True)
 
 
 async def _run(operation):
@@ -71,7 +68,7 @@ async def register_bot_type(
     service: PlatformService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.handle_platform_registration(bot_type, _model_dict(payload))
+        lambda: service.handle_platform_registration(bot_type, model_dict(payload))
     )
 
 

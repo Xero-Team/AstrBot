@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -9,6 +7,7 @@ from astrbot.dashboard.schemas import (
     PersonaMoveRequest,
     PersonaReorderRequest,
     PersonaRequest,
+    model_patch_dict,
 )
 from astrbot.dashboard.services.persona_service import (
     PersonaService,
@@ -26,19 +25,6 @@ def get_service(request: Request) -> PersonaService:
 
 async def require_persona_scope(request: Request) -> AuthContext:
     return await require_scope(request, "persona")
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    """Serialize a request model while preserving explicit null updates.
-
-    Args:
-        payload: Pydantic request model.
-
-    Returns:
-        Request data without fields omitted by the caller.
-    """
-
-    return payload.model_dump(exclude_unset=True)
 
 
 def _raise_persona_error(exc: PersonaServiceError | ValueError) -> None:
@@ -79,7 +65,7 @@ async def create_persona(
     _auth: AuthContext = Depends(require_persona_scope),
     service: PersonaService = Depends(get_service),
 ):
-    return await _run(lambda: service.create_persona(_model_dict(payload)))
+    return await _run(lambda: service.create_persona(model_patch_dict(payload)))
 
 
 @router.post("/personas/move")
@@ -88,7 +74,7 @@ async def move_persona(
     _auth: AuthContext = Depends(require_persona_scope),
     service: PersonaService = Depends(get_service),
 ):
-    return await _run(lambda: service.move_persona(_model_dict(payload)))
+    return await _run(lambda: service.move_persona(model_patch_dict(payload)))
 
 
 @router.post("/personas/reorder")
@@ -97,7 +83,7 @@ async def reorder_personas(
     _auth: AuthContext = Depends(require_persona_scope),
     service: PersonaService = Depends(get_service),
 ):
-    return await _run(lambda: service.reorder_items(_model_dict(payload)))
+    return await _run(lambda: service.reorder_items(model_patch_dict(payload)))
 
 
 @router.get("/persona-folders")
@@ -115,7 +101,7 @@ async def create_persona_folder(
     _auth: AuthContext = Depends(require_persona_scope),
     service: PersonaService = Depends(get_service),
 ):
-    return await _run(lambda: service.create_folder(_model_dict(payload)))
+    return await _run(lambda: service.create_folder(model_patch_dict(payload)))
 
 
 @router.put("/persona-folders/{folder_id:path}")
@@ -126,7 +112,9 @@ async def update_persona_folder(
     service: PersonaService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.update_folder({"folder_id": folder_id, **_model_dict(payload)})
+        lambda: service.update_folder(
+            {"folder_id": folder_id, **model_patch_dict(payload)}
+        )
     )
 
 
@@ -157,7 +145,7 @@ async def update_persona(
 ):
     return await _run(
         lambda: service.update_persona(
-            {"persona_id": persona_id, **_model_dict(payload)}
+            {"persona_id": persona_id, **model_patch_dict(payload)}
         )
     )
 

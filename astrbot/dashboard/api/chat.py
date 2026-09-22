@@ -13,6 +13,7 @@ from astrbot.dashboard.schemas import (
     ChatSessionPatchRequest,
     ChatThreadCreateRequest,
     ChatThreadMessageRequest,
+    model_patch_dict,
 )
 from astrbot.dashboard.services.chat_service import (
     ChatService,
@@ -52,17 +53,6 @@ async def _json_or_none(request: Request) -> dict[str, Any] | None:
     except Exception:
         return None
     return data if isinstance(data, dict) else None
-
-
-async def _json_body(request: Request):
-    try:
-        return await request.json()
-    except Exception:
-        return None
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    return payload.model_dump(exclude_unset=True, exclude_none=False)
 
 
 async def _run(operation):
@@ -262,7 +252,7 @@ async def update_chat_message(
             {
                 "session_id": session_id,
                 "message_id": message_id,
-                **_model_dict(payload),
+                **model_patch_dict(payload),
             },
         )
     )
@@ -280,7 +270,7 @@ async def regenerate_chat_message(
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatService = Depends(get_service),
 ):
-    body = _model_dict(payload) if payload is not None else {}
+    body = model_patch_dict(payload) if payload is not None else {}
     try:
         chat_payload = await service.prepare_regenerate_message_payload(
             auth.username,
@@ -312,7 +302,7 @@ async def create_chat_thread(
     service: ChatService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.create_thread(auth.username, _model_dict(payload))
+        lambda: service.create_thread(auth.username, model_patch_dict(payload))
     )
 
 
@@ -345,7 +335,7 @@ async def send_chat_thread_message(
     try:
         chat_payload = await service.prepare_thread_chat_payload(
             auth.username,
-            {"thread_id": thread_id, **_model_dict(payload)},
+            {"thread_id": thread_id, **model_patch_dict(payload)},
         )
     except ChatServiceError as exc:
         return JSONResponse(error(str(exc)))

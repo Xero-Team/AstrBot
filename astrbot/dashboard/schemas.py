@@ -1,7 +1,57 @@
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+def _serialize_request(
+    payload: Any,
+    *,
+    exclude_unset: bool,
+    exclude_none: bool,
+) -> dict[str, Any]:
+    if payload is None:
+        return {}
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump(
+            exclude_unset=exclude_unset,
+            exclude_none=exclude_none,
+        )
+    return payload if isinstance(payload, dict) else {}
+
+
+def model_dict(payload: Any) -> dict[str, Any]:
+    """Serialize a full request model, omitting unset and ``None`` fields."""
+    return _serialize_request(payload, exclude_unset=False, exclude_none=True)
+
+
+def model_patch_dict(payload: Any) -> dict[str, Any]:
+    """Serialize a PATCH request model, keeping explicit ``None`` updates."""
+    return _serialize_request(payload, exclude_unset=True, exclude_none=False)
+
+
+def reject_forbidden_keys(
+    mapping: Mapping[str, Any],
+    forbidden: Iterable[str],
+    *,
+    label: str,
+    error: type[Exception] = ValueError,
+) -> None:
+    """Raise ``error`` when ``mapping`` carries any removed key.
+
+    Args:
+        mapping: Request payload or query parameters to inspect.
+        forbidden: Removed key names that must be absent.
+        label: Message prefix describing the rejected field set.
+        error: Exception class raised for the first forbidden key.
+
+    Raises:
+        error: When at least one forbidden key is present.
+    """
+    present = [key for key in forbidden if key in mapping]
+    if present:
+        raise error(f"{label}: {', '.join(sorted(present))}")
 
 
 class OpenModel(BaseModel):
@@ -74,10 +124,11 @@ def _reject_legacy_mcp_request_fields(
 ) -> Any:
     if not isinstance(value, dict):
         return value
-    legacy_fields = [key for key in forbidden if key in value]
-    if legacy_fields:
-        fields = ", ".join(sorted(legacy_fields))
-        raise ValueError(f"Legacy MCP request fields are not supported: {fields}")
+    reject_forbidden_keys(
+        value,
+        forbidden,
+        label="Legacy MCP request fields are not supported",
+    )
     return value
 
 

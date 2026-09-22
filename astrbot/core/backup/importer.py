@@ -39,7 +39,6 @@ from ._importer_files import (
 )
 from ._importer_kb import clear_kb_data, import_kb_metadata_tables
 from ._importer_platform_stats import (
-    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     InvalidCountWarnLimiter,
     merge_platform_stats_rows,
     normalize_platform_stats_entry,
@@ -72,16 +71,8 @@ def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 KB_PATH = get_astrbot_knowledge_base_path()
-DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
-PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV = (
-    "ASTRBOT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT"
-)
 _IMPORT_ERROR = "Backup import failed"
 _PRE_CHECK_ERROR = "Backup pre-check failed"
-
-
-def _load_platform_stats_invalid_count_warn_limit() -> int:
-    return PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
 
 
 class _InvalidCountWarnLimiter:

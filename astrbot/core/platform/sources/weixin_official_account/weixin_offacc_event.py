@@ -28,14 +28,6 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         self._client = client
         self.message_out = message_out
 
-    @staticmethod
-    async def send_with_client(
-        client: WeChatClient,
-        message: MessageChain,
-        user_name: str,
-    ) -> None:
-        pass
-
     async def split_plain(self, plain: str, max_length: int = 1024) -> list[str]:
         """将长文本分割成多个小文本, 每个小文本长度不超过 max_length 字符
 

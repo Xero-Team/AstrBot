@@ -43,17 +43,6 @@ def _get_cua_idle_timeout(config: dict) -> float:
     return max(timeout, 0.0)
 
 
-def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
-    skills: list[Path] = []
-    for entry in sorted(skills_root.iterdir()):
-        if not entry.is_dir():
-            continue
-        skill_md = entry / "SKILL.md"
-        if skill_md.exists():
-            skills.append(entry)
-    return skills
-
-
 def _collect_sync_skill_dirs(
     skill_manager: SkillManager | None = None,
     plugins: PluginRegistry | None = None,
@@ -368,11 +357,6 @@ print(
 )
 """.strip()
     return _build_python_exec_command(script)
-
-
-def _build_sync_and_scan_command() -> str:
-    """Build the combined sync command used by the sandbox skill flow."""
-    return f"{_build_apply_sync_command()}\n{_build_scan_command()}"
 
 
 def _shell_exec_succeeded(result: dict) -> bool:

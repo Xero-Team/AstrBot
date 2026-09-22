@@ -5,7 +5,11 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS, Resource
 from astrbot.dashboard.responses import ApiError, error, ok
-from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
+from astrbot.dashboard.schemas import (
+    ImMessageRequest,
+    OpenApiChatRequest,
+    model_patch_dict,
+)
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -68,14 +72,6 @@ def get_service(request: Request) -> OpenApiService:
 
 def get_chat_service(request: Request) -> ChatService:
     return request.app.state.services.chat
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    if payload is None:
-        return {}
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_unset=True, exclude_none=False)
-    return payload if isinstance(payload, dict) else {}
 
 
 def _open_api_error(message: str) -> JSONResponse:
@@ -253,7 +249,7 @@ async def chat(
     chat_service: ChatService = Depends(get_chat_service),
 ):
     return await _open_api_chat_response(
-        _model_dict(payload),
+        model_patch_dict(payload),
         auth,
         service,
         chat_service,
@@ -390,7 +386,7 @@ async def send_im_message(
     _auth: AuthContext = Depends(require_im_scope),
     service: OpenApiService = Depends(get_service),
 ):
-    body = _model_dict(payload)
+    body = model_patch_dict(payload)
     try:
         await service.send_message(body)
     except OpenApiServiceError as exc:

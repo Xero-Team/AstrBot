@@ -88,15 +88,11 @@ def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> lis
     return labels
 
 
-def get_astrbot_workspaces_path() -> str:
-    """Compatibility wrapper for tests and older module-level monkeypatches."""
-    return computer_util.get_astrbot_workspaces_path()
-
-
 def _workspace_root(umo: str) -> Path:
-    """Workspace root that follows both util-level and fs-level getter monkeypatches."""
     normalized_umo = normalize_umo_for_workspace(umo)
-    return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
+    return (
+        Path(computer_util.get_astrbot_workspaces_path()) / normalized_umo
+    ).resolve(strict=False)
 
 
 def _plugin_skill_roots() -> tuple[Path, ...]:

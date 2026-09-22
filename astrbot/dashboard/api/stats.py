@@ -46,17 +46,6 @@ async def _run(operation):
         _raise_stat_error(exc)
 
 
-def _parse_int(value: object, default: int, name: str) -> int:
-    if value is None:
-        return default
-    if not isinstance(value, int | float | str | bytes | bytearray):
-        raise ApiError(f"{name} must be an integer")
-    try:
-        return int(value)
-    except (TypeError, ValueError) as exc:
-        raise ApiError(f"{name} must be an integer") from exc
-
-
 @router.get("/stats")
 async def get_stats(
     offset_sec: int = Query(default=86400),

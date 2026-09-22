@@ -11,6 +11,7 @@ from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import (
     SkillNeoRequest,
     SkillUpdateRequest,
+    model_dict,
 )
 from astrbot.dashboard.services.skills_service import (
     SkillArchive,
@@ -90,14 +91,6 @@ async def _authorize_neo_object(
         action="extension.manage" if write else "extension.read",
         resource=object_resource("skill", f"neo-{kind}", str(object_id).strip()),
     )
-
-
-def _model_dict(payload) -> dict[str, Any]:
-    if payload is None:
-        return {}
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump(exclude_none=True)
-    return payload if isinstance(payload, dict) else {}
 
 
 def _serialize_result(result: SkillsOperationResult):
@@ -312,7 +305,7 @@ async def evaluate_neo_skill_candidate(
     await _authorize_neo_object(
         request, auth, kind="candidate", object_id=payload.candidate_id, write=True
     )
-    return await _run(lambda: service.evaluate_neo_candidate(_model_dict(payload)))
+    return await _run(lambda: service.evaluate_neo_candidate(model_dict(payload)))
 
 
 @router.post("/skills/neo/promote")
@@ -325,7 +318,7 @@ async def promote_neo_skill_candidate(
     await _authorize_neo_object(
         request, auth, kind="candidate", object_id=payload.candidate_id, write=True
     )
-    return await _run(lambda: service.promote_neo_candidate(_model_dict(payload)))
+    return await _run(lambda: service.promote_neo_candidate(model_dict(payload)))
 
 
 @router.post("/skills/neo/rollback")
@@ -338,7 +331,7 @@ async def rollback_neo_skill_release(
     await _authorize_neo_object(
         request, auth, kind="release", object_id=payload.release_id, write=True
     )
-    return await _run(lambda: service.rollback_neo_release(_model_dict(payload)))
+    return await _run(lambda: service.rollback_neo_release(model_dict(payload)))
 
 
 @router.post("/skills/neo/sync")
@@ -357,7 +350,7 @@ async def sync_neo_skill_release(
     await _authorize_neo_object(
         request, auth, kind=target_kind, object_id=target_id, write=True
     )
-    return await _run(lambda: service.sync_neo_release(_model_dict(payload)))
+    return await _run(lambda: service.sync_neo_release(model_dict(payload)))
 
 
 @router.post("/skills/neo/candidates/delete")
@@ -370,7 +363,7 @@ async def delete_neo_skill_candidate(
     await _authorize_neo_object(
         request, auth, kind="candidate", object_id=payload.candidate_id, write=True
     )
-    return await _run(lambda: service.delete_neo_candidate(_model_dict(payload)))
+    return await _run(lambda: service.delete_neo_candidate(model_dict(payload)))
 
 
 @router.post("/skills/neo/releases/delete")
@@ -383,4 +376,4 @@ async def delete_neo_skill_release(
     await _authorize_neo_object(
         request, auth, kind="release", object_id=payload.release_id, write=True
     )
-    return await _run(lambda: service.delete_neo_release(_model_dict(payload)))
+    return await _run(lambda: service.delete_neo_release(model_dict(payload)))

@@ -43,14 +43,6 @@ def get_file_service(request: Request) -> ConfigFileService:
     return request.app.state.services.config_files
 
 
-async def _json_or_empty(request: Request) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 async def _authorize_config_resource(
     request: Request,
     auth: AuthContext,

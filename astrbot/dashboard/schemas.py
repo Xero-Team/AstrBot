@@ -22,7 +22,7 @@ def _serialize_request(
 
 
 def model_dict(payload: Any) -> dict[str, Any]:
-    """Serialize a full request model, droppingdropping ``None`` fields."""
+    """Serialize a full request model, dropping ``None`` fields."""
     return _serialize_request(payload, exclude_unset=False, exclude_none=True)
 
 

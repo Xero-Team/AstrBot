@@ -39,14 +39,6 @@ async def require_chat_scope(request: Request) -> AuthContext:
     return await require_scope(request, "chat")
 
 
-async def _json_or_empty(request: Request) -> dict[str, Any]:
-    try:
-        data = await request.json()
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 async def _json_or_none(request: Request) -> dict[str, Any] | None:
     try:
         data = await request.json()

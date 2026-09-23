@@ -50,7 +50,7 @@
       "actions": "操作"
     }
   },
-  "persona": {
+  "prompt": {
     "none": "跟随配置文件"
   },
   "provider": {
@@ -86,10 +86,10 @@
       "sttProvider": "语音识别模型",
       "ttsProvider": "语音合成模型"
     },
-    "personaConfig": {
-      "title": "人格配置",
-      "selectPersona": "选择人格",
-      "hint": "应用人格配置后，将会强制该来源的所有对话使用该人格。"
+    "promptConfig": {
+      "title": "提示词配置",
+      "selectPrompt": "选择提示词",
+      "hint": "应用提示词配置后，将会强制该来源的所有对话使用该提示词。"
     },
     "pluginConfig": {
       "title": "插件配置",

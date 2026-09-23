@@ -43,7 +43,6 @@ from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseServi
 from astrbot.dashboard.services.log_service import LogService
 from astrbot.dashboard.services.memory_service import MemoryService
 from astrbot.dashboard.services.open_api_service import OpenApiService
-from astrbot.dashboard.services.persona_service import PersonaService
 from astrbot.dashboard.services.platform_service import PlatformService
 from astrbot.dashboard.services.plugin_dashboard_service import PluginDashboardService
 from astrbot.dashboard.services.plugin_file_ticket_service import (
@@ -53,6 +52,7 @@ from astrbot.dashboard.services.plugin_page_session_service import (
     PluginPageSessionService,
 )
 from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.prompt_service import PromptService
 from astrbot.dashboard.services.session_management_service import (
     SessionManagementService,
 )
@@ -310,7 +310,7 @@ def create_dashboard_asgi_app(
             runtime.catalogs.providers,
             runtime.services.llm_metadata_catalog,
         ),
-        personas=PersonaService(runtime.persona_mgr),
+        prompts=PromptService(runtime.prompt_mgr),
         plugin_dashboard=plugin_dashboard,
         plugin_page_sessions=plugin_page_sessions,
         plugin_file_tickets=plugin_file_tickets,
@@ -340,7 +340,7 @@ def create_dashboard_asgi_app(
             db,
             runtime.services.preferences,
             runtime.provider_manager,
-            runtime.persona_mgr,
+            runtime.prompt_mgr,
             runtime.catalogs.plugins,
             runtime.knowledge_base_manager,
             runtime.umop_config_router,

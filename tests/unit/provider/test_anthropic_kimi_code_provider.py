@@ -304,7 +304,7 @@ async def test_text_chat_passes_through_list_system_prompt(monkeypatch):
     monkeypatch.setattr(provider, "_query", fake_query)
 
     structured_system = [
-        {"type": "text", "text": "Persona block."},
+        {"type": "text", "text": "Prompt block."},
         {"type": "text", "text": "Style guide."},
     ]
     await provider.text_chat(prompt="hello", system_prompt=structured_system)

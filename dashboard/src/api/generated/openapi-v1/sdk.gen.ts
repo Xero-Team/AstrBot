@@ -66,15 +66,15 @@ import type {
   CreateMcpServerResponses,
   CreateMemoryFactData,
   CreateMemoryFactResponses,
-  CreatePersonaData,
-  CreatePersonaFolderData,
-  CreatePersonaFolderResponses,
-  CreatePersonaResponses,
   CreatePluginDashboardPageSessionData,
   CreatePluginDashboardPageSessionErrors,
   CreatePluginDashboardPageSessionResponses,
   CreatePluginSourceData,
   CreatePluginSourceResponses,
+  CreatePromptData,
+  CreatePromptFolderData,
+  CreatePromptFolderResponses,
+  CreatePromptResponses,
   CreateProviderData,
   CreateProviderInSourceData,
   CreateProviderInSourceResponses,
@@ -126,14 +126,14 @@ import type {
   DeleteNeoSkillCandidateResponses,
   DeleteNeoSkillReleaseData,
   DeleteNeoSkillReleaseResponses,
-  DeletePersonaData,
-  DeletePersonaFolderData,
-  DeletePersonaFolderResponses,
-  DeletePersonaResponses,
   DeletePluginConfigFileData,
   DeletePluginConfigFileResponses,
   DeletePluginSourceData,
   DeletePluginSourceResponses,
+  DeletePromptData,
+  DeletePromptFolderData,
+  DeletePromptFolderResponses,
+  DeletePromptResponses,
   DeleteProviderData,
   DeleteProviderResponses,
   DeleteProviderSourceData,
@@ -229,10 +229,6 @@ import type {
   GetMemoryStatsResponses,
   GetNeoSkillPayloadData,
   GetNeoSkillPayloadResponses,
-  GetPersonaData,
-  GetPersonaResponses,
-  GetPersonaTreeData,
-  GetPersonaTreeResponses,
   GetPluginChangelogData,
   GetPluginChangelogResponses,
   GetPluginConfigData,
@@ -246,6 +242,10 @@ import type {
   GetPluginReadmeData,
   GetPluginReadmeResponses,
   GetPluginResponses,
+  GetPromptData,
+  GetPromptResponses,
+  GetPromptTreeData,
+  GetPromptTreeResponses,
   GetProviderData,
   GetProviderEmbeddingDimensionData,
   GetProviderEmbeddingDimensionResponses,
@@ -397,10 +397,6 @@ import type {
   ListNeoSkillCandidatesResponses,
   ListNeoSkillReleasesData,
   ListNeoSkillReleasesResponses,
-  ListPersonaFoldersData,
-  ListPersonaFoldersResponses,
-  ListPersonasData,
-  ListPersonasResponses,
   ListPluginConfigFilesData,
   ListPluginConfigFilesResponses,
   ListPluginMarketCategoriesData,
@@ -411,6 +407,10 @@ import type {
   ListPluginSourcesData,
   ListPluginSourcesResponses,
   ListPluginsResponses,
+  ListPromptFoldersData,
+  ListPromptFoldersResponses,
+  ListPromptsData,
+  ListPromptsResponses,
   ListProvidersBySourceData,
   ListProvidersBySourceResponses,
   ListProvidersData,
@@ -442,8 +442,8 @@ import type {
   LogoutResponses,
   MoveDataFileEntryData,
   MoveDataFileEntryResponses,
-  MovePersonaItemData,
-  MovePersonaItemResponses,
+  MovePromptItemData,
+  MovePromptItemResponses,
   OpenChatWebSocketData,
   OpenUnifiedChatWebSocketData,
   PromoteNeoSkillCandidateData,
@@ -476,8 +476,8 @@ import type {
   RenameBackupResponses,
   RenameConfigProfileData,
   RenameConfigProfileResponses,
-  ReorderPersonaItemsData,
-  ReorderPersonaItemsResponses,
+  ReorderPromptItemsData,
+  ReorderPromptItemsResponses,
   ReplaceConfigRoutesData,
   ReplaceConfigRoutesResponses,
   ReplaceConversationMessagesData,
@@ -595,10 +595,6 @@ import type {
   UpdateMcpServerResponses,
   UpdateMemoryFactData,
   UpdateMemoryFactResponses,
-  UpdatePersonaData,
-  UpdatePersonaFolderData,
-  UpdatePersonaFolderResponses,
-  UpdatePersonaResponses,
   UpdatePluginConfigData,
   UpdatePluginConfigResponses,
   UpdatePluginData,
@@ -607,6 +603,10 @@ import type {
   UpdatePluginResponses,
   UpdatePluginsData,
   UpdatePluginsResponses,
+  UpdatePromptData,
+  UpdatePromptFolderData,
+  UpdatePromptFolderResponses,
+  UpdatePromptResponses,
   UpdateProviderData,
   UpdateProviderResponses,
   UpdateSessionGroupData,
@@ -5248,99 +5248,46 @@ export const getMemoryStats = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Get persona folder tree
+ * Get prompt folder tree
  */
-export const getPersonaTree = <ThrowOnError extends boolean = false>(
-  options?: Options<GetPersonaTreeData, ThrowOnError>,
-): RequestResult<GetPersonaTreeResponses, unknown, ThrowOnError> =>
+export const getPromptTree = <ThrowOnError extends boolean = false>(
+  options?: Options<GetPromptTreeData, ThrowOnError>,
+): RequestResult<GetPromptTreeResponses, unknown, ThrowOnError> =>
   (options?.client ?? client).get<
-    GetPersonaTreeResponses,
+    GetPromptTreeResponses,
     unknown,
     ThrowOnError
   >({
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/tree',
+    url: '/api/v1/prompts/tree',
     ...options,
   });
 
 /**
- * List personas
+ * List prompts
  */
-export const listPersonas = <ThrowOnError extends boolean = false>(
-  options?: Options<ListPersonasData, ThrowOnError>,
-): RequestResult<ListPersonasResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<ListPersonasResponses, unknown, ThrowOnError>(
+export const listPrompts = <ThrowOnError extends boolean = false>(
+  options?: Options<ListPromptsData, ThrowOnError>,
+): RequestResult<ListPromptsResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<ListPromptsResponses, unknown, ThrowOnError>({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/prompts',
+    ...options,
+  });
+
+/**
+ * Create a prompt
+ */
+export const createPrompt = <ThrowOnError extends boolean = false>(
+  options: Options<CreatePromptData, ThrowOnError>,
+): RequestResult<CreatePromptResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<CreatePromptResponses, unknown, ThrowOnError>(
     {
       responseType: 'json',
       security: [{ name: 'X-API-Key', type: 'apiKey' }],
-      url: '/api/v1/personas',
-      ...options,
-    },
-  );
-
-/**
- * Create a persona
- */
-export const createPersona = <ThrowOnError extends boolean = false>(
-  options: Options<CreatePersonaData, ThrowOnError>,
-): RequestResult<CreatePersonaResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    CreatePersonaResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Delete a persona
- */
-export const deletePersona = <ThrowOnError extends boolean = false>(
-  options: Options<DeletePersonaData, ThrowOnError>,
-): RequestResult<DeletePersonaResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).delete<
-    DeletePersonaResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/{persona_id}',
-    ...options,
-  });
-
-/**
- * Get a persona
- */
-export const getPersona = <ThrowOnError extends boolean = false>(
-  options: Options<GetPersonaData, ThrowOnError>,
-): RequestResult<GetPersonaResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).get<GetPersonaResponses, unknown, ThrowOnError>({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/{persona_id}',
-    ...options,
-  });
-
-/**
- * Update a persona
- */
-export const updatePersona = <ThrowOnError extends boolean = false>(
-  options: Options<UpdatePersonaData, ThrowOnError>,
-): RequestResult<UpdatePersonaResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).put<UpdatePersonaResponses, unknown, ThrowOnError>(
-    {
-      responseType: 'json',
-      security: [{ name: 'X-API-Key', type: 'apiKey' }],
-      url: '/api/v1/personas/{persona_id}',
+      url: '/api/v1/prompts',
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -5350,74 +5297,121 @@ export const updatePersona = <ThrowOnError extends boolean = false>(
   );
 
 /**
- * List persona folders
+ * Delete a prompt
  */
-export const listPersonaFolders = <ThrowOnError extends boolean = false>(
-  options?: Options<ListPersonaFoldersData, ThrowOnError>,
-): RequestResult<ListPersonaFoldersResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<
-    ListPersonaFoldersResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/persona-folders',
-    ...options,
-  });
-
-/**
- * Create a persona folder
- */
-export const createPersonaFolder = <ThrowOnError extends boolean = false>(
-  options: Options<CreatePersonaFolderData, ThrowOnError>,
-): RequestResult<CreatePersonaFolderResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    CreatePersonaFolderResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/persona-folders',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Delete a persona folder
- */
-export const deletePersonaFolder = <ThrowOnError extends boolean = false>(
-  options: Options<DeletePersonaFolderData, ThrowOnError>,
-): RequestResult<DeletePersonaFolderResponses, unknown, ThrowOnError> =>
+export const deletePrompt = <ThrowOnError extends boolean = false>(
+  options: Options<DeletePromptData, ThrowOnError>,
+): RequestResult<DeletePromptResponses, unknown, ThrowOnError> =>
   (options.client ?? client).delete<
-    DeletePersonaFolderResponses,
+    DeletePromptResponses,
     unknown,
     ThrowOnError
   >({
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/persona-folders/{folder_id}',
+    url: '/api/v1/prompts/{prompt_id}',
     ...options,
   });
 
 /**
- * Update a persona folder
+ * Get a prompt
  */
-export const updatePersonaFolder = <ThrowOnError extends boolean = false>(
-  options: Options<UpdatePersonaFolderData, ThrowOnError>,
-): RequestResult<UpdatePersonaFolderResponses, unknown, ThrowOnError> =>
+export const getPrompt = <ThrowOnError extends boolean = false>(
+  options: Options<GetPromptData, ThrowOnError>,
+): RequestResult<GetPromptResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).get<GetPromptResponses, unknown, ThrowOnError>({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/prompts/{prompt_id}',
+    ...options,
+  });
+
+/**
+ * Update a prompt
+ */
+export const updatePrompt = <ThrowOnError extends boolean = false>(
+  options: Options<UpdatePromptData, ThrowOnError>,
+): RequestResult<UpdatePromptResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).put<UpdatePromptResponses, unknown, ThrowOnError>({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/prompts/{prompt_id}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * List prompt folders
+ */
+export const listPromptFolders = <ThrowOnError extends boolean = false>(
+  options?: Options<ListPromptFoldersData, ThrowOnError>,
+): RequestResult<ListPromptFoldersResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListPromptFoldersResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/prompt-folders',
+    ...options,
+  });
+
+/**
+ * Create a prompt folder
+ */
+export const createPromptFolder = <ThrowOnError extends boolean = false>(
+  options: Options<CreatePromptFolderData, ThrowOnError>,
+): RequestResult<CreatePromptFolderResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    CreatePromptFolderResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/prompt-folders',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Delete a prompt folder
+ */
+export const deletePromptFolder = <ThrowOnError extends boolean = false>(
+  options: Options<DeletePromptFolderData, ThrowOnError>,
+): RequestResult<DeletePromptFolderResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).delete<
+    DeletePromptFolderResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/prompt-folders/{folder_id}',
+    ...options,
+  });
+
+/**
+ * Update a prompt folder
+ */
+export const updatePromptFolder = <ThrowOnError extends boolean = false>(
+  options: Options<UpdatePromptFolderData, ThrowOnError>,
+): RequestResult<UpdatePromptFolderResponses, unknown, ThrowOnError> =>
   (options.client ?? client).put<
-    UpdatePersonaFolderResponses,
+    UpdatePromptFolderResponses,
     unknown,
     ThrowOnError
   >({
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/persona-folders/{folder_id}',
+    url: '/api/v1/prompt-folders/{folder_id}',
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -5426,19 +5420,19 @@ export const updatePersonaFolder = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Move a persona or folder
+ * Move a prompt or folder
  */
-export const movePersonaItem = <ThrowOnError extends boolean = false>(
-  options: Options<MovePersonaItemData, ThrowOnError>,
-): RequestResult<MovePersonaItemResponses, unknown, ThrowOnError> =>
+export const movePromptItem = <ThrowOnError extends boolean = false>(
+  options: Options<MovePromptItemData, ThrowOnError>,
+): RequestResult<MovePromptItemResponses, unknown, ThrowOnError> =>
   (options.client ?? client).post<
-    MovePersonaItemResponses,
+    MovePromptItemResponses,
     unknown,
     ThrowOnError
   >({
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/move',
+    url: '/api/v1/prompts/move',
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -5447,19 +5441,19 @@ export const movePersonaItem = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Reorder personas or folders
+ * Reorder prompts or folders
  */
-export const reorderPersonaItems = <ThrowOnError extends boolean = false>(
-  options: Options<ReorderPersonaItemsData, ThrowOnError>,
-): RequestResult<ReorderPersonaItemsResponses, unknown, ThrowOnError> =>
+export const reorderPromptItems = <ThrowOnError extends boolean = false>(
+  options: Options<ReorderPromptItemsData, ThrowOnError>,
+): RequestResult<ReorderPromptItemsResponses, unknown, ThrowOnError> =>
   (options.client ?? client).post<
-    ReorderPersonaItemsResponses,
+    ReorderPromptItemsResponses,
     unknown,
     ThrowOnError
   >({
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/personas/reorder',
+    url: '/api/v1/prompts/reorder',
     ...options,
     headers: {
       'Content-Type': 'application/json',

@@ -672,7 +672,7 @@ const apiKeyExpiryOptions = computed(() => [
 const availableScopes = [
   { value: 'bot', label: 'bot' },
   { value: 'provider', label: 'provider' },
-  { value: 'persona', label: 'persona' },
+  { value: 'prompt', label: 'prompt' },
   { value: 'im', label: 'im' },
   { value: 'config', label: 'config' },
   { value: 'chat', label: 'chat' },

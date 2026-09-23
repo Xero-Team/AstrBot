@@ -89,7 +89,7 @@ async def test_third_party_runner_receives_inline_profile_config(
             astrbot_config=config,
             execution_context=SimpleNamespace(
                 conversation_manager=MagicMock(),
-                persona_manager=MagicMock(),
+                prompt_manager=MagicMock(),
                 background_tasks=set(),
                 metrics=SimpleNamespace(upload=AsyncMock()),
             ),
@@ -98,7 +98,7 @@ async def test_third_party_runner_receives_inline_profile_config(
             preferences=None,
         )
     )
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     event = MagicMock()
     event.message_str = "hello"
     event.unified_msg_origin = "webchat:FriendMessage:test"
@@ -121,7 +121,7 @@ async def test_third_party_runner_receives_inline_profile_config(
 
 
 @pytest.mark.asyncio
-async def test_third_party_persona_resolution_does_not_force_default_via_provider_settings(
+async def test_third_party_prompt_resolution_does_not_force_default_via_provider_settings(
     monkeypatch: pytest.MonkeyPatch,
 ):
     captured = {}
@@ -132,24 +132,24 @@ async def test_third_party_persona_resolution_does_not_force_default_via_provide
 
     monkeypatch.setattr(
         third_party,
-        "resolve_event_conversation_persona_id",
-        AsyncMock(return_value="conversation-persona"),
+        "resolve_event_conversation_prompt_id",
+        AsyncMock(return_value="conversation-prompt"),
     )
     monkeypatch.setattr(
-        third_party, "resolve_persona_custom_error_message", fake_resolve
+        third_party, "resolve_prompt_custom_error_message", fake_resolve
     )
 
     stage = third_party.ThirdPartyAgentSubStage()
     stage.ctx = SimpleNamespace(
         execution_context=SimpleNamespace(
             conversation_manager=MagicMock(),
-            persona_manager=MagicMock(),
+            prompt_manager=MagicMock(),
         )
     )
     event = MagicMock()
 
-    result = await stage._resolve_persona_custom_error_message(event)
+    result = await stage._resolve_prompt_custom_error_message(event)
 
     assert result == "custom-error"
     assert "provider_settings" not in captured
-    assert captured["conversation_persona_id"] == "conversation-persona"
+    assert captured["conversation_prompt_id"] == "conversation-prompt"

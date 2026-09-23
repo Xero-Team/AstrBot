@@ -13,7 +13,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
-from astrbot.core.persona_error_reply import (
+from astrbot.core.prompt_error_reply import (
     get_agent_error_message,
 )
 from astrbot.core.utils.error_redaction import safe_error

@@ -134,7 +134,7 @@ def test_skill_prompt_reader_and_tool_catalog_share_filtered_snapshot(
     catalog = assemble_tool_catalog(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -148,7 +148,7 @@ def test_skill_prompt_reader_and_tool_catalog_share_filtered_snapshot(
 
 
 @pytest.mark.parametrize(
-    ("enabled", "loop", "runtime", "persona", "workspace_visible"),
+    ("enabled", "loop", "runtime", "prompt", "workspace_visible"),
     [
         (True, "conversation", "local", None, False),
         (True, None, "local", None, False),
@@ -159,8 +159,8 @@ def test_skill_prompt_reader_and_tool_catalog_share_filtered_snapshot(
         (True, "work", "local", {"skills": []}, False),
     ],
 )
-def test_workspace_skill_requires_local_work_and_respects_persona(
-    skill_context, enabled, loop, runtime, persona, workspace_visible
+def test_workspace_skill_requires_local_work_and_respects_prompt(
+    skill_context, enabled, loop, runtime, prompt, workspace_visible
 ):
     context, event, profile, extras = skill_context
     profile["btw"]["enabled"] = enabled
@@ -168,12 +168,12 @@ def test_workspace_skill_requires_local_work_and_respects_persona(
     snapshot = main_agent._append_skills_prompt(
         ProviderRequest(prompt="help"),
         {"computer_use_runtime": runtime},
-        persona,
+        prompt,
         event,
         context,
     )
     assert (snapshot.get("workspace-guide") is not None) == workspace_visible
-    if persona == {"skills": []}:
+    if prompt == {"skills": []}:
         assert snapshot.skills == ()
 
 

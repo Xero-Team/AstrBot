@@ -22,8 +22,8 @@
     "enabledAgents": "启用中的 Agent",
     "enabledAgentsNote": "会参与 handoff 编排的子代理",
     "mainOrchestration": "主编排状态",
-    "boundPersonas": "已绑定 Persona",
-    "boundPersonasNote": "完成角色绑定的子代理数量"
+    "boundPrompts": "已绑定 Prompt",
+    "boundPromptsNote": "完成角色绑定的子代理数量"
   },
   "switches": {
     "enable": "启用子代理编排",
@@ -37,7 +37,7 @@
   },
   "section": {
     "title": "子代理配置",
-    "subtitle": "为主代理配置可委派的子代理、人格与描述信息",
+    "subtitle": "为主代理配置可委派的子代理、提示词与描述信息",
     "globalSettings": "全局设置",
     "agentSetup": "Agent 设置"
   },
@@ -48,32 +48,32 @@
     "transferPrefix": "transfer_to_{name}",
     "switchLabel": "启用",
     "previewTitle": "预览：主 LLM 将看到的 handoff 工具",
-    "personaChip": "Persona: {id}",
+    "promptChip": "Prompt: {id}",
     "noDescription": "暂无描述",
-    "personaPreview": "人格预览",
-    "previewHint": "这里展示当前所选 Persona 的预览，便于确认 handoff 目标。"
+    "promptPreview": "提示词预览",
+    "previewHint": "这里展示当前所选 Prompt 的预览，便于确认 handoff 目标。"
   },
   "form": {
     "nameLabel": "Agent 名称（用于 transfer_to_{name}）",
     "nameHint": "建议使用英文小写+下划线，且全局唯一",
     "providerLabel": "Chat Provider（可选）",
     "providerHint": "留空表示跟随全局默认 provider。",
-    "personaLabel": "选择人格设定",
-    "personaHint": "子代理 将直接继承所选 Persona 的系统设定与工具。在人格设定页管理和新建人格。",
-    "personaPreview": "人格预览",
+    "promptLabel": "选择提示词设定",
+    "promptHint": "子代理 将直接继承所选 Prompt 的系统设定与工具。在提示词设定页管理和新建提示词。",
+    "promptPreview": "提示词预览",
     "descriptionLabel": "对主 LLM 的描述（用于决定是否 handoff）",
     "descriptionHint": "这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
   },
   "messages": {
     "loadConfigFailed": "获取配置失败",
-    "loadPersonaFailed": "获取 Persona 列表失败",
+    "loadPromptFailed": "获取 Prompt 列表失败",
     "unsavedChangesNotice": "当前页面有未保存修改，请在离开前保存。",
     "unsavedChangesLeaveConfirm": "当前页面有未保存修改，离开后将丢失这些更改。是否继续离开？",
     "unsavedChangesReloadConfirm": "当前页面有未保存修改，刷新配置会丢失这些更改。是否继续刷新？",
     "nameMissing": "存在未填写名称的子代理",
     "nameInvalid": "子代理名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头",
     "nameDuplicate": "子代理名称重复：{name}",
-    "personaMissing": "子代理 {name} 未选择 Persona",
+    "promptMissing": "子代理 {name} 未选择 Prompt",
     "saveSuccess": "保存成功",
     "saveFailed": "保存失败",
     "nameRequired": "名称必填",

@@ -229,7 +229,7 @@ describe('config docs links', () => {
         metadata: {
           agent_runner: { items: {} },
           ai: { items: {} },
-          persona: { items: {} },
+          prompt: { items: {} },
           websearch: {
             description: 'Web Search',
             items: {

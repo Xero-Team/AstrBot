@@ -7,7 +7,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.tools.function_tool_manager import FunctionToolManager
 
 if TYPE_CHECKING:
-    from astrbot.core.persona_mgr import PersonaManager
+    from astrbot.core.prompt_mgr import PromptManager
 
 
 class SubAgentOrchestrator:
@@ -18,10 +18,10 @@ class SubAgentOrchestrator:
     """
 
     def __init__(
-        self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager
+        self, tool_mgr: FunctionToolManager, prompt_mgr: PromptManager
     ) -> None:
         self._tool_mgr = tool_mgr
-        self._persona_mgr = persona_mgr
+        self._prompt_mgr = prompt_mgr
         self.handoffs: list[HandoffTool] = []
 
     async def reload_from_config(self, cfg: dict[str, Any]) -> None:
@@ -43,14 +43,14 @@ class SubAgentOrchestrator:
             if not name:
                 continue
 
-            persona_id = item.get("persona_id")
-            if persona_id is not None:
-                persona_id = str(persona_id).strip() or None
-            persona_data = self._persona_mgr.get_runtime_persona_by_id(persona_id)
-            if persona_id and persona_data is None:
+            prompt_id = item.get("prompt_id")
+            if prompt_id is not None:
+                prompt_id = str(prompt_id).strip() or None
+            prompt_data = self._prompt_mgr.get_runtime_prompt_by_id(prompt_id)
+            if prompt_id and prompt_data is None:
                 logger.warning(
-                    "SubAgent persona %s not found, fallback to inline prompt.",
-                    persona_id,
+                    "SubAgent prompt %s not found, fallback to inline prompt.",
+                    prompt_id,
                 )
 
             instructions = str(item.get("system_prompt", "")).strip()
@@ -61,14 +61,14 @@ class SubAgentOrchestrator:
             tools = item.get("tools", [])
             begin_dialogs = None
 
-            if persona_data:
-                prompt = str(persona_data.get("prompt", "")).strip()
+            if prompt_data:
+                prompt = str(prompt_data.get("prompt", "")).strip()
                 if prompt:
                     instructions = prompt
                 begin_dialogs = copy.deepcopy(
-                    persona_data.get("_begin_dialogs_processed")
+                    prompt_data.get("_begin_dialogs_processed")
                 )
-                tools = persona_data.get("tools")
+                tools = prompt_data.get("tools")
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:

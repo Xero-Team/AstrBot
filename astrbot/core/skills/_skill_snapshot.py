@@ -24,7 +24,7 @@ from astrbot.core.skills._skill_inventory import (
 )
 
 SKILL_SNAPSHOT_EXTRA_KEY = "skill_snapshot"
-PERSONA_TOOLS_EXTRA_KEY = "persona_tools"
+PROMPT_TOOLS_EXTRA_KEY = "prompt_tools"
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ import '@/utils/monacoLoader';
 import { ref, computed } from 'vue';
 import ConfigItemRenderer from './ConfigItemRenderer.vue';
 import TemplateListEditor from './TemplateListEditor.vue';
-import PersonaQuickPreview from './PersonaQuickPreview.vue';
+import PromptQuickPreview from './PromptQuickPreview.vue';
 import ConfigDocsLink from './ConfigDocsLink.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver';
@@ -356,11 +356,11 @@ function shouldShowSection() {
         </v-row>
 
         <v-row
-          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona'"
-          class="persona-preview-row"
+          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_prompt'"
+          class="prompt-preview-row"
         >
-          <v-col cols="12" class="persona-preview-display">
-            <PersonaQuickPreview
+          <v-col cols="12" class="prompt-preview-display">
+            <PromptQuickPreview
               :model-value="createSelectorModel(itemKey).value"
             />
           </v-col>
@@ -487,12 +487,12 @@ function shouldShowSection() {
 
             <v-row
               v-if="
-                !itemMeta?.invisible && itemMeta?._special === 'select_persona'
+                !itemMeta?.invisible && itemMeta?._special === 'select_prompt'
               "
-              class="persona-preview-row"
+              class="prompt-preview-row"
             >
-              <v-col cols="12" class="persona-preview-display">
-                <PersonaQuickPreview
+              <v-col cols="12" class="prompt-preview-display">
+                <PromptQuickPreview
                   :model-value="createSelectorModel(itemKey).value"
                 />
               </v-col>
@@ -693,12 +693,12 @@ function shouldShowSection() {
   padding: 0 8px;
 }
 
-.persona-preview-row {
+.prompt-preview-row {
   margin: 16px;
   margin-top: 0;
 }
 
-.persona-preview-display {
+.prompt-preview-display {
   padding: 0 8px;
 }
 

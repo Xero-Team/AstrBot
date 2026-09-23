@@ -40,8 +40,8 @@ from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
-from astrbot.core.persona_error_reply import (
-    extract_persona_custom_error_message_from_event,
+from astrbot.core.prompt_error_reply import (
+    extract_prompt_custom_error_message_from_event,
 )
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.string_utils import interpolate_placeholders
@@ -195,10 +195,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._inflight_operations: set[asyncio.Future[T.Any]] = set()
         self._stop_cleanup_tasks: set[asyncio.Future[T.Any]] = set()
 
-    def _get_persona_custom_error_message(self) -> str | None:
-        """Read persona-level custom error message from event extras when available."""
+    def _get_prompt_custom_error_message(self) -> str | None:
+        """Read prompt-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
-        return extract_persona_custom_error_message_from_event(event)
+        return extract_prompt_custom_error_message_from_event(event)
 
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
         """Finalize the current step as a plain assistant response with no tool calls."""
@@ -1258,7 +1258,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
             self._resolve_unconsumed_follow_ups()
-            custom_error_message = self._get_persona_custom_error_message()
+            custom_error_message = self._get_prompt_custom_error_message()
             error_text = custom_error_message or (
                 f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
             )

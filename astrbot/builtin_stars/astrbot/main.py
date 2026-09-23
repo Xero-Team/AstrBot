@@ -167,7 +167,7 @@ class Main(star.Star):
     async def decorate_llm_req(
         self, event: AstrMessageEvent, req: ProviderRequest
     ) -> None:
-        """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
+        """在请求 LLM 前注入提示词信息、Identifier、时间、回复内容等 System Prompt"""
         if self.group_chat_context and self.group_context_enabled(event):
             try:
                 await self.group_chat_context.on_req_llm(event, req)

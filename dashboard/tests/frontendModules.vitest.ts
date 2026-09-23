@@ -25,7 +25,7 @@ const apiMocks = vi.hoisted(() => ({
   systemGet: vi.fn(),
   tree: vi.fn(),
   folders: vi.fn(),
-  listPersonas: vi.fn(),
+  listPrompts: vi.fn(),
   startTime: vi.fn(),
   restart: vi.fn(),
 }));
@@ -42,10 +42,10 @@ vi.mock('@/api/v1', () => ({
   configRouteApi: { upsert: vi.fn(), list: vi.fn() },
   providerApi: { schema: apiMocks.schema, listByProviderType: vi.fn() },
   systemConfigApi: { get: apiMocks.systemGet },
-  personaApi: {
+  promptApi: {
     tree: apiMocks.tree,
     folders: apiMocks.folders,
-    list: apiMocks.listPersonas,
+    list: apiMocks.listPrompts,
   },
   statsApi: {
     startTime: apiMocks.startTime,
@@ -63,7 +63,7 @@ import { useSessions } from '@/composables/useSessions';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import { useToast } from '@/utils/toast';
 import {
   buildWebchatUmoDetails,
@@ -197,7 +197,7 @@ describe('frontend modules', () => {
     expect(apiMocks.restart).toHaveBeenCalled();
   });
 
-  it('covers auth, persona, common, and customizer stores', async () => {
+  it('covers auth, prompt, common, and customizer stores', async () => {
     apiMocks.systemGet.mockResolvedValue({
       data: { data: { config: { platform: [{}] } } },
     });
@@ -206,7 +206,7 @@ describe('frontend modules', () => {
     });
     apiMocks.tree.mockResolvedValue({ data: { status: 'ok', data: [] } });
     apiMocks.folders.mockResolvedValue({ data: { status: 'ok', data: [] } });
-    apiMocks.listPersonas.mockResolvedValue({
+    apiMocks.listPrompts.mockResolvedValue({
       data: { status: 'ok', data: [] },
     });
     apiMocks.logout.mockResolvedValue({ data: { status: 'ok' } });
@@ -222,13 +222,13 @@ describe('frontend modules', () => {
     auth.logout();
     expect(auth.has_token()).toBe(false);
 
-    const persona = usePersonaStore();
-    persona.toggleFolderExpansion('folder-1');
-    persona.setFolderExpansion('folder-1', true);
-    persona.updateBreadcrumb(null);
-    await persona.loadFolderTree();
-    await persona.navigateToFolder(null);
-    expect(persona.currentFolderName).toBeDefined();
+    const prompt = usePromptStore();
+    prompt.toggleFolderExpansion('folder-1');
+    prompt.setFolderExpansion('folder-1', true);
+    prompt.updateBreadcrumb(null);
+    await prompt.loadFolderTree();
+    await prompt.navigateToFolder(null);
+    expect(prompt.currentFolderName).toBeDefined();
 
     const common = useCommonStore();
     expect(common.log_cache).toEqual([]);

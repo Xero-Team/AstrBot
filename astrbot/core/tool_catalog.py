@@ -153,7 +153,7 @@ class PluginLookup(Protocol):
 @dataclass(frozen=True, slots=True)
 class ToolCatalogInputs:
     snapshot: SkillSnapshot
-    persona_tools: Sequence[str] | None
+    prompt_tools: Sequence[str] | None
     surface: CatalogSurface
     computer_use_runtime: str
     plugin_names: Sequence[str] | None
@@ -192,13 +192,13 @@ def assemble_tool_catalog(inputs: ToolCatalogInputs) -> ToolSet:
 
 def assemble_tool_catalog_names(inputs: ToolCatalogInputs) -> tuple[str, ...]:
     candidates = _candidate_union(inputs)
-    after_persona = _apply_persona_tools(
+    after_prompt = _apply_prompt_tools(
         candidates,
-        persona_tools=inputs.persona_tools,
+        prompt_tools=inputs.prompt_tools,
         snapshot=inputs.snapshot,
     )
     after_plugin = _apply_plugin_filter(
-        after_persona,
+        after_prompt,
         plugin_names=inputs.plugin_names,
         registered_tools=inputs.registered_tools,
         plugins=inputs.plugins,
@@ -407,19 +407,19 @@ def _on_demand_computer_tools(inputs: ToolCatalogInputs) -> set[str]:
     return set()
 
 
-def _apply_persona_tools(
+def _apply_prompt_tools(
     candidates: set[str],
     *,
-    persona_tools: Sequence[str] | None,
+    prompt_tools: Sequence[str] | None,
     snapshot: SkillSnapshot,
 ) -> set[str]:
     keep_read_skill = bool(snapshot.skills) and READ_SKILL_TOOL_NAME in candidates
-    if persona_tools is None:
+    if prompt_tools is None:
         names = set(candidates)
-    elif not persona_tools:
+    elif not prompt_tools:
         names = set()
     else:
-        allowed = set(persona_tools)
+        allowed = set(prompt_tools)
         names = {name for name in candidates if name in allowed}
     if keep_read_skill:
         names.add(READ_SKILL_TOOL_NAME)

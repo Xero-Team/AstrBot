@@ -31,7 +31,7 @@ const api = vi.hoisted(() => {
       listProjectSessions: fn(),
     },
     configRouteApi: { upsert: fn() },
-    personaApi: {
+    promptApi: {
       tree: fn(),
       folders: fn(),
       list: fn(),
@@ -89,7 +89,7 @@ import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useRecording } from '@/composables/useRecording';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import { restartAstrBot } from '@/utils/restartAstrBot';
 import { useToolActions } from '@/components/extension/componentPanel/composables/useToolActions';
 import { useComponentData } from '@/components/extension/componentPanel/composables/useComponentData';
@@ -264,33 +264,33 @@ describe('error-path coverage', () => {
     delete window.astrbotDesktop;
   });
 
-  it('covers persona errors, auth upgrade, tools, commands, and sidebar apply', async () => {
-    const persona = usePersonaStore();
-    api.personaApi.tree.mockResolvedValue({
+  it('covers prompt errors, auth upgrade, tools, commands, and sidebar apply', async () => {
+    const prompt = usePromptStore();
+    api.promptApi.tree.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    await expect(persona.loadFolderTree()).rejects.toThrow();
-    api.personaApi.move.mockResolvedValue({
+    await expect(prompt.loadFolderTree()).rejects.toThrow();
+    api.promptApi.move.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    await expect(persona.movePersonaToFolder('p', 'f')).rejects.toThrow();
-    api.personaApi.updateFolder.mockResolvedValue({
+    await expect(prompt.movePromptToFolder('p', 'f')).rejects.toThrow();
+    api.promptApi.updateFolder.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    await expect(persona.moveFolderToFolder('a', null)).rejects.toThrow();
-    api.personaApi.createFolder.mockResolvedValue({
+    await expect(prompt.moveFolderToFolder('a', null)).rejects.toThrow();
+    api.promptApi.createFolder.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    await expect(persona.createFolder({ name: 'x' })).rejects.toThrow();
-    api.personaApi.delete.mockResolvedValue({
+    await expect(prompt.createFolder({ name: 'x' })).rejects.toThrow();
+    api.promptApi.delete.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    await expect(persona.deletePersona('p')).rejects.toThrow();
-    api.personaApi.reorder.mockResolvedValue({
+    await expect(prompt.deletePrompt('p')).rejects.toThrow();
+    api.promptApi.reorder.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
     await expect(
-      persona.reorderItems([{ id: 'p', type: 'persona', sort_order: 1 }]),
+      prompt.reorderItems([{ id: 'p', type: 'prompt', sort_order: 1 }]),
     ).rejects.toThrow();
 
     api.authApi.login.mockResolvedValue({
@@ -546,17 +546,17 @@ describe('error-path coverage', () => {
     });
     await dialog.saveEditedProvider();
 
-    api.personaApi.updateFolder.mockResolvedValue({
+    api.promptApi.updateFolder.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    const persona = usePersonaStore();
+    const prompt = usePromptStore();
     await expect(
-      persona.updateFolder({ folder_id: 'a', name: 'n' }),
+      prompt.updateFolder({ folder_id: 'a', name: 'n' }),
     ).rejects.toThrow();
-    api.personaApi.deleteFolder.mockResolvedValue({
+    api.promptApi.deleteFolder.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    await expect(persona.deleteFolder('a')).rejects.toThrow();
+    await expect(prompt.deleteFolder('a')).rejects.toThrow();
 
     const validator = new I18nValidator();
     expect(
@@ -603,12 +603,12 @@ describe('error-path coverage', () => {
     conversations.currCid.value = '';
     await conversations.getConversations();
 
-    const persona = usePersonaStore();
-    persona.folderTree = [
+    const prompt = usePromptStore();
+    prompt.folderTree = [
       { folder_id: 'a', name: 'A', parent_id: null, children: [] },
     ];
-    persona.updateBreadcrumb('missing');
-    expect(persona.breadcrumbPath).toEqual([]);
+    prompt.updateBreadcrumb('missing');
+    expect(prompt.breadcrumbPath).toEqual([]);
 
     const { useCommandFilters } =
       await import('@/components/extension/componentPanel/composables/useCommandFilters');

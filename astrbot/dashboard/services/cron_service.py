@@ -61,7 +61,7 @@ class CronService:
             cron_expression = payload.get("cron_expression")
             note = payload.get("note") or payload.get("description") or name
             session = str(payload.get("session") or "").strip()
-            persona_id = payload.get("persona_id")
+            prompt_id = payload.get("prompt_id")
             provider_id = payload.get("provider_id")
             timezone_name = str(payload.get("timezone") or "").strip()
             if not timezone_name:
@@ -85,7 +85,7 @@ class CronService:
             job_payload = {
                 "session": session,
                 "note": note,
-                "persona_id": persona_id,
+                "prompt_id": prompt_id,
                 "provider_id": provider_id,
                 "run_at": run_at,
                 "origin": "api",

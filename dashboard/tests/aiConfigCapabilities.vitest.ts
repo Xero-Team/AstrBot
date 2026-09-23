@@ -16,7 +16,7 @@ function buildMetadata(includeBtw: boolean) {
   const metadata: Record<string, unknown> = {
     agent_runner: { items: {} },
     ai: { items: {} },
-    persona: { items: {} },
+    prompt: { items: {} },
     knowledgebase: { description: 'Knowledge Base', items: {} },
     websearch: { description: 'Web Search', items: {} },
     agent_computer_use: { description: 'Computer Use', items: {} },

@@ -1,7 +1,7 @@
 <template>
   <BaseFolderCard
     :folder="folder"
-    :accept-drop-types="['persona']"
+    :accept-drop-types="['prompt']"
     :labels="{
       open: tm('folder.contextMenu.open'),
       rename: tm('folder.contextMenu.rename'),
@@ -34,17 +34,17 @@ const emit = defineEmits<{
   rename: [];
   move: [];
   delete: [];
-  'persona-dropped': [
-    payload: { persona_id: string; target_folder_id: string | null },
+  'prompt-dropped': [
+    payload: { prompt_id: string; target_folder_id: string | null },
   ];
 }>();
 
-const { tm } = useModuleI18n('features/persona');
+const { tm } = useModuleI18n('features/prompt');
 
 function onItemDropped(data: DropEventData) {
-  if (data.item_type === 'persona') {
-    emit('persona-dropped', {
-      persona_id: data.item_id,
+  if (data.item_type === 'prompt') {
+    emit('prompt-dropped', {
+      prompt_id: data.item_id,
       target_folder_id: data.target_folder_id ?? props.folder.folder_id,
     });
   }

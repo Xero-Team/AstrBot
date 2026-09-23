@@ -73,7 +73,7 @@ Use Agentic when some turns need documents and some are small talk. Use default 
 1. The knowledge base exists, but profile `kb_names` is still empty.
 2. You changed the embedding model or dimension and kept the old index. Reindex refuses that case; it does not silently corrupt the index.
 3. A custom rule `kb_ids` points at a deleted base, so retrieval looks dead.
-4. Agentic is on, but the model cannot call tools or the Persona forbids the tool.
+4. Agentic is on, but the model cannot call tools or the Prompt forbids the tool.
 5. A failed upload is still searchable — treat that as a defect, clean up, and re-upload.
 
 If this happens, do not upload the same file again immediately:

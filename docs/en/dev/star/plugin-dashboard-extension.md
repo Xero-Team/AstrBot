@@ -210,7 +210,7 @@ size, and MIME, then streams the file through a short-lived owner-bound ticket.
 Every Action can declare:
 
 - `required_scope`: defaults to `plugin`; allowed values are `bot`, `provider`,
-  `persona`, `im`, `config`, `chat`, `kb`, `memory`, `data`, `file`, `plugin`,
+  `prompt`, `im`, `config`, `chat`, `kb`, `memory`, `data`, `file`, `plugin`,
   `mcp`, and `skill`.
 - `timeout_seconds`: 5–120 seconds, default 30.
 - `description`: at most 200 characters.

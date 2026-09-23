@@ -170,7 +170,7 @@ class ConversationService:
             "title": conversation.title
             or webchat_titles.get(conversation.user_id)
             or None,
-            "persona_id": conversation.persona_id,
+            "prompt_id": conversation.prompt_id,
             "history": conversation.history,
             "created_at": conversation.created_at,
             "updated_at": conversation.updated_at,
@@ -189,14 +189,14 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        persona_id = payload.get("persona_id", conversation.persona_id)
+        prompt_id = payload.get("prompt_id", conversation.prompt_id)
 
-        if title is not None or persona_id is not None:
+        if title is not None or prompt_id is not None:
             await self.conv_mgr.update_conversation(
                 unified_msg_origin=user_id,
                 conversation_id=cid,
                 title=title,
-                persona_id=persona_id,
+                prompt_id=prompt_id,
             )
         return {"message": "对话信息更新成功"}
 
@@ -284,7 +284,7 @@ class ConversationService:
                     "user_id": user_id,
                     "platform_id": conversation.platform_id,
                     "title": conversation.title or webchat_titles.get(user_id) or None,
-                    "persona_id": conversation.persona_id,
+                    "prompt_id": conversation.prompt_id,
                     "created_at": conversation.created_at,
                     "updated_at": conversation.updated_at,
                     "content": content,

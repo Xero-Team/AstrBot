@@ -1,6 +1,6 @@
 {
   "title": "Long-term Memory",
-  "subtitle": "Manage auditable, deletable, and restorable persona memory",
+  "subtitle": "Manage auditable, deletable, and restorable prompt memory",
   "stats": {
     "activeFacts": "Active facts",
     "deletedFacts": "Deleted facts",

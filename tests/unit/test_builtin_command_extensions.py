@@ -12,8 +12,8 @@ from astrbot.builtin_stars.builtin_commands.commands.bot import (
 )
 from astrbot.builtin_stars.builtin_commands.commands.chat import ChatCommands
 from astrbot.builtin_stars.builtin_commands.commands.help import HelpCommand
-from astrbot.builtin_stars.builtin_commands.commands.persona import PersonaCommands
 from astrbot.builtin_stars.builtin_commands.commands.plugin import PluginCommands
+from astrbot.builtin_stars.builtin_commands.commands.prompt import PromptCommands
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
 from astrbot.builtin_stars.builtin_commands.commands.tts import TtsCommands
 from astrbot.builtin_stars.builtin_commands.commands.user import (
@@ -301,11 +301,11 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "user_unblock",
         "user_llm_on",
         "user_llm_off",
-        "persona_list",
-        "persona_set",
-        "persona_status",
-        "persona_unset",
-        "persona_show",
+        "prompt_list",
+        "prompt_set",
+        "prompt_status",
+        "prompt_unset",
+        "prompt_show",
         "plugin_install",
         "plugin_show",
         "plugin_list",
@@ -331,8 +331,8 @@ def test_all_builtin_extension_commands_use_native_command_schemas():
         "conversation_create_for": ("session_id",),
         "model_set": ("model_or_index",),
         "admin_grant": ("user_id",),
-        "persona_set": ("persona_id",),
-        "persona_show": ("persona_id",),
+        "prompt_set": ("prompt_id",),
+        "prompt_show": ("prompt_id",),
         "plugin_install": ("repository_url",),
         "plugin_show": ("plugin_name",),
         "plugin_disable": ("plugin_name",),
@@ -428,8 +428,8 @@ async def test_help_command_defaults_to_plain_text(monkeypatch):
                 "enabled": True,
                 "type": "command",
                 "parent_signature": None,
-                "effective_command": "persona",
-                "description": "View or switch persona",
+                "effective_command": "prompt",
+                "description": "View or switch prompt",
             },
             {
                 "reserved": True,
@@ -483,7 +483,7 @@ async def test_help_command_defaults_to_plain_text(monkeypatch):
 
     text = _plain_text(event.result)
     assert "AstrBot v" in text
-    assert "/persona - View or switch persona" in text
+    assert "/prompt - View or switch prompt" in text
     assert "/plugin - Plugin management" in text
     assert "/model - View or switch the current model" in text
     assert "/variable - Manage session variables" in text
@@ -503,8 +503,8 @@ async def test_help_command_supports_image_mode(monkeypatch):
                 "enabled": True,
                 "type": "command",
                 "parent_signature": None,
-                "effective_command": "persona",
-                "description": "View or switch persona",
+                "effective_command": "prompt",
+                "description": "View or switch prompt",
             }
         ]
 
@@ -581,8 +581,8 @@ async def test_help_command_sends_local_image_when_callback_url_is_unavailable(
                 "enabled": True,
                 "type": "command",
                 "parent_signature": None,
-                "effective_command": "persona",
-                "description": "View or switch persona",
+                "effective_command": "prompt",
+                "description": "View or switch prompt",
             }
         ]
 
@@ -633,8 +633,8 @@ async def test_help_command_sends_local_image_when_file_token_registration_fails
                 "enabled": True,
                 "type": "command",
                 "parent_signature": None,
-                "effective_command": "persona",
-                "description": "View or switch persona",
+                "effective_command": "prompt",
+                "description": "View or switch prompt",
             }
         ]
 
@@ -687,8 +687,8 @@ async def test_help_command_uses_file_token_for_local_image_when_callback_is_ava
                 "enabled": True,
                 "type": "command",
                 "parent_signature": None,
-                "effective_command": "persona",
-                "description": "View or switch persona",
+                "effective_command": "prompt",
+                "description": "View or switch prompt",
             }
         ]
 
@@ -903,7 +903,7 @@ async def test_user_commands_write_sender_overlays():
         "llm_enabled": False,
         "session_enabled": False,
         "tts_enabled": False,
-        "persona_id": "p1",
+        "prompt_id": "p1",
     }
     await command.set_blocked(DummyEvent(message_str="user block"), full_id, True)
     assert stored[(full_id, "session_service_config")] == {
@@ -1147,7 +1147,7 @@ async def test_bot_leave_reports_failure_without_leaving_result():
 
 
 @pytest.mark.asyncio
-async def test_persona_command_switches_current_conversation_persona():
+async def test_prompt_command_switches_current_conversation_prompt():
     updates: list[tuple[str, str]] = []
 
     async def current_id(_umo: str) -> str:
@@ -1155,11 +1155,11 @@ async def test_persona_command_switches_current_conversation_persona():
 
     async def get(_umo: str, _conversation_id: str, *, create_if_missing: bool):
         assert create_if_missing is True
-        return SimpleNamespace(title="Current", persona_id=None)
+        return SimpleNamespace(title="Current", prompt_id=None)
 
-    async def update(umo: str, *, persona_id: str, **kwargs) -> None:
+    async def update(umo: str, *, prompt_id: str, **kwargs) -> None:
         _ = kwargs
-        updates.append((umo, persona_id))
+        updates.append((umo, prompt_id))
 
     async def resolve(**kwargs):
         _ = kwargs
@@ -1171,11 +1171,11 @@ async def test_persona_command_switches_current_conversation_persona():
             get=get,
             update=update,
         ),
-        personas=SimpleNamespace(
+        prompts=SimpleNamespace(
             resolve=resolve,
-            get=lambda persona_id: (
-                {"name": persona_id, "prompt": "prompt"}
-                if persona_id == "assistant"
+            get=lambda prompt_id: (
+                {"name": prompt_id, "prompt": "prompt"}
+                if prompt_id == "assistant"
                 else None
             ),
         ),
@@ -1183,23 +1183,23 @@ async def test_persona_command_switches_current_conversation_persona():
         i18n=FakeI18n(),
     )
 
-    command = PersonaCommands(context)
-    event = DummyEvent(message_str="persona set assistant")
-    await command.set_persona(event, "assistant")
+    command = PromptCommands(context)
+    event = DummyEvent(message_str="prompt set assistant")
+    await command.set_prompt(event, "assistant")
 
     assert updates == [("napcat:FriendMessage:42", "assistant")]
-    assert "Persona updated" in _plain_text(event.result)
+    assert "Prompt updated" in _plain_text(event.result)
 
 
-def test_persona_operations_are_registered_as_native_subcommands():
-    persona_group = Main.persona.parent_group
+def test_prompt_operations_are_registered_as_native_subcommands():
+    prompt_group = Main.prompt.parent_group
     subcommands = {
         filter_ref.command_name: filter_ref
-        for filter_ref in persona_group.sub_command_filters
+        for filter_ref in prompt_group.sub_command_filters
         if isinstance(filter_ref, CommandFilter)
     }
 
-    assert persona_group.group_name == "persona"
+    assert prompt_group.group_name == "prompt"
     assert set(subcommands) == {"list", "set", "show", "status", "unset"}
     assert subcommands["status"].alias == set()
     assert subcommands["set"].handler_params[0].is_greedy is True
@@ -1319,7 +1319,7 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
         "tts": {"disable", "enable", "status"},
         "flow": {"disable", "enable", "status", "unset"},
         "admin": {"grant", "list", "revoke"},
-        "persona": {"list", "set", "show", "status", "unset"},
+        "prompt": {"list", "set", "show", "status", "unset"},
         "plugin": {"disable", "enable", "install", "list", "show"},
         "user": {"block", "unblock"},
     }

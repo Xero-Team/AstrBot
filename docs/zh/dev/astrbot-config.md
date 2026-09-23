@@ -102,7 +102,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 ## `agent_runner`
 
-配置档的 AI 执行入口。形状为 `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`。聊天模型、Persona、压缩和步数上限都写在这里，不要再放到 `provider_settings`。
+配置档的 AI 执行入口。形状为 `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`。聊天模型、Prompt、压缩和步数上限都写在这里，不要再放到 `provider_settings`。
 
 ### 模型选择与重试
 
@@ -110,13 +110,12 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 - `agent_runner.config.model.fallback_provider_ids`：主模型失败时按顺序尝试的聊天模型 ID。
 - `agent_runner.config.model.request_max_retries`：单个模型请求最大重试次数，默认 `5`；fallback 与单模型重试是不同层次。
 
-### Persona
+### Prompt
 
-- 本地 Runner：`agent_runner.config.persona.persona_id`。
-- 第三方 Runner：`agent_runner.config.persona_id`。
-- 健康模式：`agent_runner.config.persona.safety_mode`。
+- 本地与第三方 Runner：`agent_runner.config.prompt_id`。
+- 健康模式：`agent_runner.config.safety_mode`。
 
-选择优先级和权限语义见 [Persona 人格设定](../use/persona)。
+选择优先级和权限语义见 [Prompt 提示词设定](../use/prompt)。
 
 ### 上下文压缩
 
@@ -156,15 +155,15 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志或备份提交到 Git；日志和 Trace 也可能包含 Provider ID、请求错误或工具输出。
 
-### Persona、提示词与会话
+### Prompt、提示词与会话
 
-- `persona_pool`：本配置档可选 Persona，`["*"]` 表示全部。
-- `prompt_prefix`：用户提示词模板。占位符语法是无逻辑的 `{{name}}`，不是 Jinja2。允许的键只有 `prompt`。模板含 `{{prompt}}` 时替换为用户输入；不含该占位符时，把前缀拼在用户输入前面。Persona `system_prompt` 和 workspace `EXTRA_PROMPT.md` 不是模板。
+- `prompt_pool`：本配置档可选 Prompt，`["*"]` 表示全部。
+- `prompt_prefix`：用户提示词模板。占位符语法是无逻辑的 `{{name}}`，不是 Jinja2。允许的键只有 `prompt`。模板含 `{{prompt}}` 时替换为用户输入；不含该占位符时，把前缀拼在用户输入前面。Prompt `system_prompt` 和 workspace `EXTRA_PROMPT.md` 不是模板。
 - 内置 LLM 模板使用同一套 `{{name}}` 语法。cron 唤醒允许 `cron_job`；后台任务唤醒允许 `background_task_result`；tool-loop 通知允许 `follow_up_lines`、`tool_names`、`tool_name`、`streak`、`overflow_path`、`read_tool_hint`。未知 `{{name}}` 保持字面量，替换值不会再次扫描。
 - `identifier`、`group_name_display`：在本轮最后一条 user 消息后附加用户 ID 或群名的 `<system_reminder>`，并写入会话历史。
 - `datetime_system_prompt`：开启后在本轮最后一条 user 消息后附加临时当前时间 `<system_reminder>`，不写入会话历史，也不写入 system prompt。
 
-默认 Persona ID 在 `agent_runner` 中配置。选择优先级见 [Persona 人格设定](../use/persona)。
+默认 Prompt ID 在 `agent_runner` 中配置。选择优先级见 [Prompt 提示词设定](../use/prompt)。
 
 ### 工具展示
 
@@ -186,7 +185,7 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 - `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.computer_use`、`tool.local_exec`、`tool.file_read` 和 `tool.file_write` 等动作统一授权。WebChat 高风险实例工具仍要 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up。
 - `sandbox.booter`：`shipyard_neo` 或 `cua`，其余字段保存 endpoint、token、profile、TTL 或 CUA 系统/遥测/本地模式配置。
 
-本地模式直接操作 AstrBot 主机，应仅在可信环境使用。沙箱也不是自动授权边界；仍需限制管理员、Persona 工具和外部网络。
+本地模式直接操作 AstrBot 主机，应仅在可信环境使用。沙箱也不是自动授权边界；仍需限制管理员、Prompt 工具和外部网络。
 
 ### 搜索与图片
 
@@ -218,7 +217,7 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 在配置档中启用 BTW 后，可通过 **更多功能 → BTW 双循环 → 插件工具循环分配** 为每个已启用的非系统插件选择对话循环、工作循环或两者。未分配的插件默认仅工作循环可用；选择两者会保存显式覆盖，重新选择工作循环会移除覆盖。关闭 BTW 后保留普通工具可用性。
 
-主 Agent 与其子 Agent handoff 应用相同分配，并继续遵守 Persona、配置档与授权限制。循环分配不会授予工具执行权限。插件事件处理器和显式命令保留原有执行路径；此设置不会把整个插件转换为后台任务。
+主 Agent 与其子 Agent handoff 应用相同分配，并继续遵守 Prompt、配置档与授权限制。循环分配不会授予工具执行权限。插件事件处理器和显式命令保留原有执行路径；此设置不会把整个插件转换为后台任务。
 
 ## BTW MCP 工具循环分配
 
@@ -230,7 +229,7 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 启用 BTW 后，可通过 **Skills 循环分配** 为每个已启用的普通 Skill 选择对话循环、工作循环或两者。普通 Skill 默认在两个循环可见；选择单一循环会保存覆盖，重新选择两者会移除覆盖。工作区 Skill 仅在使用 `local` 运行时的工作循环中可用。关闭 BTW 后保留标准 Skill 选择路径。
 
-循环分配在请求 Skill 快照冻结之前筛选已启用的 Skill，因此提示词、`read_skill` 和 Skill 声明的候选工具使用同一选择结果。Persona 与插件限制继续生效，包括 Persona 的空 Skill 列表。循环分配不会授予执行权限：Computer Use 为 `none` 时，`read_skill` 仍可读取允许的 Skill 手册，但 Shell 和 Python 仍不可用。
+循环分配在请求 Skill 快照冻结之前筛选已启用的 Skill，因此提示词、`read_skill` 和 Skill 声明的候选工具使用同一选择结果。Prompt 与插件限制继续生效，包括 Prompt 的空 Skill 列表。循环分配不会授予执行权限：Computer Use 为 `none` 时，`read_skill` 仍可读取允许的 Skill 手册，但 Shell 和 Python 仍不可用。
 
 ## 子代理、语音与知识库
 
@@ -342,4 +341,4 @@ Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和
 3. 不在 Issue、日志或 Git diff 中暴露凭据、TOTP secret、JWT secret 和访问 token。
 4. 重启后查看日志是否出现字段被删除、Provider 加载失败或平台重载失败。
 5. 修改监听、代理头、TLS、Computer Use、MCP 或回调地址后，重新做网络边界测试。
-6. 为多个配置档分别验证默认 Provider、Persona、插件池和会话绑定；默认配置档的值不会自动代表所有配置档。
+6. 为多个配置档分别验证默认 Provider、Prompt、插件池和会话绑定；默认配置档的值不会自动代表所有配置档。

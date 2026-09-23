@@ -50,7 +50,7 @@
       "actions": "Actions"
     }
   },
-  "persona": {
+  "prompt": {
     "none": "Follow Config"
   },
   "provider": {
@@ -86,10 +86,10 @@
       "sttProvider": "STT Provider",
       "ttsProvider": "TTS Provider"
     },
-    "personaConfig": {
-      "title": "Persona Configuration",
-      "selectPersona": "Select Persona",
-      "hint": "Persona settings affect the conversation style and behavior of the LLM"
+    "promptConfig": {
+      "title": "Prompt Configuration",
+      "selectPrompt": "Select Prompt",
+      "hint": "Prompt settings affect the conversation style and behavior of the LLM"
     },
     "pluginConfig": {
       "title": "Plugin Configuration",

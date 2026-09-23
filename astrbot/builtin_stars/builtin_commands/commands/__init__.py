@@ -6,8 +6,8 @@ from .chat import ChatCommands
 from .conversation import ConversationCommands
 from .flow import FlowCommands
 from .help import HelpCommand
-from .persona import PersonaCommands
 from .plugin import PluginCommands
+from .prompt import PromptCommands
 from .provider import ProviderCommands
 from .session import SessionCommands
 from .tts import TtsCommands
@@ -22,7 +22,7 @@ __all__ = [
     "ConversationCommands",
     "FlowCommands",
     "HelpCommand",
-    "PersonaCommands",
+    "PromptCommands",
     "PluginCommands",
     "ProviderCommands",
     "SessionCommands",

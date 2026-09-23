@@ -14,7 +14,7 @@ from astrbot.core.auth.admission import (
 from astrbot.core.db.po import ConversationV2, Preference
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
-from astrbot.core.persona_mgr import PersonaManager
+from astrbot.core.prompt_mgr import PromptManager
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.session_llm_manager import sender_service_config
@@ -56,7 +56,7 @@ class SessionManagementService:
         db_helper: SQLiteDatabase,
         preferences: SharedPreferences,
         provider_manager: ProviderManager,
-        persona_manager: PersonaManager,
+        prompt_manager: PromptManager,
         plugin_catalog: PluginRegistry,
         knowledge_base_manager: KnowledgeBaseManager,
         config_router: UmopConfigRouter | None = None,
@@ -64,7 +64,7 @@ class SessionManagementService:
         self.db_helper = db_helper
         self.preferences = preferences
         self.provider_manager = provider_manager
-        self.persona_manager = persona_manager
+        self.prompt_manager = prompt_manager
         self.plugin_catalog = plugin_catalog
         self.knowledge_base_manager = knowledge_base_manager
         self.config_router = config_router
@@ -477,9 +477,9 @@ class SessionManagementService:
                 for umo, rules in umo_rules.items()
             ]
 
-        available_personas = [
-            {"name": p.persona_id, "prompt": p.system_prompt}
-            for p in self.persona_manager.personas
+        available_prompts = [
+            {"name": p.prompt_id, "prompt": p.system_prompt}
+            for p in self.prompt_manager.prompts
         ]
         available_plugins = [
             {
@@ -510,7 +510,7 @@ class SessionManagementService:
             "total": total,
             "page": page,
             "page_size": page_size,
-            "available_personas": available_personas,
+            "available_prompts": available_prompts,
             "available_chat_providers": self._serialize_provider_insts(
                 self.provider_manager.provider_insts
             ),

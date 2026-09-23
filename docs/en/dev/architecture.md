@@ -55,7 +55,7 @@ The source and CLI entry points have different preparation paths, but both event
 - demo-mode state
 - `AuthorizationService`
 
-`AstrBotCoreLifecycle` builds Provider, Platform, Conversation, Persona, Memory, Knowledge Base, Cron, Plugin, SubAgent, and Pipeline managers on top of those services in dependency order. Pass shared capabilities through their existing owners; do not restore process-global service singletons.
+`AstrBotCoreLifecycle` builds Provider, Platform, Conversation, Prompt, Memory, Knowledge Base, Cron, Plugin, SubAgent, and Pipeline managers on top of those services in dependency order. Pass shared capabilities through their existing owners; do not restore process-global service singletons.
 
 The main SQLite database uses SQLModel tables as the schema source of truth. Access ports are the domain store protocols; `SQLiteDatabase` is only the composite implementation. Details are in [Main SQLite database](#main-sqlite-database) below. The knowledge-base SQLite file and FAISS document store stay separate from the main database.
 
@@ -102,12 +102,12 @@ Mixins obtain sessions through the typed `store_session(self)` helper and must n
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `StatisticsStore`      | `platform_stats`, `provider_stats`                                                                                                                                               | `stores/statistics.py`                                          |
 | `MemoryStore`          | fact/profile/episode/scope policy/tuning task/operation log                                                                                                                      | `stores/memory.py`                                              |
-| `ConversationStore`    | `conversations`; read-only session projection joins `preferences` and `personas`                                                                                                 | `stores/conversations.py`                                       |
+| `ConversationStore`    | `conversations`; read-only session projection joins `preferences` and `prompts`                                                                                                  | `stores/conversations.py`                                       |
 | `MessageHistoryStore`  | `platform_message_history`                                                                                                                                                       | `stores/message_history.py`                                     |
 | `WebChatThreadStore`   | `webchat_threads`                                                                                                                                                                | `stores/webchat.py`                                             |
 | `AttachmentStore`      | `attachments`                                                                                                                                                                    | `stores/attachments.py`                                         |
 | `ApiKeyStore`          | `api_keys` + derived `auth_capabilities`                                                                                                                                         | `stores/api_keys.py` (one transaction)                          |
-| `PersonaStore`         | `personas`, `persona_folders`                                                                                                                                                    | `stores/personas.py`                                            |
+| `PromptStore`          | `prompts`, `prompt_folders`                                                                                                                                                      | `stores/prompts.py`                                             |
 | `PreferenceStore`      | `preferences`                                                                                                                                                                    | `stores/preferences.py`                                         |
 | `CommandStore`         | `command_configs`, `command_conflicts`                                                                                                                                           | `stores/commands.py`                                            |
 | `CronStore`            | `cron_jobs`                                                                                                                                                                      | `stores/cron.py`                                                |
@@ -118,18 +118,18 @@ Mixins obtain sessions through the typed `store_session(self)` helper and must n
 
 Callers annotate domain protocols; the Dashboard composition root uses `SQLiteDatabase`. The WebChat adapter injects attachment and history access through `astrbot/core/platform/webchat_storage.py` and does not depend on the concrete database class. `tests/unit/db/test_protocols.py` requires every public coroutine to belong to a domain protocol.
 
-`get_session_conversations()` is owned by `ConversationStore`. It is an explicitly documented cross-domain read exception that joins `Preference`, `ConversationV2`, and `Persona`; do not add a projection protocol for it.
+`get_session_conversations()` is owned by `ConversationStore`. It is an explicitly documented cross-domain read exception that joins `Preference`, `ConversationV2`, and `Prompt`; do not add a projection protocol for it.
 
 `platform_message_history.role`, `is_group`, and `ix_platform_message_history_scope_order` exist only on the model; there is no “add the column if missing” path.
 
 ### Runtime DTOs
 
-`Conversation` and `Personality` are not tables:
+`Conversation` and `PromptSpec` are not tables:
 
 - `Conversation` lives in `astrbot/core/conversation_models.py` as the neutral runtime contract shared by conversation, platform, and agent code.
-- `Personality` lives in `astrbot/core/persona_models.py` as the neutral runtime contract for the prompt entity.
+- `PromptSpec` lives in `astrbot/core/prompt_models.py` as the neutral runtime contract for the prompt entity.
 
-The plugin SDK still exports `Personality` from `astrbot.api.provider`. `astrbot.core.db.po` no longer exports either name and does not provide shims for the old imports.
+The plugin SDK still exports `PromptSpec` from `astrbot.api.provider`. `astrbot.core.db.po` no longer exports either name and does not provide shims for the old imports.
 
 ### Authorization persistence
 
@@ -195,21 +195,21 @@ Tools can come from the core, plugins, or MCP. MCP supports stdio and Streamable
 
 Skills can come from `data/skills`, plugin `skills/` directories, the sandbox, or the current session workspace. Workspace Skills are request-scoped and normally live under `data/workspaces/{normalized_umo}/skills/`. The system prompt lists names and short descriptions; manuals load through `read_skill` (`skill.read`), with paths locked to the request-scoped Skill snapshot. User-facing behavior is in [Skills](/en/use/skills).
 
-The tool catalog is computed once by `assemble_tool_catalog()` in `astrbot/core/tool_catalog.py`. Inputs are the frozen Skill snapshot, Persona three-state policy, request surface, `computer_use_runtime`, session plugin filter, and the registered-tool table. The output is a tool-name set, then one materialized `ToolSet`. Tools already present on the request are reattached only after the same surface strip. `_apply_local_env_tools()` / `_apply_sandbox_tools()` write runtime prompts only. `tool_schema_mode=skills_like` is a two-stage light schema; it does not shrink the catalog.
+The tool catalog is computed once by `assemble_tool_catalog()` in `astrbot/core/tool_catalog.py`. Inputs are the frozen Skill snapshot, Prompt three-state policy, request surface, `computer_use_runtime`, session plugin filter, and the registered-tool table. The output is a tool-name set, then one materialized `ToolSet`. Tools already present on the request are reattached only after the same surface strip. `_apply_local_env_tools()` / `_apply_sandbox_tools()` write runtime prompts only. `tool_schema_mode=skills_like` is a two-stage light schema; it does not shrink the catalog.
 
 ```text
 candidates = platform baseline ∪ session plugin/MCP ∪ Skill.tools ∪ on-demand computer tools
-catalog = surface-strip(visibility-filter(Persona whitelist ∩ candidates))
+catalog = surface-strip(visibility-filter(Prompt whitelist ∩ candidates))
 ```
 
-| Layer                    | Enters the candidate set when                                                          | Depends on Skill `tools:`?                                       |
-| ------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Platform baseline        | The matching capability is on                                                          | No                                                               |
-| Session plugin / MCP     | The plugin is active and passes the session filter; unowned MCP tools are kept         | No. A Skill cannot install MCP or open private-network MCP       |
-| Skill declarations       | Enabled Skill frontmatter `tools:`                                                     | Yes. Filter existing names only                                  |
-| On-demand computer tools | `computer_use_runtime` is `local` or `sandbox`, and Persona plus hard-strip allow them | May declare, but cannot grant extra privilege. Empty when `none` |
+| Layer                    | Enters the candidate set when                                                         | Depends on Skill `tools:`?                                       |
+| ------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Platform baseline        | The matching capability is on                                                         | No                                                               |
+| Session plugin / MCP     | The plugin is active and passes the session filter; unowned MCP tools are kept        | No. A Skill cannot install MCP or open private-network MCP       |
+| Skill declarations       | Enabled Skill frontmatter `tools:`                                                    | Yes. Filter existing names only                                  |
+| On-demand computer tools | `computer_use_runtime` is `local` or `sandbox`, and Prompt plus hard-strip allow them | May declare, but cannot grant extra privilege. Empty when `none` |
 
-Persona `tools is None` means “do not shrink these four layers”. It does not mean “drop plugin tools unless a Skill named them”. An empty list removes ordinary tools and still keeps `read_skill`. A non-empty list intersects the whitelist and still keeps `read_skill`. Assembly uses static visibility only; it does not call full `authorize()`. Neo lifecycle tools belong to the sandbox + `shipyard_neo` computer layer, not the platform baseline.
+Prompt `tools is None` means “do not shrink these four layers”. It does not mean “drop plugin tools unless a Skill named them”. An empty list removes ordinary tools and still keeps `read_skill`. A non-empty list intersects the whitelist and still keeps `read_skill`. Assembly uses static visibility only; it does not call full `authorize()`. Neo lifecycle tools belong to the sandbox + `shipyard_neo` computer layer, not the platform baseline.
 
 Social surfaces hard-strip tools whose `required_actions` intersect `WEBCHAT_INSTANCE_TOOL_ACTIONS`: `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use`. Anonymous WebChat, plugins, agents, and API keys always strip that set. Authenticated WebChat keeps only actions covered by the current step-up set. IM mounts the whole set without Dashboard step-up when the IM subject is `instance_operator` or above on that config; adding an action to the set is the compatibility hook. Do not use the full `HIGH_RISK_ACTIONS` set as a catalog blacklist. `tool.file_read` is not in the strip set; IM must not mount workspace file-read tools merely because a Skill declared them. Global `root`/`operator` bindings do not apply to IM subjects.
 
@@ -314,7 +314,7 @@ Actions use `domain.verb`. Built-in commands declare them with `@filter.permissi
 | `skill.read`                                      | member+                                                                                                                             | no                                 |
 | instance tools such as `tool.local_exec`          | instance_operator+; WebChat also needs step-up; IM skips step-up when the IM subject is bound as `instance_operator` on that config | yes                                |
 
-Plugin actions must use `plugin:<plugin-id>:<action>` and call `self.context.authz.authorize()` again. Undeclared plugin writes are denied. Tool authority is the intersection of user authorization, Persona tool policy, and the tool's own policy. Sub-agent handoff cannot escalate the caller.
+Plugin actions must use `plugin:<plugin-id>:<action>` and call `self.context.authz.authorize()` again. Undeclared plugin writes are denied. Tool authority is the intersection of user authorization, Prompt tool policy, and the tool's own policy. Sub-agent handoff cannot escalate the caller.
 
 ### Step-up, audit, and API keys
 

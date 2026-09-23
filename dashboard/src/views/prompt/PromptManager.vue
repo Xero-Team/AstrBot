@@ -1,5 +1,5 @@
 <template>
-  <div class="persona-manager">
+  <div class="prompt-manager">
     <!-- 移动端顶部导航 -->
     <div class="mobile-nav d-md-none mb-4">
       <FolderBreadcrumb />
@@ -24,7 +24,7 @@
           @move-folder="openMoveFolderDialog"
           @success="showSuccess"
           @error="showError"
-          @persona-dropped="handlePersonaDropped"
+          @prompt-dropped="handlePromptDropped"
         />
       </div>
 
@@ -54,7 +54,7 @@
               variant="tonal"
               prepend-icon="mdi-plus"
               rounded="md"
-              @click="openCreatePersonaDialog"
+              @click="openCreatePromptDialog"
             >
               {{ tm('buttons.create') }}
             </v-btn>
@@ -106,39 +106,39 @@
               >
                 <FolderCard
                   :folder="folder"
-                  @click="personaStore.navigateToFolder(folder.folder_id)"
-                  @open="personaStore.navigateToFolder(folder.folder_id)"
+                  @click="promptStore.navigateToFolder(folder.folder_id)"
+                  @open="promptStore.navigateToFolder(folder.folder_id)"
                   @rename="openRenameFolderDialog(folder)"
                   @move="openMoveFolderDialog(folder)"
                   @delete="confirmDeleteFolder(folder)"
-                  @persona-dropped="handlePersonaDropped"
+                  @prompt-dropped="handlePromptDropped"
                 />
               </v-col>
             </v-row>
           </div>
 
-          <!-- Persona 区域 -->
-          <div v-if="currentPersonas.length > 0" class="personas-section">
+          <!-- Prompt 区域 -->
+          <div v-if="currentPrompts.length > 0" class="prompts-section">
             <h3 class="text-subtitle-1 font-weight-medium mb-3">
               <v-icon size="small" class="mr-1">mdi-account-heart</v-icon>
-              {{ tm('persona.personasTitle') }} ({{ currentPersonas.length }})
+              {{ tm('prompt.promptsTitle') }} ({{ currentPrompts.length }})
             </h3>
             <v-row>
               <v-col
-                v-for="persona in currentPersonas"
-                :key="persona.persona_id"
+                v-for="prompt in currentPrompts"
+                :key="prompt.prompt_id"
                 cols="12"
                 sm="6"
                 lg="6"
                 xl="4"
               >
-                <PersonaCard
-                  :persona="persona"
-                  @view="viewPersona(persona)"
-                  @edit="editPersona(persona)"
-                  @move="openMovePersonaDialog(persona)"
-                  @delete="confirmDeletePersona(persona)"
-                  @export="handlePersonaExport"
+                <PromptCard
+                  :prompt="prompt"
+                  @view="viewPrompt(prompt)"
+                  @edit="editPrompt(prompt)"
+                  @move="openMovePromptDialog(prompt)"
+                  @delete="confirmDeletePrompt(prompt)"
+                  @export="handlePromptExport"
                 />
               </v-col>
             </v-row>
@@ -146,7 +146,7 @@
 
           <!-- 空状态 -->
           <div
-            v-if="currentFolders.length === 0 && currentPersonas.length === 0"
+            v-if="currentFolders.length === 0 && currentPrompts.length === 0"
             class="empty-state"
           >
             <v-card class="text-center pa-8" elevation="0">
@@ -162,7 +162,7 @@
                   color="primary"
                   variant="tonal"
                   prepend-icon="mdi-plus"
-                  @click="openCreatePersonaDialog"
+                  @click="openCreatePromptDialog"
                 >
                   {{ tm('buttons.create') }}
                 </v-btn>
@@ -180,22 +180,22 @@
       </div>
     </div>
 
-    <!-- 创建/编辑 Persona 对话框 -->
-    <PersonaForm
-      v-model="showPersonaDialog"
-      :editing-persona="editingPersona ?? undefined"
+    <!-- 创建/编辑 Prompt 对话框 -->
+    <PromptForm
+      v-model="showPromptDialog"
+      :editing-prompt="editingPrompt ?? undefined"
       :current-folder-id="currentFolderId ?? undefined"
       :current-folder-name="currentFolderName ?? undefined"
-      @saved="handlePersonaSaved"
-      @deleted="handlePersonaDeleted"
+      @saved="handlePromptSaved"
+      @deleted="handlePromptDeleted"
       @error="showError"
     />
 
-    <!-- 查看 Persona 详情对话框 -->
+    <!-- 查看 Prompt 详情对话框 -->
     <v-dialog v-model="showViewDialog" max-width="700px" scrollable>
-      <v-card v-if="viewingPersona" class="persona-preview-dialog__card">
+      <v-card v-if="viewingPrompt" class="prompt-preview-dialog__card">
         <v-card-title class="d-flex justify-space-between align-center">
-          <span class="text-h5">{{ viewingPersona.persona_id }}</span>
+          <span class="text-h5">{{ viewingPrompt.prompt_id }}</span>
           <div class="d-flex align-center ga-1">
             <v-btn
               color="primary"
@@ -214,31 +214,31 @@
           </div>
         </v-card-title>
 
-        <v-card-text class="persona-preview-dialog__content">
+        <v-card-text class="prompt-preview-dialog__content">
           <div class="mb-4">
             <h4 class="text-h6 mb-2">{{ tm('form.systemPrompt') }}</h4>
             <pre class="system-prompt-content">{{
-              viewingPersona.system_prompt
+              viewingPrompt.system_prompt
             }}</pre>
           </div>
 
-          <div v-if="viewingPersona.custom_error_message" class="mb-4">
+          <div v-if="viewingPrompt.custom_error_message" class="mb-4">
             <h4 class="text-h6 mb-2">{{ tm('form.customErrorMessage') }}</h4>
             <pre class="system-prompt-content">{{
-              viewingPersona.custom_error_message
+              viewingPrompt.custom_error_message
             }}</pre>
           </div>
 
           <div
             v-if="
-              viewingPersona.begin_dialogs &&
-              viewingPersona.begin_dialogs.length > 0
+              viewingPrompt.begin_dialogs &&
+              viewingPrompt.begin_dialogs.length > 0
             "
             class="mb-4"
           >
             <h4 class="text-h6 mb-2">{{ tm('form.presetDialogs') }}</h4>
             <div
-              v-for="(dialog, index) in viewingPersona.begin_dialogs"
+              v-for="(dialog, index) in viewingPrompt.begin_dialogs"
               :key="index"
               class="mb-2"
             >
@@ -261,7 +261,7 @@
           <div class="mb-4">
             <h4 class="text-h6 mb-2">{{ tm('form.tools') }}</h4>
             <div
-              v-if="viewingPersona.tools === null"
+              v-if="viewingPrompt.tools === null"
               class="text-body-2 text-medium-emphasis"
             >
               <v-chip
@@ -274,13 +274,11 @@
               </v-chip>
             </div>
             <div
-              v-else-if="
-                viewingPersona.tools && viewingPersona.tools.length > 0
-              "
+              v-else-if="viewingPrompt.tools && viewingPrompt.tools.length > 0"
               class="d-flex flex-wrap ga-1"
             >
               <v-chip
-                v-for="toolName in viewingPersona.tools"
+                v-for="toolName in viewingPrompt.tools"
                 :key="toolName"
                 size="small"
                 color="primary"
@@ -297,7 +295,7 @@
           <div class="mb-4">
             <h4 class="text-h6 mb-2">{{ tm('form.skills') }}</h4>
             <div
-              v-if="viewingPersona.skills === null"
+              v-if="viewingPrompt.skills === null"
               class="text-body-2 text-medium-emphasis"
             >
               <v-chip
@@ -311,12 +309,12 @@
             </div>
             <div
               v-else-if="
-                viewingPersona.skills && viewingPersona.skills.length > 0
+                viewingPrompt.skills && viewingPrompt.skills.length > 0
               "
               class="d-flex flex-wrap ga-1"
             >
               <v-chip
-                v-for="skillName in viewingPersona.skills"
+                v-for="skillName in viewingPrompt.skills"
                 :key="skillName"
                 size="small"
                 color="primary"
@@ -333,11 +331,11 @@
           <div class="text-caption text-medium-emphasis">
             <div>
               {{ tm('labels.createdAt') }}:
-              {{ formatDate(viewingPersona.created_at) }}
+              {{ formatDate(viewingPrompt.created_at) }}
             </div>
-            <div v-if="viewingPersona.updated_at">
+            <div v-if="viewingPrompt.updated_at">
               {{ tm('labels.updatedAt') }}:
-              {{ formatDate(viewingPersona.updated_at) }}
+              {{ formatDate(viewingPrompt.updated_at) }}
             </div>
           </div>
         </v-card-text>
@@ -447,16 +445,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { usePersonaStore } from '@/stores/personaStore';
-import { personaApi } from '@/api/v1';
+import { usePromptStore } from '@/stores/promptStore';
+import { promptApi } from '@/api/v1';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import { storeToRefs } from 'pinia';
 
 import FolderTree from './FolderTree.vue';
 import FolderBreadcrumb from './FolderBreadcrumb.vue';
 import FolderCard from './FolderCard.vue';
-import PersonaCard from './PersonaCard.vue';
-import PersonaForm from '@/components/shared/PersonaForm.vue';
+import PromptCard from './PromptCard.vue';
+import PromptForm from '@/components/shared/PromptForm.vue';
 import CreateFolderDialog from './CreateFolderDialog.vue';
 import MoveToFolderDialog from './MoveToFolderDialog.vue';
 import {
@@ -465,27 +463,22 @@ import {
 } from '@/utils/confirmDialog';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
-import type { Persona as StorePersona } from '@/stores/personaStore';
+import type { Prompt as StorePrompt } from '@/stores/promptStore';
 
-type MoveDialogType = 'persona' | 'folder';
+type MoveDialogType = 'prompt' | 'folder';
 type SnackbarType = 'success' | 'error';
 
-const { tm } = useModuleI18n('features/persona');
+const { tm } = useModuleI18n('features/prompt');
 const confirmDialog = useConfirmDialog();
-const personaStore = usePersonaStore();
-const {
-  folderTree,
-  currentFolderId,
-  currentFolders,
-  currentPersonas,
-  loading,
-} = storeToRefs(personaStore);
+const promptStore = usePromptStore();
+const { folderTree, currentFolderId, currentFolders, currentPrompts, loading } =
+  storeToRefs(promptStore);
 
-const showPersonaDialog = ref(false);
+const showPromptDialog = ref(false);
 const importFileInput = ref<HTMLInputElement | null>(null);
 const showViewDialog = ref(false);
-const editingPersona = ref<StorePersona | null>(null);
-const viewingPersona = ref<StorePersona | null>(null);
+const editingPrompt = ref<StorePrompt | null>(null);
+const viewingPrompt = ref<StorePrompt | null>(null);
 
 const showCreateFolderDialog = ref(false);
 const showRenameFolderDialog = ref(false);
@@ -499,8 +492,8 @@ const renameLoading = ref(false);
 const deleteLoading = ref(false);
 
 const showMoveDialog = ref(false);
-const moveDialogType = ref<MoveDialogType>('persona');
-const moveDialogItem = ref<StorePersona | Folder | null>(null);
+const moveDialogType = ref<MoveDialogType>('prompt');
+const moveDialogItem = ref<StorePrompt | Folder | null>(null);
 
 const showMessage = ref(false);
 const message = ref('');
@@ -565,17 +558,17 @@ onMounted(async () => {
 
 async function initialize() {
   await Promise.all([
-    personaStore.loadFolderTree(),
-    personaStore.navigateToFolder(null),
+    promptStore.loadFolderTree(),
+    promptStore.navigateToFolder(null),
   ]);
 }
 
-function openCreatePersonaDialog() {
-  editingPersona.value = null;
-  showPersonaDialog.value = true;
+function openCreatePromptDialog() {
+  editingPrompt.value = null;
+  showPromptDialog.value = true;
 }
 
-function handlePersonaExport(exportMessage: string, isError: boolean) {
+function handlePromptExport(exportMessage: string, isError: boolean) {
   if (isError) {
     showError(exportMessage);
     return;
@@ -601,7 +594,7 @@ async function handleImportFile(event: Event) {
       return;
     }
     const imported = data as {
-      persona_id?: unknown;
+      prompt_id?: unknown;
       system_prompt?: unknown;
       begin_dialogs?: unknown;
     };
@@ -610,25 +603,25 @@ async function handleImportFile(event: Event) {
       return;
     }
 
-    const response = await personaApi.list();
+    const response = await promptApi.list();
     const existingIds = new Set(
       response.data.status === 'ok'
-        ? (response.data.data || []).map((persona) => persona.persona_id)
+        ? (response.data.data || []).map((prompt) => prompt.prompt_id)
         : [],
     );
     const baseId =
-      typeof imported.persona_id === 'string' && imported.persona_id
-        ? imported.persona_id
-        : 'imported_persona';
-    let personaId = baseId;
+      typeof imported.prompt_id === 'string' && imported.prompt_id
+        ? imported.prompt_id
+        : 'imported_prompt';
+    let promptId = baseId;
     let suffix = 1;
-    while (existingIds.has(personaId)) {
-      personaId = `${baseId}_imported${suffix === 1 ? '' : `_${suffix}`}`;
+    while (existingIds.has(promptId)) {
+      promptId = `${baseId}_imported${suffix === 1 ? '' : `_${suffix}`}`;
       suffix += 1;
     }
 
-    const createResponse = await personaApi.create({
-      persona_id: personaId,
+    const createResponse = await promptApi.create({
+      prompt_id: promptId,
       system_prompt: imported.system_prompt,
       begin_dialogs: Array.isArray(imported.begin_dialogs)
         ? imported.begin_dialogs.filter(
@@ -644,9 +637,9 @@ async function handleImportFile(event: Event) {
         createResponse.data.message || tm('messages.importError'),
       );
     }
-    await personaStore.refreshCurrentFolder();
-    if (personaId !== baseId) {
-      showSuccess(tm('messages.importIdExists', { id: personaId }));
+    await promptStore.refreshCurrentFolder();
+    if (promptId !== baseId) {
+      showSuccess(tm('messages.importIdExists', { id: promptId }));
     } else {
       showSuccess(tm('messages.importSuccess'));
     }
@@ -655,44 +648,44 @@ async function handleImportFile(event: Event) {
       showError(tm('messages.importFormatError'));
       return;
     }
-    console.error('Failed to import persona:', error);
+    console.error('Failed to import prompt:', error);
     showError(resolveErrorMessage(error, tm('messages.importError')));
   }
 }
 
-function editPersona(persona: StorePersona) {
-  editingPersona.value = persona;
-  showPersonaDialog.value = true;
+function editPrompt(prompt: StorePrompt) {
+  editingPrompt.value = prompt;
+  showPromptDialog.value = true;
 }
 
-function viewPersona(persona: StorePersona) {
-  viewingPersona.value = persona;
+function viewPrompt(prompt: StorePrompt) {
+  viewingPrompt.value = prompt;
   showViewDialog.value = true;
 }
 
 function openEditFromViewDialog() {
-  if (!viewingPersona.value) {
+  if (!viewingPrompt.value) {
     return;
   }
-  editingPersona.value = viewingPersona.value;
+  editingPrompt.value = viewingPrompt.value;
   showViewDialog.value = false;
-  showPersonaDialog.value = true;
+  showPromptDialog.value = true;
 }
 
-function handlePersonaSaved(successMessage: string) {
+function handlePromptSaved(successMessage: string) {
   showSuccess(successMessage);
-  void personaStore.refreshCurrentFolder();
+  void promptStore.refreshCurrentFolder();
 }
 
-function handlePersonaDeleted(successMessage: string) {
+function handlePromptDeleted(successMessage: string) {
   showSuccess(successMessage);
-  void personaStore.refreshCurrentFolder();
+  void promptStore.refreshCurrentFolder();
 }
 
-async function confirmDeletePersona(persona: StorePersona) {
+async function confirmDeletePrompt(prompt: StorePrompt) {
   if (
     !(await askForConfirmationDialog(
-      tm('messages.deleteConfirm', { id: persona.persona_id }),
+      tm('messages.deleteConfirm', { id: prompt.prompt_id }),
       confirmDialog,
     ))
   ) {
@@ -700,32 +693,32 @@ async function confirmDeletePersona(persona: StorePersona) {
   }
 
   try {
-    await personaStore.deletePersona(persona.persona_id);
+    await promptStore.deletePrompt(prompt.prompt_id);
     showSuccess(tm('messages.deleteSuccess'));
   } catch (error) {
     showError(resolveErrorMessage(error, tm('messages.deleteError')));
   }
 }
 
-function openMovePersonaDialog(persona: StorePersona) {
-  moveDialogType.value = 'persona';
-  moveDialogItem.value = persona;
+function openMovePromptDialog(prompt: StorePrompt) {
+  moveDialogType.value = 'prompt';
+  moveDialogItem.value = prompt;
   showMoveDialog.value = true;
 }
 
-async function handlePersonaDropped({
-  persona_id,
+async function handlePromptDropped({
+  prompt_id,
   target_folder_id,
 }: {
-  persona_id: string;
+  prompt_id: string;
   target_folder_id: string | null;
 }) {
   try {
-    await personaStore.movePersonaToFolder(persona_id, target_folder_id);
-    showSuccess(tm('persona.messages.moveSuccess'));
-    await personaStore.navigateToFolder(target_folder_id);
+    await promptStore.movePromptToFolder(prompt_id, target_folder_id);
+    showSuccess(tm('prompt.messages.moveSuccess'));
+    await promptStore.navigateToFolder(target_folder_id);
   } catch (error) {
-    showError(resolveErrorMessage(error, tm('persona.messages.moveError')));
+    showError(resolveErrorMessage(error, tm('prompt.messages.moveError')));
   }
 }
 
@@ -741,7 +734,7 @@ async function submitRenameFolder() {
 
   renameLoading.value = true;
   try {
-    await personaStore.updateFolder({
+    await promptStore.updateFolder({
       folder_id: renameFolderData.value.folder.folder_id,
       name: renameFolderData.value.name,
     });
@@ -772,7 +765,7 @@ async function submitDeleteFolder() {
 
   deleteLoading.value = true;
   try {
-    await personaStore.deleteFolder(deleteFolderData.value.folder_id);
+    await promptStore.deleteFolder(deleteFolderData.value.folder_id);
     showSuccess(tm('folder.messages.deleteSuccess'));
     showDeleteFolderDialog.value = false;
   } catch (error) {
@@ -803,7 +796,7 @@ function showError(errorMessage: string) {
 </script>
 
 <style scoped>
-.persona-manager {
+.prompt-manager {
   height: 100%;
 }
 
@@ -829,13 +822,13 @@ function showError(errorMessage: string) {
   min-width: 0;
 }
 
-.persona-preview-dialog__card {
+.prompt-preview-dialog__card {
   display: flex;
   flex-direction: column;
   max-height: min(88dvh, 860px);
 }
 
-.persona-preview-dialog__content {
+.prompt-preview-dialog__content {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;

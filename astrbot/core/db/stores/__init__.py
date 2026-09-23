@@ -7,9 +7,9 @@ from astrbot.core.db.stores.cron import CronStoreMixin
 from astrbot.core.db.stores.knowledge_base import KnowledgeBaseTaskStoreMixin
 from astrbot.core.db.stores.memory import MemoryStoreMixin
 from astrbot.core.db.stores.message_history import MessageHistoryStoreMixin
-from astrbot.core.db.stores.personas import PersonaStoreMixin
 from astrbot.core.db.stores.preferences import PreferenceStoreMixin
 from astrbot.core.db.stores.projects import ChatProjectStoreMixin
+from astrbot.core.db.stores.prompts import PromptStoreMixin
 from astrbot.core.db.stores.session_bridge import SessionBridgeStoreMixin
 from astrbot.core.db.stores.sessions import PlatformSessionStoreMixin
 from astrbot.core.db.stores.statistics import StatisticsStoreMixin
@@ -25,9 +25,9 @@ __all__ = [
     "KnowledgeBaseTaskStoreMixin",
     "MemoryStoreMixin",
     "MessageHistoryStoreMixin",
-    "PersonaStoreMixin",
     "PlatformSessionStoreMixin",
     "PreferenceStoreMixin",
+    "PromptStoreMixin",
     "SessionBridgeStoreMixin",
     "StatisticsStoreMixin",
     "UmoAliasStoreMixin",

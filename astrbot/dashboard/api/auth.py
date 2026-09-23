@@ -74,7 +74,7 @@ async def _await_dashboard_principal(validate_principal, principal) -> bool:
 _SCOPE_ACTIONS = {
     "bot": "platform.manage",
     "provider": "provider.manage",
-    "persona": "agent.manage",
+    "prompt": "agent.manage",
     "im": "session.manage",
     "config": "platform.manage",
     "chat": "session.manage",

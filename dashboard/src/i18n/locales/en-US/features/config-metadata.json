@@ -51,8 +51,8 @@
           "max_steps": {
             "description": "Maximum tool-call steps"
           },
-          "persona_id": {
-            "description": "Default persona"
+          "prompt_id": {
+            "description": "Default prompt"
           },
           "proxy_mode": {
             "description": "Proxy mode",
@@ -87,8 +87,8 @@
           "max_steps": {
             "description": "Maximum tool-call steps"
           },
-          "persona_id": {
-            "description": "Default persona"
+          "prompt_id": {
+            "description": "Default prompt"
           },
           "proxy_mode": {
             "description": "Proxy mode",
@@ -134,8 +134,8 @@
           "max_steps": {
             "description": "Maximum tool-call steps"
           },
-          "persona_id": {
-            "description": "Default persona"
+          "prompt_id": {
+            "description": "Default prompt"
           },
           "proxy_mode": {
             "description": "Proxy mode",
@@ -188,8 +188,8 @@
           "max_steps": {
             "description": "Maximum tool-call steps"
           },
-          "persona_id": {
-            "description": "Default persona"
+          "prompt_id": {
+            "description": "Default prompt"
           },
           "proxy_mode": {
             "description": "Proxy mode",
@@ -255,23 +255,21 @@
         }
       }
     },
-    "persona": {
-      "description": "Persona",
-      "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
+    "prompt": {
+      "description": "Prompt",
+      "hint": "Set the default prompt for AI conversations. Prompts can be managed in the Prompt tab.",
       "agent_runner": {
         "config": {
-          "persona": {
-            "persona_id": {
-              "description": "Default Persona"
-            },
-            "safety_mode": {
-              "description": "Safety Mode",
-              "hint": "Guide the model toward safe content and away from harmful or sensitive topics."
-            },
-            "safety_mode_strategy": {
-              "description": "Safety Mode Strategy",
-              "hint": "Select how safety mode is applied."
-            }
+          "prompt_id": {
+            "description": "Default Prompt"
+          },
+          "safety_mode": {
+            "description": "Safety Mode",
+            "hint": "Guide the model toward safe content and away from harmful or sensitive topics."
+          },
+          "safety_mode_strategy": {
+            "description": "Safety Mode Strategy",
+            "hint": "Select how safety mode is applied."
           }
         }
       }

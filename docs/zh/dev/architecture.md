@@ -55,7 +55,7 @@ outline: deep
 - demo mode 状态
 - `AuthorizationService`
 
-`AstrBotCoreLifecycle` 在这些基础服务之上按依赖顺序创建 Provider、Platform、Conversation、Persona、Memory、Knowledge Base、Cron、Plugin、SubAgent 和 Pipeline 等管理器。需要共享这些能力时，应通过现有所有者注入，不要恢复进程级全局单例。
+`AstrBotCoreLifecycle` 在这些基础服务之上按依赖顺序创建 Provider、Platform、Conversation、Prompt、Memory、Knowledge Base、Cron、Plugin、SubAgent 和 Pipeline 等管理器。需要共享这些能力时，应通过现有所有者注入，不要恢复进程级全局单例。
 
 主 SQLite 库以 SQLModel 表为 schema 真源，访问口是域存储协议，`SQLiteDatabase` 只是组合实现。细节见下文[主 SQLite 库](#主-sqlite-库)。知识库 SQLite 与 FAISS 文档库仍独立于主库。
 
@@ -102,12 +102,12 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | `StatisticsStore`      | `platform_stats`、`provider_stats`                                                                                                                                               | `stores/statistics.py`            |
 | `MemoryStore`          | fact/profile/episode/scope policy/tuning task/operation log                                                                                                                      | `stores/memory.py`                |
-| `ConversationStore`    | `conversations`；只读 session projection 会 join `preferences`、`personas`                                                                                                       | `stores/conversations.py`         |
+| `ConversationStore`    | `conversations`；只读 session projection 会 join `preferences`、`prompts`                                                                                                        | `stores/conversations.py`         |
 | `MessageHistoryStore`  | `platform_message_history`                                                                                                                                                       | `stores/message_history.py`       |
 | `WebChatThreadStore`   | `webchat_threads`                                                                                                                                                                | `stores/webchat.py`               |
 | `AttachmentStore`      | `attachments`                                                                                                                                                                    | `stores/attachments.py`           |
 | `ApiKeyStore`          | `api_keys` + 派生 `auth_capabilities`                                                                                                                                            | `stores/api_keys.py`（同一事务）  |
-| `PersonaStore`         | `personas`、`persona_folders`                                                                                                                                                    | `stores/personas.py`              |
+| `PromptStore`          | `prompts`、`prompt_folders`                                                                                                                                                      | `stores/prompts.py`               |
 | `PreferenceStore`      | `preferences`                                                                                                                                                                    | `stores/preferences.py`           |
 | `CommandStore`         | `command_configs`、`command_conflicts`                                                                                                                                           | `stores/commands.py`              |
 | `CronStore`            | `cron_jobs`                                                                                                                                                                      | `stores/cron.py`                  |
@@ -118,18 +118,18 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 调用方按域协议标注；Dashboard 组合根使用 `SQLiteDatabase`。WebChat 适配器通过 `astrbot/core/platform/webchat_storage.py` 注入附件与历史端口，不依赖具体数据库类。`tests/unit/db/test_protocols.py` 要求每个公开协程都挂在域协议上。
 
-`get_session_conversations()` 由 `ConversationStore` 所有。它是明确记录的跨域只读例外，会 join `Preference`、`ConversationV2` 和 `Persona`；不要为此新增 projection 协议。
+`get_session_conversations()` 由 `ConversationStore` 所有。它是明确记录的跨域只读例外，会 join `Preference`、`ConversationV2` 和 `Prompt`；不要为此新增 projection 协议。
 
 `platform_message_history` 的 `role`、`is_group` 和 `ix_platform_message_history_scope_order` 只存在于模型上，没有“缺列则补”的路径。
 
 ### 运行时 DTO
 
-`Conversation` 与 `Personality` 不是表：
+`Conversation` 与 `PromptSpec` 不是表：
 
 - `Conversation` 位于 `astrbot/core/conversation_models.py`，是会话、平台和 agent 共用的中性运行时契约。
-- `Personality` 位于 `astrbot/core/persona_models.py`，作为 prompt 实体的中性运行时契约。
+- `PromptSpec` 位于 `astrbot/core/prompt_models.py`，作为 prompt 实体的中性运行时契约。
 
-插件 SDK 仍从 `astrbot.api.provider` 导出 `Personality`。`astrbot.core.db.po` 不再导出这两个名字，也不为旧导入提供垫片。
+插件 SDK 仍从 `astrbot.api.provider` 导出 `PromptSpec`。`astrbot.core.db.po` 不再导出这两个名字，也不为旧导入提供垫片。
 
 ### 授权持久化
 
@@ -195,21 +195,21 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`），路径锁在请求级 Skill 快照内。用户说明见 [技能 Skills](/use/skills)。
 
-工具目录由 `astrbot/core/tool_catalog.py` 的 `assemble_tool_catalog()` 一次计算。输入是冻结的 Skill 快照、人格三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再物化 `ToolSet`。请求上已有的工具回灌时仍走同一套表面硬裁。`_apply_local_env_tools()` / `_apply_sandbox_tools()` 只写运行时提示词。`tool_schema_mode=skills_like` 只做两阶段轻 schema，不收目录。
+工具目录由 `astrbot/core/tool_catalog.py` 的 `assemble_tool_catalog()` 一次计算。输入是冻结的 Skill 快照、提示词三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再物化 `ToolSet`。请求上已有的工具回灌时仍走同一套表面硬裁。`_apply_local_env_tools()` / `_apply_sandbox_tools()` 只写运行时提示词。`tool_schema_mode=skills_like` 只做两阶段轻 schema，不收目录。
 
 ```text
 候选 = 平台基线 ∪ 会话插件/MCP ∪ Skill.tools ∪ 按需电脑工具
-目录 = 表面硬裁(可见性过滤(人格白名单 ∩ 候选))
+目录 = 表面硬裁(可见性过滤(提示词白名单 ∩ 候选))
 ```
 
-| 层             | 何时进入候选                                                     | 是否靠 Skill `tools:`                         |
-| -------------- | ---------------------------------------------------------------- | --------------------------------------------- |
-| 平台基线       | 对应能力已开                                                     | 否                                            |
-| 会话插件 / MCP | 插件已激活且通过会话过滤；MCP 无插件归属则保留                   | 否。Skill 不能安装或放开私网 MCP              |
-| Skill 声明     | 已启用 Skill 前言 `tools:`                                       | 是。只过滤已有工具名                          |
-| 按需电脑工具   | `computer_use_runtime` 为 `local` 或 `sandbox`，且通过人格与硬裁 | 可声明，但不能扩权。`runtime=none` 时本层为空 |
+| 层             | 何时进入候选                                                       | 是否靠 Skill `tools:`                         |
+| -------------- | ------------------------------------------------------------------ | --------------------------------------------- |
+| 平台基线       | 对应能力已开                                                       | 否                                            |
+| 会话插件 / MCP | 插件已激活且通过会话过滤；MCP 无插件归属则保留                     | 否。Skill 不能安装或放开私网 MCP              |
+| Skill 声明     | 已启用 Skill 前言 `tools:`                                         | 是。只过滤已有工具名                          |
+| 按需电脑工具   | `computer_use_runtime` 为 `local` 或 `sandbox`，且通过提示词与硬裁 | 可声明，但不能扩权。`runtime=none` 时本层为空 |
 
-人格 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表移除普通工具，仍保留 `read_skill`。非空列表与白名单求交，`read_skill` 仍保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。Neo 生命周期工具属于 sandbox + `shipyard_neo` 的按需电脑层，不是平台基线。
+提示词 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表移除普通工具，仍保留 `read_skill`。非空列表与白名单求交，`read_skill` 仍保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。Neo 生命周期工具属于 sandbox + `shipyard_neo` 的按需电脑层，不是平台基线。
 
 社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。匿名 WebChat、插件、Agent、API Key 一律裁掉。已认证 WebChat 只放行已 step-up 的动作交集。IM 在该配置上绑了 `instance_operator` 及以上时，挂出整组动作且不走 Dashboard step-up；新动作加入该集合后自动进入这条路径。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。全局 `root`/`operator` 绑定不会继承到 IM 主体。
 
@@ -314,7 +314,7 @@ guest:<id>
 | `skill.read`                                      | member 及以上                                                                                    | 否                 |
 | `tool.local_exec` 等实例工具                      | instance_operator 及以上；WebChat 另需 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up | 是                 |
 
-插件自定义动作必须使用 `plugin:<plugin-id>:<action>` 命名空间，并通过 `self.context.authz.authorize()` 再次调用核心授权。未声明的插件写操作默认拒绝。工具最终权限是“用户授权 ∩ Persona 工具策略 ∩ 工具自身策略”；子 Agent handoff 不能提升调用者。
+插件自定义动作必须使用 `plugin:<plugin-id>:<action>` 命名空间，并通过 `self.context.authz.authorize()` 再次调用核心授权。未声明的插件写操作默认拒绝。工具最终权限是“用户授权 ∩ Prompt 工具策略 ∩ 工具自身策略”；子 Agent handoff 不能提升调用者。
 
 ### Step-up、审计与 API Key
 

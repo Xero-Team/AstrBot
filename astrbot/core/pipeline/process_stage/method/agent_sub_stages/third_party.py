@@ -25,11 +25,11 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
-from astrbot.core.persona_error_reply import (
+from astrbot.core.prompt_error_reply import (
     DEFAULT_AGENT_ERROR_MESSAGE,
-    resolve_event_conversation_persona_id,
-    resolve_persona_custom_error_message,
-    set_persona_custom_error_message_on_event,
+    resolve_event_conversation_prompt_id,
+    resolve_prompt_custom_error_message,
+    set_prompt_custom_error_message_on_event,
 )
 
 if TYPE_CHECKING:
@@ -212,22 +212,22 @@ class ThirdPartyAgentSubStage:
             source="Third-party runner config",
         )
 
-    async def _resolve_persona_custom_error_message(
+    async def _resolve_prompt_custom_error_message(
         self, event: AstrMessageEvent
     ) -> str | None:
         try:
-            conversation_persona_id = await resolve_event_conversation_persona_id(
+            conversation_prompt_id = await resolve_event_conversation_prompt_id(
                 event,
                 self.ctx.execution_context.conversation_manager,
             )
-            return await resolve_persona_custom_error_message(
+            return await resolve_prompt_custom_error_message(
                 event=event,
-                persona_manager=self.ctx.execution_context.persona_manager,
-                conversation_persona_id=conversation_persona_id,
+                prompt_manager=self.ctx.execution_context.prompt_manager,
+                conversation_prompt_id=conversation_prompt_id,
             )
         except Exception as e:
             logger.debug(
-                "Failed to resolve persona custom error message: %s",
+                "Failed to resolve prompt custom error message: %s",
                 safe_error("", e),
             )
             return None
@@ -368,8 +368,8 @@ class ThirdPartyAgentSubStage:
         ):
             return
 
-        custom_error_message = await self._resolve_persona_custom_error_message(event)
-        set_persona_custom_error_message_on_event(event, custom_error_message)
+        custom_error_message = await self._resolve_prompt_custom_error_message(event)
+        set_prompt_custom_error_message_on_event(event, custom_error_message)
 
         # call event hook
         if await call_event_hook(

@@ -28,7 +28,7 @@ PUBLIC_OPEN_API_TAGS = {
     "Skills",
     "Knowledge Base",
     "Memory",
-    "Personas",
+    "Prompts",
     "Sessions",
     "Conversations",
     "T2I",

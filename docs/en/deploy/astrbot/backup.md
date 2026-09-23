@@ -10,7 +10,7 @@ Runtime data defaults to `data/` under the process working directory. With `ASTR
 - Copy only `data/data_v4.db` and drop knowledge bases, plugins, and config.
 - Commit a backup that contains secrets, or post it in a public channel.
 - Drill against a developer's real `data/`; use a copy or a temporary root.
-- Treat [Persona JSON export](../../use/persona) as a full backup.
+- Treat [Prompt JSON export](../../use/prompt) as a full backup.
 
 ## Preferred: WebUI backup ZIP
 
@@ -43,7 +43,7 @@ Do this at least once and record the date and result:
 2. Stop the service.
 3. Restore onto an isolated directory or a new volume: import the ZIP, or place the `data/` copy at the runtime root.
 4. Start.
-5. Log in as the original admin and confirm conversations, personas, plugins, knowledge-base search, and Provider config. After restore, check that plugin, MCP, Skill, and Provider names still resolve.
+5. Log in as the original admin and confirm conversations, prompts, plugins, knowledge-base search, and Provider config. After restore, check that plugin, MCP, Skill, and Provider names still resolve.
 
 Breaking main-database rebuilds on current `master` do not migrate rows from an old `data_v4.db`. Read `changelogs/` across the versions you are jumping before you restore a snapshot or cut over to an empty database as documented.
 

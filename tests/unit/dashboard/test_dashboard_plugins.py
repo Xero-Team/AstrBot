@@ -110,7 +110,7 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
 
 
 @pytest.mark.asyncio
-async def test_subagent_config_accepts_default_persona(
+async def test_subagent_config_accepts_default_prompt(
     app: FastAPI,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -125,7 +125,7 @@ async def test_subagent_config_accepts_default_persona(
         "agents": [
             {
                 "name": "planner",
-                "persona_id": "default",
+                "prompt_id": "default",
                 "public_description": "planner",
                 "system_prompt": "",
                 "enabled": True,
@@ -149,7 +149,7 @@ async def test_subagent_config_accepts_default_persona(
         assert get_response.status_code == 200
         get_data = await get_response.get_json()
         assert get_data["status"] == "ok"
-        assert get_data["data"]["agents"][0]["persona_id"] == "default"
+        assert get_data["data"]["agents"][0]["prompt_id"] == "default"
     finally:
         await test_client.put(
             "/api/v1/subagents/config",

@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, kb, memory, data, file, plugin, mcp, and skill. The config scope also grants bot and provider access.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, prompt, im, config, chat, kb, memory, data, file, plugin, mcp, and skill. The config scope also grants bot and provider access.\n"
   },
   "x-astrbot-scope-definitions": {
     "bot": {
@@ -14,9 +14,9 @@
       "description": "Manage model providers and provider sources.",
       "description_zh": "管理模型服务提供商和提供商源。"
     },
-    "persona": {
-      "description": "Manage personas and persona folders.",
-      "description_zh": "管理人格设定和人格文件夹。"
+    "prompt": {
+      "description": "Manage prompts and prompt folders.",
+      "description_zh": "管理提示词设定和提示词文件夹。"
     },
     "im": {
       "description": "Send proactive IM messages and query bot or platform identifiers.",
@@ -124,7 +124,7 @@
       "name": "Memory"
     },
     {
-      "name": "Personas"
+      "name": "Prompts"
     },
     {
       "name": "Sessions"
@@ -4509,12 +4509,12 @@
         }
       }
     },
-    "/api/v1/personas/tree": {
+    "/api/v1/prompts/tree": {
       "get": {
-        "tags": ["Personas"],
-        "summary": "Get persona folder tree",
-        "operationId": "getPersonaTree",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Get prompt folder tree",
+        "operationId": "getPromptTree",
+        "x-astrbot-scope": "prompt",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
@@ -4522,12 +4522,12 @@
         }
       }
     },
-    "/api/v1/personas": {
+    "/api/v1/prompts": {
       "get": {
-        "tags": ["Personas"],
-        "summary": "List personas",
-        "operationId": "listPersonas",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "List prompts",
+        "operationId": "listPrompts",
+        "x-astrbot-scope": "prompt",
         "parameters": [
           {
             "name": "folder_id",
@@ -4544,16 +4544,16 @@
         }
       },
       "post": {
-        "tags": ["Personas"],
-        "summary": "Create a persona",
-        "operationId": "createPersona",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Create a prompt",
+        "operationId": "createPrompt",
+        "x-astrbot-scope": "prompt",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PersonaRequest"
+                "$ref": "#/components/schemas/PromptRequest"
               }
             }
           }
@@ -4565,15 +4565,15 @@
         }
       }
     },
-    "/api/v1/personas/{persona_id}": {
+    "/api/v1/prompts/{prompt_id}": {
       "get": {
-        "tags": ["Personas"],
-        "summary": "Get a persona",
-        "operationId": "getPersona",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Get a prompt",
+        "operationId": "getPrompt",
+        "x-astrbot-scope": "prompt",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PersonaId"
+            "$ref": "#/components/parameters/PromptId"
           }
         ],
         "responses": {
@@ -4583,13 +4583,13 @@
         }
       },
       "put": {
-        "tags": ["Personas"],
-        "summary": "Update a persona",
-        "operationId": "updatePersona",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Update a prompt",
+        "operationId": "updatePrompt",
+        "x-astrbot-scope": "prompt",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PersonaId"
+            "$ref": "#/components/parameters/PromptId"
           }
         ],
         "requestBody": {
@@ -4597,7 +4597,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PersonaRequest"
+                "$ref": "#/components/schemas/PromptRequest"
               }
             }
           }
@@ -4609,13 +4609,13 @@
         }
       },
       "delete": {
-        "tags": ["Personas"],
-        "summary": "Delete a persona",
-        "operationId": "deletePersona",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Delete a prompt",
+        "operationId": "deletePrompt",
+        "x-astrbot-scope": "prompt",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PersonaId"
+            "$ref": "#/components/parameters/PromptId"
           }
         ],
         "responses": {
@@ -4625,12 +4625,12 @@
         }
       }
     },
-    "/api/v1/persona-folders": {
+    "/api/v1/prompt-folders": {
       "get": {
-        "tags": ["Personas"],
-        "summary": "List persona folders",
-        "operationId": "listPersonaFolders",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "List prompt folders",
+        "operationId": "listPromptFolders",
+        "x-astrbot-scope": "prompt",
         "parameters": [
           {
             "name": "parent_id",
@@ -4647,16 +4647,16 @@
         }
       },
       "post": {
-        "tags": ["Personas"],
-        "summary": "Create a persona folder",
-        "operationId": "createPersonaFolder",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Create a prompt folder",
+        "operationId": "createPromptFolder",
+        "x-astrbot-scope": "prompt",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PersonaFolderRequest"
+                "$ref": "#/components/schemas/PromptFolderRequest"
               }
             }
           }
@@ -4668,12 +4668,12 @@
         }
       }
     },
-    "/api/v1/persona-folders/{folder_id}": {
+    "/api/v1/prompt-folders/{folder_id}": {
       "put": {
-        "tags": ["Personas"],
-        "summary": "Update a persona folder",
-        "operationId": "updatePersonaFolder",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Update a prompt folder",
+        "operationId": "updatePromptFolder",
+        "x-astrbot-scope": "prompt",
         "parameters": [
           {
             "$ref": "#/components/parameters/FolderId"
@@ -4684,7 +4684,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PersonaFolderRequest"
+                "$ref": "#/components/schemas/PromptFolderRequest"
               }
             }
           }
@@ -4696,10 +4696,10 @@
         }
       },
       "delete": {
-        "tags": ["Personas"],
-        "summary": "Delete a persona folder",
-        "operationId": "deletePersonaFolder",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Delete a prompt folder",
+        "operationId": "deletePromptFolder",
+        "x-astrbot-scope": "prompt",
         "parameters": [
           {
             "$ref": "#/components/parameters/FolderId"
@@ -4712,18 +4712,18 @@
         }
       }
     },
-    "/api/v1/personas/move": {
+    "/api/v1/prompts/move": {
       "post": {
-        "tags": ["Personas"],
-        "summary": "Move a persona or folder",
-        "operationId": "movePersonaItem",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Move a prompt or folder",
+        "operationId": "movePromptItem",
+        "x-astrbot-scope": "prompt",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PersonaMoveRequest"
+                "$ref": "#/components/schemas/PromptMoveRequest"
               }
             }
           }
@@ -4735,12 +4735,12 @@
         }
       }
     },
-    "/api/v1/personas/reorder": {
+    "/api/v1/prompts/reorder": {
       "post": {
-        "tags": ["Personas"],
-        "summary": "Reorder personas or folders",
-        "operationId": "reorderPersonaItems",
-        "x-astrbot-scope": "persona",
+        "tags": ["Prompts"],
+        "summary": "Reorder prompts or folders",
+        "operationId": "reorderPromptItems",
+        "x-astrbot-scope": "prompt",
         "requestBody": {
           "required": true,
           "content": {
@@ -5717,8 +5717,8 @@
           "default": 20
         }
       },
-      "PersonaId": {
-        "name": "persona_id",
+      "PromptId": {
+        "name": "prompt_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -7014,11 +7014,11 @@
         },
         "additionalProperties": true
       },
-      "PersonaRequest": {
+      "PromptRequest": {
         "type": "object",
-        "required": ["persona_id", "system_prompt"],
+        "required": ["prompt_id", "system_prompt"],
         "properties": {
-          "persona_id": {
+          "prompt_id": {
             "type": "string"
           },
           "system_prompt": {
@@ -7051,7 +7051,7 @@
         },
         "additionalProperties": true
       },
-      "PersonaFolderRequest": {
+      "PromptFolderRequest": {
         "type": "object",
         "properties": {
           "name": {
@@ -7066,11 +7066,11 @@
         },
         "additionalProperties": true
       },
-      "PersonaMoveRequest": {
+      "PromptMoveRequest": {
         "type": "object",
-        "required": ["persona_id"],
+        "required": ["prompt_id"],
         "properties": {
-          "persona_id": {
+          "prompt_id": {
             "type": "string"
           },
           "folder_id": {
@@ -7094,7 +7094,7 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": ["persona", "folder"]
+                  "enum": ["prompt", "folder"]
                 },
                 "sort_order": {
                   "type": "integer"
@@ -7243,7 +7243,7 @@
           "title": {
             "type": "string"
           },
-          "persona_id": {
+          "prompt_id": {
             "type": "string"
           }
         },

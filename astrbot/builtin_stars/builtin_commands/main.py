@@ -11,8 +11,8 @@ from .commands import (
     ConversationCommands,
     FlowCommands,
     HelpCommand,
-    PersonaCommands,
     PluginCommands,
+    PromptCommands,
     ProviderCommands,
     SessionCommands,
     TtsCommands,
@@ -32,7 +32,7 @@ class Main(star.Star):
         self.conversation_c = ConversationCommands(self.context)
         self.flow_c = FlowCommands(self.context)
         self.help_c = HelpCommand(self.context)
-        self.persona_c = PersonaCommands(self.context)
+        self.prompt_c = PromptCommands(self.context)
         self.plugin_c = PluginCommands(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.session_c = SessionCommands(self.context)
@@ -504,41 +504,39 @@ class Main(star.Star):
         """Revoke administrator permission"""
         await self.admin_c.revoke(event, user_id)
 
-    @filter.command_group("persona")
-    def persona(self) -> None:
-        """Manage personas"""
+    @filter.command_group("prompt")
+    def prompt(self) -> None:
+        """Manage prompts"""
 
     @filter.permission("agent.manage")
-    @persona.command("status")
-    async def persona_status(self, event: AstrMessageEvent) -> None:
-        """Show the current persona"""
-        await self.persona_c.status(event)
+    @prompt.command("status")
+    async def prompt_status(self, event: AstrMessageEvent) -> None:
+        """Show the current prompt"""
+        await self.prompt_c.status(event)
 
     @filter.permission("agent.manage")
-    @persona.command("list")
-    async def persona_list(self, event: AstrMessageEvent) -> None:
-        """List personas"""
-        await self.persona_c.list_personas(event)
+    @prompt.command("list")
+    async def prompt_list(self, event: AstrMessageEvent) -> None:
+        """List prompts"""
+        await self.prompt_c.list_prompts(event)
 
     @filter.permission("agent.manage")
-    @persona.command("set")
-    async def persona_set(self, event: AstrMessageEvent, persona_id: GreedyStr) -> None:
-        """Set the current conversation persona"""
-        await self.persona_c.set_persona(event, persona_id)
+    @prompt.command("set")
+    async def prompt_set(self, event: AstrMessageEvent, prompt_id: GreedyStr) -> None:
+        """Set the current conversation prompt"""
+        await self.prompt_c.set_prompt(event, prompt_id)
 
     @filter.permission("agent.manage")
-    @persona.command("show")
-    async def persona_show(
-        self, event: AstrMessageEvent, persona_id: GreedyStr
-    ) -> None:
-        """View persona details"""
-        await self.persona_c.show(event, persona_id)
+    @prompt.command("show")
+    async def prompt_show(self, event: AstrMessageEvent, prompt_id: GreedyStr) -> None:
+        """View prompt details"""
+        await self.prompt_c.show(event, prompt_id)
 
     @filter.permission("agent.manage")
-    @persona.command("unset")
-    async def persona_unset(self, event: AstrMessageEvent) -> None:
-        """Unset the current conversation persona"""
-        await self.persona_c.unset(event)
+    @prompt.command("unset")
+    async def prompt_unset(self, event: AstrMessageEvent) -> None:
+        """Unset the current conversation prompt"""
+        await self.prompt_c.unset(event)
 
     @filter.command_group("plugin")
     def plugin(self) -> None:

@@ -1,7 +1,7 @@
 <template>
-  <div class="persona-preview-card">
+  <div class="prompt-preview-card">
     <div class="preview-header">
-      <small>{{ tm('personaQuickPreview.title') }}</small>
+      <small>{{ tm('promptQuickPreview.title') }}</small>
     </div>
 
     <div v-if="loading" class="preview-loading">
@@ -12,40 +12,40 @@
         color="primary"
         class="mr-2"
       />
-      <small class="text-grey">{{ tm('personaQuickPreview.loading') }}</small>
+      <small class="text-grey">{{ tm('promptQuickPreview.loading') }}</small>
     </div>
 
     <div v-else-if="!modelValue" class="preview-empty">
       <small class="text-grey">{{
-        tm('personaQuickPreview.noPersonaSelected')
+        tm('promptQuickPreview.noPromptSelected')
       }}</small>
     </div>
 
-    <div v-else-if="!personaData" class="preview-empty">
+    <div v-else-if="!promptData" class="preview-empty">
       <small class="text-grey">{{
-        tm('personaQuickPreview.personaNotFound')
+        tm('promptQuickPreview.promptNotFound')
       }}</small>
     </div>
 
     <div v-else class="preview-content">
       <div class="section-title">
-        {{ tm('personaQuickPreview.systemPromptLabel') }}
+        {{ tm('promptQuickPreview.systemPromptLabel') }}
       </div>
-      <pre class="prompt-content">{{ personaData.system_prompt || '' }}</pre>
+      <pre class="prompt-content">{{ promptData.system_prompt || '' }}</pre>
 
       <div class="section-title mt-3">
-        {{ tm('personaQuickPreview.toolsLabel') }}
+        {{ tm('promptQuickPreview.toolsLabel') }}
       </div>
       <div class="chip-wrap tools-wrap">
         <v-chip
-          v-if="personaData.tools === null"
+          v-if="promptData.tools === null"
           size="small"
           color="success"
           variant="tonal"
           label
         >
           {{
-            tm('personaQuickPreview.allToolsWithCount', {
+            tm('promptQuickPreview.allToolsWithCount', {
               count: allToolsCount,
             })
           }}
@@ -67,46 +67,46 @@
           <v-tooltip v-if="tool.active === false" location="top">
             <template #activator="{ props: tooltipProps }">
               <small class="text-warning tool-inactive" v-bind="tooltipProps">
-                {{ tm('personaQuickPreview.toolInactive') }}
+                {{ tm('promptQuickPreview.toolInactive') }}
               </small>
             </template>
-            {{ tm('personaQuickPreview.toolInactiveTooltip') }}
+            {{ tm('promptQuickPreview.toolInactiveTooltip') }}
           </v-tooltip>
           <small
             v-if="tool.origin || tool.origin_name"
             class="text-grey tool-meta"
           >
             <span v-if="tool.origin"
-              >{{ tm('personaQuickPreview.originLabel') }}:
+              >{{ tm('promptQuickPreview.originLabel') }}:
               {{ tool.origin }}</span
             >
             <span v-if="tool.origin_name">
-              | {{ tm('personaQuickPreview.originNameLabel') }}:
+              | {{ tm('promptQuickPreview.originNameLabel') }}:
               {{ tool.origin_name }}</span
             >
           </small>
         </div>
         <small
-          v-if="personaData.tools !== null && normalizedTools.length === 0"
+          v-if="promptData.tools !== null && normalizedTools.length === 0"
           class="text-grey"
         >
-          {{ tm('personaQuickPreview.noTools') }}
+          {{ tm('promptQuickPreview.noTools') }}
         </small>
       </div>
 
       <div class="section-title mt-3">
-        {{ tm('personaQuickPreview.skillsLabel') }}
+        {{ tm('promptQuickPreview.skillsLabel') }}
       </div>
       <div class="chip-wrap">
         <v-chip
-          v-if="personaData.skills === null"
+          v-if="promptData.skills === null"
           size="small"
           color="success"
           variant="tonal"
           label
         >
           {{
-            tm('personaQuickPreview.allSkillsWithCount', {
+            tm('promptQuickPreview.allSkillsWithCount', {
               count: allSkillsCount,
             })
           }}
@@ -128,17 +128,17 @@
           <v-tooltip v-if="skill.plugin_active === false" location="top">
             <template #activator="{ props: tooltipProps }">
               <small class="text-warning tool-inactive" v-bind="tooltipProps">
-                {{ tm('personaQuickPreview.skillInactive') }}
+                {{ tm('promptQuickPreview.skillInactive') }}
               </small>
             </template>
-            {{ tm('personaQuickPreview.skillInactiveTooltip') }}
+            {{ tm('promptQuickPreview.skillInactiveTooltip') }}
           </v-tooltip>
         </div>
         <small
-          v-if="personaData.skills !== null && normalizedSkills.length === 0"
+          v-if="promptData.skills !== null && normalizedSkills.length === 0"
           class="text-grey"
         >
-          {{ tm('personaQuickPreview.noSkills') }}
+          {{ tm('promptQuickPreview.noSkills') }}
         </small>
       </div>
     </div>
@@ -147,7 +147,7 @@
 
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { personaApi, skillApi, toolApi } from '@/api/v1';
+import { promptApi, skillApi, toolApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 
 const props = defineProps({
@@ -160,23 +160,23 @@ const props = defineProps({
 const { tm } = useModuleI18n('core.shared');
 
 const loading = ref(false);
-const personaData = ref(null);
+const promptData = ref(null);
 const toolMetaMap = ref({});
 const skillMetaMap = ref({});
 const availableSkills = ref([]);
 
-const defaultPersonaData = {
-  persona_id: 'default',
+const defaultPromptData = {
+  prompt_id: 'default',
   system_prompt: 'You are a helpful and friendly assistant.',
   tools: null,
   skills: null,
 };
 
 const normalizedTools = computed(() =>
-  Array.isArray(personaData.value?.tools) ? personaData.value.tools : [],
+  Array.isArray(promptData.value?.tools) ? promptData.value.tools : [],
 );
 const normalizedSkills = computed(() =>
-  Array.isArray(personaData.value?.skills) ? personaData.value.skills : [],
+  Array.isArray(promptData.value?.skills) ? promptData.value.skills : [],
 );
 const allToolsCount = computed(
   () =>
@@ -254,45 +254,45 @@ async function loadSkillsMeta() {
   }
 }
 
-async function loadPersonaPreview(personaId) {
-  if (!personaId) {
-    personaData.value = null;
+async function loadPromptPreview(promptId) {
+  if (!promptId) {
+    promptData.value = null;
     return;
   }
 
-  if (personaId === 'default') {
-    personaData.value = defaultPersonaData;
+  if (promptId === 'default') {
+    promptData.value = defaultPromptData;
     return;
   }
 
   loading.value = true;
   try {
-    const response = await personaApi.list();
+    const response = await promptApi.list();
     if (response.data?.status === 'ok') {
-      const personas = response.data?.data || [];
-      personaData.value =
-        personas.find((item) => item.persona_id === personaId) || null;
+      const prompts = response.data?.data || [];
+      promptData.value =
+        prompts.find((item) => item.prompt_id === promptId) || null;
     } else {
-      personaData.value = null;
+      promptData.value = null;
     }
   } catch (error) {
-    console.error('Failed to load persona preview:', error);
-    personaData.value = null;
+    console.error('Failed to load prompt preview:', error);
+    promptData.value = null;
   } finally {
     loading.value = false;
   }
 }
 
-function handlePersonaSaved() {
+function handlePromptSaved() {
   if (props.modelValue) {
-    void loadPersonaPreview(props.modelValue);
+    void loadPromptPreview(props.modelValue);
   }
 }
 
 watch(
   () => props.modelValue,
   (newValue) => {
-    void loadPersonaPreview(newValue);
+    void loadPromptPreview(newValue);
   },
   { immediate: true },
 );
@@ -301,16 +301,16 @@ void loadToolsMeta();
 void loadSkillsMeta();
 
 onMounted(() => {
-  window.addEventListener('astrbot:persona-saved', handlePersonaSaved);
+  window.addEventListener('astrbot:prompt-saved', handlePromptSaved);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('astrbot:persona-saved', handlePersonaSaved);
+  window.removeEventListener('astrbot:prompt-saved', handlePromptSaved);
 });
 </script>
 
 <style scoped>
-.persona-preview-card {
+.prompt-preview-card {
   background-color: rgba(var(--v-theme-primary), 0.05);
   border: 1px solid rgba(var(--v-theme-primary), 0.1);
   border-radius: 8px;

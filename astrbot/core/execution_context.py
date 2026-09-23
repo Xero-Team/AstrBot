@@ -24,7 +24,6 @@ from astrbot.core.group_sender_concurrency import GroupOutboundGate
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform.message_protocol import (
     MessageDeliveryCapabilities,
@@ -34,6 +33,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.send_result import DeliveryReceipt, PlatformSendResult
 from astrbot.core.platform.session_bridge import SessionBridgeManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.prompt_mgr import PromptManager
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
@@ -197,7 +197,7 @@ class CoreExecutionContext:
         platform_manager: PlatformManagerProtocol,
         conversation_manager: ConversationManager,
         message_history_manager: PlatformMessageHistoryManager,
-        persona_manager: PersonaManager,
+        prompt_manager: PromptManager,
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
@@ -246,8 +246,8 @@ class CoreExecutionContext:
         """会话管理器"""
         self.message_history_manager = message_history_manager
         """平台消息历史管理器"""
-        self.persona_manager = persona_manager
-        """人格角色设定管理器"""
+        self.prompt_manager = prompt_manager
+        """提示词角色设定管理器"""
         self.astrbot_config_mgr = astrbot_config_mgr
         """配置文件管理器(非webui)"""
         self.kb_manager = knowledge_base_manager

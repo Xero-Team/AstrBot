@@ -22,23 +22,23 @@ from astrbot.core.tools.function_tool_manager import FunctionToolManager
 
 pytestmark = pytest.mark.provider
 
-_original_persona_mgr = sys.modules.get("astrbot.core.persona_mgr")
-_stub_persona_mgr = types.ModuleType("astrbot.core.persona_mgr")
+_original_prompt_mgr = sys.modules.get("astrbot.core.prompt_mgr")
+_stub_prompt_mgr = types.ModuleType("astrbot.core.prompt_mgr")
 
 
-class PersonaManager: ...
+class PromptManager: ...
 
 
-setattr(_stub_persona_mgr, "PersonaManager", PersonaManager)
-sys.modules["astrbot.core.persona_mgr"] = _stub_persona_mgr
+setattr(_stub_prompt_mgr, "PromptManager", PromptManager)
+sys.modules["astrbot.core.prompt_mgr"] = _stub_prompt_mgr
 
 provider_manager_module = importlib.import_module("astrbot.core.provider.manager")
 ProviderManager = provider_manager_module.ProviderManager
 
-if _original_persona_mgr is not None:
-    sys.modules["astrbot.core.persona_mgr"] = _original_persona_mgr
+if _original_prompt_mgr is not None:
+    sys.modules["astrbot.core.prompt_mgr"] = _original_prompt_mgr
 else:
-    sys.modules.pop("astrbot.core.persona_mgr", None)
+    sys.modules.pop("astrbot.core.prompt_mgr", None)
 
 
 class DummyChatProvider(Provider):
@@ -113,10 +113,10 @@ def _build_manager(config: dict | None = None) -> ProviderManager:
         get_conf=lambda umo=None: default_conf,
         default_conf=default_conf,
     )
-    persona_mgr = SimpleNamespace(default_persona="default")
+    prompt_mgr = SimpleNamespace(default_prompt="default")
     return ProviderManager(
         acm,
-        persona_mgr=persona_mgr,
+        prompt_mgr=prompt_mgr,
         preferences=AsyncMock(),
         catalog=ProviderCatalog(),
         tools=FunctionToolManager(),

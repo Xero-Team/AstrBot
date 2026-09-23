@@ -69,7 +69,7 @@ async def test_export_continues_after_conversation_lookup_failure():
         user_id="qq:FriendMessage:bob",
         platform_id="qq",
         title="Bob chat",
-        persona_id=None,
+        prompt_id=None,
         created_at="2026-09-10T00:00:00+00:00",
         updated_at="2026-09-10T00:00:00+00:00",
         history='[{"role": "user", "content": "hello"}]',
@@ -94,7 +94,7 @@ async def test_export_continues_after_conversation_lookup_failure():
 
     assert export.file_obj.read().decode("utf-8") == (
         '{"cid": "second", "user_id": "qq:FriendMessage:bob", '
-        '"platform_id": "qq", "title": "Bob chat", "persona_id": null, '
+        '"platform_id": "qq", "title": "Bob chat", "prompt_id": null, '
         '"created_at": "2026-09-10T00:00:00+00:00", '
         '"updated_at": "2026-09-10T00:00:00+00:00", '
         '"content": [{"role": "user", "content": "hello"}]}'

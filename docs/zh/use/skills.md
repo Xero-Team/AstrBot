@@ -33,12 +33,12 @@ AstrBot 会从多个位置发现 Skills：
 
 工作区 Skills 是**请求级**能力：local 运行环境下，AstrBot 会在每次构建请求时检测当前会话 workspace 下的 `skills/` 目录，并把合法的 Skills 拼进本次请求的 Skills 清单。它们暂时不会显示在 WebUI 的 Skills 管理页面，也不会写入全局 Skills 配置。
 
-如果人格配置为“选择指定 Skills”，该列表只用于筛选本地、插件内置和 sandbox Skills；工作区 Skills 仍会作为当前请求的一部分被检测并注入。只有人格明确配置为“不使用任何 Skills”时，才会同时禁用工作区 Skills。
+如果提示词配置为“选择指定 Skills”，该列表只用于筛选本地、插件内置和 sandbox Skills；工作区 Skills 仍会作为当前请求的一部分被检测并注入。只有提示词明确配置为“不使用任何 Skills”时，才会同时禁用工作区 Skills。
 
 当不同来源出现同名 Skill 时，请求中的优先级如下：
 
-1. 如果当前人格明确配置为“不使用任何 Skills”，则不会注入任何 Skills，包括工作区 Skills。
-2. 如果当前人格配置了指定 Skills 列表，该列表不会过滤工作区 Skills。
+1. 如果当前提示词明确配置为“不使用任何 Skills”，则不会注入任何 Skills，包括工作区 Skills。
+2. 如果当前提示词配置了指定 Skills 列表，该列表不会过滤工作区 Skills。
 3. 当前会话的工作区 Skill 优先级最高。同名时，它会覆盖本地、插件或 sandbox 中的同名 Skill，仅对当前请求生效。
 4. 本地 Skills 优先于插件内置 Skills 和 sandbox-only Skills。
 5. 插件内置 Skills 优先于 sandbox-only Skills。

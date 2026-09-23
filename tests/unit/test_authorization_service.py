@@ -1240,7 +1240,7 @@ async def test_session_scoped_tool_role_cannot_cross_origin_session(authorizatio
     )
     current = Resource.session("default", "napcat:GroupMessage:room-a")
     other = Resource.session("default", "napcat:GroupMessage:room-b")
-    tool = Resource.named("tool", "persona-editor", config_id="default")
+    tool = Resource.named("tool", "prompt-editor", config_id="default")
     await authorization.grant_binding(
         actor=Subject.system("test"),
         subject_id=subject.id,

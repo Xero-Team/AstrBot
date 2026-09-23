@@ -50,7 +50,7 @@ const api = vi.hoisted(() => {
       createInSource: fn(),
       update: fn(),
     },
-    personaApi: {
+    promptApi: {
       tree: fn(),
       folders: fn(),
       list: fn(),
@@ -107,7 +107,7 @@ import { useCommandFilters } from '@/components/extension/componentPanel/composa
 import { useToolActions } from '@/components/extension/componentPanel/composables/useToolActions';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
 import { generateMissingKeys } from '@/i18n/tools';
 import { I18nLoader } from '@/i18n/loader';
@@ -516,7 +516,7 @@ describe('frontend logic coverage', () => {
     },
   );
 
-  it('covers persona, auth, common, and router-loading stores', async () => {
+  it('covers prompt, auth, common, and router-loading stores', async () => {
     const tree = [
       {
         folder_id: 'a',
@@ -525,39 +525,39 @@ describe('frontend logic coverage', () => {
         children: [{ folder_id: 'b', name: 'B', parent_id: 'a', children: [] }],
       },
     ];
-    api.personaApi.tree.mockResolvedValue({
+    api.promptApi.tree.mockResolvedValue({
       data: { status: 'ok', data: tree },
     });
-    api.personaApi.folders.mockResolvedValue({
+    api.promptApi.folders.mockResolvedValue({
       data: { status: 'ok', data: [] },
     });
-    api.personaApi.list.mockResolvedValue({ data: { status: 'ok', data: [] } });
-    api.personaApi.move.mockResolvedValue({ data: { status: 'ok' } });
-    api.personaApi.updateFolder.mockResolvedValue({ data: { status: 'ok' } });
-    api.personaApi.createFolder.mockResolvedValue({
+    api.promptApi.list.mockResolvedValue({ data: { status: 'ok', data: [] } });
+    api.promptApi.move.mockResolvedValue({ data: { status: 'ok' } });
+    api.promptApi.updateFolder.mockResolvedValue({ data: { status: 'ok' } });
+    api.promptApi.createFolder.mockResolvedValue({
       data: { status: 'ok', data: { folder: { folder_id: 'c', name: 'C' } } },
     });
-    api.personaApi.deleteFolder.mockResolvedValue({ data: { status: 'ok' } });
-    const persona = usePersonaStore();
-    await persona.loadFolderTree();
-    persona.updateBreadcrumb('b');
-    expect(persona.breadcrumbPath.map((n) => n.folder_id)).toContain('b');
-    await persona.navigateToFolder('a');
-    await persona.refreshCurrentFolder();
-    await persona.movePersonaToFolder('p1', 'a');
-    await persona.moveFolderToFolder('b', 'a');
-    await persona.createFolder({ name: 'C' });
-    await persona.updateFolder({ folder_id: 'a', name: 'A2' });
-    await persona.deleteFolder('b');
-    api.personaApi.delete = vi
+    api.promptApi.deleteFolder.mockResolvedValue({ data: { status: 'ok' } });
+    const prompt = usePromptStore();
+    await prompt.loadFolderTree();
+    prompt.updateBreadcrumb('b');
+    expect(prompt.breadcrumbPath.map((n) => n.folder_id)).toContain('b');
+    await prompt.navigateToFolder('a');
+    await prompt.refreshCurrentFolder();
+    await prompt.movePromptToFolder('p1', 'a');
+    await prompt.moveFolderToFolder('b', 'a');
+    await prompt.createFolder({ name: 'C' });
+    await prompt.updateFolder({ folder_id: 'a', name: 'A2' });
+    await prompt.deleteFolder('b');
+    api.promptApi.delete = vi
       .fn()
       .mockResolvedValue({ data: { status: 'ok' } });
-    api.personaApi.reorder = vi
+    api.promptApi.reorder = vi
       .fn()
       .mockResolvedValue({ data: { status: 'ok' } });
-    await persona.deletePersona('p1');
-    await persona.reorderItems([{ id: 'p1', type: 'persona', sort_order: 1 }]);
-    expect(persona.findFolderInTree('a')?.name).toBe('A');
+    await prompt.deletePrompt('p1');
+    await prompt.reorderItems([{ id: 'p1', type: 'prompt', sort_order: 1 }]);
+    expect(prompt.findFolderInTree('a')?.name).toBe('A');
 
     api.authApi.login.mockResolvedValue({
       data: { status: 'ok', data: { username: 'u', token: 'tok' } },

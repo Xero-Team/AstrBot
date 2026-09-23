@@ -123,7 +123,7 @@ tree at the frozen SHA; this table is a starting map, not a substitute for
 | `builtin-stars`    | Built-in Stars behave as plugins                   | `astrbot/builtin_stars/`                                                                           | workflow        |
 | `knowledge-base`   | Upload, chunk, FAISS, compensating cleanup         | `astrbot/core/knowledge_base/`, `db/vec_db/`                                                       | dataflow        |
 | `memory`           | Memory writeback/retrieval policy                  | `astrbot/core/memory/`                                                                             | dataflow        |
-| `persona`          | Persona prompt definitions and folders             | `astrbot/core/persona_mgr.py`                                                                      | lifecycle       |
+| `prompt`           | Prompt prompt definitions and folders              | `astrbot/core/prompt_mgr.py`                                                                       | lifecycle       |
 | `conversation`     | Conversations, history, attachments                | `conversation_mgr.py`, message history                                                             | lifecycle       |
 | `cron`             | Scheduled jobs                                     | `astrbot/core/cron/`                                                                               | lifecycle       |
 | `skills`           | Skill discovery from data/plugins/workspace        | `astrbot/core/skills/`                                                                             | architecture    |
@@ -152,7 +152,7 @@ Respect dependencies so later chapters can cite earlier trust boundaries:
 2. `authz`, `sdk-api`, `star`
 3. `pipeline`, `command`, `platform`
 4. `provider`, `agent`, `computer`, `skills`
-5. `conversation`, `memory`, `persona`, `knowledge-base`
+5. `conversation`, `memory`, `prompt`, `knowledge-base`
 6. `cron`, `backup`, `webchat`
 7. `dashboard-api`, `dashboard-ui`, `cli`, `builtin-stars`
 8. `ops-supply-chain`

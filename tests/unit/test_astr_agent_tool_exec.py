@@ -873,7 +873,7 @@ async def test_background_wakeup_honors_explicit_runtime_and_safety_mode(
     context = SimpleNamespace(
         get_config=lambda **_kwargs: {
             "provider_settings": {"computer_use_runtime": "local"},
-            "agent_runner": {"config": {"persona": {"safety_mode": False}}},
+            "agent_runner": {"config": {"safety_mode": False}},
         },
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool

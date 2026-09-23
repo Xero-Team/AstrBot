@@ -38,17 +38,17 @@
         :button-text="t('core.shared.providerSelector.selectProviderPool')"
       />
     </template>
-    <template v-else-if="itemMeta?._special === 'select_persona'">
-      <PersonaSelector
+    <template v-else-if="itemMeta?._special === 'select_prompt'">
+      <PromptSelector
         :model-value="modelValue"
         @update:model-value="emitUpdate"
       />
     </template>
-    <template v-else-if="itemMeta?._special === 'persona_pool'">
-      <PersonaSelector
+    <template v-else-if="itemMeta?._special === 'prompt_pool'">
+      <PromptSelector
         :model-value="modelValue"
         @update:model-value="emitUpdate"
-        :button-text="t('core.shared.personaSelector.selectPersonaPool')"
+        :button-text="t('core.shared.promptSelector.selectPromptPool')"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_knowledgebase'">
@@ -353,7 +353,7 @@ import ListConfigItem from './ListConfigItem.vue';
 import FileConfigItem from './FileConfigItem.vue';
 import ObjectEditor from './ObjectEditor.vue';
 import ProviderSelector from './ProviderSelector.vue';
-import PersonaSelector from './PersonaSelector.vue';
+import PromptSelector from './PromptSelector.vue';
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue';
 import PluginSetSelector from './PluginSetSelector.vue';
 import PluginLoopSelector from './PluginLoopSelector.vue';

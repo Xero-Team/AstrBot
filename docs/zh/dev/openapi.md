@@ -38,7 +38,7 @@ X-API-Key: abk_xxx
 | ---------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `bot`      | 管理机器人/平台配置                                | `GET/POST /api/v1/bots`、`PATCH /api/v1/bots/{bot_id}/enabled`                                                                  |
 | `provider` | 管理模型和 Provider 来源                           | `GET/POST /api/v1/providers`、`GET/PUT/DELETE /api/v1/provider-sources/{source_id}`                                             |
-| `persona`  | 管理 Persona 和 Persona 文件夹                     | `GET/POST /api/v1/personas`、`GET/POST /api/v1/persona-folders`                                                                 |
+| `prompt`   | 管理 Prompt 和 Prompt 文件夹                       | `GET/POST /api/v1/prompts`、`GET/POST /api/v1/prompt-folders`                                                                   |
 | `im`       | 主动发 IM 消息、查询 bot/platform 列表             | `POST /api/v1/im/messages`、`GET /api/v1/im/bots`                                                                               |
 | `config`   | 管理配置档和系统配置，同时包含 `bot` 和 `provider` | `GET/PUT /api/v1/system-config`、`GET/POST /api/v1/config-profiles`、`GET /api/v1/subagents/config`                             |
 | `chat`     | 调用对话能力、查询和维护 WebChat 会话              | `POST /api/v1/chat`、`GET /api/v1/chat/sessions`、`GET /api/v1/chat/configs`                                                    |
@@ -78,9 +78,9 @@ X-API-Key: abk_xxx
 - `GET /api/v1/providers`：获取模型提供商配置列表
 - `GET /api/v1/provider-sources`：获取提供商源配置列表
 
-**Persona、知识库、长期记忆、数据、插件、MCP 和 Skills**
+**Prompt、知识库、长期记忆、数据、插件、MCP 和 Skills**
 
-- `GET /api/v1/personas`：获取人格列表
+- `GET /api/v1/prompts`：获取提示词列表
 - `GET /api/v1/knowledge-bases`：获取知识库列表
 - `GET /api/v1/memory/facts`：分页查询长期记忆事实
 - `GET /api/v1/sessions`：获取会话状态与规则

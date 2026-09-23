@@ -360,7 +360,7 @@ def mock_conversation():
         platform_id="test_platform",
         user_id="test_user",
         content=[],
-        persona_id=None,
+        prompt_id=None,
     )
 
 
@@ -471,8 +471,8 @@ async def mock_context(
     platform_manager = MagicMock()
     conversation_manager = MagicMock()
     message_history_manager = MagicMock()
-    persona_manager = MagicMock()
-    persona_manager.runtime_personas = []
+    prompt_manager = MagicMock()
+    prompt_manager.runtime_prompts = []
     astrbot_config_mgr = MagicMock()
     knowledge_base_manager = MagicMock()
     cron_manager = MagicMock()
@@ -486,7 +486,7 @@ async def mock_context(
         platform_manager=platform_manager,
         conversation_manager=conversation_manager,
         message_history_manager=message_history_manager,
-        persona_manager=persona_manager,
+        prompt_manager=prompt_manager,
         astrbot_config_mgr=astrbot_config_mgr,
         knowledge_base_manager=knowledge_base_manager,
         cron_manager=cron_manager,

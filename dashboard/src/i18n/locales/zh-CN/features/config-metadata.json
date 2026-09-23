@@ -45,8 +45,8 @@
           "max_steps": {
             "description": "工具调用轮数上限"
           },
-          "persona_id": {
-            "description": "默认采用的人格"
+          "prompt_id": {
+            "description": "默认采用的提示词"
           },
           "proxy_mode": {
             "description": "代理模式",
@@ -81,8 +81,8 @@
           "max_steps": {
             "description": "工具调用轮数上限"
           },
-          "persona_id": {
-            "description": "默认采用的人格"
+          "prompt_id": {
+            "description": "默认采用的提示词"
           },
           "proxy_mode": {
             "description": "代理模式",
@@ -128,8 +128,8 @@
           "max_steps": {
             "description": "工具调用轮数上限"
           },
-          "persona_id": {
-            "description": "默认采用的人格"
+          "prompt_id": {
+            "description": "默认采用的提示词"
           },
           "proxy_mode": {
             "description": "代理模式",
@@ -182,8 +182,8 @@
           "max_steps": {
             "description": "工具调用轮数上限"
           },
-          "persona_id": {
-            "description": "默认采用的人格"
+          "prompt_id": {
+            "description": "默认采用的提示词"
           },
           "proxy_mode": {
             "description": "代理模式",
@@ -249,23 +249,21 @@
         }
       }
     },
-    "persona": {
-      "description": "人格",
-      "hint": "赋予 AstrBot 人格。",
+    "prompt": {
+      "description": "提示词",
+      "hint": "赋予 AstrBot 提示词。",
       "agent_runner": {
         "config": {
-          "persona": {
-            "persona_id": {
-              "description": "默认采用的人格"
-            },
-            "safety_mode": {
-              "description": "健康模式",
-              "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。"
-            },
-            "safety_mode_strategy": {
-              "description": "健康模式策略",
-              "hint": "选择健康模式的实现策略。"
-            }
+          "prompt_id": {
+            "description": "默认采用的提示词"
+          },
+          "safety_mode": {
+            "description": "健康模式",
+            "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。"
+          },
+          "safety_mode_strategy": {
+            "description": "健康模式策略",
+            "hint": "选择健康模式的实现策略。"
           }
         }
       }

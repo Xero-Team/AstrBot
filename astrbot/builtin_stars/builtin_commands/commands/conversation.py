@@ -11,7 +11,7 @@ class ConversationCommands:
     def __init__(self, context: star.PluginContext) -> None:
         self.context = context
 
-    async def _get_current_persona_id(self, session_id):
+    async def _get_current_prompt_id(self, session_id):
         curr = await self.context.conversations.current_id(
             session_id,
         )
@@ -23,7 +23,7 @@ class ConversationCommands:
         )
         if not conv:
             return None
-        return conv.persona_id
+        return conv.prompt_id
 
     async def reset(self, message: AstrMessageEvent) -> None:
         """Reset LLM conversation history."""
@@ -87,11 +87,11 @@ class ConversationCommands:
             return
 
         self.context.conversations.stop_active_events(umo, exclude=message)
-        cpersona = await self._get_current_persona_id(umo)
+        cprompt = await self._get_current_prompt_id(umo)
         cid = await self.context.conversations.create(
             umo,
             message.get_platform_id(),
-            persona_id=cpersona,
+            prompt_id=cprompt,
         )
         message.set_extra("_clean_group_context_session", True)
         await reply_i18n(
@@ -197,8 +197,8 @@ class ConversationCommands:
         }
         cfg = self.context.config.get(umo=message.unified_msg_origin)
         platform_name = message.get_platform_name()
-        none_persona = await self.context.i18n.t(
-            message, "conversation.list.none_persona"
+        none_prompt = await self.context.i18n.t(
+            message, "conversation.list.none_prompt"
         )
         session_rule = await self.context.i18n.t(
             message, "conversation.list.session_rule"
@@ -208,23 +208,23 @@ class ConversationCommands:
         global_index = start_idx + 1
         for conv in conversations_paged:
             (
-                persona_id,
+                prompt_id,
                 _,
-                force_applied_persona_id,
+                force_applied_prompt_id,
                 _,
-            ) = await self.context.personas.resolve(
+            ) = await self.context.prompts.resolve(
                 umo=message.unified_msg_origin,
-                conversation_persona_id=conv.persona_id,
+                conversation_prompt_id=conv.prompt_id,
                 platform_name=platform_name,
             )
-            if persona_id == "[%None]":
-                persona_name = none_persona
-            elif persona_id:
-                persona_name = persona_id
+            if prompt_id == "[%None]":
+                prompt_name = none_prompt
+            elif prompt_id:
+                prompt_name = prompt_id
             else:
-                persona_name = none_persona
-            if force_applied_persona_id:
-                persona_name = f"{persona_name} {session_rule}"
+                prompt_name = none_prompt
+            if force_applied_prompt_id:
+                prompt_name = f"{prompt_name} {session_rule}"
             title = titles.get(conv.cid, new_title)
             updated_at = datetime.datetime.fromtimestamp(conv.updated_at).strftime(
                 "%m-%d %H:%M"
@@ -236,7 +236,7 @@ class ConversationCommands:
                     index=global_index,
                     title=title,
                     cid=conv.cid[:4],
-                    persona=persona_name,
+                    prompt=prompt_name,
                     updated=updated_at,
                 )
             )
@@ -294,11 +294,11 @@ class ConversationCommands:
                     self.context, message, "conversation.create_for.denied"
                 )
                 return
-        current_persona = await self._get_current_persona_id(session)
+        current_prompt = await self._get_current_prompt_id(session)
         cid = await self.context.conversations.create(
             session,
             message.get_platform_id(),
-            persona_id=current_persona,
+            prompt_id=current_prompt,
         )
         await reply_i18n(
             self.context,

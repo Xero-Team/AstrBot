@@ -25,9 +25,9 @@ from astrbot.core.db.po.memory import (
     MemoryTuningTask,
 )
 from astrbot.core.db.po.message_history import PlatformMessageHistory
-from astrbot.core.db.po.personas import Persona, PersonaFolder
 from astrbot.core.db.po.preferences import Preference
 from astrbot.core.db.po.projects import ChatUIProject, SessionProjectRelation
+from astrbot.core.db.po.prompts import Prompt, PromptFolder
 from astrbot.core.db.po.session_bridge import (
     SessionBridgeDelivery,
     SessionBridgeRule,
@@ -59,8 +59,8 @@ TABLE_MODELS: tuple[type, ...] = (
     MemoryProfile,
     MemoryScopePolicyRecord,
     MemoryTuningTask,
-    Persona,
-    PersonaFolder,
+    Prompt,
+    PromptFolder,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,

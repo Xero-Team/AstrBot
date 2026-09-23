@@ -238,7 +238,7 @@ export type CreateApiKeyRequest = {
   scopes?: Array<
     | 'bot'
     | 'provider'
-    | 'persona'
+    | 'prompt'
     | 'im'
     | 'config'
     | 'chat'
@@ -835,8 +835,8 @@ export type MemoryProfileRefreshRequest = {
   [key: string]: unknown;
 };
 
-export type PersonaRequest = {
-  persona_id: string;
+export type PromptRequest = {
+  prompt_id: string;
   system_prompt: string;
   begin_dialogs?: Array<string>;
   folder_id?: string;
@@ -846,15 +846,15 @@ export type PersonaRequest = {
   [key: string]: unknown;
 };
 
-export type PersonaFolderRequest = {
+export type PromptFolderRequest = {
   name?: string;
   parent_id?: string;
   description?: string;
   [key: string]: unknown;
 };
 
-export type PersonaMoveRequest = {
-  persona_id: string;
+export type PromptMoveRequest = {
+  prompt_id: string;
   folder_id?: string;
   [key: string]: unknown;
 };
@@ -862,7 +862,7 @@ export type PersonaMoveRequest = {
 export type ReorderRequest = {
   items: Array<{
     id: string;
-    type: 'persona' | 'folder';
+    type: 'prompt' | 'folder';
     sort_order: number;
   }>;
 };
@@ -908,7 +908,7 @@ export type SessionGroupRequest = {
 
 export type ConversationPatchRequest = {
   title?: string;
-  persona_id?: string;
+  prompt_id?: string;
 };
 
 export type ConversationMessagesReplaceRequest = {
@@ -943,7 +943,7 @@ export type CronJobRequest = {
   session?: string;
   note?: string;
   description?: string;
-  persona_id?: string;
+  prompt_id?: string;
   provider_id?: string;
   enabled?: boolean;
   run_once?: boolean;
@@ -1172,7 +1172,7 @@ export type Page = number;
 
 export type PageSize = number;
 
-export type PersonaId = string;
+export type PromptId = string;
 
 export type PluginId = string;
 
@@ -5834,222 +5834,222 @@ export type GetMemoryStatsResponses = {
 export type GetMemoryStatsResponse =
   GetMemoryStatsResponses[keyof GetMemoryStatsResponses];
 
-export type GetPersonaTreeData = {
+export type GetPromptTreeData = {
   body?: never;
   path?: never;
   query?: never;
-  url: '/api/v1/personas/tree';
+  url: '/api/v1/prompts/tree';
 };
 
-export type GetPersonaTreeResponses = {
+export type GetPromptTreeResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type GetPersonaTreeResponse =
-  GetPersonaTreeResponses[keyof GetPersonaTreeResponses];
+export type GetPromptTreeResponse =
+  GetPromptTreeResponses[keyof GetPromptTreeResponses];
 
-export type ListPersonasData = {
+export type ListPromptsData = {
   body?: never;
   path?: never;
   query?: {
     folder_id?: string;
   };
-  url: '/api/v1/personas';
+  url: '/api/v1/prompts';
 };
 
-export type ListPersonasResponses = {
+export type ListPromptsResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type ListPersonasResponse =
-  ListPersonasResponses[keyof ListPersonasResponses];
+export type ListPromptsResponse =
+  ListPromptsResponses[keyof ListPromptsResponses];
 
-export type CreatePersonaData = {
-  body: PersonaRequest;
+export type CreatePromptData = {
+  body: PromptRequest;
   path?: never;
   query?: never;
-  url: '/api/v1/personas';
+  url: '/api/v1/prompts';
 };
 
-export type CreatePersonaResponses = {
+export type CreatePromptResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type CreatePersonaResponse =
-  CreatePersonaResponses[keyof CreatePersonaResponses];
+export type CreatePromptResponse =
+  CreatePromptResponses[keyof CreatePromptResponses];
 
-export type DeletePersonaData = {
+export type DeletePromptData = {
   body?: never;
   path: {
-    persona_id: string;
+    prompt_id: string;
   };
   query?: never;
-  url: '/api/v1/personas/{persona_id}';
+  url: '/api/v1/prompts/{prompt_id}';
 };
 
-export type DeletePersonaResponses = {
+export type DeletePromptResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type DeletePersonaResponse =
-  DeletePersonaResponses[keyof DeletePersonaResponses];
+export type DeletePromptResponse =
+  DeletePromptResponses[keyof DeletePromptResponses];
 
-export type GetPersonaData = {
+export type GetPromptData = {
   body?: never;
   path: {
-    persona_id: string;
+    prompt_id: string;
   };
   query?: never;
-  url: '/api/v1/personas/{persona_id}';
+  url: '/api/v1/prompts/{prompt_id}';
 };
 
-export type GetPersonaResponses = {
+export type GetPromptResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type GetPersonaResponse = GetPersonaResponses[keyof GetPersonaResponses];
+export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
 
-export type UpdatePersonaData = {
-  body: PersonaRequest;
+export type UpdatePromptData = {
+  body: PromptRequest;
   path: {
-    persona_id: string;
+    prompt_id: string;
   };
   query?: never;
-  url: '/api/v1/personas/{persona_id}';
+  url: '/api/v1/prompts/{prompt_id}';
 };
 
-export type UpdatePersonaResponses = {
+export type UpdatePromptResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type UpdatePersonaResponse =
-  UpdatePersonaResponses[keyof UpdatePersonaResponses];
+export type UpdatePromptResponse =
+  UpdatePromptResponses[keyof UpdatePromptResponses];
 
-export type ListPersonaFoldersData = {
+export type ListPromptFoldersData = {
   body?: never;
   path?: never;
   query?: {
     parent_id?: string;
   };
-  url: '/api/v1/persona-folders';
+  url: '/api/v1/prompt-folders';
 };
 
-export type ListPersonaFoldersResponses = {
+export type ListPromptFoldersResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type ListPersonaFoldersResponse =
-  ListPersonaFoldersResponses[keyof ListPersonaFoldersResponses];
+export type ListPromptFoldersResponse =
+  ListPromptFoldersResponses[keyof ListPromptFoldersResponses];
 
-export type CreatePersonaFolderData = {
-  body: PersonaFolderRequest;
+export type CreatePromptFolderData = {
+  body: PromptFolderRequest;
   path?: never;
   query?: never;
-  url: '/api/v1/persona-folders';
+  url: '/api/v1/prompt-folders';
 };
 
-export type CreatePersonaFolderResponses = {
+export type CreatePromptFolderResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type CreatePersonaFolderResponse =
-  CreatePersonaFolderResponses[keyof CreatePersonaFolderResponses];
+export type CreatePromptFolderResponse =
+  CreatePromptFolderResponses[keyof CreatePromptFolderResponses];
 
-export type DeletePersonaFolderData = {
+export type DeletePromptFolderData = {
   body?: never;
   path: {
     folder_id: string;
   };
   query?: never;
-  url: '/api/v1/persona-folders/{folder_id}';
+  url: '/api/v1/prompt-folders/{folder_id}';
 };
 
-export type DeletePersonaFolderResponses = {
+export type DeletePromptFolderResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type DeletePersonaFolderResponse =
-  DeletePersonaFolderResponses[keyof DeletePersonaFolderResponses];
+export type DeletePromptFolderResponse =
+  DeletePromptFolderResponses[keyof DeletePromptFolderResponses];
 
-export type UpdatePersonaFolderData = {
-  body: PersonaFolderRequest;
+export type UpdatePromptFolderData = {
+  body: PromptFolderRequest;
   path: {
     folder_id: string;
   };
   query?: never;
-  url: '/api/v1/persona-folders/{folder_id}';
+  url: '/api/v1/prompt-folders/{folder_id}';
 };
 
-export type UpdatePersonaFolderResponses = {
+export type UpdatePromptFolderResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type UpdatePersonaFolderResponse =
-  UpdatePersonaFolderResponses[keyof UpdatePersonaFolderResponses];
+export type UpdatePromptFolderResponse =
+  UpdatePromptFolderResponses[keyof UpdatePromptFolderResponses];
 
-export type MovePersonaItemData = {
-  body: PersonaMoveRequest;
+export type MovePromptItemData = {
+  body: PromptMoveRequest;
   path?: never;
   query?: never;
-  url: '/api/v1/personas/move';
+  url: '/api/v1/prompts/move';
 };
 
-export type MovePersonaItemResponses = {
+export type MovePromptItemResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type MovePersonaItemResponse =
-  MovePersonaItemResponses[keyof MovePersonaItemResponses];
+export type MovePromptItemResponse =
+  MovePromptItemResponses[keyof MovePromptItemResponses];
 
-export type ReorderPersonaItemsData = {
+export type ReorderPromptItemsData = {
   body: ReorderRequest;
   path?: never;
   query?: never;
-  url: '/api/v1/personas/reorder';
+  url: '/api/v1/prompts/reorder';
 };
 
-export type ReorderPersonaItemsResponses = {
+export type ReorderPromptItemsResponses = {
   /**
    * Standard AstrBot success response
    */
   200: SuccessEnvelope;
 };
 
-export type ReorderPersonaItemsResponse =
-  ReorderPersonaItemsResponses[keyof ReorderPersonaItemsResponses];
+export type ReorderPromptItemsResponse =
+  ReorderPromptItemsResponses[keyof ReorderPromptItemsResponses];
 
 export type ListSessionsData = {
   body?: never;

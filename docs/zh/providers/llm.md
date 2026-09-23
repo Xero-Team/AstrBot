@@ -26,7 +26,7 @@
 - 工具调用：只有服务完整支持 function/tool calling 时才向 Agent 暴露工具。
 - 生成参数：temperature、top-p、max tokens 等是否被目标模型接受。
 
-同一来源可以创建多个模型。不要通过复制 JSON 产生重复 ID；Provider Manager 以 ID 解析默认模型、fallback 和 Persona/配置引用。
+同一来源可以创建多个模型。不要通过复制 JSON 产生重复 ID；Provider Manager 以 ID 解析默认模型、fallback 和 Prompt/配置引用。
 
 ## OpenAI Responses
 

@@ -234,7 +234,7 @@ class TestAstrBotCoreLifecycleErrorHandling:
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.tool_manager = MagicMock()
-        lifecycle.persona_mgr = MagicMock()
+        lifecycle.prompt_mgr = MagicMock()
         lifecycle.astrbot_config = mock_astrbot_config
         lifecycle.astrbot_config.get = MagicMock(return_value={})
 
@@ -254,7 +254,7 @@ class TestAstrBotCoreLifecycleErrorHandling:
 
         mock_subagent_cls.assert_called_once_with(
             lifecycle.provider_manager.tool_manager,
-            lifecycle.persona_mgr,
+            lifecycle.prompt_mgr,
         )
         mock_subagent.reload_from_config.assert_awaited_once_with({})
         assert mock_logger.error.called
@@ -404,8 +404,8 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_astrbot_config_mgr.confs = {}
         mock_astrbot_config_mgr.initialize = AsyncMock()
 
-        mock_persona_mgr = MagicMock()
-        mock_persona_mgr.initialize = AsyncMock()
+        mock_prompt_mgr = MagicMock()
+        mock_prompt_mgr.initialize = AsyncMock()
 
         mock_memory_manager = MagicMock()
         mock_memory_manager.initialize = AsyncMock()
@@ -458,8 +458,8 @@ class TestAstrBotCoreLifecycleInitialize:
                 return_value=mock_astrbot_config_mgr,
             ),
             patch(
-                "astrbot.core.core_lifecycle.PersonaManager",
-                return_value=mock_persona_mgr,
+                "astrbot.core.core_lifecycle.PromptManager",
+                return_value=mock_prompt_mgr,
             ),
             patch(
                 "astrbot.core.core_lifecycle.MemoryManager",
@@ -518,8 +518,8 @@ class TestAstrBotCoreLifecycleInitialize:
         # Verify UMOP config router initialized
         mock_umop_config_router.initialize.assert_awaited_once()
 
-        # Verify persona manager initialized
-        mock_persona_mgr.initialize.assert_awaited_once()
+        # Verify prompt manager initialized
+        mock_prompt_mgr.initialize.assert_awaited_once()
         mock_memory_manager.initialize.assert_awaited_once()
         assert lifecycle.execution_context.memory_manager is mock_memory_manager
 
@@ -650,7 +650,7 @@ class TestAstrBotCoreLifecycleInitialize:
             default_conf={},
             confs={},
         )
-        persona_manager = SimpleNamespace(initialize=AsyncMock())
+        prompt_manager = SimpleNamespace(initialize=AsyncMock())
         memory_manager = SimpleNamespace(
             initialize=AsyncMock(),
             terminate=AsyncMock(side_effect=cleanup_action("memory")),
@@ -707,8 +707,8 @@ class TestAstrBotCoreLifecycleInitialize:
             lambda **_kwargs: config_manager,
         )
         monkeypatch.setattr(
-            "astrbot.core.core_lifecycle.PersonaManager",
-            lambda *_args: persona_manager,
+            "astrbot.core.core_lifecycle.PromptManager",
+            lambda *_args: prompt_manager,
         )
         monkeypatch.setattr(
             "astrbot.core.core_lifecycle.MemoryManager", lambda *_args: memory_manager

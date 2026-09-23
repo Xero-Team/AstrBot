@@ -1,6 +1,6 @@
 # 通用文件夹管理组件库
 
-这是一个可复用的文件夹管理 UI 组件库，提供了完整的文件夹树、面包屑导航、拖放操作等功能。可用于管理各种类型的项目，如 Persona、模板、知识库等。
+这是一个可复用的文件夹管理 UI 组件库，提供了完整的文件夹树、面包屑导航、拖放操作等功能。可用于管理各种类型的项目，如 Prompt、模板、知识库等。
 
 ## 组件列表
 
@@ -314,15 +314,15 @@ interface CreateFolderData {
 组件内置了拖放支持，可以通过 `acceptDropTypes` 指定接受的拖放类型：
 
 ```vue
-<!-- 只接受 'persona' 类型的拖放 -->
-<BaseFolderTree :accept-drop-types="['persona']" @item-dropped="handleDrop" />
+<!-- 只接受 'prompt' 类型的拖放 -->
+<BaseFolderTree :accept-drop-types="['prompt']" @item-dropped="handleDrop" />
 
 <!-- 拖放事件处理 -->
 <script setup>
 function handleDrop({ item_id, item_type, target_folder_id, source_data }) {
-  if (item_type === 'persona') {
-    // 移动 persona 到目标文件夹
-    movePersonaToFolder(item_id, target_folder_id);
+  if (item_type === 'prompt') {
+    // 移动 prompt 到目标文件夹
+    movePromptToFolder(item_id, target_folder_id);
   }
 }
 </script>
@@ -330,7 +330,7 @@ function handleDrop({ item_id, item_type, target_folder_id, source_data }) {
 
 ## 与 Pinia Store 集成
 
-如果你更喜欢使用 Pinia Store 管理状态，可以参考现有的 `personaStore.ts` 实现：
+如果你更喜欢使用 Pinia Store 管理状态，可以参考现有的 `promptStore.ts` 实现：
 
 ```typescript
 // stores/myFolderStore.ts

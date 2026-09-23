@@ -6,7 +6,7 @@ import pytest
 from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_CONFIG_DEFAULTS,
     get_agent_runner_config_default,
-    get_persona_id,
+    get_prompt_id,
     normalize_agent_runner,
     normalize_agent_runner_for_load,
 )
@@ -33,7 +33,7 @@ def test_agent_runner_defaults_are_isolated_and_normalized(runner_type: str):
         "config": second,
     }
     if runner_type != "local":
-        assert second["persona_id"] == "default"
+        assert second["prompt_id"] == "default"
         assert second["max_steps"] == 128
         assert second["proxy_mode"] == "inherit"
         assert second["proxy_url"] == ""
@@ -46,7 +46,7 @@ def test_switching_runner_type_discards_previous_runner_fields():
             "runner_type": "dify",
             "config": {
                 "provider_id": "legacy-provider",
-                "persona_id": "legacy-persona",
+                "prompt_id": "legacy-prompt",
                 "model": {"provider_id": "chat-model"},
                 "dify_api_key": "secret",
                 "unexpected": True,
@@ -57,7 +57,7 @@ def test_switching_runner_type_discards_previous_runner_fields():
     assert normalized["config"] == {
         **get_agent_runner_config_default("dify"),
         "dify_api_key": "secret",
-        "persona_id": "legacy-persona",
+        "prompt_id": "legacy-prompt",
     }
     assert "provider_id" not in normalized["config"]
     assert "model" not in normalized["config"]
@@ -143,11 +143,9 @@ def test_local_legacy_fields_are_fully_migrated():
                 "fallback_provider_ids": ["chat-backup"],
                 "request_max_retries": 7,
             },
-            "persona": {
-                "persona_id": "developer",
-                "safety_mode": False,
-                "safety_mode_strategy": "system_prompt",
-            },
+            "prompt_id": "developer",
+            "safety_mode": False,
+            "safety_mode_strategy": "system_prompt",
             "compression": {
                 "max_turns": 20,
                 "trim_turns": 3,
@@ -223,11 +221,9 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
                 "fallback_provider_ids": ["chat-backup"],
                 "request_max_retries": 8,
             },
-            "persona": {
-                "persona_id": "developer",
-                "safety_mode": False,
-                "safety_mode_strategy": "system_prompt",
-            },
+            "prompt_id": "developer",
+            "safety_mode": False,
+            "safety_mode_strategy": "system_prompt",
             "compression": {
                 "max_turns": 24,
                 "trim_turns": 4,
@@ -339,7 +335,7 @@ def test_third_party_provider_config_is_copied_inline(
     runner_config = config["agent_runner"]["config"]
     assert config["agent_runner"]["runner_type"] == runner_type
     assert runner_config[expected_key] == provider_config[expected_key]
-    assert runner_config["persona_id"] == "operator"
+    assert runner_config["prompt_id"] == "operator"
     assert runner_config["max_steps"] == 128
     assert not {
         "id",
@@ -511,7 +507,7 @@ def test_missing_third_party_provider_uses_runner_defaults():
     _migrate_agent_runner_config(config)
 
     expected = get_agent_runner_config_default("coze")
-    expected["persona_id"] = "operator"
+    expected["prompt_id"] = "operator"
     assert config["agent_runner"] == {
         "runner_type": "coze",
         "config": expected,
@@ -605,13 +601,13 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
         },
     }
     profiles = []
-    for persona_id in ("one", "two"):
+    for prompt_id in ("one", "two"):
         profile = {
             "provider": [],
             "provider_settings": {
                 "agent_runner_type": "deerflow",
                 "deerflow_agent_runner_provider_id": "shared-deerflow",
-                "default_personality": persona_id,
+                "default_personality": prompt_id,
             },
         }
         _migrate_agent_runner_config(profile, global_config)
@@ -623,9 +619,10 @@ def test_multiple_profiles_can_copy_one_provider_and_migration_is_idempotent():
     assert [
         profile["agent_runner"]["config"]["deerflow_api_key"] for profile in profiles
     ] == ["shared-key", "shared-key"]
-    assert [
-        profile["agent_runner"]["config"]["persona_id"] for profile in profiles
-    ] == ["one", "two"]
+    assert [profile["agent_runner"]["config"]["prompt_id"] for profile in profiles] == [
+        "one",
+        "two",
+    ]
     assert global_config["provider"] == [
         {
             "id": "chat-model",
@@ -724,7 +721,7 @@ def test_third_party_proxy_and_max_steps_are_copied_from_legacy_provider():
     assert runner_config["proxy_mode"] == "custom"
     assert runner_config["proxy_url"] == "http://127.0.0.1:7890"
     assert runner_config["max_steps"] == 12
-    assert runner_config["persona_id"] == "operator"
+    assert runner_config["prompt_id"] == "operator"
     assert "proxy" not in runner_config
 
 
@@ -827,21 +824,21 @@ def test_normalize_for_load_repairs_invalid_runner_without_raising():
     assert repaired["config"] == get_agent_runner_config_default("local")
 
 
-def test_get_persona_id_reads_local_and_third_party_fields():
+def test_get_prompt_id_reads_local_and_third_party_fields():
     assert (
-        get_persona_id(
+        get_prompt_id(
             {
                 "runner_type": "local",
-                "config": {"persona": {"persona_id": "developer"}},
+                "config": {"prompt_id": "developer"},
             }
         )
         == "developer"
     )
     assert (
-        get_persona_id({"runner_type": "dify", "config": {"persona_id": "operator"}})
+        get_prompt_id({"runner_type": "dify", "config": {"prompt_id": "operator"}})
         == "operator"
     )
-    assert get_persona_id({"runner_type": "dify", "config": {}}) == "default"
-    assert get_persona_id({"runner_type": "dify", "config": {"persona_id": ""}}) == (
+    assert get_prompt_id({"runner_type": "dify", "config": {}}) == "default"
+    assert get_prompt_id({"runner_type": "dify", "config": {"prompt_id": ""}}) == (
         "default"
     )

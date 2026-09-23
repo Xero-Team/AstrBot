@@ -128,12 +128,12 @@ def mock_context():
     ctx = MagicMock()
     ctx.get_config.return_value = {}
     ctx.conversation_manager = MagicMock()
-    ctx.persona_manager = MagicMock()
-    ctx.persona_manager.runtime_personas = []
-    ctx.persona_manager.resolve_selected_persona = AsyncMock(
+    ctx.prompt_manager = MagicMock()
+    ctx.prompt_manager.runtime_prompts = []
+    ctx.prompt_manager.resolve_selected_prompt = AsyncMock(
         return_value=(None, None, None, False)
     )
-    ctx.persona_manager.get_runtime_persona_by_id = MagicMock(return_value=None)
+    ctx.prompt_manager.get_runtime_prompt_by_id = MagicMock(return_value=None)
     tool_mgr = MagicMock()
     tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
     tool_mgr.get_full_tool_set.return_value = ToolSet()
@@ -185,7 +185,7 @@ def mock_conversation():
     """Create a mock conversation."""
     conv = MagicMock(spec=Conversation)
     conv.cid = "conv-id"
-    conv.persona_id = None
+    conv.prompt_id = None
     conv.history = "[]"
     return conv
 
@@ -449,7 +449,7 @@ def sample_config():
 def _new_mock_conversation(cid: str = "conv-id") -> MagicMock:
     conv = MagicMock(spec=Conversation)
     conv.cid = cid
-    conv.persona_id = None
+    conv.prompt_id = None
     conv.history = "[]"
     return conv
 
@@ -859,7 +859,7 @@ class TestGetSessionConv:
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
         mock_conversation = MagicMock(spec=Conversation)
         mock_conversation.cid = "new-conv-id"
-        mock_conversation.persona_id = None
+        mock_conversation.prompt_id = None
         mock_conversation.history = "[]"
         conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
 
@@ -904,7 +904,7 @@ class TestGetSessionConv:
         conv_mgr.new_conversation = AsyncMock(return_value="retry-conv-id")
         mock_conversation = MagicMock(spec=Conversation)
         mock_conversation.cid = "retry-conv-id"
-        mock_conversation.persona_id = None
+        mock_conversation.prompt_id = None
         mock_conversation.history = "[]"
         conv_mgr.get_conversation.side_effect = [None, mock_conversation]
 
@@ -930,7 +930,7 @@ class TestGetSessionConv:
 def _loop_conversation(*, cid: str, history: list[dict]) -> MagicMock:
     conversation = MagicMock(spec=Conversation)
     conversation.cid = cid
-    conversation.persona_id = None
+    conversation.prompt_id = None
     conversation.history = json.dumps(history)
     return conversation
 
@@ -1229,11 +1229,11 @@ async def test_memory_context_is_extra_user_part(
 ):
     req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
     req.system_prompt = ""
-    mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+    mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
         return_value=(
-            "persona-a",
+            "prompt-a",
             {
-                "name": "persona-a",
+                "name": "prompt-a",
                 "prompt": "Stable seed.",
                 "tools": [],
                 "skills": [],
@@ -1256,7 +1256,7 @@ async def test_memory_context_is_extra_user_part(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
     assert "Stable seed." in req.system_prompt
     assert "<memory>" not in req.system_prompt
@@ -1266,7 +1266,7 @@ async def test_memory_context_is_extra_user_part(
 
 
 @pytest.mark.asyncio
-async def test_memory_retrieval_tools_are_available_for_default_persona(
+async def test_memory_retrieval_tools_are_available_for_default_prompt(
     mock_event,
     mock_context,
 ):
@@ -1288,7 +1288,7 @@ async def test_memory_retrieval_tools_are_available_for_default_persona(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
     ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
@@ -1301,16 +1301,16 @@ async def test_memory_retrieval_tools_are_available_for_default_persona(
 
 
 @pytest.mark.asyncio
-async def test_memory_retrieval_tools_respect_explicit_empty_persona_tools(
+async def test_memory_retrieval_tools_respect_explicit_empty_prompt_tools(
     mock_event,
     mock_context,
 ):
     req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
-    mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+    mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
         return_value=(
-            "persona-no-tools",
+            "prompt-no-tools",
             {
-                "name": "persona-no-tools",
+                "name": "prompt-no-tools",
                 "prompt": "Stable seed.",
                 "tools": [],
                 "skills": [],
@@ -1337,7 +1337,7 @@ async def test_memory_retrieval_tools_respect_explicit_empty_persona_tools(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
     ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
@@ -1345,16 +1345,16 @@ async def test_memory_retrieval_tools_respect_explicit_empty_persona_tools(
 
 
 @pytest.mark.asyncio
-async def test_memory_retrieval_tool_can_be_enabled_by_explicit_persona_tool(
+async def test_memory_retrieval_tool_can_be_enabled_by_explicit_prompt_tool(
     mock_event,
     mock_context,
 ):
     req = ProviderRequest(prompt="hello", conversation=_new_mock_conversation())
-    mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+    mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
         return_value=(
-            "persona-memory-tool",
+            "prompt-memory-tool",
             {
-                "name": "persona-memory-tool",
+                "name": "prompt-memory-tool",
                 "prompt": "Stable seed.",
                 "tools": ["search_memory"],
                 "skills": [],
@@ -1377,7 +1377,7 @@ async def test_memory_retrieval_tool_can_be_enabled_by_explicit_persona_tool(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
     ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
@@ -1589,8 +1589,8 @@ class TestBuiltinToolInjection:
         assert req.func_tool.get_tool("future_task") is future_task_tool
 
 
-class TestEnsurePersonaAndSkills:
-    """Tests for _ensure_persona_and_skills function."""
+class TestEnsurePromptAndSkills:
+    """Tests for _ensure_prompt_and_skills function."""
 
     def test_filter_plugin_skills_uses_current_config_plugin_set(self):
         module = ama
@@ -1672,52 +1672,52 @@ class TestEnsurePersonaAndSkills:
         assert filtered == []
 
     @pytest.mark.asyncio
-    async def test_ensure_persona_from_session(self, mock_event, mock_context):
-        """Test applying persona from session service config."""
+    async def test_ensure_prompt_from_session(self, mock_event, mock_context):
+        """Test applying prompt from session service config."""
         module = ama
-        persona = {"name": "test-persona", "prompt": "You are helpful."}
-        mock_context.persona_manager.runtime_personas = [persona]
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("test-persona", persona, "test-persona", False)
+        prompt = {"name": "test-prompt", "prompt": "You are helpful."}
+        mock_context.prompt_manager.runtime_prompts = [prompt]
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
+            return_value=("test-prompt", prompt, "test-prompt", False)
         )
         mock_event.trace = MagicMock(record=MagicMock())
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id=None)
+        req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
         assert "You are helpful." in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_persona_from_conversation(self, mock_event, mock_context):
-        """Test applying persona from conversation setting."""
+    async def test_ensure_prompt_from_conversation(self, mock_event, mock_context):
+        """Test applying prompt from conversation setting."""
         module = ama
-        persona = {"name": "conv-persona", "prompt": "Custom persona."}
-        mock_context.persona_manager.runtime_personas = [persona]
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("conv-persona", persona, None, False)
+        prompt = {"name": "conv-prompt", "prompt": "Custom prompt."}
+        mock_context.prompt_manager.runtime_prompts = [prompt]
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
+            return_value=("conv-prompt", prompt, None, False)
         )
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id="conv-persona")
+        req.conversation = MagicMock(prompt_id="conv-prompt")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
-        assert "Custom persona." in req.system_prompt
+        assert "Custom prompt." in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_persona_none_explicit(self, mock_event, mock_context):
-        """Test that [%None] persona is explicitly set to no persona."""
+    async def test_ensure_prompt_none_explicit(self, mock_event, mock_context):
+        """Test that [%None] prompt is explicitly set to no prompt."""
         module = ama
-        mock_context.persona_manager.runtime_personas = []
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+        mock_context.prompt_manager.runtime_prompts = []
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
             return_value=("[%None]", None, None, False)
         )
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id="[%None]")
+        req.conversation = MagicMock(prompt_id="[%None]")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
-        assert "Persona Instructions" not in req.system_prompt
+        assert "Prompt Instructions" not in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_ensure_skills_includes_workspace_skills(
@@ -1771,10 +1771,10 @@ class TestEnsurePersonaAndSkills:
         )
 
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id=None)
+        req.conversation = MagicMock(prompt_id=None)
         runtime_config = {"computer_use_runtime": "local"}
 
-        await module._ensure_persona_and_skills(
+        await module._ensure_prompt_and_skills(
             req, runtime_config, mock_context, mock_event
         )
 
@@ -1785,7 +1785,7 @@ class TestEnsurePersonaAndSkills:
         assert "cat " not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_skills_respects_empty_persona_skills_for_workspace(
+    async def test_ensure_skills_respects_empty_prompt_skills_for_workspace(
         self,
         monkeypatch,
         tmp_path,
@@ -1828,14 +1828,14 @@ class TestEnsurePersonaAndSkills:
             lambda: str(plugins_dir),
         )
 
-        persona = {"name": "no-skills", "prompt": "", "skills": []}
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("no-skills", persona, None, False)
+        prompt = {"name": "no-skills", "prompt": "", "skills": []}
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
+            return_value=("no-skills", prompt, None, False)
         )
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id="no-skills")
+        req.conversation = MagicMock(prompt_id="no-skills")
 
-        await module._ensure_persona_and_skills(
+        await module._ensure_prompt_and_skills(
             req, {"computer_use_runtime": "local"}, mock_context, mock_event
         )
 
@@ -1892,9 +1892,9 @@ class TestEnsurePersonaAndSkills:
         )
 
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id=None)
+        req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_persona_and_skills(
+        await module._ensure_prompt_and_skills(
             req,
             runtime_settings,
             mock_context,
@@ -1905,8 +1905,8 @@ class TestEnsurePersonaAndSkills:
         assert "## Skills" not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_tools_from_persona(self, mock_event, mock_context):
-        """Test applying tools from persona."""
+    async def test_ensure_tools_from_prompt(self, mock_event, mock_context):
+        """Test applying tools from prompt."""
         module = ama
         mock_tool = FunctionTool(
             name="test_tool",
@@ -1915,10 +1915,10 @@ class TestEnsurePersonaAndSkills:
             required_actions=("session.read",),
             active=True,
         )
-        persona = {"name": "persona", "prompt": "Test", "tools": ["test_tool"]}
-        mock_context.persona_manager.runtime_personas = [persona]
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("persona", persona, None, False)
+        prompt = {"name": "prompt", "prompt": "Test", "tools": ["test_tool"]}
+        mock_context.prompt_manager.runtime_prompts = [prompt]
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
+            return_value=("prompt", prompt, None, False)
         )
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.get_func.return_value = mock_tool
@@ -1929,9 +1929,9 @@ class TestEnsurePersonaAndSkills:
         )
 
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id="persona")
+        req.conversation = MagicMock(prompt_id="prompt")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
         config = module.MainAgentBuildConfig(tool_call_timeout=60)
         module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
@@ -1939,13 +1939,13 @@ class TestEnsurePersonaAndSkills:
         assert "test_tool" in req.func_tool.names()
 
     @pytest.mark.asyncio
-    async def test_persona_empty_tools_strips_late_builtin_tools(
+    async def test_prompt_empty_tools_strips_late_builtin_tools(
         self, mock_event, mock_context, mock_provider
     ):
         module = ama
-        persona = {"name": "locked", "prompt": "No tools.", "tools": []}
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
+        prompt = {"name": "locked", "prompt": "No tools.", "tools": []}
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
+            return_value=("locked", prompt, None, False)
         )
         mock_event.platform_meta.support_proactive_message = False
         mock_context.get_config.return_value = {
@@ -1964,7 +1964,7 @@ class TestEnsurePersonaAndSkills:
             add_cron_tools=False,
         )
         req = ProviderRequest(prompt="hello")
-        req.conversation = MagicMock(persona_id="locked", history="[]")
+        req.conversation = MagicMock(prompt_id="locked", history="[]")
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
@@ -1996,7 +1996,7 @@ class TestEnsurePersonaAndSkills:
         ("allow_execution", "allow_network"),
         [(True, False), (True, True), (False, False)],
     )
-    async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
+    async def test_prompt_empty_tools_keeps_local_runtime_builtin_tools(
         self,
         mock_event,
         mock_context,
@@ -2006,9 +2006,9 @@ class TestEnsurePersonaAndSkills:
         allow_network,
     ):
         module = ama
-        persona = {"name": "locked", "prompt": "No tools.", "tools": []}
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
+        prompt = {"name": "locked", "prompt": "No tools.", "tools": []}
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
+            return_value=("locked", prompt, None, False)
         )
         mock_event.platform_meta.support_proactive_message = False
         mock_event._computer_permission_role = role
@@ -2030,7 +2030,7 @@ class TestEnsurePersonaAndSkills:
             add_cron_tools=False,
         )
         req = ProviderRequest(prompt="hello")
-        req.conversation = MagicMock(persona_id="locked", history="[]")
+        req.conversation = MagicMock(prompt_id="locked", history="[]")
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
@@ -2075,7 +2075,7 @@ class TestEnsurePersonaAndSkills:
             add_cron_tools=False,
         )
         req = ProviderRequest(prompt="hello")
-        req.conversation = MagicMock(persona_id=None, history="[]")
+        req.conversation = MagicMock(prompt_id=None, history="[]")
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
@@ -2118,22 +2118,22 @@ class TestEnsurePersonaAndSkills:
         config, _ = ama.local_agent_runtime_from_profile(
             {
                 "provider_settings": {"computer_use_runtime": "local"},
-                "agent_runner": {"config": {"persona": {"safety_mode": False}}},
+                "agent_runner": {"config": {"safety_mode": False}},
             }
         )
         assert config.computer_use_runtime == "local"
         assert config.llm_safety_mode is False
 
     @pytest.mark.asyncio
-    async def test_subagent_dedupe_uses_default_persona_tools(
+    async def test_subagent_dedupe_uses_default_prompt_tools(
         self, mock_event, mock_context
     ):
-        """Test dedupe uses resolved default persona tools in subagent mode."""
+        """Test dedupe uses resolved default prompt tools in subagent mode."""
         module = ama
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+        mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
             return_value=(None, None, None, False)
         )
-        mock_context.persona_manager.get_runtime_persona_by_id = MagicMock(
+        mock_context.prompt_manager.get_runtime_prompt_by_id = MagicMock(
             return_value={"name": "default", "tools": ["tool_a"]}
         )
 
@@ -2166,16 +2166,16 @@ class TestEnsurePersonaAndSkills:
                     {
                         "name": "planner",
                         "enabled": True,
-                        "persona_id": "default",
+                        "prompt_id": "default",
                     }
                 ],
             }
         }
 
         req = ProviderRequest()
-        req.conversation = MagicMock(persona_id=None)
+        req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
         config = module.MainAgentBuildConfig(tool_call_timeout=60)
         module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
 

@@ -54,7 +54,7 @@ function senderRuleResponse(item: unknown) {
   return response({
     rules: [item],
     total: 1,
-    available_personas: [],
+    available_prompts: [],
     available_chat_providers: [],
     available_stt_providers: [],
     available_tts_providers: [],
@@ -104,7 +104,7 @@ describe('SessionManagementPage', () => {
       response({
         rules: [],
         total: 0,
-        available_personas: [{ name: 'persona-a' }],
+        available_prompts: [{ name: 'prompt-a' }],
         available_chat_providers: [],
         available_stt_providers: [],
         available_tts_providers: [],
@@ -197,7 +197,7 @@ describe('SessionManagementPage', () => {
     await flushPromises();
 
     expect(document.body.textContent).toContain('Block this sender');
-    expect(document.body.textContent).not.toContain('Persona Configuration');
+    expect(document.body.textContent).not.toContain('Prompt Configuration');
     expect(document.body.textContent).not.toContain('Plugin Configuration');
     expect(document.body.textContent).not.toContain(
       'Knowledge Base Configuration',

@@ -172,15 +172,15 @@ LINE 等需要公网媒体 URL 的目标要求配置可访问的 HTTPS `callback
 
 三个子指令都需要 `identity.manage`。当前会话的 owner 只能管理本会话的 `session_admin` / `member`，不能委派 owner。角色说明见 [授权管理](./authorization)。
 
-### Persona
+### Prompt
 
-- `/persona status`：显示默认 Persona 和当前对话实际使用的 Persona。
-- `/persona list`：列出 Persona。
-- `/persona show <persona_id>`：显示 Persona 的系统提示词。
-- `/persona set <persona_id>`：为当前对话选择 Persona。
-- `/persona unset`：让当前对话显式不使用 Persona。
+- `/prompt status`：显示默认 Prompt 和当前对话实际使用的 Prompt。
+- `/prompt list`：列出 Prompt。
+- `/prompt show <prompt_id>`：显示 Prompt 的系统提示词。
+- `/prompt set <prompt_id>`：为当前对话选择 Prompt。
+- `/prompt unset`：让当前对话显式不使用 Prompt。
 
-Persona 子指令需要 `agent.manage`。仅输入 `/persona` 会显示子指令树。
+Prompt 子指令需要 `agent.manage`。仅输入 `/prompt` 会显示子指令树。
 
 ### 插件
 

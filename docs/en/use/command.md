@@ -172,15 +172,15 @@ These commands require `session.manage`. There is no argument-less toggle.
 
 All three subcommands require `identity.manage`. A current session owner may manage `session_admin` and `member` in that session only and cannot delegate ownership. See [Authorization](./authorization) for the role model.
 
-### Personas
+### Prompts
 
-- `/persona status`: Show the default Persona and the Persona effectively used by the current conversation.
-- `/persona list`: List Personas.
-- `/persona show <persona_id>`: Show a Persona's system prompt.
-- `/persona set <persona_id>`: Select a Persona for the current conversation.
-- `/persona unset`: Explicitly select no Persona for the current conversation.
+- `/prompt status`: Show the default Prompt and the Prompt effectively used by the current conversation.
+- `/prompt list`: List Prompts.
+- `/prompt show <prompt_id>`: Show a Prompt's system prompt.
+- `/prompt set <prompt_id>`: Select a Prompt for the current conversation.
+- `/prompt unset`: Explicitly select no Prompt for the current conversation.
 
-Persona subcommands require `agent.manage`. Entering `/persona` alone displays the subcommand tree.
+Prompt subcommands require `agent.manage`. Entering `/prompt` alone displays the subcommand tree.
 
 ### Plugins
 

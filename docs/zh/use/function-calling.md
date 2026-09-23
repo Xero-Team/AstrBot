@@ -26,7 +26,7 @@ outline: deep
 2. 逐个允许或禁止内置工具、插件工具和 MCP 工具；
 3. 打开原生并行执行（默认关闭）。
 
-最终能否调用还要过三道关：用户授权 ∩ Persona 允许的工具 ∩ 工具自身策略。Persona 里把工具设成空列表，等于这个角色不能用工具，见 [Persona](./persona)。子 Agent handoff 不能提升调用者的权限。
+最终能否调用还要过三道关：用户授权 ∩ Prompt 允许的工具 ∩ 工具自身策略。Prompt 里把工具设成空列表，等于这个角色不能用工具，见 [Prompt](./prompt)。子 Agent handoff 不能提升调用者的权限。
 
 高风险工具（本机 Shell、文件写入、浏览器、Computer Use、可写 MCP）还要满足 [授权管理](./authorization)。ChatUI 需要 step-up。IM 消息不会继承 Dashboard `root`；要把发送者绑成该配置的 `instance_operator` 才能使用同一组实例工具。
 
@@ -60,5 +60,5 @@ outline: deep
 
 1. 在 **指令管理** 里找工具开关。
 2. 模型不支持 function calling，却开着一堆工具。
-3. Persona 把工具列表留空，面板上看起来是开的。
+3. Prompt 把工具列表留空，面板上看起来是开的。
 4. 打开并行后，MCP 服务器仍串行，因为每服务器并发默认是 1。

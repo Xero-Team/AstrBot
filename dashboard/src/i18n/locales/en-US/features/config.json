@@ -51,7 +51,7 @@
     "settingsSuffix": "Settings",
     "tabs": {
       "model": "Model",
-      "persona": "Persona",
+      "prompt": "Prompt",
       "capabilities": "Capabilities",
       "advanced": "Advanced"
     },
@@ -84,8 +84,8 @@
     "runners": {
       "local": {
         "title": "Built-in AI",
-        "summary": "Configure AstrBot's AI capabilities, including models, personas, knowledge bases, and tools.",
-        "description": "Use AstrBot's built-in AI with models, personas, knowledge bases, and tools."
+        "summary": "Configure AstrBot's AI capabilities, including models, prompts, knowledge bases, and tools.",
+        "description": "Use AstrBot's built-in AI with models, prompts, knowledge bases, and tools."
       },
       "dify": {
         "title": "Dify",

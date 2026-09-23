@@ -235,10 +235,10 @@
 
                   <div class="selector-wrap">
                     <div class="selector-label">
-                      {{ tm('form.personaLabel') }}
+                      {{ tm('form.promptLabel') }}
                     </div>
                     <div class="selector-card">
-                      <PersonaSelector v-model="agent.persona_id" />
+                      <PromptSelector v-model="agent.prompt_id" />
                     </div>
                   </div>
 
@@ -255,14 +255,14 @@
 
               <section class="dashboard-card dashboard-card--padded inner-card">
                 <div class="dashboard-section-title section-mini-title">
-                  {{ tm('cards.personaPreview') }}
+                  {{ tm('cards.promptPreview') }}
                 </div>
                 <div class="dashboard-section-subtitle">
                   {{ tm('cards.previewHint') }}
                 </div>
-                <div class="persona-preview-wrap">
-                  <PersonaQuickPreview
-                    :model-value="agent.persona_id"
+                <div class="prompt-preview-wrap">
+                  <PromptQuickPreview
+                    :model-value="agent.prompt_id"
                     class="h-100"
                   />
                 </div>
@@ -295,8 +295,8 @@ import { onBeforeRouteLeave } from 'vue-router';
 import { useTheme } from 'vuetify';
 import { subagentApi } from '@/api/v1';
 import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
-import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue';
-import PersonaSelector from '@/components/shared/PersonaSelector.vue';
+import PromptQuickPreview from '@/components/shared/PromptQuickPreview.vue';
+import PromptSelector from '@/components/shared/PromptSelector.vue';
 import ProviderSelector from '@/components/shared/ProviderSelector.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
@@ -304,7 +304,7 @@ import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 type SubAgentItem = {
   __key: string;
   name: string;
-  persona_id: string;
+  prompt_id: string;
   public_description: string;
   enabled: boolean;
   provider_id?: string;
@@ -375,7 +375,7 @@ function normalizeConfig(raw: RawSubAgentConfig): SubAgentConfig {
   const agents: SubAgentItem[] = agentsRaw.map((a, i) => ({
     __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
     name: (a?.name ?? '').toString(),
-    persona_id: (a?.persona_id ?? '').toString(),
+    prompt_id: (a?.prompt_id ?? '').toString(),
     public_description: (a?.public_description ?? '').toString(),
     enabled: a?.enabled !== false,
     provider_id: a?.provider_id ?? undefined,
@@ -390,7 +390,7 @@ function serializeConfig(config: SubAgentConfig): string {
     remove_main_duplicate_tools: config.remove_main_duplicate_tools,
     agents: config.agents.map((agent) => ({
       name: agent.name,
-      persona_id: agent.persona_id,
+      prompt_id: agent.prompt_id,
       public_description: agent.public_description,
       enabled: agent.enabled,
       provider_id: agent.provider_id ?? null,
@@ -424,7 +424,7 @@ function addAgent() {
   cfg.value.agents.push({
     __key: key,
     name: '',
-    persona_id: '',
+    prompt_id: '',
     public_description: '',
     enabled: true,
     provider_id: undefined,
@@ -466,8 +466,8 @@ function validateBeforeSave(): boolean {
       return false;
     }
     seen.add(name);
-    if (!agent.persona_id) {
-      toast(tm('messages.personaMissing', { name }), 'warning');
+    if (!agent.prompt_id) {
+      toast(tm('messages.promptMissing', { name }), 'warning');
       return false;
     }
   }
@@ -484,7 +484,7 @@ async function save() {
       remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
       agents: cfg.value.agents.map((agent) => ({
         name: agent.name,
-        persona_id: agent.persona_id,
+        prompt_id: agent.prompt_id,
         public_description: agent.public_description,
         enabled: agent.enabled,
         provider_id: agent.provider_id,
@@ -715,7 +715,7 @@ onBeforeRouteLeave(async () => {
   background: var(--dashboard-surface);
 }
 
-.persona-preview-wrap {
+.prompt-preview-wrap {
   min-height: 320px;
 }
 

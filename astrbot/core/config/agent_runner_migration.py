@@ -200,9 +200,9 @@ def _migrate_agent_runner_config(
             runner_type = default_provider_runner_type
 
         if runner_type == "local":
-            persona_id = provider_settings.get("default_personality", "default")
-            if not isinstance(persona_id, str) or not persona_id:
-                persona_id = "default"
+            prompt_id = provider_settings.get("default_personality", "default")
+            if not isinstance(prompt_id, str) or not prompt_id:
+                prompt_id = "default"
             runner_config = get_agent_runner_config_default("local")
             runner_config["model"] = {
                 "provider_id": default_provider_id,
@@ -211,13 +211,13 @@ def _migrate_agent_runner_config(
                 ),
                 "request_max_retries": provider_settings.get("request_max_retries", 5),
             }
-            runner_config["persona"] = {
-                "persona_id": persona_id,
-                "safety_mode": provider_settings.get("llm_safety_mode", True),
-                "safety_mode_strategy": provider_settings.get(
-                    "safety_mode_strategy", "system_prompt"
-                ),
-            }
+            runner_config["prompt_id"] = prompt_id
+            runner_config["safety_mode"] = provider_settings.get(
+                "llm_safety_mode", True
+            )
+            runner_config["safety_mode_strategy"] = provider_settings.get(
+                "safety_mode_strategy", "system_prompt"
+            )
             runner_config["compression"] = {
                 "max_turns": provider_settings.get("max_context_length", -1),
                 "trim_turns": provider_settings.get("dequeue_context_length", 1),
@@ -281,10 +281,10 @@ def _migrate_agent_runner_config(
                 runner_config = _copy_provider_config(runner_type, provider)
             else:
                 runner_config = get_agent_runner_config_default(runner_type)
-            persona_id = provider_settings.get("default_personality", "default")
-            if not isinstance(persona_id, str) or not persona_id:
-                persona_id = "default"
-            runner_config["persona_id"] = persona_id
+            prompt_id = provider_settings.get("default_personality", "default")
+            if not isinstance(prompt_id, str) or not prompt_id:
+                prompt_id = "default"
+            runner_config["prompt_id"] = prompt_id
             runner_config["max_steps"] = provider_settings.get("max_agent_step", 128)
             runner_config = normalize_agent_runner(
                 {"runner_type": runner_type, "config": runner_config}

@@ -16,10 +16,10 @@ if TYPE_CHECKING:
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.log import LogBroker
     from astrbot.core.memory import MemoryManager
-    from astrbot.core.persona_mgr import PersonaManager
     from astrbot.core.pipeline.scheduler import PipelineScheduler
     from astrbot.core.platform.manager import PlatformManager
     from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+    from astrbot.core.prompt_mgr import PromptManager
     from astrbot.core.provider.manager import ProviderManager
     from astrbot.core.runtime_catalogs import RuntimeCatalogs
     from astrbot.core.runtime_services import RuntimeServices
@@ -43,7 +43,7 @@ class CoreRuntime:
     platform_manager: PlatformManager
     conversation_manager: ConversationManager
     platform_message_history_manager: PlatformMessageHistoryManager
-    persona_mgr: PersonaManager
+    prompt_mgr: PromptManager
     memory_manager: MemoryManager
     knowledge_base_manager: KnowledgeBaseManager
     cron_manager: CronJobManager

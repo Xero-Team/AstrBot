@@ -133,7 +133,7 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
 DEFAULT_API_KEY_SCOPES = (
     "bot",
     "provider",
-    "persona",
+    "prompt",
     "im",
     "config",
     "chat",
@@ -155,7 +155,7 @@ API_SCOPE_ACTIONS: dict[str, frozenset[str]] = {
         {"platform.read", "platform.manage", "provider.read", "provider.manage"}
     ),
     "chat": frozenset({"session.read", "session.manage", "provider.use"}),
-    "persona": frozenset({"agent.manage"}),
+    "prompt": frozenset({"agent.manage"}),
     "plugin": frozenset({"extension.read", "extension.manage"}),
     "mcp": frozenset({"tool.mcp_read", "tool.mcp_write"}),
     "skill": frozenset({"extension.manage", "skill.read"}),
@@ -219,7 +219,7 @@ def _resource_types_for(action: str) -> frozenset[str]:
             }
         )
     if action.startswith("agent."):
-        return frozenset({"persona", "session", "tool", "dashboard-api"})
+        return frozenset({"prompt", "session", "tool", "dashboard-api"})
     if action.startswith("skill."):
         return frozenset({"tool", "skill", "session"})
     if action.startswith("extension."):
@@ -346,7 +346,7 @@ def api_key_scope_action(method: str, scope: str) -> str | None:
     if scope == "im":
         return "session.read" if safe else "session.manage"
     return {
-        "persona": "agent.manage",
+        "prompt": "agent.manage",
         "kb": "data.manage",
         "memory": "data.manage",
         "file": "data.manage",

@@ -194,8 +194,6 @@ WebChat. Name the skipped ones.
 ## `persona`
 
 - Persona tool policy intersects user authz.
-- Learners cannot escalate.
-- Session state owned by `persona_runtime` store.
 
 ## `conversation`
 

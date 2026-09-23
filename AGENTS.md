@@ -327,7 +327,7 @@ and recreates an empty file from the current models.
   have explicit termination. Re-raise `asyncio.CancelledError` when broad
   exception handling is unavoidable.
 - Other major subsystems are `knowledge_base/`, `conversation_mgr.py`,
-  `memory/`, `persona_runtime/`, `cron/`, `skills/`, `computer/`, `db/`, and
+  `memory/`, `cron/`, `skills/`, `computer/`, `db/`, and
   `backup/`.
 
 ### Dashboard protocol

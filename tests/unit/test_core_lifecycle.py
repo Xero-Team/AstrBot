@@ -407,9 +407,6 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_persona_mgr = MagicMock()
         mock_persona_mgr.initialize = AsyncMock()
 
-        mock_persona_runtime_manager = MagicMock()
-        mock_persona_runtime_manager.initialize = AsyncMock()
-
         mock_memory_manager = MagicMock()
         mock_memory_manager.initialize = AsyncMock()
 
@@ -463,10 +460,6 @@ class TestAstrBotCoreLifecycleInitialize:
             patch(
                 "astrbot.core.core_lifecycle.PersonaManager",
                 return_value=mock_persona_mgr,
-            ),
-            patch(
-                "astrbot.core.core_lifecycle.PersonaRuntimeManager",
-                return_value=mock_persona_runtime_manager,
             ),
             patch(
                 "astrbot.core.core_lifecycle.MemoryManager",
@@ -527,12 +520,7 @@ class TestAstrBotCoreLifecycleInitialize:
 
         # Verify persona manager initialized
         mock_persona_mgr.initialize.assert_awaited_once()
-        mock_persona_runtime_manager.initialize.assert_awaited_once()
         mock_memory_manager.initialize.assert_awaited_once()
-        assert (
-            lifecycle.execution_context.persona_runtime_manager
-            is mock_persona_runtime_manager
-        )
         assert lifecycle.execution_context.memory_manager is mock_memory_manager
 
         # Verify provider manager initialized
@@ -663,7 +651,6 @@ class TestAstrBotCoreLifecycleInitialize:
             confs={},
         )
         persona_manager = SimpleNamespace(initialize=AsyncMock())
-        persona_runtime_manager = SimpleNamespace(initialize=AsyncMock())
         memory_manager = SimpleNamespace(
             initialize=AsyncMock(),
             terminate=AsyncMock(side_effect=cleanup_action("memory")),
@@ -722,10 +709,6 @@ class TestAstrBotCoreLifecycleInitialize:
         monkeypatch.setattr(
             "astrbot.core.core_lifecycle.PersonaManager",
             lambda *_args: persona_manager,
-        )
-        monkeypatch.setattr(
-            "astrbot.core.core_lifecycle.PersonaRuntimeManager",
-            lambda *_args: persona_runtime_manager,
         )
         monkeypatch.setattr(
             "astrbot.core.core_lifecycle.MemoryManager", lambda *_args: memory_manager

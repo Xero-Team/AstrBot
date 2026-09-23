@@ -56,7 +56,7 @@ from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
 )
-from astrbot.core.persona_runtime.models import Personality
+from astrbot.core.persona_models import Personality
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.skills._skill_snapshot import (
@@ -706,28 +706,11 @@ def _get_context_runtime_attr(plugin_context: CoreExecutionContext, name: str):
     return getattr(plugin_context, "__dict__", {}).get(name)
 
 
-async def _inject_persona_runtime_and_memory(
+async def _inject_memory_context(
     req: ProviderRequest,
     event: AstrMessageEvent,
-    plugin_context: CoreExecutionContext,
-    persona_id: str | None,
     memory_manager,
 ) -> None:
-    if persona_id and persona_id != "[%None]":
-        event.set_extra("selected_persona_id", persona_id)
-        persona_runtime_manager = _get_context_runtime_attr(
-            plugin_context, "persona_runtime_manager"
-        )
-        if persona_runtime_manager is not None:
-            try:
-                await persona_runtime_manager.inject_context(
-                    req=req,
-                    persona_id=persona_id,
-                    umo=event.unified_msg_origin,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.error("Failed to inject persona runtime context: %s", exc)
-
     if memory_manager is not None:
         try:
             await memory_manager.inject_context(
@@ -908,26 +891,17 @@ async def _ensure_persona_and_skills(
     if req.system_prompt is None:
         req.system_prompt = ""
 
-    selected_persona_id = persona_id
     if persona:
-        selected_persona_id = persona["name"]
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
     elif use_webchat_special_default:
-        selected_persona_id = "_chatui_default_"
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     memory_manager = _get_context_runtime_attr(plugin_context, "memory_manager")
-    await _inject_persona_runtime_and_memory(
-        req,
-        event,
-        plugin_context,
-        selected_persona_id,
-        memory_manager,
-    )
+    await _inject_memory_context(req, event, memory_manager)
 
     _append_skills_prompt(req, cfg, persona, event, plugin_context)
     try:

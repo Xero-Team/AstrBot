@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from astrbot.core.log import LogBroker
     from astrbot.core.memory import MemoryManager
     from astrbot.core.persona_mgr import PersonaManager
-    from astrbot.core.persona_runtime import PersonaRuntimeManager
     from astrbot.core.pipeline.scheduler import PipelineScheduler
     from astrbot.core.platform.manager import PlatformManager
     from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
@@ -45,7 +44,6 @@ class CoreRuntime:
     conversation_manager: ConversationManager
     platform_message_history_manager: PlatformMessageHistoryManager
     persona_mgr: PersonaManager
-    persona_runtime_manager: PersonaRuntimeManager
     memory_manager: MemoryManager
     knowledge_base_manager: KnowledgeBaseManager
     cron_manager: CronJobManager

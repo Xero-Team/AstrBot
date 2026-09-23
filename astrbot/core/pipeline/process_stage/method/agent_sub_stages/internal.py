@@ -851,13 +851,8 @@ class InternalAgentSubStage:
         if execution_context is None:
             return
 
-        persona_runtime_manager = getattr(
-            execution_context,
-            "persona_runtime_manager",
-            None,
-        )
         memory_manager = getattr(execution_context, "memory_manager", None)
-        if persona_runtime_manager is None and memory_manager is None:
+        if memory_manager is None:
             return
 
         try:
@@ -867,7 +862,6 @@ class InternalAgentSubStage:
                     event=event,
                     req=req,
                     assistant_text=assistant_text,
-                    persona_runtime_manager=persona_runtime_manager,
                     memory_manager=memory_manager,
                 ),
                 name="runtime_memory_postprocess",
@@ -938,26 +932,9 @@ async def _run_runtime_memory_postprocess(
     event: AstrMessageEvent,
     req: ProviderRequest,
     assistant_text: str,
-    persona_runtime_manager,
     memory_manager,
 ) -> None:
     conversation_id = req.conversation.cid if req.conversation else None
-    if persona_runtime_manager is not None:
-        persona_id = event.get_extra("selected_persona_id")
-        if isinstance(persona_id, str) and persona_id and persona_id != "[%None]":
-            try:
-                await persona_runtime_manager.process_turn(
-                    event=event,
-                    persona_id=persona_id,
-                    conversation_id=conversation_id,
-                    assistant_text=assistant_text,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.error(
-                    "Persona runtime postprocess failed for umo=%s: %s",
-                    event.unified_msg_origin,
-                    safe_error("", exc),
-                )
 
     if memory_manager is not None:
         try:

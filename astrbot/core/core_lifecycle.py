@@ -30,7 +30,6 @@ from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.log import LogBroker, LogManager
 from astrbot.core.memory import MemoryManager
 from astrbot.core.persona_mgr import PersonaManager
-from astrbot.core.persona_runtime import PersonaRuntimeManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.pipeline.turn_window import TurnWindowManager
 from astrbot.core.platform.manager import PlatformManager
@@ -82,7 +81,6 @@ class AstrBotCoreLifecycle:
         self.umop_config_router: UmopConfigRouter | None = None
         self.astrbot_config_mgr: AstrBotConfigManager | None = None
         self.persona_mgr: PersonaManager | None = None
-        self.persona_runtime_manager: PersonaRuntimeManager | None = None
         self.memory_manager: MemoryManager | None = None
         self.provider_manager: ProviderManager | None = None
         self.platform_manager: PlatformManager | None = None
@@ -404,9 +402,6 @@ class AstrBotCoreLifecycle:
         )
         await self.persona_mgr.initialize()
 
-        self.persona_runtime_manager = PersonaRuntimeManager(self.db)
-        await self.persona_runtime_manager.initialize()
-
         self.memory_manager = MemoryManager(self.db)
         self._register_cleanup("memory manager", self.memory_manager.terminate)
         await self.memory_manager.initialize()
@@ -478,7 +473,6 @@ class AstrBotCoreLifecycle:
             authorization=self.services.authorization,
         )
         self.execution_context = execution_context
-        execution_context.persona_runtime_manager = self.persona_runtime_manager
         execution_context.memory_manager = self.memory_manager
         execution_context.turn_window_manager = self.turn_window_manager
         self.platform_manager.typing_signal = self._on_typing_signal
@@ -590,7 +584,6 @@ class AstrBotCoreLifecycle:
         assert self.conversation_manager is not None
         assert self.platform_message_history_manager is not None
         assert self.persona_mgr is not None
-        assert self.persona_runtime_manager is not None
         assert self.memory_manager is not None
         assert self.kb_manager is not None
         assert self.cron_manager is not None
@@ -612,7 +605,6 @@ class AstrBotCoreLifecycle:
             conversation_manager=self.conversation_manager,
             platform_message_history_manager=self.platform_message_history_manager,
             persona_mgr=self.persona_mgr,
-            persona_runtime_manager=self.persona_runtime_manager,
             memory_manager=self.memory_manager,
             knowledge_base_manager=self.kb_manager,
             cron_manager=self.cron_manager,

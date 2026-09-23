@@ -101,7 +101,6 @@ Mixins obtain sessions through the typed `store_session(self)` helper and must n
 | Protocol               | Tables                                                                                                                                                                           | Store module                                                    |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `StatisticsStore`      | `platform_stats`, `provider_stats`                                                                                                                                               | `stores/statistics.py`                                          |
-| `PersonaRuntimeStore`  | `persona_session_states`, expression/jargon/behavior                                                                                                                             | `stores/persona_runtime.py`                                     |
 | `MemoryStore`          | fact/profile/episode/scope policy/tuning task/operation log                                                                                                                      | `stores/memory.py`                                              |
 | `ConversationStore`    | `conversations`; read-only session projection joins `preferences` and `personas`                                                                                                 | `stores/conversations.py`                                       |
 | `MessageHistoryStore`  | `platform_message_history`                                                                                                                                                       | `stores/message_history.py`                                     |
@@ -128,7 +127,7 @@ Callers annotate domain protocols; the Dashboard composition root uses `SQLiteDa
 `Conversation` and `Personality` are not tables:
 
 - `Conversation` lives in `astrbot/core/conversation_models.py` as the neutral runtime contract shared by conversation, platform, and agent code.
-- `Personality` lives in `astrbot/core/persona_runtime/models.py` with the persona-runtime contracts.
+- `Personality` lives in `astrbot/core/persona_models.py` as the neutral runtime contract for the prompt entity.
 
 The plugin SDK still exports `Personality` from `astrbot.api.provider`. `astrbot.core.db.po` no longer exports either name and does not provide shims for the old imports.
 

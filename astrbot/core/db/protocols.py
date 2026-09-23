@@ -27,11 +27,7 @@ if TYPE_CHECKING:
         MemoryScopePolicyRecord,
         MemoryTuningTask,
         Persona,
-        PersonaBehaviorPolicy,
-        PersonaExpressionAsset,
         PersonaFolder,
-        PersonaJargonAsset,
-        PersonaSessionState,
         PlatformMessageHistory,
         PlatformSession,
         PlatformStat,
@@ -110,95 +106,6 @@ class StatisticsStore(Protocol):
         stats: dict | None = None,
         agent_type: str = "internal",
     ) -> ProviderStat: ...
-
-
-@runtime_checkable
-class PersonaRuntimeStore(Protocol):
-    """Operations for persona runtime state and learned assets."""
-
-    async def get_persona_session_state(
-        self,
-        persona_id: str,
-        umo: str,
-    ) -> PersonaSessionState | None: ...
-
-    async def upsert_persona_session_state(
-        self,
-        *,
-        persona_id: str,
-        umo: str,
-        agent_state: str = "running",
-        talk_frequency_adjust: float = 1.0,
-        consecutive_idle_count: int = 0,
-        cooldown_until: datetime.datetime | None = None,
-        last_interaction_at: datetime.datetime | None = None,
-        extra_state: dict | None = None,
-    ) -> PersonaSessionState: ...
-
-    async def upsert_persona_expression_asset(
-        self,
-        *,
-        persona_id: str,
-        scope: str,
-        trigger_scene: str,
-        style_text: str,
-        source_message_id: str,
-        score: float = 0.5,
-        enabled: bool = True,
-    ) -> PersonaExpressionAsset: ...
-
-    async def list_persona_expression_assets(
-        self,
-        *,
-        persona_id: str,
-        scope: str,
-        enabled: bool = True,
-        limit: int = 10,
-    ) -> list[PersonaExpressionAsset]: ...
-
-    async def upsert_persona_jargon_asset(
-        self,
-        *,
-        persona_id: str,
-        scope: str,
-        term: str,
-        meaning: str | None,
-        source_message_id: str,
-        score: float = 0.5,
-        approved: bool = False,
-        enabled: bool = True,
-    ) -> PersonaJargonAsset: ...
-
-    async def list_persona_jargon_assets(
-        self,
-        *,
-        persona_id: str,
-        scope: str,
-        enabled: bool = True,
-        approved: bool | None = None,
-        limit: int = 10,
-    ) -> list[PersonaJargonAsset]: ...
-
-    async def upsert_persona_behavior_policy(
-        self,
-        *,
-        persona_id: str,
-        scope: str,
-        situation: str,
-        preferred_action: str,
-        avoid_action: str | None = None,
-        confidence: float = 0.5,
-        enabled: bool = True,
-    ) -> PersonaBehaviorPolicy: ...
-
-    async def list_persona_behavior_policies(
-        self,
-        *,
-        persona_id: str,
-        scope: str,
-        enabled: bool = True,
-        limit: int = 10,
-    ) -> list[PersonaBehaviorPolicy]: ...
 
 
 @runtime_checkable
@@ -1071,7 +978,6 @@ __all__ = [
     "KnowledgeBaseTaskStore",
     "MemoryStore",
     "MessageHistoryStore",
-    "PersonaRuntimeStore",
     "PersonaStore",
     "PlatformSessionStore",
     "PreferenceStore",

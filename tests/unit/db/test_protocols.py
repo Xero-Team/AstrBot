@@ -17,7 +17,6 @@ from astrbot.core.db.protocols import (
     KnowledgeBaseTaskStore,
     MemoryStore,
     MessageHistoryStore,
-    PersonaRuntimeStore,
     PersonaStore,
     PlatformSessionStore,
     PreferenceStore,
@@ -32,7 +31,6 @@ from astrbot.core.platform.webchat_storage import WebChatStorageStore
 DOMAIN_PROTOCOLS: tuple[type[Protocol], ...] = (
     KnowledgeBaseTaskStore,
     StatisticsStore,
-    PersonaRuntimeStore,
     MemoryStore,
     ConversationStore,
     MessageHistoryStore,

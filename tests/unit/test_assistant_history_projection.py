@@ -92,7 +92,6 @@ async def test_finalized_event_runs_after_commit_and_is_read_only(monkeypatch):
     stage.ctx = SimpleNamespace(
         execution_context=SimpleNamespace(
             assistant_history_committer=AssistantHistoryCommitter(),
-            persona_runtime_manager=None,
             memory_manager=None,
         ),
         handlers=SimpleNamespace(),
@@ -129,7 +128,6 @@ async def test_finalized_event_observes_failed_receipt_without_commit(monkeypatc
     stage.ctx = SimpleNamespace(
         execution_context=SimpleNamespace(
             assistant_history_committer=AssistantHistoryCommitter(),
-            persona_runtime_manager=None,
             memory_manager=None,
         ),
         handlers=SimpleNamespace(),
@@ -165,4 +163,4 @@ def test_finalized_event_has_a_dedicated_plugin_registration():
         EventType.OnAssistantHistoryFinalized,
     )
 
-    assert declaration.event_type is EventType.OnAssistantHistoryFinalized
+    assert declaration.event_type

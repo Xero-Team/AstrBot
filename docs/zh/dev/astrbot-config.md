@@ -112,7 +112,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 ### Prompt
 
-- 本地与第三方本地与第三方 Runner：`agent_runner.config.prompt_id`。
+- 本地与第三方 Runner：`agent_runner.config.prompt_id`。
 - 健康模式：`agent_runner.config.safety_mode`。
 
 选择优先级和权限语义见 [Prompt 提示词设定](../use/prompt)。

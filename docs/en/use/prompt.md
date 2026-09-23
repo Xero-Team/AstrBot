@@ -51,7 +51,7 @@ The Prompt card menu exports JSON, and the page toolbar imports JSON. The curren
 }
 ```
 
-The export does **not** include tools, Skills, the custom error reply, folder placement, ordering, long-term memory, or Prompt Runtime learning data.
+The export does **not** include tools, Skills, the custom error reply, folder placement, ordering, or long-term memory.
 
 During import:
 

@@ -3803,7 +3803,7 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "items": {
                     "agent_runner.config.prompt_id": {
-                        "description": "默认采用的提示词默认采用的提示词",
+                        "description": "默认采用的提示词",
                         "type": "string",
                         "_special": "select_prompt",
                     },

@@ -67,7 +67,6 @@ if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
     from astrbot.core.file_token_service import FileTokenService
     from astrbot.core.memory import MemoryManager
-    from astrbot.core.persona_runtime import PersonaRuntimeManager
     from astrbot.core.skills.skill_manager import SkillManager
     from astrbot.core.utils.shared_preferences import SharedPreferences
     from astrbot.core.utils.t2i.renderer import HtmlRenderer
@@ -294,7 +293,6 @@ class CoreExecutionContext:
         """Runtime-owned interactive message waits."""
         self.demo_mode = demo_mode
         self.subagent_orchestrator = subagent_orchestrator
-        self.persona_runtime_manager: PersonaRuntimeManager | None = None
         self.memory_manager: MemoryManager | None = None
         self.turn_window_manager: Any | None = None
         self.dashboard_extension_registry = DashboardExtensionRegistry()

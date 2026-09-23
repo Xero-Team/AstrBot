@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -12,8 +11,6 @@ from astrbot.core.memory.tools import (
     SearchMemoryTool,
 )
 from astrbot.core.memory.writeback import MemoryFactExtractor, MemoryProfileRefresher
-from astrbot.core.persona_runtime import PersonaRuntimeManager
-from astrbot.core.persona_runtime.models import PersonaRuntimeSignal
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     _run_runtime_memory_postprocess,
 )
@@ -36,30 +33,6 @@ def test_scope_policy_defaults_to_isolated():
     assert scope.sharing_mode == "isolated"
     assert scope.scope_id == "isolated:telegram:GroupMessage:g1"
     assert scope.allowed_chat_ids == ["telegram:GroupMessage:g1"]
-
-
-@pytest.mark.asyncio
-async def test_persona_runtime_state_migration_updates_frequency_and_cooldown(temp_db):
-    manager = PersonaRuntimeManager(temp_db)
-    await temp_db.initialize()
-
-    state = await manager.state_store.apply_signal(
-        PersonaRuntimeSignal(
-            persona_id="persona-a",
-            umo="telegram:FriendMessage:u1",
-            user_text="are you there?",
-            assistant_text="yes",
-            sender_id="u1",
-            mentioned=True,
-            occurred_at=datetime.now(UTC),
-        )
-    )
-
-    assert state.agent_state == "running"
-    assert state.talk_frequency_adjust > 1.0
-    assert state.consecutive_idle_count == 0
-    assert state.cooldown_until is not None
-    assert state.extra_state["last_mention_at"]
 
 
 @pytest.mark.asyncio
@@ -212,9 +185,8 @@ async def test_profile_refresher_updates_existing_profile_version(temp_db):
 
 
 @pytest.mark.asyncio
-async def test_post_turn_runtime_memory_smoke_uses_real_sqlite(temp_db):
+async def test_post_turn_memory_smoke_uses_real_sqlite(temp_db):
     await temp_db.initialize()
-    persona_runtime = PersonaRuntimeManager(temp_db)
     memory_manager = MemoryManager(temp_db)
     await memory_manager.initialize()
     event = SimpleNamespace(
@@ -225,7 +197,6 @@ async def test_post_turn_runtime_memory_smoke_uses_real_sqlite(temp_db):
             message=[],
             self_id="bot",
         ),
-        get_extra=lambda key: "persona-smoke" if key == "selected_persona_id" else None,
     )
 
     try:
@@ -233,17 +204,12 @@ async def test_post_turn_runtime_memory_smoke_uses_real_sqlite(temp_db):
             event=event,
             req=ProviderRequest(conversation=SimpleNamespace(cid="conv-smoke")),
             assistant_text="noted",
-            persona_runtime_manager=persona_runtime,
             memory_manager=memory_manager,
         )
         await memory_manager.writeback_worker.queue.join()
     finally:
         await memory_manager.terminate()
 
-    state = await temp_db.get_persona_session_state(
-        "persona-smoke",
-        "webchat:FriendMessage:session-smoke",
-    )
     facts = await temp_db.list_memory_facts(
         person_id="user-smoke",
         chat_ids=["webchat:FriendMessage:session-smoke"],
@@ -257,8 +223,6 @@ async def test_post_turn_runtime_memory_smoke_uses_real_sqlite(temp_db):
         query="deterministic",
     )
 
-    assert state is not None
-    assert state.agent_state == "running"
     assert [fact.fact_text for fact in facts] == ["User likes deterministic tests."]
     assert profile is not None
     assert "deterministic tests" in profile.profile_text

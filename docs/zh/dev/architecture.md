@@ -101,7 +101,6 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 | 协议                   | 表                                                                                                                                                                               | store 模块                        |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | `StatisticsStore`      | `platform_stats`、`provider_stats`                                                                                                                                               | `stores/statistics.py`            |
-| `PersonaRuntimeStore`  | `persona_session_states`、expression/jargon/behavior                                                                                                                             | `stores/persona_runtime.py`       |
 | `MemoryStore`          | fact/profile/episode/scope policy/tuning task/operation log                                                                                                                      | `stores/memory.py`                |
 | `ConversationStore`    | `conversations`；只读 session projection 会 join `preferences`、`personas`                                                                                                       | `stores/conversations.py`         |
 | `MessageHistoryStore`  | `platform_message_history`                                                                                                                                                       | `stores/message_history.py`       |
@@ -128,7 +127,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 `Conversation` 与 `Personality` 不是表：
 
 - `Conversation` 位于 `astrbot/core/conversation_models.py`，是会话、平台和 agent 共用的中性运行时契约。
-- `Personality` 位于 `astrbot/core/persona_runtime/models.py`，与 persona runtime 契约归属一致。
+- `Personality` 位于 `astrbot/core/persona_models.py`，作为 prompt 实体的中性运行时契约。
 
 插件 SDK 仍从 `astrbot.api.provider` 导出 `Personality`。`astrbot.core.db.po` 不再导出这两个名字，也不为旧导入提供垫片。
 

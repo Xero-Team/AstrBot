@@ -310,15 +310,13 @@ async def test_internal_save_to_history_schedules_runtime_memory_postprocess(
 ):
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    persona_runtime_manager = SimpleNamespace()
     memory_manager = SimpleNamespace()
     stage.ctx = _pipeline_context(
         SimpleNamespace(
-            persona_runtime_manager=persona_runtime_manager,
             memory_manager=memory_manager,
         )
     )
-    event = FakeEvent(extras={"selected_persona_id": "persona-a"})
+    event = FakeEvent(extras={})
     req = ProviderRequest(conversation=SimpleNamespace(cid="conv-post"))
     scheduled = []
 
@@ -362,7 +360,6 @@ async def test_internal_save_to_history_does_not_postprocess_empty_terminal_tool
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
     stage.ctx = _pipeline_context(
         SimpleNamespace(
-            persona_runtime_manager=SimpleNamespace(),
             memory_manager=SimpleNamespace(),
         )
     )

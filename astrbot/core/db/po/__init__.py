@@ -29,14 +29,7 @@ from astrbot.core.db.po.memory import (
     MemoryTuningTask,
 )
 from astrbot.core.db.po.message_history import PlatformMessageHistory
-from astrbot.core.db.po.personas import (
-    Persona,
-    PersonaBehaviorPolicy,
-    PersonaExpressionAsset,
-    PersonaFolder,
-    PersonaJargonAsset,
-    PersonaSessionState,
-)
+from astrbot.core.db.po.personas import Persona, PersonaFolder
 from astrbot.core.db.po.preferences import Preference
 from astrbot.core.db.po.projects import ChatUIProject, SessionProjectRelation
 from astrbot.core.db.po.session_bridge import SessionBridgeDelivery, SessionBridgeRule
@@ -68,11 +61,7 @@ __all__ = [
     "MemoryScopePolicyRecord",
     "MemoryTuningTask",
     "Persona",
-    "PersonaBehaviorPolicy",
-    "PersonaExpressionAsset",
     "PersonaFolder",
-    "PersonaJargonAsset",
-    "PersonaSessionState",
     "PlatformMessageHistory",
     "PlatformSession",
     "PlatformStat",

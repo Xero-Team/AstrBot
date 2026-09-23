@@ -1223,7 +1223,7 @@ class TestApplyKb:
 
 
 @pytest.mark.asyncio
-async def test_persona_runtime_and_memory_context_are_extra_user_parts(
+async def test_memory_context_is_extra_user_part(
     mock_event,
     mock_context,
 ):
@@ -1248,33 +1248,20 @@ async def test_persona_runtime_and_memory_context_are_extra_user_parts(
     tool_mgr.get_full_tool_set.return_value = ToolSet()
     mock_context.get_llm_tool_manager.return_value = tool_mgr
 
-    class RuntimeManager:
-        async def inject_context(self, *, req, persona_id, umo):
-            req.extra_user_content_parts.append(
-                ama.TextPart(
-                    text=f"<runtime>{persona_id}:{umo}</runtime>"
-                ).mark_as_temp()
-            )
-
     class MemoryManager:
         async def inject_context(self, *, req, event, query=None):
             req.extra_user_content_parts.append(
                 ama.TextPart(text=f"<memory>{query}</memory>").mark_as_temp()
             )
 
-    mock_context.persona_runtime_manager = RuntimeManager()
     mock_context.memory_manager = MemoryManager()
 
     await ama._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
     assert "Stable seed." in req.system_prompt
-    assert "<runtime>" not in req.system_prompt
     assert "<memory>" not in req.system_prompt
     texts = [part.text for part in req.extra_user_content_parts]
-    assert texts == [
-        f"<runtime>persona-a:{mock_event.unified_msg_origin}</runtime>",
-        "<memory>hello</memory>",
-    ]
+    assert texts == ["<memory>hello</memory>"]
     assert all(part._no_save for part in req.extra_user_content_parts)
 
 

@@ -259,7 +259,7 @@ adapter.
   protects this boundary.
 - `InitialLoader` runs `AstrBotCoreLifecycle` and `AstrBotDashboard`.
   `AstrBotCoreLifecycle` owns manager initialization, bounded event queues,
-  pipeline schedulers, plugins, cron, memory/persona runtime, knowledge bases,
+  pipeline schedulers, plugins, cron, memory runtime, knowledge bases,
   sub-agents, background tasks, and shutdown order.
 
 ### Message flow
@@ -327,7 +327,7 @@ and recreates an empty file from the current models.
   have explicit termination. Re-raise `asyncio.CancelledError` when broad
   exception handling is unavoidable.
 - Other major subsystems are `knowledge_base/`, `conversation_mgr.py`,
-  `memory/`, `persona_runtime/`, `cron/`, `skills/`, `computer/`, `db/`, and
+  `memory/`, `cron/`, `skills/`, `computer/`, `db/`, and
   `backup/`.
 
 ### Dashboard protocol

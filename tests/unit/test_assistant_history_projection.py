@@ -163,4 +163,4 @@ def test_finalized_event_has_a_dedicated_plugin_registration():
         EventType.OnAssistantHistoryFinalized,
     )
 
-    assert declaration.event_type
+    assert declaration.event_type is EventType.OnAssistantHistoryFinalized

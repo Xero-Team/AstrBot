@@ -259,7 +259,7 @@ adapter.
   protects this boundary.
 - `InitialLoader` runs `AstrBotCoreLifecycle` and `AstrBotDashboard`.
   `AstrBotCoreLifecycle` owns manager initialization, bounded event queues,
-  pipeline schedulers, plugins, cron, memory/persona runtime, knowledge bases,
+  pipeline schedulers, plugins, cron, memory runtime, knowledge bases,
   sub-agents, background tasks, and shutdown order.
 
 ### Message flow

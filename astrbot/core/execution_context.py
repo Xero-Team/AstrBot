@@ -247,7 +247,7 @@ class CoreExecutionContext:
         self.message_history_manager = message_history_manager
         """平台消息历史管理器"""
         self.prompt_manager = prompt_manager
-        """提示词角色设定管理器"""
+        """提示词管理器"""
         self.astrbot_config_mgr = astrbot_config_mgr
         """配置文件管理器(非webui)"""
         self.kb_manager = knowledge_base_manager

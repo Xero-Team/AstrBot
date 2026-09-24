@@ -122,8 +122,12 @@ class ClassifierResult(_TypedValue):
 class ClassifierModel(Protocol):
     """Provider-neutral typed-decision contract consumed by Agent routing."""
 
-    def get_model(self) -> str: ...
+    def get_model(self) -> str:
+        """Return the active model identifier."""
+        raise NotImplementedError
 
     async def evaluate(
         self, state: ClassifierInput, questions: dict[str, ClassifierQuestion]
-    ) -> ClassifierResult: ...
+    ) -> ClassifierResult:
+        """Return one typed answer per question, including model and usage."""
+        raise NotImplementedError

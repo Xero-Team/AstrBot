@@ -296,7 +296,8 @@ async def test_concurrent_reentry_during_admission_cannot_duplicate_work(
     await entered.wait()
     assert await consume(loop.process(event)) == []
     release.set()
-    await first
+    first_result = await first
+    assert first_result == [None]
     assert executor.calls == ["work"]
     classifier.evaluate.assert_awaited_once()
 

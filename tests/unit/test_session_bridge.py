@@ -2693,6 +2693,37 @@ async def test_forward_card_skipped_when_target_cannot_receive_images():
 
 
 @pytest.mark.asyncio
+async def test_forward_card_skipped_when_public_media_cannot_publish():
+    from astrbot.core.message.components import Image
+
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send)
+    manager._get_capabilities = lambda _: MessageDeliveryCapabilities(
+        quote=True,
+        media=frozenset({"image"}),
+        forward=False,
+        public_media_urls=True,
+    )
+    renderer = _ForwardCardRenderer()
+    manager._html_renderer = renderer
+    manager._get_forward_card_enabled = lambda _: True
+    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_forward_envelope())
+
+    assert renderer.calls == []
+    assert not any(
+        isinstance(component, Image) for chain in sent for component in chain.chain
+    )
+    assert "hello" in "".join(chain.get_plain_text() for chain in sent)
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
 async def test_forward_card_render_failure_falls_back_to_transcript():
     sent = []
 

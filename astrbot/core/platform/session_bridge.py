@@ -1152,6 +1152,13 @@ class SessionBridgeManager:
             return envelope
         if ContentKind.IMAGE.value not in capabilities.media:
             return envelope
+        if capabilities.public_media_urls and not self._can_publish_public_media(
+            target_umo
+        ):
+            # Publishing the replacement image would fail, degrading it to an
+            # unavailable placeholder and discarding the transcript. Keep the
+            # transcript instead of rendering a card that cannot be delivered.
+            return envelope
         if (
             self._get_forward_card_enabled is not None
             and not self._get_forward_card_enabled(target_umo)
@@ -1213,6 +1220,12 @@ class SessionBridgeManager:
             result.append(item)
         return tuple(result)
 
+    def _can_publish_public_media(self, target_umo: str) -> bool:
+        """Return whether public HTTPS media URLs can be served for a target."""
+        if self._file_token_service is None or self._get_callback_base is None:
+            return False
+        return self._get_callback_base(target_umo).rstrip("/").startswith("https://")
+
     async def _publish_media(
         self,
         target_umo: str,
@@ -1222,6 +1235,7 @@ class SessionBridgeManager:
     ) -> MessageEnvelope:
         from .message_protocol import MediaReference
 
+        file_token_service = self._file_token_service
         base = (
             self._get_callback_base(target_umo).rstrip("/")
             if self._get_callback_base
@@ -1232,7 +1246,7 @@ class SessionBridgeManager:
             if isinstance(part, PortablePart) and isinstance(
                 part.value, MediaReference
             ):
-                if not base.startswith("https://") or self._file_token_service is None:
+                if file_token_service is None or not base.startswith("https://"):
                     part = PortablePart(
                         ContentKind.TEXT,
                         localize(
@@ -1242,9 +1256,7 @@ class SessionBridgeManager:
                         ),
                     )
                 else:
-                    token = await self._file_token_service.register_snapshot(
-                        part.value.uri
-                    )
+                    token = await file_token_service.register_snapshot(part.value.uri)
                     part = replace(
                         part,
                         value=replace(

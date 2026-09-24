@@ -22,6 +22,10 @@
             <v-icon start>mdi-compare-vertical</v-icon>
             {{ tm('dialogs.addProvider.tabs.rerank') }}
           </v-tab>
+          <v-tab value="classifier" class="font-weight-medium px-3">
+            <v-icon start>mdi-code-json</v-icon>
+            {{ tm('dialogs.addProvider.tabs.classifier') }}
+          </v-tab>
         </v-tabs>
 
         <v-window v-model="activeProviderTab" class="mt-4">
@@ -47,7 +51,7 @@
                   <div class="provider-card-content">
                     <div class="provider-card-text">
                       <v-card-title class="provider-card-title">{{
-                        name
+                        getTemplateDisplayName(template, name)
                       }}</v-card-title>
                       <v-card-text
                         class="text-caption text-medium-emphasis provider-card-description"
@@ -100,8 +104,9 @@
 import { computed, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import {
-  getProviderIcon,
   getProviderDescription as describeProvider,
+  getProviderDisplayName,
+  getProviderIcon,
   isMonochromeProviderIcon,
 } from '@/utils/providerUtils';
 
@@ -110,7 +115,8 @@ type ProviderTab =
   | 'speech_to_text'
   | 'text_to_speech'
   | 'embedding'
-  | 'rerank';
+  | 'rerank'
+  | 'classifier';
 
 interface ProviderTemplate {
   type?: string;
@@ -129,6 +135,7 @@ const AVAILABLE_PROVIDER_TABS: ProviderTab[] = [
   'text_to_speech',
   'embedding',
   'rerank',
+  'classifier',
 ];
 
 const PROVIDER_WINDOW_TABS: ProviderTab[] = [
@@ -209,6 +216,10 @@ function resolveProviderIcon(provider?: string) {
 
 function getTemplateDescription(template: ProviderTemplate, name: string) {
   return describeProvider(template, name, tm);
+}
+
+function getTemplateDisplayName(template: ProviderTemplate, name: string) {
+  return getProviderDisplayName(template.type, name);
 }
 
 function selectProviderTemplate(name: string) {

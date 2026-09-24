@@ -41,7 +41,8 @@ async def submit_work_task(
         profile has no work loop that can run detached work.
     """
     task = prompt.strip()
-    if not task:
+    get_extra = getattr(event, "get_extra", None)
+    if not task or (callable(get_extra) and get_extra("btw_classifier_no_handoff")):
         return None
     work_loop = runtime_registry.work_loop_for(config_id_of(event))
     if work_loop is None:

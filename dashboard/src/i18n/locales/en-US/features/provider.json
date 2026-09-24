@@ -1,6 +1,6 @@
 {
   "title": "Providers",
-  "subtitle": "Configure chat models under Chat Completion, and manage speech, embedding, and rerank providers in the other tabs. Agent Runners are configured on the profile Config page.",
+  "subtitle": "Configure chat, speech, embedding, rerank, and classifier providers. Agent Runners are configured on the profile Config page.",
   "providers": {
     "title": "Service Providers",
     "settings": "Settings",
@@ -14,7 +14,8 @@
       "speechToText": "Speech to Text",
       "textToSpeech": "Text to Speech",
       "embedding": "Embedding",
-      "rerank": "Rerank"
+      "rerank": "Rerank",
+      "classifier": "Classifier"
     },
     "empty": {
       "all": "No service providers available, click Add Provider to add one",
@@ -29,7 +30,8 @@
       "opencode_go_messages": "Dedicated OpenCode Go Messages adapter. Sends the AstrBot User-Agent and a hashed session header.",
       "opencode_go_responses": "Dedicated OpenCode Go Responses adapter. Sends the AstrBot User-Agent and a hashed session header.",
       "vllm_rerank": "Also supports Jina AI, Cohere, PPIO, and similar providers.",
-      "default": ""
+      "default": "",
+      "jev_systemone": "TypeSafe JEV typed decisions (noul, choice, score)."
     }
   },
   "availability": {
@@ -56,7 +58,8 @@
         "speechToText": "Speech to Text",
         "textToSpeech": "Text to Speech",
         "embedding": "Embedding",
-        "rerank": "Rerank"
+        "rerank": "Rerank",
+        "classifier": "Classifier"
       },
       "noTemplates": "No this type provider templates available"
     },

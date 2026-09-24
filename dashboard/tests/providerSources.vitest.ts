@@ -35,6 +35,31 @@ describe('useProviderSources', () => {
     setActivePinia(createPinia());
   });
 
+  it('selects and filters standalone classifiers', () => {
+    const sources = useProviderSources({
+      defaultTab: 'select_provider_classifier',
+      tm: (key: string) => key,
+      showMessage: vi.fn(),
+    });
+    sources.providers.value = [
+      { id: 'jev', provider_type: 'classifier', model: 'jev-latest' },
+      { id: 'chat', provider_type: 'chat_completion' },
+    ];
+    sources.providerTemplates.value = {
+      jev_systemone: { provider_type: 'classifier' },
+    };
+    expect(sources.selectedProviderType.value).toBe('classifier');
+    expect(
+      sources.providerTypes.value.some((item) => item.value === 'classifier'),
+    ).toBe(true);
+    expect(sources.filteredProviders.value.map((item) => item.id)).toEqual([
+      'jev',
+    ]);
+    expect(
+      sources.availableSourceTypes.value.map((item) => item.value),
+    ).toEqual(['jev_systemone']);
+  });
+
   it('exposes computed collections and helper formatters', async () => {
     const sources = useProviderSources({
       tm: (key: string) => key,

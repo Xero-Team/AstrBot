@@ -8,6 +8,13 @@
         :provider-type="'chat_completion'"
       />
     </template>
+    <template v-else-if="itemMeta?._special === 'select_provider_classifier'">
+      <ProviderSelector
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+        :provider-type="'classifier'"
+      />
+    </template>
     <template v-else-if="itemMeta?._special === 'select_provider_stt'">
       <ProviderSelector
         :model-value="modelValue"

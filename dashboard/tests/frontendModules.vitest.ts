@@ -85,6 +85,7 @@ import {
 } from '@/utils/pluginSearch';
 import {
   getProviderDescription,
+  getProviderDisplayName,
   getProviderIcon,
   isMonochromeProviderIcon,
 } from '@/utils/providerUtils';
@@ -139,6 +140,15 @@ describe('frontend modules', () => {
     expect(isMonochromeProviderIcon('opencode-go')).toBe(true);
     expect(isMonochromeProviderIcon('openai')).toBe(true);
     expect(isMonochromeProviderIcon('google')).toBe(false);
+    expect(getProviderIcon('typesafe').toLowerCase()).toContain('typesafe');
+    expect(isMonochromeProviderIcon('typesafe')).toBe(true);
+    expect(getProviderDisplayName('jev_systemone', 'jev_systemone')).toBe(
+      'JEV System One',
+    );
+    expect(getProviderDisplayName('openai_chat_completions', 'OpenAI')).toBe(
+      'OpenAI',
+    );
+    expect(getProviderDisplayName(undefined, 'Fallback')).toBe('Fallback');
     expect(
       getProviderDescription(
         { type: 'openai_chat_completions' },

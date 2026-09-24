@@ -17,6 +17,7 @@ The current WebUI exposes these Provider categories:
 | Text to Speech  | OpenAI, Mimo, Genie, Edge TTS, GPT-SoVITS, FishAudio, DashScope, Azure, MiniMax, Volcengine, Gemini, and ElevenLabs.                                                                                                                                                                    |
 | Embedding       | OpenAI, Gemini, NVIDIA, and Ollama.                                                                                                                                                                                                                                                     |
 | Rerank          | vLLM, Xinference, Alibaba Bailian, and NVIDIA.                                                                                                                                                                                                                                          |
+| Classifier      | JEV System One (`jev_systemone`) for typed `noul`, `choice`, and `score` decisions.                                                                                                                                                                                                     |
 | Agent Runner    | Dify, Coze, Alibaba Bailian Applications, and DeerFlow; selected by a profile rather than invoked as a local model.                                                                                                                                                                     |
 
 Templates come from the current code registry and can change in later releases. Treat the list shown under **Providers → Add Provider Source** as authoritative for the running version.
@@ -27,7 +28,7 @@ Templates come from the current code registry and can change in later releases. 
 2. Select the exact API type and enter its base URL, API key, proxy, and related fields.
 3. Fetch models from the source or add a model with the exact model ID.
 4. Verify `max_context_tokens`, modalities, and tool-calling capability for each model.
-5. Open **Config**, edit the active profile, and select the default chat, STT, TTS, embedding, or rerank model under Provider settings.
+5. Open **Config**, edit the active profile, and select the default chat, STT, TTS, embedding, rerank, or classifier provider where the feature supports it.
 6. Use the test action or a real conversation before configuring fallback and retries.
 
 Provider data is stored in two profile arrays:
@@ -36,6 +37,29 @@ Provider data is stored in two profile arrays:
 - `provider` contains model instances linked through `provider_source_id`.
 
 Do not copy old `provider` objects by hand. The current WebUI coordinates model references when a source is renamed and handles dependent models when a source is removed.
+
+## JEV System One classifier
+
+Under **Providers → Classifier → Add Provider**, choose **JEV System One**
+(type `jev_systemone`).
+Set the HTTPS API base (default `https://api.typesafe.ai`), API key, model
+(`jev-latest` by default), and timeout in seconds. This is a standalone entry
+in `provider`, with capability `classifier`; it is not a chat model or Agent
+Runner. The key list uses its first entry and accepts `$ENV_VAR` references.
+Explicit provider/global proxy settings apply; TLS verification stays enabled
+and redirects are refused. Testing connectivity makes a paid API request.
+
+The adapter implements [TypeSafe's System One API](https://docs.typesafe.ai/api):
+`noul` returns P(yes), `choice` returns a selected option and probability
+distribution, and `score` returns a weighted level and legend. Only `choice`
+and `score` have a separate `confidence` field. Results include the resolved
+model version and input/output token usage. Malformed answers fail validation;
+HTTP 429/529 retry at most twice with exponential backoff within the total
+timeout. Other HTTP failures do not retry, and error bodies are not exposed.
+
+Adding a classifier does not enable automatic BTW routing. This is the R4
+experiment in [#272](https://github.com/Xero-Team/AstrBot/issues/272), pending
+comparison under [#122](https://github.com/Xero-Team/AstrBot/issues/122).
 
 ## Choosing an API type
 

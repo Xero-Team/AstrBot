@@ -212,6 +212,100 @@ The work loop never reads its own history: every work task starts from an empty 
 
 The conversation loop can read the work loop's history: its request context carries the work loop's most recent complete turns as provider-only context that is never written into either history, so the chat can refer to what the work loop produced. Hand-off reduces turns to their text roles, so tool calls and their results never cross the loop boundary. Disabling BTW leaves a run reading only its own conversation's history, creating no work conversation and injecting nothing.
 
+## Experimental JEV routing (R4)
+
+[Issue #272](https://github.com/Xero-Team/AstrBot/issues/272) adds a default-off
+experiment, pending comparison under [#122](https://github.com/Xero-Team/AstrBot/issues/122).
+Configure a [JEV classifier](../providers/start.md#jev-system-one-classifier), then
+open **More Features → BTW Dual Loop**, enable both loops and set:
+
+```json
+{
+  "btw": {
+    "enabled": true,
+    "work_loop": { "enabled": true },
+    "classifier": {
+      "enabled": true,
+      "provider_id": "jev_systemone",
+      "fallback_provider_id": "",
+      "confidence_threshold": 0.85,
+      "clarify_on_uncertain": false
+    }
+  }
+}
+```
+
+Use your actual provider ID. Disabled classification or two empty provider fields
+preserve existing explicit/model-authored work submission. The experiment applies
+only to admitted ordinary text on the local Agent, after the session AI switch.
+Explicit `/work`, plugin-supplied requests, attachments, quoted replies, and
+messages over 8,000 characters retain their existing paths.
+
+The `choice` question offers `conversation`, `work`, `clarify`, and `unavailable`.
+Input capabilities come from each loop's existing tool catalog and frozen Skill
+snapshot, including Persona, plugin/MCP/Skill assignments, runtime and surface
+restrictions. There is no second capability registry. A high-confidence `work`
+decision requires a work-only capability and uses existing WorkLoop submission,
+request identity, delivery and execution authorization. It grants no permissions
+and does not select or invoke a coding CLI itself.
+
+A missing classifier, failure, timeout or low confidence calls the configured
+chat fallback once with the same state and strict JSON output. An empty fallback
+ID selects the conversation loop's model and its normal session/default fallback.
+Each classification/fallback call is capped at 20 seconds, including retries;
+the fallback cannot execute tools. Its self-reported confidence is not JEV's
+calibrated distribution statistic: the shared threshold is experimental.
+
+An uncertain/failed fallback stays in conversation. `clarify` does too unless
+`clarify_on_uncertain` is enabled, which asks for task details directly.
+`unavailable` explains that neither loop can complete the request. Every decision
+that stays in conversation blocks `submit_work_task` for that request, including
+indirect attempts. A new explicit `/work` remains available. Work is never
+classified again; reentry, cancellation, stopping, or disabling work cannot
+produce a duplicate handoff.
+
+### Third-party data boundary
+
+Only **current message text and resolved capability names/short summaries** are
+sent to JEV and, when needed, the fallback. `state` excludes conversation history,
+Persona prompts, raw tool schemas, Skill bodies, credential configuration,
+local-path metadata and unrelated profile data. Text is redacted before truncation
+to remove recognized credentials, tokens, URLs and absolute/relative paths. Do not
+put secrets in free text: redaction cannot recognize every arbitrary secret.
+The router does not log raw requests or remote error bodies; request-local results
+record only decisions, model versions, usage, status and latency.
+
+### Reproducing the experiment
+
+`tests/fixtures/btw_routing/v1.json` freezes baseline
+`9bac9db64c7e038652f8af349de5c15a4604a835`, 21 evaluation cases, paired capabilities,
+labels and **proposed** thresholds. It has no tuning cases. The parent had no
+versioned shared corpus at implementation time; this proposes one for R1–R4,
+without claiming other candidates have been evaluated on it. Explicit `/work`
+is the control. `contracts.json` separately stores scripted responses: replay
+checks routing contracts, not model accuracy.
+
+```bash
+uv run python scripts/evaluate_btw_classifier.py \
+  --mode contract --output .tmp/jev-routing-contract.json
+
+# Set TYPESAFE_API_KEY before a paid live trial.
+uv run python scripts/evaluate_btw_classifier.py \
+  --mode live --model jev-1.13.0 --repeats 3 \
+  --output .tmp/jev-routing-live.json
+```
+
+A real chat fallback additionally needs `BTW_FALLBACK_API_KEY`,
+`--fallback-api-base`, and `--fallback-model` for an OpenAI-compatible service.
+Optional `--input-price`/`--output-price` are JEV USD rates per million tokens;
+cost excludes missing usage, failed-call billing and fallback pricing. Reports
+include model versions, full prompts/questions, parameters, revisions, dirty state,
+dataset hashes, per-case decisions, false/missed handoffs, latency, provider calls,
+tokens and repeated-run variation. The harness never executes tools: completion,
+clarification quality and duplicate side-effect outcomes need separate supervised
+trials. Deterministic lifecycle tests cover execution boundaries. Replay success
+does not adopt R4 or complete the parent comparison.
+
 ## BTW plugin tool assignments
 
 When BTW is enabled in a configuration profile, **More Features → BTW Dual Loop → Plugin tool loop assignments** assigns each enabled non-system plugin's LLM tools to conversation, work, or both loops. An unassigned plugin defaults to work. Selecting both saves an explicit override; selecting work again removes it. Disabling BTW preserves normal tool availability.

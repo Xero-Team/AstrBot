@@ -12,6 +12,7 @@ import pytest
 from astrbot.core.provider.catalog import ProviderAdapterDescriptor, ProviderCatalog
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import (
+    ClassifierProvider,
     EmbeddingProvider,
     Provider,
     RerankProvider,
@@ -87,6 +88,44 @@ class DummyEmbeddingProvider(EmbeddingProvider):
 class DummyRerankProvider(RerankProvider):
     async def rerank(self, query: str, documents: list[str], top_n: int | None = None):
         return []
+
+
+class DummyClassifierProvider(ClassifierProvider):
+    async def evaluate(self, state, questions):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_classifier_load_lookup_reload_termination(monkeypatch):
+    manager = _build_manager()
+    _register_provider(
+        manager, "test_classifier", DummyClassifierProvider, ProviderType.CLASSIFIER
+    )
+    monkeypatch.setattr(manager, "dynamic_import_provider", lambda _: None)
+    monkeypatch.setenv("TEST_JEV_KEY", "test-key")
+    config = {
+        "id": "jev",
+        "type": "test_classifier",
+        "provider_type": "classifier",
+        "enable": True,
+        "key": ["$TEST_JEV_KEY"],
+    }
+    await manager.load_provider(config)
+    instance = await manager.get_provider_by_id("jev")
+    assert isinstance(instance, ClassifierProvider)
+    assert instance.provider_config["key"] == ["test-key"]
+    assert manager.classifier_provider_insts == [instance]
+    assert not manager.provider_insts
+    instance.terminate = AsyncMock()
+    await manager.terminate_provider("jev")
+    assert not manager.classifier_provider_insts
+    assert "jev" not in manager.inst_map
+    instance.terminate.assert_awaited_once()
+    await manager.load_provider(config)
+    second = manager.inst_map["jev"]
+    second.terminate = AsyncMock()
+    await manager.terminate()
+    second.terminate.assert_awaited_once()
 
 
 class _ConfigWithAsyncSave(dict):

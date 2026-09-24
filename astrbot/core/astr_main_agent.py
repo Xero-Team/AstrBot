@@ -740,7 +740,7 @@ def _append_skills_prompt(
     )
     skills = _filter_skills_for_current_config(
         skill_manager.list_skills(active_only=True, runtime=runtime),
-        cfg,
+        profile,
         plugin_context.catalogs.plugins,
     )
     if btw_enabled:
@@ -1450,7 +1450,11 @@ def _assemble_request_tool_catalog(
         btw_config=btw_config if isinstance(btw_config, dict) else None,
         loop_mode=loop_mode,
         # Only the conversation loop submits work; the work loop runs it.
-        work_loop_submission=loop_mode == "conversation" and is_work_loop_enabled(cfg),
+        work_loop_submission=(
+            loop_mode == "conversation"
+            and is_work_loop_enabled(cfg)
+            and not event.get_extra("btw_classifier_no_handoff")
+        ),
         # The work loop plans and reads; writes belong to a coding agent.
         work_loop_read_only=work_loop_is_read_only(cfg, loop_mode),
         work_loop_delegation=loop_mode == "work" and has_enabled_coding_agent(cfg),
@@ -1460,6 +1464,68 @@ def _assemble_request_tool_catalog(
         catalog_inputs = merge_existing_tools(catalog_inputs, existing.tools)
     req.func_tool = assemble_tool_catalog(catalog_inputs)
     _add_subagent_tools(req, plugin_context, tool_manager)
+
+
+async def resolve_btw_capabilities(
+    event: AstrMessageEvent, plugin_context: CoreExecutionContext
+) -> dict[str, list[dict[str, str]]]:
+    """Preview both catalogs without running tools, hooks, models or creating history.
+
+    Uses the same persona resolution, Skill snapshots and catalog assembly as
+    the main Agent. The returned allowlist contains no schemas or host paths;
+    callers must redact its free-text fields before sending them off-device.
+    """
+    profile = plugin_context.get_config(umo=event.unified_msg_origin)
+    config, _ = local_agent_runtime_from_profile(profile)
+    capabilities = {}
+    for loop, scope in (
+        ("conversation", DIALOGUE_LOOP_SCOPE),
+        ("work", WORK_LOOP_SCOPE),
+    ):
+        probe = copy.copy(event)
+        probe._extras = {"btw_loop": loop}
+        runtime = resolve_computer_runtime(profile, loop, config.computer_use_runtime)
+        loop_config = replace(
+            config,
+            computer_use_runtime=runtime,
+            allow_computer_tools=runtime != "none",
+            provider_settings={
+                **config.provider_settings,
+                "computer_use_runtime": runtime,
+            },
+        )
+        manager = plugin_context.conversation_manager
+        cid = await manager.get_curr_conversation_id(event.unified_msg_origin, scope)
+        conversation = (
+            await manager.get_conversation(event.unified_msg_origin, cid)
+            if cid
+            else None
+        )
+        (
+            _,
+            persona,
+            _,
+            _,
+        ) = await plugin_context.persona_manager.resolve_selected_persona(
+            umo=event.unified_msg_origin,
+            conversation_persona_id=conversation.persona_id if conversation else None,
+            platform_name=event.get_platform_name(),
+        )
+        req = ProviderRequest()
+        snapshot = _append_skills_prompt(
+            req, loop_config.provider_settings, persona, probe, plugin_context
+        )
+        _assemble_request_tool_catalog(probe, req, plugin_context, loop_config)
+        tools = req.func_tool.tools if req.func_tool else []
+        capabilities[loop] = [
+            {"name": f"tool:{tool.name}", "summary": tool.description}
+            for tool in tools
+            if tool.name != "submit_work_task"
+        ] + [
+            {"name": f"skill:{skill.name}", "summary": skill.description}
+            for skill in snapshot.skills
+        ]
+    return capabilities
 
 
 async def _handle_webchat(

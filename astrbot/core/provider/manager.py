@@ -16,6 +16,7 @@ from ..persona_mgr import PersonaManager
 from .catalog import ProviderAdapterDescriptor, ProviderCatalog
 from .entities import ProviderType
 from .provider import (
+    ClassifierProvider,
     EmbeddingProvider,
     Provider,
     Providers,
@@ -72,6 +73,7 @@ class ProviderManager:
         """加载的 Embedding Provider 的实例"""
         self.rerank_provider_insts: list[RerankProvider] = []
         """加载的 Rerank Provider 的实例"""
+        self.classifier_provider_insts: list[ClassifierProvider] = []
         self.inst_map: dict[
             str,
             Providers,
@@ -480,7 +482,10 @@ class ProviderManager:
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
         provider_config = self.get_merged_provider_config(provider_config)
 
-        if provider_config.get("provider_type", "") == "chat_completion":
+        if provider_config.get("provider_type", "") in {
+            "chat_completion",
+            "classifier",
+        }:
             provider_config = self._resolve_env_key_list(provider_config)
 
         if not provider_config["enable"]:
@@ -593,6 +598,16 @@ class ProviderManager:
                     if isinstance(inst, HasInitialize):
                         await inst.initialize()
                     self.rerank_provider_insts.append(inst)
+                case ProviderType.CLASSIFIER:
+                    if not issubclass(cls_type, ClassifierProvider):
+                        raise TypeError(
+                            "Classifier adapter must extend ClassifierProvider"
+                        )
+                    inst = cls_type(provider_config, self.provider_settings)
+                    self._bind_adapter_descriptor(inst, provider_metadata)
+                    if isinstance(inst, HasInitialize):
+                        await inst.initialize()
+                    self.classifier_provider_insts.append(inst)
                 case _:
                     # 未知供应商抛出异常，确保inst初始化
                     # Should be unreachable
@@ -655,6 +670,10 @@ class ProviderManager:
                 prov_inst = self.inst_map[provider_id]
                 if isinstance(prov_inst, RerankProvider):
                     self.rerank_provider_insts.remove(prov_inst)
+
+            classifier = self.inst_map[provider_id]
+            if isinstance(classifier, ClassifierProvider):
+                self.classifier_provider_insts.remove(classifier)
 
             if getattr(self.inst_map[provider_id], "terminate", None):
                 await self.inst_map[provider_id].terminate()  # type: ignore
@@ -750,6 +769,7 @@ class ProviderManager:
             self.tts_provider_insts,
             self.embedding_provider_insts,
             self.rerank_provider_insts,
+            self.classifier_provider_insts,
         )
         terminated_ids: set[int] = set()
         for provider_group in provider_groups:

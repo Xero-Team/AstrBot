@@ -37,6 +37,7 @@ from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryMana
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
+    ClassifierProvider,
     EmbeddingProvider,
     Provider,
     RerankProvider,
@@ -607,7 +608,13 @@ class CoreExecutionContext:
         self,
         provider_id: str,
     ) -> (
-        Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
+        Provider
+        | TTSProvider
+        | STTProvider
+        | EmbeddingProvider
+        | RerankProvider
+        | ClassifierProvider
+        | None
     ):
         """通过 ID 获取对应的 LLM Provider。
 
@@ -642,6 +649,10 @@ class CoreExecutionContext:
     def get_all_embedding_providers(self) -> list[EmbeddingProvider]:
         """获取所有用于 Embedding 任务的 Provider。"""
         return self.provider_manager.embedding_provider_insts
+
+    def get_all_classifier_providers(self) -> list[ClassifierProvider]:
+        """Return all providers that expose typed classifier decisions."""
+        return self.provider_manager.classifier_provider_insts
 
     def get_using_provider(self, umo: str | None = None) -> Provider | None:
         """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。

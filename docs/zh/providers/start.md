@@ -17,6 +17,7 @@ WebUI 当前提供以下 Provider 类别：
 | Text to Speech  | OpenAI、Mimo、Genie、Edge TTS、GPT-SoVITS、FishAudio、DashScope、Azure、MiniMax、火山引擎、Gemini、ElevenLabs。                                                                                                                                                  |
 | Embedding       | OpenAI、Gemini、NVIDIA、Ollama。                                                                                                                                                                                                                                 |
 | Rerank          | vLLM、Xinference、阿里云百炼、NVIDIA。                                                                                                                                                                                                                           |
+| Classifier      | JEV System One（`jev_systemone`），提供类型化的 `noul`、`choice` 和 `score` 判定。                                                                                                                                                                               |
 | Agent Runner    | Dify、Coze、阿里云百炼应用、DeerFlow；在配置档中选择，不作为本地模型调用。                                                                                                                                                                                       |
 
 模板列表来自当前代码注册表，后续版本可能变化；以 **提供商 → 新增 Provider 来源** 中实际显示的类型为准。
@@ -27,7 +28,7 @@ WebUI 当前提供以下 Provider 类别：
 2. 选择准确的接口类型，填写 API Base、API Key 和代理等字段。
 3. 从来源获取模型，或手动新增模型并填写准确模型 ID。
 4. 为模型核对 `max_context_tokens`、支持的模态和工具调用能力。
-5. 打开 **配置**，编辑当前配置档，在 Provider 设置中选择默认聊天、STT、TTS、Embedding 或 Rerank 模型。
+5. 打开 **配置**，编辑当前配置档，在功能支持的位置选择默认聊天、STT、TTS、Embedding、Rerank 或分类器提供商。
 6. 使用“测试”功能或真实会话验证，再配置 fallback 和重试。
 
 Provider 数据保存在配置档的两个数组中：
@@ -36,6 +37,26 @@ Provider 数据保存在配置档的两个数组中：
 - `provider`：通过 `provider_source_id` 引用来源的模型实例。
 
 不要手工复制旧版 `provider` 对象。当前 WebUI 会在重命名来源时同步模型引用，并在删除来源前处理关联模型。
+
+## JEV System One 分类器
+
+在 **模型提供商 → 分类器 → 添加提供商** 中选择 **JEV System One**
+（类型 `jev_systemone`）。
+填写 HTTPS API 地址（默认 `https://api.typesafe.ai`）、API Key、模型
+（默认 `jev-latest`）和超时秒数。这是 `provider` 中能力类型为
+`classifier` 的独立条目，不是对话模型或 Agent Runner。Key 列表使用首项，
+支持 `$ENV_VAR` 环境变量引用。遵循提供商和全局的显式代理设置，保持 TLS
+证书校验并拒绝重定向。测试连接会产生付费 API 请求。
+
+适配器实现 [TypeSafe System One API](https://docs.typesafe.ai/api)：
+`noul` 返回 P(yes)，`choice` 返回选项和概率分布，`score` 返回加权分数与等级说明。
+只有 `choice` 和 `score` 含独立的 `confidence` 字段。结果保留实际模型版本和
+输入、输出 token 用量。畸形响应会被拒绝；HTTP 429/529 在总超时内以指数退避
+最多重试两次，其他 HTTP 错误不重试，不暴露远端错误正文。
+
+添加分类器不会自动开启 BTW 路由。这是
+[#272](https://github.com/Xero-Team/AstrBot/issues/272) 的 R4 实验，仍需在
+[#122](https://github.com/Xero-Team/AstrBot/issues/122) 下完成方案比较。
 
 ## 选择接口类型
 

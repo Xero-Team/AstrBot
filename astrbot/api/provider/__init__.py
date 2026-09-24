@@ -5,15 +5,30 @@ from astrbot.core.agent.llm_types import (
 )
 from astrbot.core.agent.message import ContentPart, TextPart
 from astrbot.core.persona_models import Personality
-from astrbot.core.provider import Provider, STTProvider
+from astrbot.core.provider import ClassifierProvider, Provider, STTProvider
 from astrbot.core.provider.entities import (
     ProviderMetaData,
     ProviderType,
 )
+from astrbot.core.typed_decision import (
+    ChoiceAnswer,
+    ChoiceQuestion,
+    ClassifierResult,
+    NoulAnswer,
+    NoulQuestion,
+    ScoreAnswer,
+    ScoreQuestion,
+)
 
 __all__ = [
+    "ChoiceAnswer",
+    "ChoiceQuestion",
+    "ClassifierProvider",
+    "ClassifierResult",
     "ContentPart",
     "LLMResponse",
+    "NoulAnswer",
+    "NoulQuestion",
     "Personality",
     "Provider",
     "ProviderContentBlock",
@@ -21,5 +36,7 @@ __all__ = [
     "ProviderRequest",
     "ProviderType",
     "STTProvider",
+    "ScoreAnswer",
+    "ScoreQuestion",
     "TextPart",
 ]

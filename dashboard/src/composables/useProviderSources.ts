@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { providerApi } from '@/api/v1';
 import {
+  getProviderDisplayName,
   getProviderIcon,
   isMonochromeProviderIcon,
 } from '@/utils/providerUtils';
@@ -125,6 +126,9 @@ export function resolveDefaultTab(value?: string) {
   if (normalized.includes('rerank')) {
     return 'rerank';
   }
+  if (normalized.includes('classifier')) {
+    return 'classifier';
+  }
 
   return 'chat_completion';
 }
@@ -191,6 +195,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       label: tm('providers.tabs.rerank'),
       icon: 'mdi-compare-vertical',
     },
+    {
+      value: 'classifier',
+      label: tm('providers.tabs.classifier'),
+      icon: 'mdi-code-json',
+    },
   ]);
 
   // ===== Computed =====
@@ -214,7 +223,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
-          label: templateName,
+          label: getProviderDisplayName(template.type, templateName),
           icon: getProviderIcon(template.provider || ''),
           isMonochrome: isMonochromeProviderIcon(template.provider || ''),
         });

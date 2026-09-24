@@ -28,7 +28,13 @@ from astrbot.core.message.json_card import format_json_card_prompt
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.message.qq_face import format_qq_face
 
-from .message_i18n import DEFAULT_LOCALE, LOCALES, localize, message_key
+from .message_i18n import (
+    DEFAULT_LOCALE,
+    LOCALES,
+    localize,
+    localize_value,
+    message_key,
+)
 from .message_protocol import (
     ContentKind,
     DeliveryBatch,
@@ -296,6 +302,11 @@ def _reconstruct_forward_chain(
             if sender is None:
                 continue
             open_node(sender)
+        if isinstance(item, PortablePart) and item.kind in {
+            ContentKind.TEXT,
+            ContentKind.LINK,
+        }:
+            item = replace(item, value=localize_value(locale, str(item.value)))
         component = _item_to_node_component(item, cross_session=cross_session)
         if component is not None and current is not None:
             current.content.append(component)

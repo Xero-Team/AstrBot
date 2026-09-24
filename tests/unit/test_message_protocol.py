@@ -633,6 +633,49 @@ async def test_envelope_quote_resolver_fetches_remote_text():
     assert await envelope.quote.resolve_preview() == "original"
 
 
+def test_forwarded_quote_localizes_inside_reconstructed_forward():
+    from astrbot.core.message.components import Node, Nodes, Plain, Reply
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[Reply(id="9002"), Plain("forwarded text")],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+
+    def node_texts(locale: str) -> str:
+        chains = plan_message_delivery(
+            envelope,
+            MESSAGE_CAPABILITIES["napcat"],
+            target_umo="napcat:GroupMessage:1",
+            locale=locale,
+        )
+        return "".join(
+            inner.text
+            for chain in chains
+            for component in chain.chain
+            if isinstance(component, Nodes)
+            for node in component.nodes
+            for inner in node.content
+            if isinstance(inner, Plain)
+        )
+
+    assert node_texts("zh-CN") == "> [引用]\nforwarded text"
+    assert node_texts("en-US") == "> [Quote]\nforwarded text"
+    assert "astrbot.msg.quote" not in node_texts("zh-CN")
+    assert "9002" not in node_texts("zh-CN")
+
+
 def test_cross_session_mentions_are_inert_and_part_limit_is_enforced():
     from astrbot.core.message.components import Plain
 

@@ -1,6 +1,6 @@
 import asyncio
 import re
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
@@ -29,6 +29,15 @@ from .forward_node_splitter import split_long_text_node
 
 _EXCLUSIVE_OUTBOUND_SEGMENTS = (Node, Nodes, File, Video, Record)
 _SPLIT_SEND_INTERVAL_SECONDS = 0.5
+
+
+def _message_id_from_result(result: object) -> str | None:
+    """Return the accepted OneBot message id, ignoring test doubles."""
+    if isinstance(result, Mapping):
+        message_id = result.get("message_id")
+        if message_id is not None:
+            return str(message_id)
+    return None
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -115,7 +124,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool,
         session_id: str | None,
         messages: list[dict],
-    ) -> None:
+    ) -> str | None:
         # session_id 必须是纯数字字符串
         session_id_int = (
             int(session_id) if session_id and session_id.isdigit() else None
@@ -125,23 +134,24 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             routing_params["self_id"] = event["self_id"]
 
         if is_group and isinstance(session_id_int, int):
-            await bot.send_group_msg(
+            result = await bot.send_group_msg(
                 group_id=session_id_int,
                 message=messages,
                 **routing_params,
             )
         elif not is_group and isinstance(session_id_int, int):
-            await bot.send_private_msg(
+            result = await bot.send_private_msg(
                 user_id=session_id_int,
                 message=messages,
                 **routing_params,
             )
         elif isinstance(event, Event):  # 最后兜底
-            await bot.send(event=event, message=messages)
+            result = await bot.send(event=event, message=messages)
         else:
             raise ValueError(
                 f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})",
             )
+        return _message_id_from_result(result)
 
     @classmethod
     def _is_forward_size_error(cls, exc: ActionFailed) -> bool:
@@ -182,22 +192,27 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool,
         session_id: str | None,
         max_retries: int = 3,
-    ) -> None:
+    ) -> tuple[str, ...]:
         action = "send_group_forward_msg" if is_group else "send_private_forward_msg"
         id_field = "group_id" if is_group else "user_id"
+        message_ids: list[str] = []
 
-        async def send_chunk(messages: list[object]) -> None:
+        async def send_chunk(messages: list[object]) -> str | None:
             chunk_payload = {id_field: session_id, "messages": messages}
             if isinstance(event, Event) and event.get("self_id"):
                 chunk_payload["self_id"] = event["self_id"]
-            await bot.call_action(action, **chunk_payload)
+            return _message_id_from_result(
+                await bot.call_action(action, **chunk_payload)
+            )
 
         messages = payload.get("messages", [])
         if not isinstance(messages, list):
             raise ValueError("Forward message payload did not contain nodes")
         try:
-            await send_chunk(messages)
-            return
+            message_id = await send_chunk(messages)
+            if message_id is not None:
+                message_ids.append(message_id)
+            return tuple(message_ids)
         except ActionFailed as exc:
             if not cls._is_forward_size_error(exc):
                 raise
@@ -207,7 +222,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         while pending:
             chunk = pending.pop(0)
             try:
-                await send_chunk(chunk)
+                message_id = await send_chunk(chunk)
+                if message_id is not None:
+                    message_ids.append(message_id)
                 continue
             except ActionFailed as exc:
                 if not cls._is_forward_size_error(exc):
@@ -223,13 +240,16 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 for segment in split_long_text_node(
                     text, 1500, r"[^。？！~…]+[。？！~…]+"
                 ):
-                    await cls._dispatch_send(
+                    message_id = await cls._dispatch_send(
                         bot,
                         event,
                         is_group,
                         session_id,
                         [{"type": "text", "data": {"text": segment}}],
                     )
+                    if message_id is not None:
+                        message_ids.append(message_id)
+        return tuple(message_ids)
 
     @classmethod
     async def _dispatch_standard_segments(
@@ -241,16 +261,18 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         segments: list[BaseMessageComponent],
         *,
         sent_any: bool,
-    ) -> bool:
+    ) -> tuple[str, ...] | None:
         if not segments:
-            return False
+            return None
         messages = await cls._parse_onebot_json(MessageChain(segments))
         if not messages:
-            return False
+            return None
         if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
             await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
-        await cls._dispatch_send(bot, event, is_group, session_id, messages)
-        return True
+        message_id = await cls._dispatch_send(
+            bot, event, is_group, session_id, messages
+        )
+        return (message_id,) if message_id is not None else ()
 
     @classmethod
     async def _send_forward_segment(
@@ -262,11 +284,11 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         session_id: str | None,
         forward_message_max_retries: int,
         forward_message_fallback_enabled: bool,
-    ) -> None:
+    ) -> tuple[str, ...]:
         nodes = segment if isinstance(segment, Nodes) else Nodes([segment])
         payload = await nodes.to_dict()
         if forward_message_fallback_enabled:
-            await cls._send_forward_with_fallback(
+            return await cls._send_forward_with_fallback(
                 bot,
                 payload,
                 event,
@@ -274,10 +296,10 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 session_id,
                 forward_message_max_retries,
             )
-            return
         action = "send_group_forward_msg" if is_group else "send_private_forward_msg"
         payload["group_id" if is_group else "user_id"] = session_id
-        await bot.call_action(action, **payload)
+        message_id = _message_id_from_result(await bot.call_action(action, **payload))
+        return (message_id,) if message_id is not None else ()
 
     @classmethod
     async def send_message(
@@ -289,7 +311,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         session_id: str | None = None,
         forward_message_max_retries: int = 3,
         forward_message_fallback_enabled: bool = True,
-    ) -> None:
+    ) -> tuple[str, ...]:
         """发送消息至 QQ 协议端（aiocqhttp）。
 
         Args:
@@ -304,43 +326,51 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         # 连续可混排段（文本、图片等）仍合并为一次发送。
         pending: list[BaseMessageComponent] = []
         sent_any = False
+        message_ids: list[str] = []
         for seg in message_chain.chain:
             if isinstance(seg, _EXCLUSIVE_OUTBOUND_SEGMENTS):
-                if await cls._dispatch_standard_segments(
+                segment_ids = await cls._dispatch_standard_segments(
                     bot,
                     event,
                     is_group,
                     session_id,
                     pending,
                     sent_any=sent_any,
-                ):
+                )
+                if segment_ids is not None:
                     sent_any = True
+                    message_ids.extend(segment_ids)
                 pending.clear()
                 if isinstance(seg, Node | Nodes):
                     if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
                         await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
-                    await cls._send_forward_segment(
+                    message_ids.extend(
+                        await cls._send_forward_segment(
+                            bot,
+                            seg,
+                            event,
+                            is_group,
+                            session_id,
+                            forward_message_max_retries,
+                            forward_message_fallback_enabled,
+                        )
+                    )
+                    sent_any = True
+                else:
+                    segment_ids = await cls._dispatch_standard_segments(
                         bot,
-                        seg,
                         event,
                         is_group,
                         session_id,
-                        forward_message_max_retries,
-                        forward_message_fallback_enabled,
+                        [seg],
+                        sent_any=sent_any,
                     )
-                    sent_any = True
-                elif await cls._dispatch_standard_segments(
-                    bot,
-                    event,
-                    is_group,
-                    session_id,
-                    [seg],
-                    sent_any=sent_any,
-                ):
-                    sent_any = True
+                    if segment_ids is not None:
+                        sent_any = True
+                        message_ids.extend(segment_ids)
                 continue
             pending.append(seg)
-        await cls._dispatch_standard_segments(
+        segment_ids = await cls._dispatch_standard_segments(
             bot,
             event,
             is_group,
@@ -348,6 +378,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             pending,
             sent_any=sent_any,
         )
+        if segment_ids is not None:
+            message_ids.extend(segment_ids)
+        return tuple(message_ids)
 
     async def send(self, message: MessageChain) -> PlatformSendResult | None:
         """发送消息"""

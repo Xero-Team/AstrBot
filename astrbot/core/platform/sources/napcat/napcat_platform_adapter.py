@@ -4,6 +4,7 @@ import asyncio
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from time import monotonic
 from typing import Any, cast
@@ -165,6 +166,13 @@ _PORTABLE_MEDIA_PREFIXES = ("http://", "https://", "base64://")
 _OutboundMedia = Image | Record | Video | File
 
 
+def _sent_message_id(result: object) -> str | None:
+    """Return the accepted platform message id, ignoring test doubles."""
+    if isinstance(result, NapCatSendMessageResult):
+        return str(result.message_id)
+    return None
+
+
 def _outbound_media_candidates(component: _OutboundMedia) -> list[str]:
     if isinstance(component, File):
         values = (component.file_, component.url)
@@ -241,15 +249,14 @@ class NapCatOutboundProtocol:
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> NapCatSendMessageResult | None:
         payload = await self._build_message(message_chain)
         if session.message_type == MessageType.GROUP_MESSAGE:
-            await self.client.send_group_message(
+            return await self.client.send_group_message(
                 group_id=session.session_id,
                 message=payload,
             )
-            return
-        await self.client.send_private_message(
+        return await self.client.send_private_message(
             user_id=session.session_id,
             message=payload,
         )
@@ -258,7 +265,7 @@ class NapCatOutboundProtocol:
         self,
         session: MessageSession,
         component: Node | Nodes,
-    ) -> None:
+    ) -> tuple[str, ...]:
         node_payload = (
             await component.to_dict()
             if isinstance(component, Nodes)
@@ -268,11 +275,11 @@ class NapCatOutboundProtocol:
         if not isinstance(messages, list) or not messages:
             raise ValueError("NapCat forward message payload did not contain nodes")
         if self.forward_message_fallback_enabled:
-            await self._send_forward_with_fallback(
+            return await self._send_forward_with_fallback(
                 session, messages, self.forward_message_max_retries
             )
-        else:
-            await self._send_forward_chunk(session, messages)
+        message_id = _sent_message_id(await self._send_forward_chunk(session, messages))
+        return (message_id,) if message_id is not None else ()
 
     @staticmethod
     def _is_forward_size_error(exc: NapCatApiError) -> bool:
@@ -286,14 +293,13 @@ class NapCatOutboundProtocol:
 
     async def _send_forward_chunk(
         self, session: MessageSession, messages: list[object]
-    ) -> None:
+    ) -> NapCatSendMessageResult | None:
         if session.message_type == MessageType.GROUP_MESSAGE:
-            await self.client.send_group_forward_message(
+            return await self.client.send_group_forward_message(
                 group_id=session.session_id,
                 messages=messages,
             )
-            return
-        await self.client.send_private_forward_message(
+        return await self.client.send_private_forward_message(
             user_id=session.session_id,
             messages=messages,
         )
@@ -322,10 +328,15 @@ class NapCatOutboundProtocol:
 
     async def _send_forward_with_fallback(
         self, session: MessageSession, messages: list[object], max_retries: int = 3
-    ) -> None:
+    ) -> tuple[str, ...]:
+        message_ids: list[str] = []
         try:
-            await self._send_forward_chunk(session, messages)
-            return
+            message_id = _sent_message_id(
+                await self._send_forward_chunk(session, messages)
+            )
+            if message_id is not None:
+                message_ids.append(message_id)
+            return tuple(message_ids)
         except NapCatApiError as exc:
             if not self._is_forward_size_error(exc):
                 raise
@@ -335,7 +346,11 @@ class NapCatOutboundProtocol:
         while pending:
             chunk = pending.pop(0)
             try:
-                await self._send_forward_chunk(session, chunk)
+                message_id = _sent_message_id(
+                    await self._send_forward_chunk(session, chunk)
+                )
+                if message_id is not None:
+                    message_ids.append(message_id)
                 continue
             except NapCatApiError as exc:
                 if not self._is_forward_size_error(exc):
@@ -351,7 +366,14 @@ class NapCatOutboundProtocol:
                 for segment in split_long_text_node(
                     text, 1500, r"[^。？！~…]+[。？！~…]+"
                 ):
-                    await self.send_standard(session, MessageChain().message(segment))
+                    message_id = _sent_message_id(
+                        await self.send_standard(
+                            session, MessageChain().message(segment)
+                        )
+                    )
+                    if message_id is not None:
+                        message_ids.append(message_id)
+        return tuple(message_ids)
 
 
 NAPCAT_NOTICE_EVENT_TYPES = (
@@ -1125,25 +1147,38 @@ class NapCatPlatformAdapter(Platform):
             isinstance(component, _EXCLUSIVE_OUTBOUND_SEGMENTS)
             for component in message_chain.chain
         ):
-            await self._send_mixed_outbound_message(session, message_chain)
+            message_ids = await self._send_mixed_outbound_message(
+                session, message_chain
+            )
         else:
-            await self._send_standard_message(session, message_chain)
-        return await super().send_by_session(session, message_chain)
+            message_id = _sent_message_id(
+                await self._send_standard_message(session, message_chain)
+            )
+            message_ids = (message_id,) if message_id is not None else ()
+        result = await super().send_by_session(session, message_chain)
+        if result is None or not message_ids:
+            return result
+        return replace(
+            result,
+            message_id=message_ids[0],
+            message_ids=message_ids,
+        )
 
     async def _send_standard_message(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
-        await self.outbound.send_standard(session, message_chain)
+    ) -> NapCatSendMessageResult | None:
+        return await self.outbound.send_standard(session, message_chain)
 
     async def _send_mixed_outbound_message(
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> None:
+    ) -> tuple[str, ...]:
         pending_standard: list[BaseMessageComponent] = []
         sent_any = False
+        message_ids: list[str] = []
 
         async def emit_standard(segments: list[BaseMessageComponent]) -> None:
             nonlocal sent_any
@@ -1151,17 +1186,21 @@ class NapCatPlatformAdapter(Platform):
                 return
             if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
                 await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
-            await self._send_standard_message(
-                session,
-                message_chain.derive(chain=list(segments)),
+            message_id = _sent_message_id(
+                await self._send_standard_message(
+                    session,
+                    message_chain.derive(chain=list(segments)),
+                )
             )
+            if message_id is not None:
+                message_ids.append(message_id)
             sent_any = True
 
         async def emit_forward(component: Node | Nodes) -> None:
             nonlocal sent_any
             if sent_any and _SPLIT_SEND_INTERVAL_SECONDS > 0:
                 await asyncio.sleep(_SPLIT_SEND_INTERVAL_SECONDS)
-            await self._send_forward_component(session, component)
+            message_ids.extend(await self._send_forward_component(session, component))
             sent_any = True
 
         for component in message_chain.chain:
@@ -1176,13 +1215,14 @@ class NapCatPlatformAdapter(Platform):
             pending_standard.append(component)
 
         await emit_standard(pending_standard)
+        return tuple(message_ids)
 
     async def _send_forward_component(
         self,
         session: MessageSession,
         component: Node | Nodes,
-    ) -> None:
-        await self.outbound.send_forward(session, component)
+    ) -> tuple[str, ...]:
+        return await self.outbound.send_forward(session, component)
 
     def _append_basic_outbound_segments(
         self,

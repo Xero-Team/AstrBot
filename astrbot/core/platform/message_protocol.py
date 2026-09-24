@@ -62,6 +62,10 @@ class QuoteReference:
     message_id: str
     sender: SenderSnapshot | None = None
     preview: str = ""
+    resolve_preview: Callable[[], Awaitable[str | None]] | None = field(
+        default=None, repr=False, compare=False
+    )
+    """Lazy readable-text resolver for a cross-session quote without a preview."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -552,6 +552,87 @@ def test_target_limits_include_quote_fallback_and_unicode():
     assert all(len(value.encode("utf-16-le")) // 2 <= 4 for value in values)
 
 
+def test_quote_fallback_without_preview_uses_localized_placeholder():
+    from astrbot.core.platform.message_protocol import QuoteReference
+
+    envelope = MessageEnvelope(
+        _route(),
+        content=(PortablePart(ContentKind.TEXT, "body"),),
+        quote=QuoteReference(_route(), "7463920164812345678"),
+    )
+
+    chains = plan_message_delivery(envelope, MessageDeliveryCapabilities())
+
+    text = chains[0].get_plain_text()
+    assert text == "> [引用]\nbody"
+    assert "7463920164812345678" not in text
+
+
+def test_quote_fallback_without_preview_localizes_for_english():
+    from astrbot.core.platform.message_protocol import QuoteReference
+
+    envelope = MessageEnvelope(
+        _route(),
+        content=(PortablePart(ContentKind.TEXT, "body"),),
+        quote=QuoteReference(_route(), "7463920164812345678"),
+    )
+
+    chains = plan_message_delivery(
+        envelope, MessageDeliveryCapabilities(), locale="en-US"
+    )
+
+    assert chains[0].get_plain_text() == "> [Quote]\nbody"
+
+
+def test_forwarded_quote_without_preview_never_renders_message_id():
+    from astrbot.core.message.components import Node, Nodes, Plain, Reply
+    from astrbot.core.platform.message_i18n import message_key
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[Reply(id="9002"), Plain("forwarded text")],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+
+    values = [
+        str(part.value) for part in envelope.content if isinstance(part, PortablePart)
+    ]
+    assert message_key("quote") in values
+    assert not any("9002" in value for value in values)
+
+
+@pytest.mark.asyncio
+async def test_envelope_quote_resolver_fetches_remote_text():
+    from astrbot.core.message.components import Reply
+    from astrbot.core.platform.message_projection import envelope_from_event
+    from tests.unit.test_quoted_message_parser import _NapCatClient
+
+    event = _event(components=[Reply(id="700")])
+    event.get_platform_name = lambda: "napcat"
+    event.adapter = SimpleNamespace(
+        client=_NapCatClient(
+            message_payloads={"700": [{"type": "text", "data": {"text": "original"}}]}
+        )
+    )
+
+    envelope = envelope_from_event(event)
+
+    assert envelope.quote is not None
+    assert envelope.quote.resolve_preview is not None
+    assert await envelope.quote.resolve_preview() == "original"
+
+
 def test_cross_session_mentions_are_inert_and_part_limit_is_enforced():
     from astrbot.core.message.components import Plain
 

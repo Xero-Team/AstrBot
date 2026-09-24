@@ -385,27 +385,27 @@ def build_forward_card_rows(
     rows: list[dict[str, object]] = []
     current: dict[str, object] | None = None
 
-    def open_row(sender: SenderSnapshot, level: int) -> None:
-        nonlocal current
+    def open_row(sender: SenderSnapshot, level: int) -> dict[str, object]:
         uin, name = _node_identity(sender, locale)
-        current = {
+        row: dict[str, object] = {
             "name": _truncate_utf16(name, _FORWARD_CARD_MAX_NAME_UTF16),
             "uin": uin,
             "text": "",
             "depth": max(0, level - 1),
         }
-        rows.append(current)
+        rows.append(row)
+        return row
 
     for item in content:
         sender = _item_sender(item)
         if _is_author_separator(item, locale):
             if sender is not None:
-                open_row(sender, item.depth)
+                current = open_row(sender, item.depth)
             continue
         if sender is None:
             continue
         if current is None or current["uin"] != (sender.id or "0"):
-            open_row(sender, item.depth)
+            current = open_row(sender, item.depth)
         image_uri = _forward_card_image_uri(item)
         if image_uri is not None:
             images = current.setdefault("images", [])

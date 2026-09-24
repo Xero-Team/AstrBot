@@ -1150,6 +1150,8 @@ class SessionBridgeManager:
         """Replace forwarded islands with one rendered image for non-forward targets."""
         if capabilities.forward or self._html_renderer is None:
             return envelope
+        if ContentKind.IMAGE.value not in capabilities.media:
+            return envelope
         if (
             self._get_forward_card_enabled is not None
             and not self._get_forward_card_enabled(target_umo)

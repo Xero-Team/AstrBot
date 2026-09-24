@@ -17,7 +17,7 @@ WebUI 当前提供以下 Provider 类别：
 | Text to Speech  | OpenAI、Mimo、Genie、Edge TTS、GPT-SoVITS、FishAudio、DashScope、Azure、MiniMax、火山引擎、Gemini、ElevenLabs。                                                                                                                                                  |
 | Embedding       | OpenAI、Gemini、NVIDIA、Ollama。                                                                                                                                                                                                                                 |
 | Rerank          | vLLM、Xinference、阿里云百炼、NVIDIA。                                                                                                                                                                                                                           |
-| Classifier      | JEV System One（`jev_systemone`），提供类型化的 `noul`、`choice` 和 `score` 判定。                                                                                                                                                                                        |
+| Classifier      | JEV System One（`jev_systemone`），提供类型化的 `noul`、`choice` 和 `score` 判定。                                                                                                                                                                               |
 | Agent Runner    | Dify、Coze、阿里云百炼应用、DeerFlow；在配置档中选择，不作为本地模型调用。                                                                                                                                                                                       |
 
 模板列表来自当前代码注册表，后续版本可能变化；以 **提供商 → 新增 Provider 来源** 中实际显示的类型为准。

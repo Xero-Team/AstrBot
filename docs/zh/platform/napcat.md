@@ -40,7 +40,15 @@
 - `reconnect_interval_seconds`：断线后重连间隔
 - `max_frame_size_mb`：允许接收的最大单帧大小
 
-## 3. 在 NapCat 中确认服务
+## 3. 合并转发的入口展开
+
+以下开关位于全局 `platform_settings`，由 `napcat` 与 `OneBot v11`（`aiocqhttp`）共享，可在 `配置` 页设置：
+
+- `platform_settings.onebot_forward.expand_on_ingress`：默认开启。收到只带 `forward` id、没有展开内容的合并转发时，适配器先调用 `get_forward_msg` 回填节点内容，再交给后续处理；拉取失败或超时会保留原样，不阻塞消息。
+- `platform_settings.onebot_forward.max_fetch`：单条消息入口展开时递归调用 `get_forward_msg` 的最大次数，默认 8。
+- `t2i_forward_card`：全局系统配置，默认开启。会话桥接把已展开的合并转发投递到**不支持**原生 `forward` 的目标时，会渲染成一张图片卡片；渲染失败时回退为带作者标签的文字转录。目标支持 `forward` 时仍重建合并转发卡片。
+
+## 4. 在 NapCat 中确认服务
 
 在 NapCat WebUI 中确认 OneBot v11 正向 WebSocket 服务已经开启，并且地址与 AstrBot 配置一致。
 
@@ -50,7 +58,7 @@
 - Docker Compose：`ws://napcat:3001`
 - 同 Pod：`ws://localhost:3001`
 
-## 4. 验证
+## 5. 验证
 
 AstrBot 启动后应看到类似日志：
 
@@ -62,7 +70,7 @@ AstrBot 启动后应看到类似日志：
 
 此时从 QQ 侧发送消息，AstrBot 应能正常收到并回复。
 
-## 5. 常见问题
+## 6. 常见问题
 
 - AstrBot 能启动，但收不到消息
   - 检查 NapCat 的正向 WebSocket 服务是否真的开启

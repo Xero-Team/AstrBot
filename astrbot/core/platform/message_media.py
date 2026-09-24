@@ -128,6 +128,7 @@ async def materialize_message_media(
                         ContentKind.TEXT,
                         localize(locale, "astrbot.msg.unavailable", label=label),
                         sender=part.sender,
+                        depth=part.depth,
                     )
                 )
         yield replace(envelope, content=tuple(content))

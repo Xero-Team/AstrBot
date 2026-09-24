@@ -60,6 +60,7 @@ from astrbot.core.platform.contracts.onebot import (
     get_capability_descriptor,
 )
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.onebot_forward import expand_unexpanded_forwards
 from astrbot.core.platform.platform import Platform
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.register import register_platform_adapter
@@ -538,6 +539,10 @@ class NapCatPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
+        forward_settings = platform_settings.get("onebot_forward")
+        if not isinstance(forward_settings, Mapping):
+            forward_settings = {}
+        self._onebot_forward_settings: Mapping[str, object] = forward_settings
         self.metadata = PlatformMetadata(
             name="napcat",
             description="NapCat platform adapter",
@@ -1935,6 +1940,55 @@ class NapCatPlatformAdapter(Platform):
             depth=depth,
         )
 
+    @staticmethod
+    def _coerce_forward_max_fetch(value: object) -> int:
+        if isinstance(value, bool):
+            return 8
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                return int(value)
+            except ValueError:
+                return 8
+        return 8
+
+    async def _expand_inbound_forwards(
+        self,
+        components: list[BaseMessageComponent],
+    ) -> list[BaseMessageComponent]:
+        if not self._onebot_forward_settings.get("expand_on_ingress", False):
+            return components
+        return await expand_unexpanded_forwards(
+            components,
+            fetch=self._fetch_forward_payload,
+            parse=self._parse_forward_payload,
+            max_fetch=self._coerce_forward_max_fetch(
+                self._onebot_forward_settings.get("max_fetch", 8)
+            ),
+        )
+
+    async def _fetch_forward_payload(
+        self,
+        forward_id: str,
+    ) -> Mapping[str, object] | None:
+        payload = await self.client.get_forward_message(forward_id)
+        return payload if isinstance(payload, Mapping) else None
+
+    async def _parse_forward_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> list[BaseMessageComponent]:
+        raw = payload.get("data")
+        if isinstance(raw, Mapping):
+            messages = raw.get("messages")
+        else:
+            messages = raw
+        if not isinstance(messages, list):
+            return []
+        nodes = await self._convert_forward_content(messages, depth=1)
+        return [*nodes]
+
     async def _convert_forward_content(
         self,
         content: list[object],
@@ -2042,11 +2096,10 @@ class NapCatPlatformAdapter(Platform):
                 payload.data.content or [],
                 depth=depth + 1,
             )
-            return (
-                [Forward(id=payload.data.id, content=[*nodes] or None)],
-                [],
-                first_at_self_processed,
+            components = await self._expand_inbound_forwards(
+                [Forward(id=payload.data.id, content=[*nodes] or None)]
             )
+            return (components, [], first_at_self_processed)
 
         if isinstance(payload, CustomNodeSegments):
             nested_components: list[BaseMessageComponent] = []

@@ -66,6 +66,7 @@ class TemplateManager:
 
     CORE_TEMPLATES = [
         "base.html",
+        "astrbot_forward.html",
         "astrbot_help.html",
         "astrbot_powershell.html",
         "astrbot_vitepress.html",

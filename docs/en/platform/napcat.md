@@ -40,7 +40,15 @@ Advanced fields:
 - `reconnect_interval_seconds`: reconnect delay after disconnect
 - `max_frame_size_mb`: maximum accepted frame size
 
-## 3. Confirm the NapCat service
+## 3. Ingress expansion of merged forwards
+
+These settings live in the global `platform_settings` and are shared by `napcat` and `OneBot v11` (`aiocqhttp`). Set them on the `Config` page:
+
+- `platform_settings.onebot_forward.expand_on_ingress`: on by default. When an inbound merged forward carries only a `forward` id and no expanded content, the adapter first calls `get_forward_msg` to fill in the nodes before later stages run. A failed or timed-out fetch keeps the forward unchanged and never blocks the message.
+- `platform_settings.onebot_forward.max_fetch`: maximum number of recursive `get_forward_msg` calls per message during ingress expansion; default 8.
+- `t2i_forward_card`: global system setting, on by default. When a session bridge delivers an expanded merged forward to a target that does **not** support native `forward`, the forward is rendered as one image card. Rendering failures fall back to the labeled text transcript. Targets that support `forward` still receive the merged-forward card.
+
+## 4. Confirm the NapCat service
 
 In NapCat WebUI, make sure the OneBot v11 forward WebSocket service is enabled and matches AstrBot's configuration.
 
@@ -50,7 +58,7 @@ Common examples:
 - Docker Compose: `ws://napcat:3001`
 - same Pod: `ws://localhost:3001`
 
-## 4. Verify
+## 5. Verify
 
 After AstrBot starts, you should see logs like:
 
@@ -62,7 +70,7 @@ After AstrBot starts, you should see logs like:
 
 Then send a QQ message and confirm AstrBot receives and replies to it.
 
-## 5. Common Issues
+## 6. Common Issues
 
 - AstrBot starts but no inbound messages arrive
   - make sure NapCat forward WebSocket is actually enabled

@@ -81,6 +81,8 @@ class PortablePart:
     value: str | MediaReference | Mapping[str, Any]
     alt_text: str = ""
     sender: SenderSnapshot | None = None
+    depth: int = 0
+    """Forward nesting level, used only for rendering nested forward cards."""
 
     def __post_init__(self) -> None:
         if isinstance(self.value, Mapping):
@@ -96,6 +98,8 @@ class NativeContent:
     payload: str
     fallback: str = ""
     sender: SenderSnapshot | None = None
+    depth: int = 0
+    """Forward nesting level, used only for rendering nested forward cards."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -119,7 +119,11 @@ class _ControlledForwardConnection:
         self.socket.exited.set()
 
 
-def _make_adapter(event_queue: asyncio.Queue) -> NapCatPlatformAdapter:
+def _make_adapter(
+    event_queue: asyncio.Queue,
+    *,
+    settings: dict | None = None,
+) -> NapCatPlatformAdapter:
     adapter = NapCatPlatformAdapter(
         {
             "id": "napcat-test",
@@ -129,7 +133,7 @@ def _make_adapter(event_queue: asyncio.Queue) -> NapCatPlatformAdapter:
             "reconnect_interval_seconds": 1,
             "max_frame_size_mb": 8,
         },
-        {},
+        settings or {},
         event_queue,
     )
     return adapter

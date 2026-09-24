@@ -22,7 +22,7 @@ MESSAGE_CAPABILITIES: dict[str, MessageDeliveryCapabilities] = {
         forward=True,
         mention=True,
         native_namespaces=frozenset({"aiocqhttp"}),
-        native_kinds=frozenset({"json", "xml", "face", "node", "nodes", "forward"}),
+        native_kinds=frozenset({"json", "xml", "face", "node", "nodes"}),
     ),
     "napcat": MessageDeliveryCapabilities(
         media=_MEDIA,
@@ -43,7 +43,6 @@ MESSAGE_CAPABILITIES: dict[str, MessageDeliveryCapabilities] = {
                 "mface",
                 "node",
                 "nodes",
-                "forward",
             }
         ),
     ),

@@ -39,6 +39,14 @@ Important fields:
 > [!CAUTION]
 > After binding `0.0.0.0`, restrict source access with a firewall or container/cluster network policy and configure `ws_reverse_token`. Never expose an unauthenticated OneBot WebSocket directly to the public internet.
 
+### Ingress expansion of merged forwards
+
+These settings live in the global `platform_settings` and are shared by `OneBot v11` (`aiocqhttp`) and `NapCat`. Set them on the `Config` page:
+
+- `platform_settings.onebot_forward.expand_on_ingress`: on by default. When an inbound merged forward carries only a `forward` id and no expanded content, the adapter first calls `get_forward_msg` to fill in the nodes. A failed or timed-out fetch keeps the forward unchanged and never blocks the message.
+- `platform_settings.onebot_forward.max_fetch`: maximum number of recursive `get_forward_msg` calls per message during ingress expansion; default 8.
+- `t2i_forward_card`: global system setting, on by default. When a session bridge delivers an expanded merged forward to a target that does **not** support native `forward`, the forward is rendered as one image card. Rendering failures fall back to the labeled text transcript. Targets that support `forward` still receive the merged-forward card.
+
 ## 2. Configure the OneBot Implementation
 
 Create a reverse WebSocket client in the OneBot implementation. Its target path is:

@@ -16,15 +16,15 @@ vi.mock('vue-router', () => ({
   onBeforeRouteLeave: vi.fn(),
 }));
 
-vi.mock('@/components/shared/PersonaQuickPreview.vue', () => ({
-  default: { template: '<div class="persona-preview-stub"></div>' },
+vi.mock('@/components/shared/PromptQuickPreview.vue', () => ({
+  default: { template: '<div class="prompt-preview-stub"></div>' },
 }));
 
-vi.mock('@/components/shared/PersonaSelector.vue', () => ({
+vi.mock('@/components/shared/PromptSelector.vue', () => ({
   default: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
-    template: '<div class="persona-selector-stub"></div>',
+    template: '<div class="prompt-selector-stub"></div>',
   },
 }));
 
@@ -58,7 +58,7 @@ describe('SubAgentPage', () => {
         agents: [
           {
             name: 123,
-            persona_id: null,
+            prompt_id: null,
             public_description: null,
             enabled: undefined,
           },

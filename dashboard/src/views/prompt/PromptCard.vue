@@ -1,6 +1,6 @@
 <template>
   <v-card
-    class="persona-card"
+    class="prompt-card"
     :class="{ dragging: isDragging }"
     rounded="md"
     variant="outlined"
@@ -11,7 +11,7 @@
     @dragend="handleDragEnd"
   >
     <v-card-title class="d-flex justify-space-between align-center">
-      <div class="text-truncate ml-2">{{ persona.persona_id }}</div>
+      <div class="text-truncate ml-2">{{ prompt.prompt_id }}</div>
       <v-menu offset-y>
         <template #activator="{ props: activatorProps }">
           <v-btn
@@ -34,10 +34,10 @@
               <v-icon size="small">mdi-folder-move</v-icon>
             </template>
             <v-list-item-title>{{
-              tm('persona.contextMenu.moveTo')
+              tm('prompt.contextMenu.moveTo')
             }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click.stop="exportPersona">
+          <v-list-item @click.stop="exportPrompt">
             <template #prepend>
               <v-icon size="small">mdi-download</v-icon>
             </template>
@@ -56,12 +56,12 @@
 
     <v-card-text>
       <div class="system-prompt-preview">
-        {{ truncateText(persona.system_prompt, 100) }}
+        {{ truncateText(prompt.system_prompt, 100) }}
       </div>
 
       <div class="mt-3 d-flex flex-wrap ga-1">
         <v-chip
-          v-if="persona.begin_dialogs && persona.begin_dialogs.length > 0"
+          v-if="prompt.begin_dialogs && prompt.begin_dialogs.length > 0"
           size="small"
           color="secondary"
           variant="tonal"
@@ -69,12 +69,12 @@
         >
           {{
             tm('labels.presetDialogs', {
-              count: persona.begin_dialogs.length / 2,
+              count: prompt.begin_dialogs.length / 2,
             })
           }}
         </v-chip>
         <v-chip
-          v-if="persona.tools === null"
+          v-if="prompt.tools === null"
           size="small"
           color="success"
           variant="tonal"
@@ -83,16 +83,16 @@
           {{ tm('form.allToolsAvailable') }}
         </v-chip>
         <v-chip
-          v-else-if="persona.tools && persona.tools.length > 0"
+          v-else-if="prompt.tools && prompt.tools.length > 0"
           size="small"
           color="primary"
           variant="tonal"
           prepend-icon="mdi-tools"
         >
-          {{ persona.tools.length }} {{ tm('persona.toolsCount') }}
+          {{ prompt.tools.length }} {{ tm('prompt.toolsCount') }}
         </v-chip>
         <v-chip
-          v-if="persona.skills === null"
+          v-if="prompt.skills === null"
           size="small"
           color="success"
           variant="tonal"
@@ -101,18 +101,18 @@
           {{ tm('form.allSkillsAvailable') }}
         </v-chip>
         <v-chip
-          v-else-if="persona.skills && persona.skills.length > 0"
+          v-else-if="prompt.skills && prompt.skills.length > 0"
           size="small"
           color="primary"
           variant="tonal"
           prepend-icon="mdi-lightning-bolt"
         >
-          {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
+          {{ prompt.skills.length }} {{ tm('prompt.skillsCount') }}
         </v-chip>
       </div>
 
       <div class="mt-3 text-caption text-medium-emphasis">
-        {{ tm('labels.createdAt') }}: {{ formatDate(persona.created_at) }}
+        {{ tm('labels.createdAt') }}: {{ formatDate(prompt.created_at) }}
       </div>
     </v-card-text>
   </v-card>
@@ -120,7 +120,7 @@
   <!-- Custom Drag Preview -->
   <div ref="dragPreview" class="drag-preview">
     <v-icon size="small" class="mr-2">mdi-account</v-icon>
-    <span class="text-subtitle-2">{{ persona.persona_id }}</span>
+    <span class="text-subtitle-2">{{ prompt.prompt_id }}</span>
   </div>
 </template>
 
@@ -132,8 +132,8 @@ import {
   useConfirmDialog,
 } from '@/utils/confirmDialog';
 
-interface Persona {
-  persona_id: string;
+interface Prompt {
+  prompt_id: string;
   system_prompt: string;
   custom_error_message?: string | null;
   begin_dialogs?: string[] | null;
@@ -145,7 +145,7 @@ interface Persona {
 }
 
 const props = defineProps<{
-  persona: Persona;
+  prompt: Prompt;
 }>();
 
 const emit = defineEmits<{
@@ -156,7 +156,7 @@ const emit = defineEmits<{
   export: [message: string, isError: boolean];
 }>();
 
-const { tm } = useModuleI18n('features/persona');
+const { tm } = useModuleI18n('features/prompt');
 const confirmDialog = useConfirmDialog();
 const dragPreview = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
@@ -170,9 +170,9 @@ function handleDragStart(event: DragEvent) {
   event.dataTransfer.setData(
     'application/json',
     JSON.stringify({
-      type: 'persona',
-      persona_id: props.persona.persona_id,
-      persona: props.persona,
+      type: 'prompt',
+      prompt_id: props.prompt.prompt_id,
+      prompt: props.prompt,
     }),
   );
 
@@ -202,7 +202,7 @@ function formatDate(dateString: string | undefined | null): string {
   return new Date(dateString).toLocaleString();
 }
 
-async function exportPersona() {
+async function exportPrompt() {
   if (
     !(await askForConfirmationDialog(
       tm('messages.exportConfirm'),
@@ -214,9 +214,9 @@ async function exportPersona() {
 
   try {
     const exportData = {
-      persona_id: props.persona.persona_id,
-      system_prompt: props.persona.system_prompt,
-      begin_dialogs: props.persona.begin_dialogs || [],
+      prompt_id: props.prompt.prompt_id,
+      system_prompt: props.prompt.system_prompt,
+      begin_dialogs: props.prompt.begin_dialogs || [],
     };
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(exportData, null, 2)], {
@@ -225,19 +225,19 @@ async function exportPersona() {
     );
     const link = document.createElement('a');
     link.href = url;
-    link.download = `persona_${props.persona.persona_id}.json`;
+    link.download = `prompt_${props.prompt.prompt_id}.json`;
     link.click();
     URL.revokeObjectURL(url);
     emit('export', tm('messages.exportSuccess'), false);
   } catch (error) {
-    console.error('Failed to export persona:', error);
+    console.error('Failed to export prompt:', error);
     emit('export', tm('messages.exportError', { error: String(error) }), true);
   }
 }
 </script>
 
 <style scoped>
-.persona-card {
+.prompt-card {
   background: rgb(var(--v-theme-surface));
   height: 100%;
   cursor: grab;
@@ -247,16 +247,16 @@ async function exportPersona() {
     transform 0.2s ease;
 }
 
-.persona-card:hover,
-.persona-card:focus-within {
+.prompt-card:hover,
+.prompt-card:focus-within {
   background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
-.persona-card:active {
+.prompt-card:active {
   cursor: grabbing;
 }
 
-.persona-card.dragging {
+.prompt-card.dragging {
   opacity: 0.5;
   transform: scale(0.95);
 }

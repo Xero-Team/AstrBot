@@ -666,7 +666,7 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{model} does not support system prompts; removing it automatically. This may affect persona settings.",
+                        f"{model} does not support system prompts; removing it automatically. This may affect prompt settings.",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
@@ -739,7 +739,7 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{model} does not support system prompts; removing it automatically. This may affect persona settings.",
+                        f"{model} does not support system prompts; removing it automatically. This may affect prompt settings.",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:

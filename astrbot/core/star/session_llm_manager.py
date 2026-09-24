@@ -26,7 +26,7 @@ def sender_service_config(existing: object, **fields: bool | None) -> dict[str, 
 
     Returns:
         A mapping that preserves existing bool overlays and applies ``fields``.
-        Extra keys such as persona, TTS, KB, or Provider are dropped.
+        Extra keys such as prompt, TTS, KB, or Provider are dropped.
     """
     config: dict[str, bool] = {}
     if isinstance(existing, dict):

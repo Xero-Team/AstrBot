@@ -24,15 +24,15 @@
 
 在 WebUI 左侧打开 **子代理编排**。
 
-### 1. 准备 Persona
+### 1. 准备 Prompt
 
-当前页面要求每个子 Agent 绑定一个 Persona。子 Agent 会从 Persona 读取：
+当前页面要求每个子 Agent 绑定一个 Prompt。子 Agent 会从 Prompt 读取：
 
 - 系统提示词；
 - 开场对话；
-- 工具列表。Persona 的工具值为“全部工具”时，子 Agent 会获得当前已启用的全部普通工具和适用的 Computer 工具，但不会获得其他 `transfer_to_*` 工具。
+- 工具列表。Prompt 的工具值为“全部工具”时，子 Agent 会获得当前已启用的全部普通工具和适用的 Computer 工具，但不会获得其他 `transfer_to_*` 工具。
 
-Persona 的 Skills 和自定义错误回复目前不会作为独立的子 Agent 配置继承。请把子 Agent 必需的行为规则写入 Persona 的系统提示词，并只授权完成职责所需的工具。
+Prompt 的 Skills 和自定义错误回复目前不会作为独立的子 Agent 配置继承。请把子 Agent 必需的行为规则写入 Prompt 的系统提示词，并只授权完成职责所需的工具。
 
 ### 2. 新增子 Agent
 
@@ -40,8 +40,8 @@ Persona 的 Skills 和自定义错误回复目前不会作为独立的子 Agent 
 
 - **Agent 名称**：必须以小写英文字母开头，只能包含小写字母、数字和下划线，并且全局唯一。例如 `web_search` 会生成 `transfer_to_web_search`。
 - **Chat Provider（可选）**：覆盖该子 Agent 使用的聊天模型。留空时跟随当前会话的模型解析结果。
-- **Persona**：提供提示词、开场对话和工具权限。
-- **对主 LLM 的描述**：直接成为 handoff 工具描述。应说明何时委派、输入需要包含什么、会返回什么，不要复制冗长的 Persona 提示词。
+- **Prompt**：提供提示词、开场对话和工具权限。
+- **对主 LLM 的描述**：直接成为 handoff 工具描述。应说明何时委派、输入需要包含什么、会返回什么，不要复制冗长的 Prompt 提示词。
 
 保存后可以在卡片预览中确认主 Agent 将看到的工具名称和描述。单个子 Agent 也可以独立停用。
 
@@ -52,7 +52,7 @@ Persona 的 Skills 和自定义错误回复目前不会作为独立的子 Agent 
 打开“主 LLM 去重重复工具”后，凡是出现在已启用子 Agent 工具集中的同名工具都会从主 Agent 隐藏。这样能减少主 Agent 的工具 schema，但会让对应能力依赖 handoff。启用前应确认：
 
 - 子 Agent 描述足以让模型稳定路由；
-- Persona 没有意外选择“全部工具”；
+- Prompt 没有意外选择“全部工具”；
 - 关键工具在子 Agent 的模型上可正常调用。
 
 ## 设计建议
@@ -66,6 +66,6 @@ Persona 的 Skills 和自定义错误回复目前不会作为独立的子 Agent 
 ## 当前限制
 
 - 功能仍为实验性，配置和行为可能继续调整。
-- 子 Agent 不保存为独立会话历史；每次 handoff 根据本次输入、Persona 开场对话和工具执行构建上下文。
-- Persona Skills 目前不会隔离并继承到子 Agent。
+- 子 Agent 不保存为独立会话历史；每次 handoff 根据本次输入、Prompt 开场对话和工具执行构建上下文。
+- Prompt Skills 目前不会隔离并继承到子 Agent。
 - 子 Agent 使用配置档中的 `agent_runner.config.misc.max_steps`、流式响应和工具超时等运行设置，没有单独的 step 上限。

@@ -18,7 +18,7 @@ class Conversation:
     history: str = ""
     """字符串格式的对话列表。"""
     title: str | None = ""
-    persona_id: str | None = ""
+    prompt_id: str | None = ""
     created_at: int = 0
     updated_at: int = 0
     token_usage: int = 0

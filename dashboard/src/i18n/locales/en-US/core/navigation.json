@@ -3,7 +3,7 @@
   "platforms": "Platforms",
   "providers": "Providers",
   "commands": "Commands",
-  "persona": "Persona",
+  "prompt": "Prompt",
   "data": "Data and Logs",
   "dataTabs": {
     "statistics": "Statistics",

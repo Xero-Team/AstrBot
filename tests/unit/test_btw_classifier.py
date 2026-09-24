@@ -472,8 +472,8 @@ async def test_capability_resolver_matches_live_catalog_and_keeps_request_inert(
             get_curr_conversation_id=AsyncMock(return_value=None),
             get_conversation=AsyncMock(),
         ),
-        persona_manager=SimpleNamespace(
-            resolve_selected_persona=AsyncMock(return_value=(None, None, None, False))
+        prompt_manager=SimpleNamespace(
+            resolve_selected_prompt=AsyncMock(return_value=(None, None, None, False))
         ),
         skill_manager=SimpleNamespace(
             list_skills=lambda **_: [skill],
@@ -505,7 +505,7 @@ async def test_capability_resolver_matches_live_catalog_and_keeps_request_inert(
     assert not any(
         item["name"].startswith("skill:") for items in hidden.values() for item in items
     )
-    context.persona_manager.resolve_selected_persona.return_value = (
+    context.prompt_manager.resolve_selected_prompt.return_value = (
         "restricted",
         {"tools": [], "skills": []},
         None,

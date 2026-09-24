@@ -1,32 +1,32 @@
 <template>
-  <div class="persona-selector">
+  <div class="prompt-selector">
     <BaseFolderItemSelector
       :model-value="modelValue"
       :folder-tree="folderTree"
-      :items="currentPersonas"
+      :items="currentPrompts"
       :tree-loading="treeLoading"
       :items-loading="itemsLoading"
       :labels="labels"
       :show-create-button="true"
       :show-edit-button="true"
-      :default-item="defaultPersona"
-      item-id-field="persona_id"
-      item-name-field="persona_id"
+      :default-item="defaultPrompt"
+      item-id-field="prompt_id"
+      item-name-field="prompt_id"
       @update:model-value="handleUpdate"
       item-description-field="system_prompt"
       :display-value-formatter="formatDisplayValue"
       @navigate="handleNavigate"
-      @create="openCreatePersona"
-      @edit="openEditPersona"
+      @create="openCreatePrompt"
+      @edit="openEditPrompt"
     />
 
-    <!-- 创建/编辑人格对话框 -->
-    <PersonaForm
-      v-model="showPersonaDialog"
-      :editing-persona="editingPersona ?? undefined"
+    <!-- 创建/编辑提示词对话框 -->
+    <PromptForm
+      v-model="showPromptDialog"
+      :editing-prompt="editingPrompt ?? undefined"
       :current-folder-id="currentFolderId ?? undefined"
       :current-folder-name="currentFolderName ?? undefined"
-      @saved="handlePersonaSaved"
+      @saved="handlePromptSaved"
       @error="handleError"
     />
   </div>
@@ -34,27 +34,26 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { personaApi } from '@/api/v1';
+import { promptApi } from '@/api/v1';
 import BaseFolderItemSelector from '@/components/folder/BaseFolderItemSelector.vue';
-import PersonaForm from './PersonaForm.vue';
+import PromptForm from './PromptForm.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { FolderTreeNode, SelectableItem } from '@/components/folder/types';
 
-interface PersonaApiRecord {
-  persona_id: string;
+interface PromptApiRecord {
+  prompt_id: string;
   system_prompt: string;
   custom_error_message?: string | null;
   folder_id?: string | null;
 }
 
-type PersonaSelectableItem = SelectableItem & PersonaApiRecord;
+type PromptSelectableItem = SelectableItem & PromptApiRecord;
 
-function isPersonaSelectableItem(
+function isPromptSelectableItem(
   item: SelectableItem,
-): item is PersonaSelectableItem {
+): item is PromptSelectableItem {
   return (
-    typeof item.persona_id === 'string' &&
-    typeof item.system_prompt === 'string'
+    typeof item.prompt_id === 'string' && typeof item.system_prompt === 'string'
   );
 }
 
@@ -75,18 +74,18 @@ const { tm } = useModuleI18n('core.shared');
 
 // 状态
 const folderTree = ref<FolderTreeNode[]>([]);
-const currentPersonas = ref<PersonaSelectableItem[]>([]);
+const currentPrompts = ref<PromptSelectableItem[]>([]);
 const treeLoading = ref(false);
 const itemsLoading = ref(false);
-const showPersonaDialog = ref(false);
-const editingPersona = ref<PersonaSelectableItem | null>(null);
+const showPromptDialog = ref(false);
+const editingPrompt = ref<PromptSelectableItem | null>(null);
 const currentFolderId = ref<string | null>(null);
 
-// 默认人格
-const defaultPersona: SelectableItem = {
+// 默认提示词
+const defaultPrompt: SelectableItem = {
   id: 'default',
-  persona_id: 'default',
-  name: tm('personaSelector.defaultPersona'),
+  prompt_id: 'default',
+  name: tm('promptSelector.defaultPrompt'),
   system_prompt: 'You are a helpful and friendly assistant.',
 };
 
@@ -110,31 +109,31 @@ function findFolderName(
 // 当前文件夹名称
 const currentFolderName = computed(() => {
   if (!currentFolderId.value) {
-    return null; // 根目录，PersonaForm 会使用 tm('form.rootFolder')
+    return null; // 根目录，PromptForm 会使用 tm('form.rootFolder')
   }
   return findFolderName(folderTree.value, currentFolderId.value);
 });
 
 // 标签配置
 const labels = computed(() => ({
-  dialogTitle: tm('personaSelector.dialogTitle'),
-  notSelected: tm('personaSelector.notSelected'),
-  buttonText: props.buttonText || tm('personaSelector.buttonText'),
-  noItems: tm('personaSelector.noPersonas'),
-  defaultItem: tm('personaSelector.defaultPersona'),
-  noDescription: tm('personaSelector.noDescription'),
-  createButton: tm('personaSelector.createPersona'),
-  editButton: tm('personaSelector.editPersona') || 'Edit',
+  dialogTitle: tm('promptSelector.dialogTitle'),
+  notSelected: tm('promptSelector.notSelected'),
+  buttonText: props.buttonText || tm('promptSelector.buttonText'),
+  noItems: tm('promptSelector.noPrompts'),
+  defaultItem: tm('promptSelector.defaultPrompt'),
+  noDescription: tm('promptSelector.noDescription'),
+  createButton: tm('promptSelector.createPrompt'),
+  editButton: tm('promptSelector.editPrompt') || 'Edit',
   confirmButton: t('core.common.confirm'),
   cancelButton: t('core.common.cancel'),
-  rootFolder: tm('personaSelector.rootFolder') || '全部人格',
-  emptyFolder: tm('personaSelector.emptyFolder') || '此文件夹为空',
+  rootFolder: tm('promptSelector.rootFolder') || '全部提示词',
+  emptyFolder: tm('promptSelector.emptyFolder') || '此文件夹为空',
 }));
 
 // 格式化显示值
 function formatDisplayValue(value: string): string {
   if (value === 'default') {
-    return tm('personaSelector.defaultPersona');
+    return tm('promptSelector.defaultPrompt');
   }
   return value;
 }
@@ -148,7 +147,7 @@ function handleUpdate(value: string) {
 async function loadFolderTree() {
   treeLoading.value = true;
   try {
-    const response = await personaApi.tree();
+    const response = await promptApi.tree();
     if (response.data.status === 'ok') {
       folderTree.value = response.data.data || [];
     }
@@ -160,25 +159,25 @@ async function loadFolderTree() {
   }
 }
 
-// 加载指定文件夹的人格
-async function loadPersonasInFolder(folderId: string | null) {
+// 加载指定文件夹的提示词
+async function loadPromptsInFolder(folderId: string | null) {
   itemsLoading.value = true;
   try {
-    const response = await personaApi.list(folderId);
+    const response = await promptApi.list(folderId);
     if (response.data.status === 'ok') {
-      const personas = Array.isArray(response.data.data)
-        ? (response.data.data as PersonaApiRecord[])
+      const prompts = Array.isArray(response.data.data)
+        ? (response.data.data as PromptApiRecord[])
         : [];
-      currentPersonas.value = personas.map((persona) => ({
-        ...persona,
-        id: persona.persona_id,
-        name: persona.persona_id,
-        description: persona.system_prompt,
+      currentPrompts.value = prompts.map((prompt) => ({
+        ...prompt,
+        id: prompt.prompt_id,
+        name: prompt.prompt_id,
+        description: prompt.system_prompt,
       }));
     }
   } catch (error) {
-    console.error('加载人格列表失败:', error);
-    currentPersonas.value = [];
+    console.error('加载提示词列表失败:', error);
+    currentPrompts.value = [];
   } finally {
     itemsLoading.value = false;
   }
@@ -187,43 +186,43 @@ async function loadPersonasInFolder(folderId: string | null) {
 // 处理文件夹导航
 async function handleNavigate(folderId: string | null) {
   currentFolderId.value = folderId;
-  await loadPersonasInFolder(folderId);
+  await loadPromptsInFolder(folderId);
 }
 
-// 打开创建人格对话框
-function openCreatePersona() {
-  editingPersona.value = null;
-  showPersonaDialog.value = true;
+// 打开创建提示词对话框
+function openCreatePrompt() {
+  editingPrompt.value = null;
+  showPromptDialog.value = true;
 }
 
-// 打开编辑人格对话框
-function openEditPersona(item: SelectableItem) {
-  if (!isPersonaSelectableItem(item)) {
+// 打开编辑提示词对话框
+function openEditPrompt(item: SelectableItem) {
+  if (!isPromptSelectableItem(item)) {
     return;
   }
 
-  editingPersona.value = item;
-  showPersonaDialog.value = true;
+  editingPrompt.value = item;
+  showPromptDialog.value = true;
 }
 
-// 人格保存成功（创建或编辑）
-async function handlePersonaSaved(message: string) {
-  console.log('人格保存成功:', message);
-  const savedPersonaId = editingPersona.value?.persona_id || '';
-  showPersonaDialog.value = false;
-  editingPersona.value = null;
-  // 刷新当前文件夹的人格列表
-  await loadPersonasInFolder(currentFolderId.value);
+// 提示词保存成功（创建或编辑）
+async function handlePromptSaved(message: string) {
+  console.log('提示词保存成功:', message);
+  const savedPromptId = editingPrompt.value?.prompt_id || '';
+  showPromptDialog.value = false;
+  editingPrompt.value = null;
+  // 刷新当前文件夹的提示词列表
+  await loadPromptsInFolder(currentFolderId.value);
   window.dispatchEvent(
-    new CustomEvent('astrbot:persona-saved', {
-      detail: { persona_id: savedPersonaId },
+    new CustomEvent('astrbot:prompt-saved', {
+      detail: { prompt_id: savedPromptId },
     }),
   );
 }
 
 // 错误处理
 function handleError(error: string) {
-  console.error('创建人格失败:', error);
+  console.error('创建提示词失败:', error);
 }
 
 // 初始化加载文件夹树

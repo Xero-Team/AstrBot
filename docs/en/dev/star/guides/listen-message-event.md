@@ -160,7 +160,7 @@ Orbit defines the argument language after a registered command header. The wake 
 
 Plugin commands should follow these conventions:
 
-- Use a singular English noun for the root command, such as `project` or `persona`. For Telegram native-menu compatibility, prefer at most 32 ASCII lowercase letters, digits, and underscores, starting with a letter.
+- Use a singular English noun for the root command, such as `project` or `prompt`. For Telegram native-menu compatibility, prefer at most 32 ASCII lowercase letters, digits, and underscores, starting with a letter.
 - Use nouns for groups and complete, explicit lowercase verbs for subcommands, such as `list`, `show`, `create`, `delete`, `set`, `unset`, `enable`, and `disable`. Use hyphens in compound subcommands, such as `create-for`.
 - Give queries, state transitions, and mutations explicit subcommands. State changes should use idempotent `enable`/`disable` or `set`/`unset` operations rather than one entry that implicitly toggles based on current state.
 - Write long options as `--kebab-case`; a frequently used option may also have one single-letter short name. Use flags for Boolean behavior, `Enum` or `Literal` for closed choices, and `T | None` with a `None` default for an omissible value.

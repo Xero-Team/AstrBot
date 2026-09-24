@@ -438,7 +438,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             provider_settings.get("sandbox", {}).get("booter"),
         )
 
-        # Keep persona semantics aligned with the main agent: tools=None means
+        # Keep prompt semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.
         if tools is None:
             toolset = ToolSet()

@@ -26,12 +26,12 @@ if TYPE_CHECKING:
         MemoryProfile,
         MemoryScopePolicyRecord,
         MemoryTuningTask,
-        Persona,
-        PersonaFolder,
         PlatformMessageHistory,
         PlatformSession,
         PlatformStat,
         Preference,
+        Prompt,
+        PromptFolder,
         ProviderStat,
         SessionBridgeDelivery,
         SessionBridgeRule,
@@ -336,7 +336,7 @@ class ConversationStore(Protocol):
         platform_id: str,
         content: list[dict] | None = None,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         cid: str | None = None,
         created_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
@@ -346,7 +346,7 @@ class ConversationStore(Protocol):
         self,
         cid: str,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         content: list[dict] | None = None,
         token_usage: int | None = None,
     ) -> ConversationV2 | None: ...
@@ -536,12 +536,12 @@ class ApiKeyStore(Protocol):
 
 
 @runtime_checkable
-class PersonaStore(Protocol):
-    """Operations for personas and their folders."""
+class PromptStore(Protocol):
+    """Operations for prompts and their folders."""
 
-    async def insert_persona(
+    async def insert_prompt(
         self,
-        persona_id: str,
+        prompt_id: str,
         system_prompt: str,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
@@ -549,65 +549,75 @@ class PersonaStore(Protocol):
         custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
-    ) -> Persona: ...
+    ) -> Prompt:
+        raise NotImplementedError
 
-    async def get_persona_by_id(self, persona_id: str) -> Persona | None: ...
+    async def get_prompt_by_id(self, prompt_id: str) -> Prompt | None:
+        raise NotImplementedError
 
-    async def get_personas(self) -> list[Persona]: ...
+    async def get_prompts(self) -> list[Prompt]:
+        raise NotImplementedError
 
-    async def update_persona(
+    async def update_prompt(
         self,
-        persona_id: str,
+        prompt_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None | object = ...,
         skills: list[str] | None | object = ...,
         custom_error_message: str | None | object = ...,
-    ) -> Persona | None: ...
+    ) -> Prompt | None:
+        raise NotImplementedError
 
-    async def delete_persona(self, persona_id: str) -> None: ...
+    async def delete_prompt(self, prompt_id: str) -> None:
+        raise NotImplementedError
 
-    async def insert_persona_folder(
+    async def insert_prompt_folder(
         self,
         name: str,
         parent_id: str | None = None,
         description: str | None = None,
         sort_order: int = 0,
-    ) -> PersonaFolder: ...
+    ) -> PromptFolder:
+        raise NotImplementedError
 
-    async def get_persona_folder_by_id(
-        self, folder_id: str
-    ) -> PersonaFolder | None: ...
+    async def get_prompt_folder_by_id(self, folder_id: str) -> PromptFolder | None:
+        raise NotImplementedError
 
-    async def get_persona_folders(
+    async def get_prompt_folders(
         self, parent_id: str | None = None
-    ) -> list[PersonaFolder]: ...
+    ) -> list[PromptFolder]:
+        raise NotImplementedError
 
-    async def get_all_persona_folders(self) -> list[PersonaFolder]: ...
+    async def get_all_prompt_folders(self) -> list[PromptFolder]:
+        raise NotImplementedError
 
-    async def update_persona_folder(
+    async def update_prompt_folder(
         self,
         folder_id: str,
         name: str | None = None,
         parent_id: T.Any = ...,
         description: T.Any = ...,
         sort_order: int | None = None,
-    ) -> PersonaFolder | None: ...
+    ) -> PromptFolder | None:
+        raise NotImplementedError
 
-    async def delete_persona_folder(self, folder_id: str) -> None: ...
+    async def delete_prompt_folder(self, folder_id: str) -> None:
+        raise NotImplementedError
 
-    async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None
-    ) -> Persona | None: ...
+    async def move_prompt_to_folder(
+        self, prompt_id: str, folder_id: str | None
+    ) -> Prompt | None:
+        raise NotImplementedError
 
-    async def get_personas_by_folder(
-        self, folder_id: str | None = None
-    ) -> list[Persona]: ...
+    async def get_prompts_by_folder(self, folder_id: str | None = None) -> list[Prompt]:
+        raise NotImplementedError
 
     async def batch_update_sort_order(
         self,
         items: list[dict],
-    ) -> None: ...
+    ) -> None:
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -978,9 +988,9 @@ __all__ = [
     "KnowledgeBaseTaskStore",
     "MemoryStore",
     "MessageHistoryStore",
-    "PersonaStore",
     "PlatformSessionStore",
     "PreferenceStore",
+    "PromptStore",
     "SessionBridgeStore",
     "StatisticsStore",
     "UmoAliasStore",

@@ -870,7 +870,7 @@ async def plugin_manager_pm(tmp_path, monkeypatch):
             self.preferences = MagicMock()
             self.astrbot_config_mgr = MagicMock()
             self.conversation_manager = MagicMock()
-            self.persona_manager = MagicMock()
+            self.prompt_manager = MagicMock()
             self.cron_manager = MagicMock()
             self.kb_manager = MagicMock()
             self.html_renderer = MagicMock()

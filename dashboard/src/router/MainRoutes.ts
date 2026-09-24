@@ -105,9 +105,9 @@ const MainRoutes = {
       component: () => import('@/views/AuthorizationPage.vue'),
     },
     {
-      name: 'Persona',
-      path: '/persona',
-      component: () => import('@/views/PersonaPage.vue'),
+      name: 'Prompt',
+      path: '/prompt',
+      component: () => import('@/views/PromptPage.vue'),
     },
     {
       name: 'SubAgent',

@@ -100,7 +100,7 @@ This is a partial illustration and must not replace the complete file. Because W
 
 ## `agent_runner`
 
-This is the profile AI execution object: `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`. Chat model, Persona, compression, and step caps live here. Do not put them back under `provider_settings`.
+This is the profile AI execution object: `{ "runner_type": "local"|"dify"|"coze"|"dashscope"|"deerflow", "config": {...} }`. Chat model, Prompt, compression, and step caps live here. Do not put them back under `provider_settings`.
 
 ### Model selection and retries
 
@@ -108,13 +108,12 @@ This is the profile AI execution object: `{ "runner_type": "local"|"dify"|"coze"
 - `agent_runner.config.model.fallback_provider_ids` lists chat-model IDs tried in order after the primary model fails.
 - `agent_runner.config.model.request_max_retries` is the per-model maximum retry count and defaults to `5`. Fallback and retries are separate layers.
 
-### Persona
+### Prompt
 
-- Local runner: `agent_runner.config.persona.persona_id`.
-- Third-party runners: `agent_runner.config.persona_id`.
-- Safety mode: `agent_runner.config.persona.safety_mode`.
+- Local and third-party runners: `agent_runner.config.prompt_id`.
+- Safety mode: `agent_runner.config.safety_mode`.
 
-See [Personas](../use/persona) for selection priority and permission semantics.
+See [Prompts](../use/prompt) for selection priority and permission semantics.
 
 ### Context compression
 
@@ -154,15 +153,15 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 
 API keys are sensitive configuration. Never commit a real `cmd_config.json`, screenshots, logs, or backups. Logs and Trace data can also contain Provider IDs, request errors, and tool output.
 
-### Persona, prompts, and sessions
+### Prompt, prompts, and sessions
 
-- `persona_pool` limits selectable Personas; `["*"]` means all.
-- `prompt_prefix` is the user-prompt template. Placeholders use logic-free `{{name}}` syntax, not Jinja2. The only allowed key is `prompt`. If the template contains `{{prompt}}`, that slot is replaced with the user input; if it does not, the prefix is prepended. Persona `system_prompt` and workspace `EXTRA_PROMPT.md` are not templates.
+- `prompt_pool` limits selectable Prompts; `["*"]` means all.
+- `prompt_prefix` is the user-prompt template. Placeholders use logic-free `{{name}}` syntax, not Jinja2. The only allowed key is `prompt`. If the template contains `{{prompt}}`, that slot is replaced with the user input; if it does not, the prefix is prepended. Prompt `system_prompt` and workspace `EXTRA_PROMPT.md` are not templates.
 - Built-in LLM templates use the same `{{name}}` syntax. Cron wake allows `cron_job`; background-task wake allows `background_task_result`; tool-loop notices allow `follow_up_lines`, `tool_names`, `tool_name`, `streak`, `overflow_path`, and `read_tool_hint`. Unknown `{{name}}` tokens stay literal, and substitution values are not scanned again.
 - `identifier` and `group_name_display` append a persistent user `<system_reminder>` with user identity or group name after this turn's last user message.
 - `datetime_system_prompt` appends a temporary current-time `<system_reminder>` after this turn's last user message. It is not saved to conversation history and is not written into the system prompt.
 
-The default Persona ID is configured on `agent_runner`. See [Personas](../use/persona) for selection priority.
+The default Prompt ID is configured on `agent_runner`. See [Prompts](../use/prompt) for selection priority.
 
 ### Tool display
 
@@ -184,7 +183,7 @@ The old `provider_settings.streaming_segmented` field has been removed. Do not a
 - `computer_use_require_admin` is no longer a runtime authorization switch. Computer capabilities use the unified `tool.computer_use`, `tool.local_exec`, `tool.file_read`, and `tool.file_write` actions. WebChat still requires step-up for instance tools; IM skips step-up when the sender is bound as `instance_operator` on that config.
 - `sandbox.booter` selects `shipyard_neo` or `cua`; related fields store endpoint, token, profile, TTL, or CUA OS, telemetry, and local/cloud settings.
 
-Local mode operates directly on the AstrBot host and belongs only in a trusted environment. A sandbox is not an authorization boundary by itself; continue to restrict administrators, Persona tools, and external network access.
+Local mode operates directly on the AstrBot host and belongs only in a trusted environment. A sandbox is not an authorization boundary by itself; continue to restrict administrators, Prompt tools, and external network access.
 
 ### Search and images
 
@@ -243,7 +242,7 @@ messages over 8,000 characters retain their existing paths.
 
 The `choice` question offers `conversation`, `work`, `clarify`, and `unavailable`.
 Input capabilities come from each loop's existing tool catalog and frozen Skill
-snapshot, including Persona, plugin/MCP/Skill assignments, runtime and surface
+snapshot, including Prompt, plugin/MCP/Skill assignments, runtime and surface
 restrictions. There is no second capability registry. A high-confidence `work`
 decision requires a work-only capability and uses existing WorkLoop submission,
 request identity, delivery and execution authorization. It grants no permissions
@@ -268,7 +267,7 @@ produce a duplicate handoff.
 
 Only **current message text and resolved capability names/short summaries** are
 sent to JEV and, when needed, the fallback. `state` excludes conversation history,
-Persona prompts, raw tool schemas, Skill bodies, credential configuration,
+Prompt system text, raw tool schemas, Skill bodies, credential configuration,
 local-path metadata and unrelated profile data. Text is redacted before truncation
 to remove recognized credentials, tokens, URLs and absolute/relative paths. Do not
 put secrets in free text: redaction cannot recognize every arbitrary secret.
@@ -310,7 +309,7 @@ does not adopt R4 or complete the parent comparison.
 
 When BTW is enabled in a configuration profile, **More Features → BTW Dual Loop → Plugin tool loop assignments** assigns each enabled non-system plugin's LLM tools to conversation, work, or both loops. An unassigned plugin defaults to work. Selecting both saves an explicit override; selecting work again removes it. Disabling BTW preserves normal tool availability.
 
-The main Agent and its subagent handoffs apply the same assignment, together with existing Persona, profile, and authorization restrictions. An assignment never grants permission to execute a tool. Plugin event handlers and explicit commands keep their existing execution path; this setting does not turn an entire plugin into a background task.
+The main Agent and its subagent handoffs apply the same assignment, together with existing Prompt, profile, and authorization restrictions. An assignment never grants permission to execute a tool. Plugin event handlers and explicit commands keep their existing execution path; this setting does not turn an entire plugin into a background task.
 
 ## BTW MCP tool assignments
 
@@ -322,7 +321,7 @@ Assignments are saved per configuration profile. They control tool visibility an
 
 With BTW enabled, **Skill loop assignments** chooses conversation, work, or both for each enabled ordinary Skill. Ordinary Skills default to both loops; choosing one loop saves an override, and choosing both removes it. Workspace Skills are available only to the work loop with the `local` runtime. Disabling BTW preserves the standard Skill selection path.
 
-Loop assignments narrow the enabled Skills before the request's Skill snapshot is frozen. The prompt, `read_skill`, and Skill-declared tool candidates therefore use the same selection. Persona and plugin restrictions still apply, including an empty Persona Skill list. A loop assignment never grants execution permission: `read_skill` can read permitted Skill manuals when Computer Use is `none`, while Shell and Python remain unavailable.
+Loop assignments narrow the enabled Skills before the request's Skill snapshot is frozen. The prompt, `read_skill`, and Skill-declared tool candidates therefore use the same selection. Prompt and plugin restrictions still apply, including an empty Prompt Skill list. A loop assignment never grants execution permission: `read_skill` can read permitted Skill manuals when Computer Use is `none`, while Shell and Python remain unavailable.
 
 ## SubAgents, speech, and knowledge base
 
@@ -434,4 +433,4 @@ Publishing container port `6185` does not override loopback binding. Set the hos
 3. Never expose credentials, TOTP secrets, JWT secrets, or access tokens in issues, logs, or diffs.
 4. After restart, inspect logs for removed fields, Provider load failures, or adapter reload failures.
 5. Retest network boundaries after changing binding, proxy headers, TLS, Computer Use, MCP, or callback URLs.
-6. Validate the default Provider, Persona, plugin pool, and message-session bindings for every profile; the default profile does not automatically represent all profiles.
+6. Validate the default Provider, Prompt, plugin pool, and message-session bindings for every profile; the default profile does not automatically represent all profiles.

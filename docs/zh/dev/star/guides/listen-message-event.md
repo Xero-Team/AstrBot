@@ -162,7 +162,7 @@ Orbit 只定义已注册指令头之后的参数语言；唤醒前缀、根指�
 
 插件指令应遵循以下设计约定：
 
-- 根指令使用表示领域或资源的单数英文名，例如 `project`、`persona`。为兼容 Telegram 原生菜单，推荐使用不超过 32 个字符的 ASCII 小写字母、数字和下划线，并以字母开头。
+- 根指令使用表示领域或资源的单数英文名，例如 `project`、`prompt`。为兼容 Telegram 原生菜单，推荐使用不超过 32 个字符的 ASCII 小写字母、数字和下划线，并以字母开头。
 - 指令组使用名词，子指令使用完整、明确且小写的动词，例如 `list`、`show`、`create`、`delete`、`set`、`unset`、`enable` 和 `disable`。复合子指令使用连字符，例如 `create-for`。
 - 查询、状态切换和修改操作分别使用显式子指令。状态修改应采用幂等的 `enable`/`disable` 或 `set`/`unset`，不要让同一入口根据当前状态隐式 toggle。
 - 长 option 使用 `--kebab-case`；常用 option 可以额外提供一个单字母短名。布尔行为使用 flag，有限选项使用 `Enum` 或 `Literal`，可省略值使用 `T | None` 和默认值 `None`。

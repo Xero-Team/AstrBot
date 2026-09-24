@@ -364,7 +364,7 @@ class FakeConversation:
     platform_id: str = "webchat-main"
     message_type: str = "FriendMessage"
     title: str = "Demo conversation"
-    persona_id: str | None = "persona/foo"
+    prompt_id: str | None = "prompt/foo"
     history: str = "[]"
     created_at: str = "2026-01-01T00:00:00"
     updated_at: str = "2026-01-01T00:00:00"
@@ -467,14 +467,14 @@ class FakeConversationManager:
         unified_msg_origin: str,
         conversation_id: str,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         history=None,
     ) -> None:
         conversation = self.conversations[(unified_msg_origin, conversation_id)]
         if title is not None:
             conversation.title = title
-        if persona_id is not None:
-            conversation.persona_id = persona_id
+        if prompt_id is not None:
+            conversation.prompt_id = prompt_id
         if history is not None:
             conversation.history = history
 
@@ -530,21 +530,21 @@ class FakePlatform:
         )
 
 
-class FakePersonaManager:
+class FakePromptManager:
     def __init__(self) -> None:
-        self.personas: dict[str, SimpleNamespace] = {
-            "persona/foo": self._persona(
-                persona_id="persona/foo",
-                system_prompt="Demo persona",
+        self.prompts: dict[str, SimpleNamespace] = {
+            "prompt/foo": self._prompt(
+                prompt_id="prompt/foo",
+                system_prompt="Demo prompt",
             )
         }
         self.folders: dict[str, SimpleNamespace] = {}
         self.sort_items: list[dict] = []
 
     @staticmethod
-    def _persona(
+    def _prompt(
         *,
-        persona_id: str,
+        prompt_id: str,
         system_prompt: str,
         begin_dialogs: list | None = None,
         tools: list[str] | None = None,
@@ -554,7 +554,7 @@ class FakePersonaManager:
         sort_order: int = 0,
     ) -> SimpleNamespace:
         return SimpleNamespace(
-            persona_id=persona_id,
+            prompt_id=prompt_id,
             system_prompt=system_prompt,
             begin_dialogs=begin_dialogs,
             tools=tools,
@@ -585,42 +585,40 @@ class FakePersonaManager:
             updated_at=None,
         )
 
-    async def get_all_personas(self) -> list[SimpleNamespace]:
-        return list(self.personas.values())
+    async def get_all_prompts(self) -> list[SimpleNamespace]:
+        return list(self.prompts.values())
 
-    async def get_personas_by_folder(
+    async def get_prompts_by_folder(
         self,
         folder_id: str | None,
     ) -> list[SimpleNamespace]:
         return [
-            persona
-            for persona in self.personas.values()
-            if persona.folder_id == folder_id
+            prompt for prompt in self.prompts.values() if prompt.folder_id == folder_id
         ]
 
-    async def get_persona(self, persona_id: str):
-        return self.personas.get(persona_id)
+    async def get_prompt(self, prompt_id: str):
+        return self.prompts.get(prompt_id)
 
-    async def create_persona(self, **kwargs):
-        persona = self._persona(**kwargs)
-        self.personas[persona.persona_id] = persona
-        return persona
+    async def create_prompt(self, **kwargs):
+        prompt = self._prompt(**kwargs)
+        self.prompts[prompt.prompt_id] = prompt
+        return prompt
 
-    async def update_persona(self, persona_id: str, **kwargs) -> None:
-        persona = self.personas[persona_id]
+    async def update_prompt(self, prompt_id: str, **kwargs) -> None:
+        prompt = self.prompts[prompt_id]
         for key, value in kwargs.items():
             if key in ("tools", "skills", "custom_error_message") or value is not None:
-                setattr(persona, key, value)
+                setattr(prompt, key, value)
 
-    async def delete_persona(self, persona_id: str) -> None:
-        self.personas.pop(persona_id, None)
+    async def delete_prompt(self, prompt_id: str) -> None:
+        self.prompts.pop(prompt_id, None)
 
-    async def move_persona_to_folder(
+    async def move_prompt_to_folder(
         self,
-        persona_id: str,
+        prompt_id: str,
         folder_id: str | None,
     ) -> None:
-        self.personas[persona_id].folder_id = folder_id
+        self.prompts[prompt_id].folder_id = folder_id
 
     async def get_folders(self, parent_id: str | None) -> list[SimpleNamespace]:
         return [
@@ -919,7 +917,7 @@ def fake_core_lifecycle(fake_db: FakeDb):
             },
         ),
         provider_manager=provider_manager,
-        persona_mgr=FakePersonaManager(),
+        prompt_mgr=FakePromptManager(),
         conversation_manager=FakeConversationManager(),
         platform_message_history_manager=SimpleNamespace(),
         plugin_manager=SimpleNamespace(

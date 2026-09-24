@@ -194,7 +194,7 @@ return DashboardFile(
 
 所有 Action 都可以声明：
 
-- `required_scope`：默认 `plugin`，只能使用 `bot`、`provider`、`persona`、`im`、
+- `required_scope`：默认 `plugin`，只能使用 `bot`、`provider`、`prompt`、`im`、
   `config`、`chat`、`kb`、`memory`、`data`、`file`、`plugin`、`mcp`、`skill`。
 - `timeout_seconds`：5–120 秒，默认 30 秒。
 - `description`：最多 200 个字符。

@@ -34,7 +34,7 @@ const api = vi.hoisted(() => {
       listProjectSessions: fn(),
     },
     configRouteApi: { upsert: fn(), list: fn() },
-    personaApi: {
+    promptApi: {
       tree: fn(),
       folders: fn(),
       list: fn(),
@@ -112,7 +112,7 @@ import {
 } from '@/components/folder/useFolderManager';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
 
 function sseResponse(chunks: string[], status = 200) {
@@ -285,17 +285,17 @@ describe('coverage closeout', () => {
     localStorage.removeItem('token');
   });
 
-  it('covers persona breadcrumb, expansion, and nested tree lookup', async () => {
-    const persona = usePersonaStore();
-    expect(persona.currentFolderName).toBe('根目录');
-    persona.setFolderExpansion('a', true);
-    persona.setFolderExpansion('a', true);
-    persona.setFolderExpansion('a', false);
-    persona.setFolderExpansion('a', false);
-    persona.toggleFolderExpansion('a');
-    persona.toggleFolderExpansion('a');
-    expect(persona.expandedFolderIds).toEqual([]);
-    persona.breadcrumbPath = [
+  it('covers prompt breadcrumb, expansion, and nested tree lookup', async () => {
+    const prompt = usePromptStore();
+    expect(prompt.currentFolderName).toBe('根目录');
+    prompt.setFolderExpansion('a', true);
+    prompt.setFolderExpansion('a', true);
+    prompt.setFolderExpansion('a', false);
+    prompt.setFolderExpansion('a', false);
+    prompt.toggleFolderExpansion('a');
+    prompt.toggleFolderExpansion('a');
+    expect(prompt.expandedFolderIds).toEqual([]);
+    prompt.breadcrumbPath = [
       {
         folder_id: 'x',
         name: '',
@@ -305,8 +305,8 @@ describe('coverage closeout', () => {
         children: [],
       },
     ];
-    expect(persona.currentFolderName).toBe('根目录');
-    persona.folderTree = [
+    expect(prompt.currentFolderName).toBe('根目录');
+    prompt.folderTree = [
       {
         folder_id: 'root',
         name: 'Root',
@@ -325,17 +325,17 @@ describe('coverage closeout', () => {
         ],
       },
     ];
-    expect(persona.findFolderInTree('child')?.name).toBe('Child');
-    expect(persona.findFolderInTree('missing')).toBeNull();
-    api.personaApi.folders.mockResolvedValue({
+    expect(prompt.findFolderInTree('child')?.name).toBe('Child');
+    expect(prompt.findFolderInTree('missing')).toBeNull();
+    api.promptApi.folders.mockResolvedValue({
       data: { status: 'error', data: null },
     });
-    api.personaApi.list.mockResolvedValue({
+    api.promptApi.list.mockResolvedValue({
       data: { status: 'error', data: null },
     });
-    await persona.navigateToFolder(null);
-    expect(persona.currentFolders).toEqual([]);
-    expect(persona.breadcrumbPath).toEqual([]);
+    await prompt.navigateToFolder(null);
+    expect(prompt.currentFolders).toEqual([]);
+    expect(prompt.breadcrumbPath).toEqual([]);
   });
 
   it('covers provider dialog schema, duplicate models, and add-without-source', async () => {

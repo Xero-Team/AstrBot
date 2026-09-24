@@ -219,7 +219,7 @@
                       :value="getItemId(item)"
                       :active="selectedItemId === getItemId(item)"
                       rounded="md"
-                      class="mb-1 persona-item"
+                      class="mb-1 prompt-item"
                       :class="{
                         'selected-item': selectedItemId === getItemId(item),
                       }"
@@ -697,16 +697,16 @@ function handleEditItem(item: SelectableItem) {
   background-color: rgba(var(--v-theme-primary), 0.06);
 }
 
-.persona-item {
+.prompt-item {
   transition: all 0.15s ease;
   border: 1px solid transparent;
 }
 
-.persona-item:hover {
+.prompt-item:hover {
   background-color: rgba(var(--v-theme-primary), 0.04);
 }
 
-.persona-item.selected-item {
+.prompt-item.selected-item {
   background-color: rgba(var(--v-theme-primary), 0.08);
   border-color: rgba(var(--v-theme-primary), 0.3);
 }

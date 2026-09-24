@@ -56,7 +56,7 @@ def _inputs(*, loop_mode: str, read_only: bool = False) -> ToolCatalogInputs:
     tools = _registered_tools()
     return ToolCatalogInputs(
         snapshot=SkillSnapshot(skills=(), runtime="none"),
-        persona_tools=None,
+        prompt_tools=None,
         surface="im",
         computer_use_runtime="local",
         plugin_names=None,

@@ -9,7 +9,7 @@ export * from './files';
 export * from './knowledge';
 export * from './lifecycle';
 export * from './memory';
-export * from './personas';
+export * from './prompts';
 export * from './platforms';
 export * from './plugins';
 export * from './providers';

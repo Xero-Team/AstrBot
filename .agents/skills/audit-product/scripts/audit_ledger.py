@@ -35,7 +35,7 @@ MODULE_IDS = (
     "builtin-stars",
     "knowledge-base",
     "memory",
-    "persona",
+    "prompt",
     "conversation",
     "cron",
     "skills",

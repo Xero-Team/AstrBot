@@ -687,11 +687,11 @@ async def test_run_agent_max_step_disables_tools_and_injects_summary_prompt():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_streaming_uses_persona_custom_error_message(monkeypatch):
+async def test_run_agent_streaming_uses_prompt_custom_error_message(monkeypatch):
     monkeypatch.setattr(
         util,
         "get_agent_error_message",
-        lambda event: "persona error",
+        lambda event: "prompt error",
     )
     event = FakeEvent()
     runner = FakeRunner(RuntimeError("boom"), event=event, streaming=True)
@@ -699,19 +699,19 @@ async def test_run_agent_streaming_uses_persona_custom_error_message(monkeypatch
     outputs = [chain async for chain in util.run_agent(runner)]
 
     assert len(outputs) == 1
-    assert outputs[0].get_plain_text() == "persona error"
+    assert outputs[0].get_plain_text() == "prompt error"
     assert event.result_history == []
     runner.agent_hooks.on_agent_done.assert_awaited_once()
     llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
-    assert llm_response.completion_text == "persona error"
+    assert llm_response.completion_text == "prompt error"
 
 
 @pytest.mark.asyncio
-async def test_run_agent_non_streaming_uses_persona_custom_error_message(monkeypatch):
+async def test_run_agent_non_streaming_uses_prompt_custom_error_message(monkeypatch):
     monkeypatch.setattr(
         util,
         "get_agent_error_message",
-        lambda event: "persona error",
+        lambda event: "prompt error",
     )
     event = FakeEvent()
     runner = FakeRunner(RuntimeError("boom"), event=event)
@@ -720,10 +720,10 @@ async def test_run_agent_non_streaming_uses_persona_custom_error_message(monkeyp
 
     assert outputs == []
     assert len(event.result_history) == 1
-    assert event.result_history[0].get_plain_text() == "persona error"
+    assert event.result_history[0].get_plain_text() == "prompt error"
     runner.agent_hooks.on_agent_done.assert_awaited_once()
     llm_response = runner.agent_hooks.on_agent_done.await_args.args[1]
-    assert llm_response.completion_text == "persona error"
+    assert llm_response.completion_text == "prompt error"
 
 
 @pytest.mark.asyncio

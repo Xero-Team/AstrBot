@@ -13,7 +13,7 @@ THIRD_PARTY_AGENT_RUNNER_TYPES = AGENT_RUNNER_TYPES[1:]
 
 _THIRD_PARTY_SHARED_DEFAULTS: dict[str, Any] = {
     "max_steps": 128,
-    "persona_id": "default",
+    "prompt_id": "default",
     "proxy_mode": "inherit",
     "proxy_url": "",
 }
@@ -25,11 +25,9 @@ AGENT_RUNNER_CONFIG_DEFAULTS: dict[str, dict[str, Any]] = {
             "fallback_provider_ids": [],
             "request_max_retries": 5,
         },
-        "persona": {
-            "persona_id": "default",
-            "safety_mode": True,
-            "safety_mode_strategy": "system_prompt",
-        },
+        "prompt_id": "default",
+        "safety_mode": True,
+        "safety_mode_strategy": "system_prompt",
         "compression": {
             "max_turns": -1,
             "trim_turns": 1,
@@ -267,27 +265,20 @@ def normalize_agent_runner_for_load(agent_runner: object) -> dict[str, Any]:
         }
 
 
-def get_persona_id(agent_runner: object, default: str = "default") -> str:
-    """Return the configured persona id for a normalized Agent Runner.
+def get_prompt_id(agent_runner: object, default: str = "default") -> str:
+    """Return the configured prompt id for a normalized Agent Runner.
 
     Args:
         agent_runner: Root Agent Runner configuration.
-        default: Fallback persona id.
+        default: Fallback prompt id.
 
     Returns:
-        Local ``config.persona.persona_id``, third-party ``config.persona_id``,
-        or ``default`` when missing or invalid.
+        ``config.prompt_id``  or ``default`` when missing or invalid.
     """
     if not isinstance(agent_runner, dict):
         return default
     runner_config = agent_runner.get("config", {})
     if not isinstance(runner_config, dict):
         return default
-    if agent_runner.get("runner_type") == "local":
-        persona = runner_config.get("persona", {})
-        persona_id = (
-            persona.get("persona_id", default) if isinstance(persona, dict) else default
-        )
-    else:
-        persona_id = runner_config.get("persona_id", default)
-    return persona_id if isinstance(persona_id, str) and persona_id else default
+    prompt_id = runner_config.get("prompt_id", default)
+    return prompt_id if isinstance(prompt_id, str) and prompt_id else default

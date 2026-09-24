@@ -1,11 +1,11 @@
 /**
- * Persona 文件夹管理 Store
+ * Prompt 文件夹管理 Store
  */
 import { defineStore } from 'pinia';
-import { personaApi } from '@/api/v1';
+import { promptApi } from '@/api/v1';
 
 // 类型定义
-export interface PersonaFolder {
+export interface PromptFolder {
   folder_id: string;
   name: string;
   parent_id: string | null;
@@ -15,8 +15,8 @@ export interface PersonaFolder {
   updated_at: string;
 }
 
-export interface Persona {
-  persona_id: string;
+export interface Prompt {
+  prompt_id: string;
   system_prompt: string;
   custom_error_message: string | null;
   begin_dialogs: string[];
@@ -39,16 +39,16 @@ export interface FolderTreeNode {
 
 export interface ReorderItem {
   id: string;
-  type: 'persona' | 'folder';
+  type: 'prompt' | 'folder';
   sort_order: number;
 }
 
-export const usePersonaStore = defineStore('persona', {
+export const usePromptStore = defineStore('prompt', {
   state: () => ({
     folderTree: [] as FolderTreeNode[],
     currentFolderId: null as string | null,
-    currentFolders: [] as PersonaFolder[],
-    currentPersonas: [] as Persona[],
+    currentFolders: [] as PromptFolder[],
+    currentPrompts: [] as Prompt[],
     breadcrumbPath: [] as FolderTreeNode[],
     expandedFolderIds: [] as string[], // Store expanded folder IDs
     loading: false,
@@ -98,7 +98,7 @@ export const usePersonaStore = defineStore('persona', {
     async loadFolderTree(): Promise<void> {
       this.treeLoading = true;
       try {
-        const response = await personaApi.tree();
+        const response = await promptApi.tree();
         if (response.data.status === 'ok') {
           this.folderTree = response.data.data || [];
         } else {
@@ -117,18 +117,18 @@ export const usePersonaStore = defineStore('persona', {
       try {
         this.currentFolderId = folderId;
 
-        // 并行加载子文件夹和 Persona
-        const [foldersRes, personasRes] = await Promise.all([
-          personaApi.folders(folderId),
-          personaApi.list(folderId),
+        // 并行加载子文件夹和 Prompt
+        const [foldersRes, promptsRes] = await Promise.all([
+          promptApi.folders(folderId),
+          promptApi.list(folderId),
         ]);
 
         if (foldersRes.data.status === 'ok') {
           this.currentFolders = foldersRes.data.data || [];
         }
 
-        if (personasRes.data.status === 'ok') {
-          this.currentPersonas = personasRes.data.data || [];
+        if (promptsRes.data.status === 'ok') {
+          this.currentPrompts = promptsRes.data.data || [];
         }
 
         // 更新面包屑
@@ -175,16 +175,16 @@ export const usePersonaStore = defineStore('persona', {
     },
 
     /**
-     * 移动 Persona 到文件夹
+     * 移动 Prompt 到文件夹
      */
-    async movePersonaToFolder(
-      personaId: string,
+    async movePromptToFolder(
+      promptId: string,
       targetFolderId: string | null,
     ): Promise<void> {
-      const response = await personaApi.move(personaId, targetFolderId);
+      const response = await promptApi.move(promptId, targetFolderId);
 
       if (response.data.status !== 'ok') {
-        throw new Error(response.data.message || '移动人格失败');
+        throw new Error(response.data.message || '移动提示词失败');
       }
 
       // 刷新当前文件夹内容和文件夹树
@@ -198,7 +198,7 @@ export const usePersonaStore = defineStore('persona', {
       folderId: string,
       targetParentId: string | null,
     ): Promise<void> {
-      const response = await personaApi.updateFolder(folderId, {
+      const response = await promptApi.updateFolder(folderId, {
         parent_id: targetParentId,
       });
 
@@ -217,8 +217,8 @@ export const usePersonaStore = defineStore('persona', {
       name: string;
       parent_id?: string | null;
       description?: string;
-    }): Promise<PersonaFolder> {
-      const response = await personaApi.createFolder({
+    }): Promise<PromptFolder> {
+      const response = await promptApi.createFolder({
         ...data,
         parent_id: data.parent_id ?? this.currentFolderId,
       });
@@ -230,7 +230,7 @@ export const usePersonaStore = defineStore('persona', {
       // 刷新当前文件夹内容和文件夹树
       await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
 
-      return response.data.data.folder as PersonaFolder;
+      return response.data.data.folder as PromptFolder;
     },
 
     /**
@@ -241,7 +241,7 @@ export const usePersonaStore = defineStore('persona', {
       name?: string;
       description?: string;
     }): Promise<void> {
-      const response = await personaApi.updateFolder(data.folder_id, data);
+      const response = await promptApi.updateFolder(data.folder_id, data);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '更新文件夹失败');
@@ -259,14 +259,14 @@ export const usePersonaStore = defineStore('persona', {
       const isCurrentFolderDeleted =
         this.currentFolderId === folderId ||
         this.breadcrumbPath.some((folder) => folder.folder_id === folderId);
-      const response = await personaApi.deleteFolder(folderId);
+      const response = await promptApi.deleteFolder(folderId);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '删除文件夹失败');
       }
 
       // If the active folder was deleted, return to its parent instead of
-      // keeping a stale folder ID that would hide moved personas and folders.
+      // keeping a stale folder ID that would hide moved prompts and folders.
       const targetFolderId = isCurrentFolderDeleted
         ? (deletedFolder?.parent_id ?? null)
         : this.currentFolderId;
@@ -275,13 +275,13 @@ export const usePersonaStore = defineStore('persona', {
     },
 
     /**
-     * 删除 Persona
+     * 删除 Prompt
      */
-    async deletePersona(personaId: string): Promise<void> {
-      const response = await personaApi.delete(personaId);
+    async deletePrompt(promptId: string): Promise<void> {
+      const response = await promptApi.delete(promptId);
 
       if (response.data.status !== 'ok') {
-        throw new Error(response.data.message || '删除人格失败');
+        throw new Error(response.data.message || '删除提示词失败');
       }
 
       // 刷新当前文件夹内容
@@ -292,7 +292,7 @@ export const usePersonaStore = defineStore('persona', {
      * 批量更新排序
      */
     async reorderItems(items: ReorderItem[]): Promise<void> {
-      const response = await personaApi.reorder(items);
+      const response = await promptApi.reorder(items);
 
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message || '更新排序失败');

@@ -193,7 +193,7 @@ def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
     converted = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
     ai_sections = converted["ai_group"]["metadata"]
     assert ai_sections["agent_runner"]["docs"] == "use/agent-runner.html"
-    assert ai_sections["persona"]["docs"] == "use/persona.html"
+    assert ai_sections["prompt"]["docs"] == "use/prompt.html"
     assert ai_sections["knowledgebase"]["docs"] == "use/knowledge-base.html"
     assert ai_sections["websearch"]["docs"] == "use/websearch.html"
     assert ai_sections["agent_computer_use"]["docs"] == "use/computer.html"

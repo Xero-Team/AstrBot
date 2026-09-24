@@ -28,7 +28,7 @@ This repository is a modernized fork of AstrBot. The code, commands, deployment 
 ## Key Features
 
 1. 💯 Free & Open Source.
-2. ✨ AI LLM Conversations, Multimodal, Agent, MCP, Skills, Knowledge Base, Persona Settings, Auto Context Compression.
+2. ✨ AI LLM Conversations, Multimodal, Agent, MCP, Skills, Knowledge Base, Prompt Settings, Auto Context Compression.
 3. 🤖 Supports integration with Dify, Alibaba Cloud Bailian, Coze, and other agent platforms.
 4. 🌐 Multi-Platform: QQ, WeChat Work, Feishu, DingTalk, WeChat Official Accounts, Telegram, Slack, and [more](#supported-messaging-platforms).
 5. 📦 Plugin extensions with a community marketplace and a sandboxed Dashboard Extension Protocol.

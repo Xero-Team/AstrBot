@@ -160,7 +160,7 @@ export default defineConfig({
               { text: '内置指令', link: '/command' },
               { text: '工具使用 Tools', link: '/function-calling' },
               { text: '技能 Skills', link: '/skills' },
-              { text: 'Persona 人格设定', link: '/persona' },
+              { text: 'Prompt 提示词设定', link: '/prompt' },
               { text: '长期记忆', link: '/long-term-memory' },
               { text: '群聊上下文感知', link: '/group-chat-context' },
               { text: '语音 STT / TTS', link: '/speech' },
@@ -419,7 +419,7 @@ export default defineConfig({
               { text: 'Built-in Commands', link: '/command' },
               { text: 'Tool Use', link: '/function-calling' },
               { text: 'Skills', link: '/skills' },
-              { text: 'Personas', link: '/persona' },
+              { text: 'Prompts', link: '/prompt' },
               { text: 'Long-term Memory', link: '/long-term-memory' },
               {
                 text: 'Group Chat Context Awareness',

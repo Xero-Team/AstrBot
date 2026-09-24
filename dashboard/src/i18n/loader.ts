@@ -63,7 +63,7 @@ export class I18nLoader {
       { name: 'features/cron', path: 'features/cron.json' },
       { name: 'features/subagent', path: 'features/subagent.json' },
       { name: 'features/alkaid/memory', path: 'features/alkaid/memory.json' },
-      { name: 'features/persona', path: 'features/persona.json' },
+      { name: 'features/prompt', path: 'features/prompt.json' },
       { name: 'features/welcome', path: 'features/welcome.json' },
       { name: 'features/data-files', path: 'features/data-files.json' },
 

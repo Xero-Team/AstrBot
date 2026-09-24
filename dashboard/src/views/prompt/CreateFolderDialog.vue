@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import BaseCreateFolderDialog from '@/components/folder/BaseCreateFolderDialog.vue';
 import type { CreateFolderData } from '@/components/folder/types';
 import { resolveErrorMessage } from '@/utils/errorUtils';
@@ -37,8 +37,8 @@ const emit = defineEmits<{
   error: [message: string];
 }>();
 
-const { tm } = useModuleI18n('features/persona');
-const personaStore = usePersonaStore();
+const { tm } = useModuleI18n('features/prompt');
+const promptStore = usePromptStore();
 const baseDialog = ref<BaseCreateFolderDialogExposed | null>(null);
 
 const showDialog = computed({
@@ -58,7 +58,7 @@ const labels = computed(() => ({
 async function handleCreate(data: CreateFolderData) {
   baseDialog.value?.setLoading(true);
   try {
-    await personaStore.createFolder({
+    await promptStore.createFolder({
       name: data.name,
       description: data.description,
       parent_id: data.parent_id,

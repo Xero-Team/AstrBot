@@ -4,12 +4,12 @@ A Star should call models through public `astrbot.api` events, `PluginContext` c
 
 ## Choose the right path
 
-| Need                                                                          | Recommended interface                            |
-| ----------------------------------------------------------------------------- | ------------------------------------------------ |
-| Continue through AstrBot's standard Persona, conversation, and Agent pipeline | `yield event.request_llm(...)`                   |
-| Call one selected chat model without executing tools                          | `await self.context.models.generate(...)`        |
-| Run a multi-step Agent over an explicit tool set                              | `await self.context.models.tool_loop(...)`       |
-| Register a tool for ordinary AstrBot conversations                            | `@filter.llm_tool` or `self.context.tools.add()` |
+| Need                                                                         | Recommended interface                            |
+| ---------------------------------------------------------------------------- | ------------------------------------------------ |
+| Continue through AstrBot's standard Prompt, conversation, and Agent pipeline | `yield event.request_llm(...)`                   |
+| Call one selected chat model without executing tools                         | `await self.context.models.generate(...)`        |
+| Run a multi-step Agent over an explicit tool set                             | `await self.context.models.tool_loop(...)`       |
+| Register a tool for ordinary AstrBot conversations                           | `@filter.llm_tool` or `self.context.tools.add()` |
 
 ## Resolve the current session model
 
@@ -23,7 +23,7 @@ This follows the profile and Provider selection for the message session. If no c
 
 ## Use the standard pipeline
 
-When a handler should reuse the current conversation, Persona, Skills, knowledge base, and default Agent, create a `ProviderRequest` and yield it:
+When a handler should reuse the current conversation, Prompt, Skills, knowledge base, and default Agent, create a `ProviderRequest` and yield it:
 
 ```python
 from astrbot.api.event import AstrMessageEvent, filter
@@ -157,7 +157,7 @@ plugin owns. Do not cache tool objects across hot reload.
 
 ## Agent-as-tool and SubAgents
 
-`astrbot.api.agent` registers an Agent handoff tool, and `RegisteringAgent.llm_tool()` can bind tools to it. This suits code-defined agents with a fixed responsibility. For ordinary operations, prefer WebUI [SubAgent Orchestration](../../../use/subagent), where Persona, Provider, and tool permissions are easier to audit.
+`astrbot.api.agent` registers an Agent handoff tool, and `RegisteringAgent.llm_tool()` can bind tools to it. This suits code-defined agents with a fixed responsibility. For ordinary operations, prefer WebUI [SubAgent Orchestration](../../../use/subagent), where Prompt, Provider, and tool permissions are easier to audit.
 
 A SubAgent is not a security container. Whether created in code or the WebUI, give it the smallest tool set, a clear description, and a finite step limit, and avoid recursive delegation.
 

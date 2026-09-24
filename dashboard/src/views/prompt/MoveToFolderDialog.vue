@@ -69,15 +69,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import { storeToRefs } from 'pinia';
 import BaseMoveTargetNode from '@/components/folder/BaseMoveTargetNode.vue';
 import { collectFolderAndChildrenIds } from '@/components/folder/useFolderManager';
 import type { FolderTreeNode } from '@/components/folder/types';
 import { resolveErrorMessage } from '@/utils/errorUtils';
 
-interface PersonaItem {
-  persona_id: string;
+interface PromptItem {
+  prompt_id: string;
   folder_id?: string | null;
 }
 
@@ -87,19 +87,19 @@ interface FolderItem {
   parent_id?: string | null;
 }
 
-function isPersonaItem(item: PersonaItem | FolderItem): item is PersonaItem {
-  return 'persona_id' in item;
+function isPromptItem(item: PromptItem | FolderItem): item is PromptItem {
+  return 'prompt_id' in item;
 }
 
-function isFolderItem(item: PersonaItem | FolderItem): item is FolderItem {
+function isFolderItem(item: PromptItem | FolderItem): item is FolderItem {
   return 'name' in item;
 }
 
 const props = withDefaults(
   defineProps<{
     modelValue?: boolean;
-    itemType: 'persona' | 'folder';
-    item?: PersonaItem | FolderItem | null;
+    itemType: 'prompt' | 'folder';
+    item?: PromptItem | FolderItem | null;
   }>(),
   {
     modelValue: false,
@@ -113,9 +113,9 @@ const emit = defineEmits<{
   error: [message: string];
 }>();
 
-const { tm } = useModuleI18n('features/persona');
-const personaStore = usePersonaStore();
-const { folderTree, treeLoading } = storeToRefs(personaStore);
+const { tm } = useModuleI18n('features/prompt');
+const promptStore = usePromptStore();
+const { folderTree, treeLoading } = storeToRefs(promptStore);
 const selectedFolderId = ref<string | null>(null);
 const loading = ref(false);
 
@@ -128,8 +128,8 @@ const itemName = computed(() => {
   if (!props.item) {
     return '';
   }
-  if (props.itemType === 'persona' && isPersonaItem(props.item)) {
-    return props.item.persona_id;
+  if (props.itemType === 'prompt' && isPromptItem(props.item)) {
+    return props.item.prompt_id;
   }
   return isFolderItem(props.item) ? props.item.name : '';
 });
@@ -147,7 +147,7 @@ watch(
   () => props.modelValue,
   (newValue) => {
     if (newValue && props.item) {
-      if (props.itemType === 'persona' && isPersonaItem(props.item)) {
+      if (props.itemType === 'prompt' && isPromptItem(props.item)) {
         selectedFolderId.value = props.item.folder_id ?? null;
         return;
       }
@@ -178,13 +178,13 @@ async function submitMove() {
 
   loading.value = true;
   try {
-    if (props.itemType === 'persona' && isPersonaItem(props.item)) {
-      await personaStore.movePersonaToFolder(
-        props.item.persona_id,
+    if (props.itemType === 'prompt' && isPromptItem(props.item)) {
+      await promptStore.movePromptToFolder(
+        props.item.prompt_id,
         selectedFolderId.value,
       );
     } else if (isFolderItem(props.item)) {
-      await personaStore.moveFolderToFolder(
+      await promptStore.moveFolderToFolder(
         props.item.folder_id,
         selectedFolderId.value,
       );

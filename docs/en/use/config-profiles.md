@@ -43,7 +43,7 @@ Saving a profile reloads that profile's pipeline. Click **Save**. In code-edit m
 | ------------ | -------------------- | ------------------------------------------------------------- | ------------------------------------------------- |
 | Settings     | Sidebar **Settings** | Process network, security, appearance, maintenance            | The whole AstrBot process                         |
 | Profile      | **Config**           | Agent, models, `llm_access`, plugin set, knowledge-base names | One behavior for a class of sessions              |
-| Custom rules | **Custom rules**     | Per-UMO on/off, models, persona, knowledge bases              | A few exceptions. Do not split a profile for this |
+| Custom rules | **Custom rules**     | Per-UMO on/off, models, prompt, knowledge bases               | A few exceptions. Do not split a profile for this |
 
 Custom rules outrank the profile. If a rule disables LLM, turning it on in the profile does nothing. See [Custom rules](./custom-rules).
 
@@ -58,14 +58,14 @@ These live on the profile, not Settings:
 - [Speech STT / TTS](./speech)
 - [Knowledge base](./knowledge-base) `kb_names`
 - [Plugins](./plugin) `plugin_set`
-- [Personas](./persona), [Agent runner](./agent-runner)
+- [Prompts](./prompt), [Agent runner](./agent-runner)
 
 `plugin_set` defaults to `["*"]`: every plugin that is not disabled on the plugin page. A global disable on that page wins over the profile checklist.
 
 ## Common misconfigurations
 
 1. Editing `default` while the group is bound to another profile.
-2. Creating a whole profile for one group's persona or model. Use a custom rule.
+2. Creating a whole profile for one group's prompt or model. Use a custom rule.
 3. Looking for wake, unlisted sessions and senders, or TTS under **Settings**.
 4. Editing JSON without **Apply this configuration**, so the form still shows old values.
 5. Copying profile files to another machine without the UMO routes.

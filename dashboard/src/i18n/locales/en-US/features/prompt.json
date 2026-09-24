@@ -1,10 +1,10 @@
 {
   "page": {
-    "description": "Manage and configure chat bot personality settings"
+    "description": "Manage and configure chat bot prompt settings"
   },
   "buttons": {
-    "create": "Create Persona",
-    "createFirst": "Create First Persona",
+    "create": "Create Prompt",
+    "createFirst": "Create First Prompt",
     "edit": "Edit",
     "delete": "Delete",
     "cancel": "Cancel",
@@ -12,7 +12,7 @@
     "move": "Move",
     "addDialogPair": "Add Dialog Pair",
     "export": "Export",
-    "import": "Import Persona"
+    "import": "Import Prompt"
   },
   "labels": {
     "presetDialogs": "Preset Dialogs ({count} pairs)",
@@ -20,16 +20,16 @@
     "updatedAt": "Updated At"
   },
   "form": {
-    "personaId": "Persona ID",
+    "promptId": "Prompt ID",
     "systemPrompt": "System Prompt",
     "customErrorMessage": "Custom Error Reply Message (Optional)",
-    "customErrorMessageHelp": "When this persona's LLM request fails (for example, connection failures), this error reply is sent first. Leave empty to use the default error message.",
+    "customErrorMessageHelp": "When this prompt's LLM request fails (for example, connection failures), this error reply is sent first. Leave empty to use the default error message.",
     "presetDialogs": "Preset Dialogs",
     "presetDialogsHelp": "Add some preset dialogs to help the bot better understand the role settings. The number of dialogs must be even (users and assistants take turns).",
     "userMessage": "User Message",
     "assistantMessage": "Assistant Message",
     "tools": "Tool Selection",
-    "toolsHelp": "Select available tools for this persona. Tools allow the bot to perform specific functions such as searching, calculating, getting information, etc.",
+    "toolsHelp": "Select available tools for this prompt. Tools allow the bot to perform specific functions such as searching, calculating, getting information, etc.",
     "toolsSelection": "Tool Selection Actions",
     "selectAllTools": "Select All Tools",
     "clearAllTools": "Clear Selection",
@@ -44,7 +44,7 @@
     "allToolsAvailable": "Use all available tools",
     "noToolsSelected": "No tools selected",
     "skills": "Skills Selection",
-    "skillsHelp": "Select available Skills for this persona. Skills provide reusable workflows and guidance.",
+    "skillsHelp": "Select available Skills for this prompt. Skills provide reusable workflows and guidance.",
     "skillsAllAvailable": "Use all available Skills",
     "skillsSelectSpecific": "Select specific Skills",
     "searchSkills": "Search Skills",
@@ -56,55 +56,55 @@
     "noSkillsSelected": "No skills selected",
     "skillsRuntimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
     "createInFolder": "Will be created in \"{folder}\"",
-    "rootFolder": "All Personas"
+    "rootFolder": "All Prompts"
   },
   "dialog": {
     "create": {
-      "title": "Create New Persona"
+      "title": "Create New Prompt"
     },
     "edit": {
-      "title": "Edit Persona"
+      "title": "Edit Prompt"
     }
   },
   "empty": {
-    "title": "No Persona Configured",
-    "description": "Create your first persona to start using personalized chatbots",
+    "title": "No Prompt Configured",
+    "description": "Create your first prompt to start using personalized chatbots",
     "folderEmpty": "This folder is empty",
-    "folderEmptyDescription": "Create a new persona or folder to get started"
+    "folderEmptyDescription": "Create a new prompt or folder to get started"
   },
   "validation": {
     "required": "This field is required",
     "minLength": "Minimum {min} characters required",
     "alphanumeric": "Only letters, numbers, underscores and hyphens are allowed",
     "dialogRequired": "{type} cannot be empty",
-    "personaIdExists": "This persona name already exists"
+    "promptIdExists": "This prompt name already exists"
   },
   "messages": {
-    "loadError": "Failed to load persona list",
+    "loadError": "Failed to load prompt list",
     "saveSuccess": "Saved successfully",
     "saveError": "Save failed",
-    "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
+    "deleteConfirm": "Are you sure you want to delete prompt \"{id}\"? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
     "deleteError": "Delete failed",
     "exportConfirm": "Export only includes system prompt and preset dialogs, not tools and Skills config. Continue?",
     "exportSuccess": "Exported successfully",
     "exportError": "Export failed: {error}",
-    "importSuccess": "Persona imported successfully, please configure tools and Skills manually",
+    "importSuccess": "Prompt imported successfully, please configure tools and Skills manually",
     "importError": "Import failed: {error}",
-    "importFormatError": "Invalid file format, please select a valid persona export file",
+    "importFormatError": "Invalid file format, please select a valid prompt export file",
     "importMissingPrompt": "Incomplete file content, missing system prompt",
-    "importIdExists": "Persona name already exists, renamed to \"{id}\""
+    "importIdExists": "Prompt name already exists, renamed to \"{id}\""
   },
-  "persona": {
-    "personasTitle": "Personas",
+  "prompt": {
+    "promptsTitle": "Prompts",
     "toolsCount": "tools",
     "skillsCount": "skills",
     "contextMenu": {
       "moveTo": "Move to..."
     },
     "messages": {
-      "moveSuccess": "Persona moved successfully",
-      "moveError": "Failed to move persona"
+      "moveSuccess": "Prompt moved successfully",
+      "moveError": "Failed to move prompt"
     }
   },
   "folder": {
@@ -137,7 +137,7 @@
     "deleteDialog": {
       "title": "Delete Folder",
       "message": "Are you sure you want to delete folder \"{name}\"?",
-      "warning": "All personas inside will be moved to root folder."
+      "warning": "All prompts inside will be moved to root folder."
     },
     "messages": {
       "createSuccess": "Folder created successfully",

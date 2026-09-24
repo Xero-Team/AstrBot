@@ -5,7 +5,7 @@
       :current-folder-id="currentFolderId"
       :expanded-folder-ids="expandedFolderIds"
       :tree-loading="treeLoading"
-      :accept-drop-types="['persona']"
+      :accept-drop-types="['prompt']"
       :labels="{
         searchPlaceholder: tm('folder.searchPlaceholder'),
         rootFolder: tm('folder.rootFolder'),
@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { reactive } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import { storeToRefs } from 'pinia';
 import BaseFolderTree from '@/components/folder/BaseFolderTree.vue';
 import type { DropEventData, Folder } from '@/components/folder/types';
@@ -111,15 +111,15 @@ const emit = defineEmits<{
   'move-folder': [folder: Folder];
   error: [message: string];
   success: [message: string];
-  'persona-dropped': [
-    payload: { persona_id: string; target_folder_id: string | null },
+  'prompt-dropped': [
+    payload: { prompt_id: string; target_folder_id: string | null },
   ];
 }>();
 
-const { tm } = useModuleI18n('features/persona');
-const personaStore = usePersonaStore();
+const { tm } = useModuleI18n('features/prompt');
+const promptStore = usePromptStore();
 const { folderTree, currentFolderId, treeLoading, expandedFolderIds } =
-  storeToRefs(personaStore);
+  storeToRefs(promptStore);
 
 const renameDialog = reactive<{
   show: boolean;
@@ -144,7 +144,7 @@ const deleteDialog = reactive<{
 });
 
 function handleFolderClick(folderId: string | null) {
-  void personaStore.navigateToFolder(folderId);
+  void promptStore.navigateToFolder(folderId);
 }
 
 function onRenameFolder(folder: Folder) {
@@ -162,13 +162,13 @@ function handleSetFolderExpansion(data: {
   folderId: string;
   expanded: boolean;
 }) {
-  personaStore.setFolderExpansion(data.folderId, data.expanded);
+  promptStore.setFolderExpansion(data.folderId, data.expanded);
 }
 
 function onItemDropped(data: DropEventData) {
-  if (data.item_type === 'persona') {
-    emit('persona-dropped', {
-      persona_id: data.item_id,
+  if (data.item_type === 'prompt') {
+    emit('prompt-dropped', {
+      prompt_id: data.item_id,
       target_folder_id: data.target_folder_id,
     });
   }
@@ -181,7 +181,7 @@ async function submitRename() {
 
   renameDialog.loading = true;
   try {
-    await personaStore.updateFolder({
+    await promptStore.updateFolder({
       folder_id: renameDialog.folder.folder_id,
       name: renameDialog.name,
     });
@@ -204,7 +204,7 @@ async function submitDelete() {
 
   deleteDialog.loading = true;
   try {
-    await personaStore.deleteFolder(deleteDialog.folder.folder_id);
+    await promptStore.deleteFolder(deleteDialog.folder.folder_id);
     emit('success', tm('folder.messages.deleteSuccess'));
     deleteDialog.show = false;
   } catch (error) {
@@ -217,7 +217,7 @@ async function submitDelete() {
   }
 }
 
-const { toggleFolderExpansion } = personaStore;
+const { toggleFolderExpansion } = promptStore;
 </script>
 
 <style scoped>

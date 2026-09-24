@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
-import PersonaForm from '@/components/shared/PersonaForm.vue';
+import PromptForm from '@/components/shared/PromptForm.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
 const testState = vi.hoisted(() => ({
   mcpListMock: vi.fn(),
-  personaCreateMock: vi.fn(),
-  personaDeleteMock: vi.fn(),
-  personaListMock: vi.fn(),
-  personaUpdateMock: vi.fn(),
+  promptCreateMock: vi.fn(),
+  promptDeleteMock: vi.fn(),
+  promptListMock: vi.fn(),
+  promptUpdateMock: vi.fn(),
   skillListMock: vi.fn(),
   toolListMock: vi.fn(),
   askForConfirmationMock: vi.fn(),
@@ -18,11 +18,11 @@ vi.mock('@/api/v1', () => ({
   mcpApi: {
     list: testState.mcpListMock,
   },
-  personaApi: {
-    create: testState.personaCreateMock,
-    delete: testState.personaDeleteMock,
-    list: testState.personaListMock,
-    update: testState.personaUpdateMock,
+  promptApi: {
+    create: testState.promptCreateMock,
+    delete: testState.promptDeleteMock,
+    list: testState.promptListMock,
+    update: testState.promptUpdateMock,
   },
   skillApi: {
     list: testState.skillListMock,
@@ -37,7 +37,7 @@ vi.mock('@/utils/confirmDialog', () => ({
   useConfirmDialog: () => undefined,
 }));
 
-describe('PersonaForm', () => {
+describe('PromptForm', () => {
   beforeEach(() => {
     testState.mcpListMock.mockResolvedValue({
       data: {
@@ -79,25 +79,25 @@ describe('PersonaForm', () => {
         },
       },
     });
-    testState.personaListMock.mockResolvedValue({
+    testState.promptListMock.mockResolvedValue({
       data: {
         status: 'ok',
         data: [],
       },
     });
-    testState.personaCreateMock.mockResolvedValue({
+    testState.promptCreateMock.mockResolvedValue({
       data: {
         status: 'ok',
         message: 'Saved',
       },
     });
-    testState.personaUpdateMock.mockResolvedValue({
+    testState.promptUpdateMock.mockResolvedValue({
       data: {
         status: 'ok',
         message: 'Updated',
       },
     });
-    testState.personaDeleteMock.mockResolvedValue({
+    testState.promptDeleteMock.mockResolvedValue({
       data: {
         status: 'ok',
         message: 'Deleted',
@@ -107,11 +107,11 @@ describe('PersonaForm', () => {
   });
 
   it('renders MCP quick select chips and applies server tools', async () => {
-    const wrapper = mountWithVuetify(PersonaForm, {
+    const wrapper = mountWithVuetify(PromptForm, {
       props: {
         modelValue: false,
-        editingPersona: {
-          persona_id: 'helper',
+        editingPrompt: {
+          prompt_id: 'helper',
           system_prompt: 'This is a sufficiently long system prompt.',
           custom_error_message: '',
           begin_dialogs: [],
@@ -151,7 +151,7 @@ describe('PersonaForm', () => {
     expect(wrapper.text()).toContain('tool.beta');
   });
 
-  it('keeps disabled plugin skills in an existing persona without offering them again', async () => {
+  it('keeps disabled plugin skills in an existing prompt without offering them again', async () => {
     testState.skillListMock.mockResolvedValue({
       data: {
         status: 'ok',
@@ -173,11 +173,11 @@ describe('PersonaForm', () => {
         },
       },
     });
-    const wrapper = mountWithVuetify(PersonaForm, {
+    const wrapper = mountWithVuetify(PromptForm, {
       props: {
         modelValue: false,
-        editingPersona: {
-          persona_id: 'helper',
+        editingPrompt: {
+          prompt_id: 'helper',
           system_prompt: 'This is a sufficiently long system prompt.',
           custom_error_message: '',
           begin_dialogs: [],
@@ -212,7 +212,7 @@ describe('PersonaForm', () => {
     await saveButton!.trigger('click');
     await flushPromises();
 
-    expect(testState.personaUpdateMock).toHaveBeenCalledWith(
+    expect(testState.promptUpdateMock).toHaveBeenCalledWith(
       'helper',
       expect.objectContaining({
         skills: ['disabled-plugin-skill'],

@@ -24,7 +24,7 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     content: list | None = Field(default=None, sa_type=JSON)
 
     title: str | None = Field(default=None, max_length=255)
-    persona_id: str | None = Field(default=None)
+    prompt_id: str | None = Field(default=None)
     token_usage: int = Field(default=0, nullable=False)
     """content is a list of OpenAI-formated messages in list[dict] format.
     token_usage is the total token value of the messages.

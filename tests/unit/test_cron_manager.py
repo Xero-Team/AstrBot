@@ -835,7 +835,7 @@ class TestRunActiveAgentJob:
         ctx = MagicMock()
         ctx.get_config.return_value = {
             "provider_settings": {"computer_use_runtime": "local"},
-            "agent_runner": {"config": {"persona": {"safety_mode": False}}},
+            "agent_runner": {"config": {"safety_mode": False}},
         }
         cron_manager.ctx = ctx
         captured = {}

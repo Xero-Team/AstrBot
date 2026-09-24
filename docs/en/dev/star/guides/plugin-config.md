@@ -79,7 +79,7 @@ offer restoration.
 Common stable `_special` values for plugins include:
 
 - `select_provider`, `select_provider_tts`, and `select_provider_stt`, returning a Provider ID string;
-- `select_persona`, returning a Persona ID string;
+- `select_prompt`, returning a Prompt ID string;
 - `select_knowledgebase`, returning a list of knowledge-base IDs, so the field should be `list`.
 
 Core configuration uses additional `_special` values that are not a plugin SDK contract. Do not copy them from core metadata.

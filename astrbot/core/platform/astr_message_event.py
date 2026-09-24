@@ -870,7 +870,7 @@ class AstrMessageEvent(abc.ABC):
 
         contexts: 当指定 contexts 时，将会使用 contexts 作为上下文。如果同时传入了 conversation，将会忽略 conversation。
 
-        conversation: 可选。如果指定，将在指定的对话中进行 LLM 请求。对话的人格会被用于 LLM 请求，并且结果将会被记录到对话中。
+        conversation: 可选。如果指定，将在指定的对话中进行 LLM 请求。对话的提示词会被用于 LLM 请求，并且结果将会被记录到对话中。
 
         """
         if image_urls is None:

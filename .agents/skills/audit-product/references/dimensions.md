@@ -164,7 +164,7 @@ do not use archived 2025 LLM numbers such as LLM05 Improper Output Handling):
   Same-session "the model said X to me" is not. Name the boundary.
 - The bug is the missing code-level gate, not the model. Guardrail prompts
   are not controls. Model output is untrusted input; trace it to the sink.
-- Tool permission = user ∩ persona ∩ tool policy; handoff cannot escalate.
+- Tool permission = user ∩ prompt ∩ tool policy; handoff cannot escalate.
   Shared service credentials with per-user query scoping are not confused
   deputies.
 - SSRF via tools, adapters, KB fetch, MCP — only if the URL is attacker-shaped

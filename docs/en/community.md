@@ -39,4 +39,4 @@ The QQ groups, Discord, Astrbook, and Jiupamiao links below are **upstream AstrB
 
 ### Jiupamiao Prompt Market (upstream)
 
-- [Jiupamiao](https://jiupamiao.asia/) — an upstream-related prompt and persona sharing market.
+- [Jiupamiao](https://jiupamiao.asia/) — an upstream-related prompt and prompt sharing market.

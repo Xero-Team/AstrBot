@@ -164,7 +164,7 @@ DEFAULT_CONFIG = {
         "identifier": False,
         "group_name_display": False,
         "datetime_system_prompt": True,
-        "persona_pool": ["*"],
+        "prompt_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
         "streaming_response": False,
         "show_tool_use_status": False,
@@ -212,7 +212,7 @@ DEFAULT_CONFIG = {
         "config": get_agent_runner_config_default("local"),
     },
     # SubAgent orchestrator mode:
-    # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
+    # - main_enable = False: disabled; main LLM mounts tools normally (prompt selection).
     # - main_enable = True: enabled; main LLM keeps its own tools and includes handoff
     #   tools (transfer_to_*). remove_main_duplicate_tools can remove tools that are
     #   duplicated on subagents from the main LLM toolset.
@@ -3527,10 +3527,10 @@ CONFIG_METADATA_3 = {
                         "description": "工具调用轮数上限",
                         "type": "int",
                     },
-                    "agent_runner.config.persona_id": {
-                        "description": "默认采用的人格",
+                    "agent_runner.config.prompt_id": {
+                        "description": "默认采用的提示词",
                         "type": "string",
-                        "_special": "select_persona",
+                        "_special": "select_prompt",
                     },
                     "agent_runner.config.proxy_mode": {
                         "description": "代理模式",
@@ -3577,10 +3577,10 @@ CONFIG_METADATA_3 = {
                         "description": "工具调用轮数上限",
                         "type": "int",
                     },
-                    "agent_runner.config.persona_id": {
-                        "description": "默认采用的人格",
+                    "agent_runner.config.prompt_id": {
+                        "description": "默认采用的提示词",
                         "type": "string",
-                        "_special": "select_persona",
+                        "_special": "select_prompt",
                     },
                     "agent_runner.config.proxy_mode": {
                         "description": "代理模式",
@@ -3642,10 +3642,10 @@ CONFIG_METADATA_3 = {
                         "description": "工具调用轮数上限",
                         "type": "int",
                     },
-                    "agent_runner.config.persona_id": {
-                        "description": "默认采用的人格",
+                    "agent_runner.config.prompt_id": {
+                        "description": "默认采用的提示词",
                         "type": "string",
-                        "_special": "select_persona",
+                        "_special": "select_prompt",
                     },
                     "agent_runner.config.proxy_mode": {
                         "description": "代理模式",
@@ -3717,10 +3717,10 @@ CONFIG_METADATA_3 = {
                         "description": "工具调用轮数上限",
                         "type": "int",
                     },
-                    "agent_runner.config.persona_id": {
-                        "description": "默认采用的人格",
+                    "agent_runner.config.prompt_id": {
+                        "description": "默认采用的提示词",
                         "type": "string",
-                        "_special": "select_persona",
+                        "_special": "select_prompt",
                     },
                     "agent_runner.config.proxy_mode": {
                         "description": "代理模式",
@@ -3819,30 +3819,30 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
-            "persona": {
-                "description": "人格",
+            "prompt": {
+                "description": "提示词",
                 "hint": "",
-                "docs": "use/persona.html",
+                "docs": "use/prompt.html",
                 "type": "object",
                 "items": {
-                    "agent_runner.config.persona.persona_id": {
-                        "description": "默认采用的人格",
+                    "agent_runner.config.prompt_id": {
+                        "description": "默认采用的提示词",
                         "type": "string",
-                        "_special": "select_persona",
+                        "_special": "select_prompt",
                     },
-                    "agent_runner.config.persona.safety_mode": {
+                    "agent_runner.config.safety_mode": {
                         "description": "健康模式",
                         "type": "bool",
                         "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。",
                     },
-                    "agent_runner.config.persona.safety_mode_strategy": {
+                    "agent_runner.config.safety_mode_strategy": {
                         "description": "健康模式策略",
                         "type": "string",
                         "invisible": True,
                         "options": ["system_prompt"],
                         "hint": "选择健康模式的实现策略。",
                         "condition": {
-                            "agent_runner.config.persona.safety_mode": True,
+                            "agent_runner.config.safety_mode": True,
                         },
                     },
                 },

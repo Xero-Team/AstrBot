@@ -26,7 +26,7 @@ On the tool panel you can:
 2. Allow or deny built-in, plugin, and MCP tools one by one;
 3. Enable native parallel execution (off by default).
 
-The final call still passes three gates: user authorization ∩ tools allowed by the Persona ∩ the tool's own policy. An empty tool list on a Persona means that role cannot use tools. See [Personas](./persona). A sub-agent handoff cannot raise the caller's authority.
+The final call still passes three gates: user authorization ∩ tools allowed by the Prompt ∩ the tool's own policy. An empty tool list on a Prompt means that role cannot use tools. See [Prompts](./prompt). A sub-agent handoff cannot raise the caller's authority.
 
 High-risk tools (local shell, file write, browser, Computer Use, writable MCP) also need [Authorization](./authorization). ChatUI needs step-up. IM messages do not inherit Dashboard `root`; bind the sender as `instance_operator` on that config to use the same instance-tool set.
 
@@ -60,5 +60,5 @@ When the profile sets `kb_agentic_mode`, retrieval becomes the `astr_kb_search` 
 
 1. Looking for tool switches under **Command management**.
 2. Leaving many tools on for a model that cannot call functions.
-3. The Persona tool list is empty, while the panel looks enabled.
+3. The Prompt tool list is empty, while the panel looks enabled.
 4. Parallel is on, but the MCP server stays serial because per-server concurrency defaults to 1.

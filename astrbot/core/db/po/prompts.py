@@ -5,13 +5,13 @@ from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 from astrbot.core.db.po.mixins import TimestampMixin
 
 
-class PersonaFolder(TimestampMixin, SQLModel, table=True):
-    """Persona 文件夹，支持递归层级结构。
+class PromptFolder(TimestampMixin, SQLModel, table=True):
+    """Prompt 文件夹，支持递归层级结构。
 
-    用于组织和管理多个 Persona，类似于文件系统的目录结构。
+    用于组织和管理多个 Prompt，类似于文件系统的目录结构。
     """
 
-    __tablename__ = "persona_folders"  # type: ignore
+    __tablename__ = "prompt_folders"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -33,25 +33,25 @@ class PersonaFolder(TimestampMixin, SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint(
             "folder_id",
-            name="uix_persona_folder_id",
+            name="uix_prompt_folder_id",
         ),
     )
 
 
-class Persona(TimestampMixin, SQLModel, table=True):
-    """Persona is a set of instructions for LLMs to follow.
+class Prompt(TimestampMixin, SQLModel, table=True):
+    """Prompt is a set of instructions for LLMs to follow.
 
     It can be used to customize the behavior of LLMs.
     """
 
-    __tablename__ = "personas"  # type: ignore
+    __tablename__ = "prompts"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
         default=None,
     )
-    persona_id: str = Field(max_length=255, nullable=False)
+    prompt_id: str = Field(max_length=255, nullable=False)
     system_prompt: str = Field(sa_type=Text, nullable=False)
     begin_dialogs: list | None = Field(default=None, sa_type=JSON)
     """a list of strings, each representing a dialog to start with"""
@@ -68,7 +68,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
 
     __table_args__ = (
         UniqueConstraint(
-            "persona_id",
-            name="uix_persona_id",
+            "prompt_id",
+            name="uix_prompt_id",
         ),
     )

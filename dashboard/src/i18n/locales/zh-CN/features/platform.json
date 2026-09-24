@@ -101,7 +101,7 @@
     },
     "configFileTitle": "配置文件",
     "optional": "可选",
-    "configHint": "想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。",
+    "configHint": "想如何配置机器人？配置文件包含了聊天模型、提示词、知识库、插件范围等丰富的机器人配置项。",
     "configDefaultHint": "默认使用默认配置文件 “default”。您也可以稍后配置。",
     "useExistingConfig": "使用现有配置文件",
     "selectConfigLabel": "选择配置文件",

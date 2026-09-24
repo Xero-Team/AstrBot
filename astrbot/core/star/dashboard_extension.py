@@ -35,7 +35,7 @@ DASHBOARD_EXTENSION_LISTENER_TIMEOUT_SECONDS = 2.0
 ALL_OPEN_API_SCOPES = (
     "bot",
     "provider",
-    "persona",
+    "prompt",
     "im",
     "config",
     "chat",

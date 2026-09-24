@@ -30,7 +30,7 @@
                     class="provider-source-avatar"
                   >
                     <v-img
-                      v-if="resolveOption(item)?.source?.provider"
+                      v-if="resolveSourceIcon(resolveOption(item)?.source)"
                       :src="resolveSourceIcon(resolveOption(item)?.source)"
                       :class="{
                         'provider-icon--monochrome': isMonochromeSourceIcon(
@@ -60,7 +60,7 @@
                       class="provider-source-avatar me-2"
                     >
                       <v-img
-                        v-if="resolveOption(item)?.source?.provider"
+                        v-if="resolveSourceIcon(resolveOption(item)?.source)"
                         :src="resolveSourceIcon(resolveOption(item)?.source)"
                         :class="{
                           'provider-icon--monochrome': isMonochromeSourceIcon(
@@ -167,7 +167,7 @@
           class="provider-source-item__avatar provider-source-avatar"
         >
           <v-img
-            v-if="source?.provider"
+            v-if="resolveSourceIcon(source)"
             :src="resolveSourceIcon(source)"
             :class="{
               'provider-icon--monochrome': isMonochromeSourceIcon(source),

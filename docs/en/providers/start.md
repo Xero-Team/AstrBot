@@ -40,7 +40,8 @@ Do not copy old `provider` objects by hand. The current WebUI coordinates model 
 
 ## JEV System One classifier
 
-Under **Providers → Classifier → Add Provider**, choose `jev_systemone`.
+Under **Providers → Classifier → Add Provider**, choose **JEV System One**
+(type `jev_systemone`).
 Set the HTTPS API base (default `https://api.typesafe.ai`), API key, model
 (`jev-latest` by default), and timeout in seconds. This is a standalone entry
 in `provider`, with capability `classifier`; it is not a chat model or Agent

@@ -40,7 +40,8 @@ Provider 数据保存在配置档的两个数组中：
 
 ## JEV System One 分类器
 
-在 **模型提供商 → 分类器 → 添加提供商** 中选择 `jev_systemone`。
+在 **模型提供商 → 分类器 → 添加提供商** 中选择 **JEV System One**
+（类型 `jev_systemone`）。
 填写 HTTPS API 地址（默认 `https://api.typesafe.ai`）、API Key、模型
 （默认 `jev-latest`）和超时秒数。这是 `provider` 中能力类型为
 `classifier` 的独立条目，不是对话模型或 Agent Runner。Key 列表使用首项，

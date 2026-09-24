@@ -51,7 +51,7 @@
                   <div class="provider-card-content">
                     <div class="provider-card-text">
                       <v-card-title class="provider-card-title">{{
-                        name
+                        getTemplateDisplayName(template, name)
                       }}</v-card-title>
                       <v-card-text
                         class="text-caption text-medium-emphasis provider-card-description"
@@ -104,8 +104,9 @@
 import { computed, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import {
-  getProviderIcon,
   getProviderDescription as describeProvider,
+  getProviderDisplayName,
+  getProviderIcon,
   isMonochromeProviderIcon,
 } from '@/utils/providerUtils';
 
@@ -215,6 +216,10 @@ function resolveProviderIcon(provider?: string) {
 
 function getTemplateDescription(template: ProviderTemplate, name: string) {
   return describeProvider(template, name, tm);
+}
+
+function getTemplateDisplayName(template: ProviderTemplate, name: string) {
+  return getProviderDisplayName(template.type, name);
 }
 
 function selectProviderTemplate(name: string) {

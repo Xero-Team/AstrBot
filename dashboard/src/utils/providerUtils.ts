@@ -69,6 +69,10 @@ const PROVIDER_ICONS: Record<string, string> = {
     'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg',
   volcengine:
     'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
+  typesafe: new URL(
+    '@/assets/images/provider_logos/typesafe.svg',
+    import.meta.url,
+  ).href,
 };
 
 interface ProviderDescriptionTemplate {
@@ -78,6 +82,17 @@ interface ProviderDescriptionTemplate {
 
 export function getProviderIcon(type: string): string {
   return PROVIDER_ICONS[type] || '';
+}
+
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  jev_systemone: 'JEV System One',
+};
+
+export function getProviderDisplayName(
+  type: string | undefined,
+  fallback: string,
+): string {
+  return (type && PROVIDER_DISPLAY_NAMES[type]) || fallback;
 }
 
 const MONOCHROME_PROVIDER_ICONS = new Set([
@@ -102,6 +117,7 @@ const MONOCHROME_PROVIDER_ICONS = new Set([
   'xiaomi-token-plan',
   'openrouter',
   'opencode-go',
+  'typesafe',
 ]);
 
 export function isMonochromeProviderIcon(type: string): boolean {

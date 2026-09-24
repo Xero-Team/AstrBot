@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { providerApi } from '@/api/v1';
 import {
+  getProviderDisplayName,
   getProviderIcon,
   isMonochromeProviderIcon,
 } from '@/utils/providerUtils';
@@ -222,7 +223,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
-          label: templateName,
+          label: getProviderDisplayName(template.type, templateName),
           icon: getProviderIcon(template.provider || ''),
           isMonochrome: isMonochromeProviderIcon(template.provider || ''),
         });

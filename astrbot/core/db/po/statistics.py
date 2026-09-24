@@ -15,7 +15,7 @@ class PlatformStat(SQLModel, table=True):
     __tablename__ = "platform_stats"  # type: ignore
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
-    timestamp: datetime = Field(nullable=False, sa_type=DateTime(timezone=False))
+    timestamp: datetime = Field(nullable=False, sa_type=DateTime)
     platform_id: str = Field(nullable=False)
     platform_type: str = Field(nullable=False)  # such as "aiocqhttp", "slack", etc.
     count: int = Field(default=0, nullable=False)

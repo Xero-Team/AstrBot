@@ -46,8 +46,8 @@ class Document(BaseDocModel, table=True):
     text: str = Field(nullable=False)
     metadata_: str | None = Field(default=None, sa_column=Column("metadata", Text))
     # Retain the legacy local timestamps without reinterpreting them as UTC.
-    created_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
-    updated_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    created_at: datetime | None = Field(default=None, sa_type=DateTime)
+    updated_at: datetime | None = Field(default=None, sa_type=DateTime)
 
 
 class DocumentStorage:

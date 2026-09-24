@@ -44,11 +44,11 @@ class KnowledgeBase(BaseKBModel, table=True):
     # Keep existing database timestamps unchanged across SQLModel upgrades.
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
-        sa_type=DateTime(timezone=False),
+        sa_type=DateTime,
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
-        sa_type=DateTime(timezone=False),
+        sa_type=DateTime,
         sa_column_kwargs={"onupdate": datetime.now(UTC)},
     )
     doc_count: int = Field(default=0, nullable=False)
@@ -95,11 +95,11 @@ class KBDocument(BaseKBModel, table=True):
     source_url: str | None = Field(default=None, max_length=2048)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
-        sa_type=DateTime(timezone=False),
+        sa_type=DateTime,
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
-        sa_type=DateTime(timezone=False),
+        sa_type=DateTime,
         sa_column_kwargs={"onupdate": datetime.now(UTC)},
     )
 
@@ -141,5 +141,5 @@ class KBMedia(BaseKBModel, table=True):
     mime_type: str = Field(max_length=100, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
-        sa_type=DateTime(timezone=False),
+        sa_type=DateTime,
     )

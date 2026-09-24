@@ -33,8 +33,6 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     persistent: bool = Field(default=True)
     run_once: bool = Field(default=False)
     status: str = Field(default="scheduled", max_length=32)
-    last_run_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
-    next_run_time: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=False)
-    )
+    last_run_at: datetime | None = Field(default=None, sa_type=DateTime)
+    next_run_time: datetime | None = Field(default=None, sa_type=DateTime)
     last_error: str | None = Field(default=None, sa_type=Text)

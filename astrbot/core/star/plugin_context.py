@@ -33,9 +33,10 @@ from astrbot.core.platform.session_bridge import (
 from astrbot.core.platform.telegram_capability import TelegramCapability
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import (
+    ClassifierProvider,
     EmbeddingProvider,
     Provider,
-    RerankProvider,
+    Providers,
     STTProvider,
     TTSProvider,
 )
@@ -361,9 +362,7 @@ class ModelCapability:
     def get(
         self,
         provider_id: str,
-    ) -> (
-        Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
-    ):
+    ) -> Providers | None:
         """Return one configured provider instance by ID."""
         return self._execution.get_provider_by_id(provider_id)
 
@@ -382,6 +381,10 @@ class ModelCapability:
     def embeddings(self) -> tuple[EmbeddingProvider, ...]:
         """Return configured embedding providers."""
         return tuple(self._execution.get_all_embedding_providers())
+
+    def classifiers(self) -> tuple[ClassifierProvider, ...]:
+        """Return configured typed classifier providers."""
+        return tuple(self._execution.get_all_classifier_providers())
 
     def using_chat(self, umo: str | None = None) -> Provider | None:
         """Return the active chat provider for a session."""

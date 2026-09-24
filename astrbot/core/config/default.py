@@ -9,6 +9,21 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent_runner import get_agent_runner_config_default
 
+JEV_SYSTEMONE_TEMPLATE = {
+    "id": "jev_systemone",
+    "provider": "typesafe",
+    "type": "jev_systemone",
+    "provider_type": "classifier",
+    "enable": True,
+    "api_base": "https://api.typesafe.ai",
+    "key": [],
+    "model": "jev-latest",
+    "timeout": 20,
+    "proxy_mode": "inherit",
+    "proxy_url": "",
+    "custom_headers": {},
+}
+
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
     """Return fresh Local permission defaults for the operating system.
@@ -1336,6 +1351,7 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 # provider sources templates
                 "config_template": {
+                    "jev_systemone": JEV_SYSTEMONE_TEMPLATE,
                     "OpenAI Chat Completions": {
                         "id": "openai_chat_completions",
                         "provider": "openai",

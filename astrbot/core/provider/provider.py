@@ -17,12 +17,16 @@ from astrbot.core.provider.entities import (
     RerankResult,
 )
 from astrbot.core.provider.headers import build_provider_headers
+from astrbot.core.typed_decision import (
+    ClassifierInput,
+    ClassifierQuestion,
+    ClassifierResult,
+    NoulQuestion,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.error_redaction import safe_error
 
-type Providers = (
-    "Provider | STTProvider | TTSProvider | EmbeddingProvider | RerankProvider"
-)
+type Providers = "Provider | STTProvider | TTSProvider | EmbeddingProvider | RerankProvider | ClassifierProvider"
 _EMBEDDING_BATCH_ERROR = "Embedding batch processing failed"
 
 
@@ -90,6 +94,26 @@ class AbstractProvider(abc.ABC):
             Exception: if the provider is not available
         """
         ...
+
+
+class ClassifierProvider(AbstractProvider):
+    """Evaluate named typed questions without chat history or tool execution."""
+
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_settings = provider_settings
+
+    @abc.abstractmethod
+    async def evaluate(
+        self, state: ClassifierInput, questions: dict[str, ClassifierQuestion]
+    ) -> ClassifierResult:
+        """Return one typed answer per question, including model and token usage."""
+        raise NotImplementedError
+
+    async def test(self) -> None:
+        await self.evaluate(
+            "Connection test", {"test": NoulQuestion(instructions="Is this text?")}
+        )
 
 
 class Provider(AbstractProvider):

@@ -125,6 +125,9 @@ export function resolveDefaultTab(value?: string) {
   if (normalized.includes('rerank')) {
     return 'rerank';
   }
+  if (normalized.includes('classifier')) {
+    return 'classifier';
+  }
 
   return 'chat_completion';
 }
@@ -190,6 +193,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       value: 'rerank',
       label: tm('providers.tabs.rerank'),
       icon: 'mdi-compare-vertical',
+    },
+    {
+      value: 'classifier',
+      label: tm('providers.tabs.classifier'),
+      icon: 'mdi-code-json',
     },
   ]);
 

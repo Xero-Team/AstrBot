@@ -1,6 +1,6 @@
 {
   "title": "模型提供商",
-  "subtitle": "在“对话”中配置对话模型，并在其他标签页中管理语音、嵌入和重排序提供商。Agent 执行器在配置档页面设置。",
+  "subtitle": "配置对话、语音、向量、重排序和分类器提供商。Agent Runner 在配置档的配置页面中设置。",
   "providers": {
     "title": "模型提供商",
     "settings": "设置",
@@ -14,7 +14,8 @@
       "speechToText": "语音转文字",
       "textToSpeech": "文字转语音",
       "embedding": "嵌入",
-      "rerank": "重排序"
+      "rerank": "重排序",
+      "classifier": "分类器"
     },
     "empty": {
       "all": "暂无模型提供商，点击 新增模型提供商 添加",
@@ -29,7 +30,8 @@
       "opencode_go_messages": "OpenCode Go Messages 专用接入。发送 AstrBot User-Agent 和哈希后的会话头。",
       "opencode_go_responses": "OpenCode Go Responses 专用接入。发送 AstrBot User-Agent 和哈希后的会话头。",
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
-      "default": ""
+      "default": "",
+      "jev_systemone": "TypeSafe JEV 结构化判定（noul、choice、score）。"
     }
   },
   "availability": {
@@ -56,7 +58,8 @@
         "speechToText": "语音转文字",
         "textToSpeech": "文字转语音",
         "embedding": "嵌入(Embedding)",
-        "rerank": "重排序(Rerank)"
+        "rerank": "重排序(Rerank)",
+        "classifier": "分类器"
       },
       "noTemplates": "暂无该类型的提供商模板"
     },

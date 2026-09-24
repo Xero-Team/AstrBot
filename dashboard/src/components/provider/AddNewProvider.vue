@@ -22,6 +22,10 @@
             <v-icon start>mdi-compare-vertical</v-icon>
             {{ tm('dialogs.addProvider.tabs.rerank') }}
           </v-tab>
+          <v-tab value="classifier" class="font-weight-medium px-3">
+            <v-icon start>mdi-code-json</v-icon>
+            {{ tm('dialogs.addProvider.tabs.classifier') }}
+          </v-tab>
         </v-tabs>
 
         <v-window v-model="activeProviderTab" class="mt-4">
@@ -110,7 +114,8 @@ type ProviderTab =
   | 'speech_to_text'
   | 'text_to_speech'
   | 'embedding'
-  | 'rerank';
+  | 'rerank'
+  | 'classifier';
 
 interface ProviderTemplate {
   type?: string;
@@ -129,6 +134,7 @@ const AVAILABLE_PROVIDER_TABS: ProviderTab[] = [
   'text_to_speech',
   'embedding',
   'rerank',
+  'classifier',
 ];
 
 const PROVIDER_WINDOW_TABS: ProviderTab[] = [

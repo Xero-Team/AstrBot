@@ -1,6 +1,7 @@
 """Static provider type-to-module registration map."""
 
 PROVIDER_MODULES = {
+    "jev_systemone": "astrbot.core.provider.sources.jev_systemone_source",
     "openai_chat_completions": "astrbot.core.provider.sources.openai_chat_completions_source",
     "openai_responses": "astrbot.core.provider.sources.openai_responses_source",
     "longcat_chat_completion": "astrbot.core.provider.sources.longcat_source",

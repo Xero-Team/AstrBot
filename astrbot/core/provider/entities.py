@@ -11,6 +11,7 @@ class ProviderType(enum.Enum):
     TEXT_TO_SPEECH = "text_to_speech"
     EMBEDDING = "embedding"
     RERANK = "rerank"
+    CLASSIFIER = "classifier"
 
 
 @dataclass

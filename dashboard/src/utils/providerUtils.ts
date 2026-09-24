@@ -115,6 +115,10 @@ export function getProviderDescription(
 ): string {
   const type = template.type ?? '';
 
+  if (type === 'jev_systemone') {
+    return tm('providers.description.jev_systemone');
+  }
+
   if (type === 'openai_chat_completions') {
     return tm('providers.description.openai_chat_completions');
   }

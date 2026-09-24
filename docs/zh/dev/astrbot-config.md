@@ -214,6 +214,84 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 对话循环可以读取工作循环的历史：其请求上下文会附带工作循环最近的完整回合（仅面向模型，不会写入任何一份历史），因此聊天可以引用工作结果。交接过程只还原文本回合，工具调用与其结果不会跨越循环边界。关闭 BTW 后，运行只读取所属对话的历史，不创建工作对话，也不注入任何内容。
 
+## JEV 路由实验（R4）
+
+[#272](https://github.com/Xero-Team/AstrBot/issues/272) 新增默认关闭的实验，仍需在
+[#122](https://github.com/Xero-Team/AstrBot/issues/122) 下比较各方案。
+先配置 [JEV 分类器](../providers/start.md#jev-system-one-分类器)，然后在
+**更多功能 → BTW 双循环** 中开启两个循环并设置：
+
+```json
+{
+  "btw": {
+    "enabled": true,
+    "work_loop": { "enabled": true },
+    "classifier": {
+      "enabled": true,
+      "provider_id": "jev_systemone",
+      "fallback_provider_id": "",
+      "confidence_threshold": 0.85,
+      "clarify_on_uncertain": false
+    }
+  }
+}
+```
+
+提供商 ID 应与实际配置一致。关闭分类或两个提供商字段都留空时，保留既有的显式提交、
+对话模型编写任务后转交的行为。实验仅作用于通过准入与会话 AI 开关检查的本地 Agent
+普通文本请求。显式 `/work`、插件提供的请求、附件、引用回复和超过 8,000 字符的消息
+保留原有路径。
+
+路由使用 `choice`，选项为 `conversation`、`work`、`clarify`、`unavailable`。
+能力来自各循环既有工具目录与冻结的 Skill 快照，遵循 Persona、插件/MCP/Skill 分配、
+运行时与入口权限限制，不维护第二套能力注册表。高置信度的 `work` 还要求存在工作循环
+独有的能力；转交复用 WorkLoop 的提交、请求身份、投递和执行授权检查，不授予权限，
+也不自行选择或调用编码 CLI。
+
+分类器不存在、失败、超时或低置信度时，使用相同输入调用一次对话兜底模型，要求严格
+JSON 判定。兜底 ID 留空时采用对话循环模型及其既有的会话/默认模型回退。分类与兜底
+调用各自最多 20 秒，包含重试；兜底不执行工具。兜底模型自报的置信度并非 JEV 的校准
+分布统计量，共用数值阈值只是实验设置。
+
+兜底仍不确定或失败时留在对话。`clarify` 也默认留在对话；开启 `clarify_on_uncertain`
+后改为直接请求补充任务信息。`unavailable` 提示两个循环都缺少所需能力。凡是留在对话
+的判定，本次请求均禁用 `submit_work_task`，包括间接调用。用户仍可发送新的显式
+`/work`。工作不会再次分类；重复进入、取消、停止或关闭工作循环不会产生重复转交。
+
+### 第三方数据边界
+
+仅将**当前消息文本、已解析的能力名称及简短摘要**发送给 JEV，必要时也发送给兜底模型。
+`state` 不含历史对话、Persona 提示词、原始工具 schema、Skill 正文、凭据配置、
+本地路径元数据或无关配置。文本在截断前脱敏，移除可识别的凭据、token、URL 与绝对/相对路径。
+不要在自由文本中写入秘密：规则无法识别所有任意字符串密钥。路由器不记录原始请求或
+远端错误正文；请求内结果只记录判定、模型版本、用量、状态与延迟。
+
+### 复现实验
+
+`tests/fixtures/btw_routing/v1.json` 固定基线
+`9bac9db64c7e038652f8af349de5c15a4604a835`、21 条评测用例、成对能力、标签与**提议中的**阈值，
+不含调参用例。实现时父 Issue 尚无版本化共享语料；这里提供 R1–R4 可共用的候选语料，
+不代表其他方案已在此版本上评测。显式 `/work` 为对照。`contracts.json` 单独保存
+脚本化响应，回放只验证路由契约，不代表模型准确率。
+
+```bash
+uv run python scripts/evaluate_btw_classifier.py \
+  --mode contract --output .tmp/jev-routing-contract.json
+
+# 付费真实评测前设置 TYPESAFE_API_KEY。
+uv run python scripts/evaluate_btw_classifier.py \
+  --mode live --model jev-1.13.0 --repeats 3 \
+  --output .tmp/jev-routing-live.json
+```
+
+真实对话兜底还需 `BTW_FALLBACK_API_KEY`，以及指向 OpenAI 兼容服务的
+`--fallback-api-base`、`--fallback-model`。可选 `--input-price`/`--output-price`
+为 JEV 每百万 token 的美元价格；不含缺失用量、失败调用计费与兜底模型费用。
+报告包含模型版本、完整提示词/问题、参数、提交版本、工作区状态、数据集哈希、逐例判定、
+错误/遗漏转交、延迟、提供商调用数、token 数与重复运行波动。脚本不执行工具，完成率、
+澄清质量与重复副作用结果仍需另行监督式评测；确定性生命周期测试验证执行边界。
+回放成功不代表采用 R4，也不代表完成父 Issue 的方案比较。
+
 ## BTW 插件工具循环分配
 
 在配置档中启用 BTW 后，可通过 **更多功能 → BTW 双循环 → 插件工具循环分配** 为每个已启用的非系统插件选择对话循环、工作循环或两者。未分配的插件默认仅工作循环可用；选择两者会保存显式覆盖，重新选择工作循环会移除覆盖。关闭 BTW 后保留普通工具可用性。

@@ -1,15 +1,25 @@
 """Opt-in conversation entry over the existing Agent request executor."""
 
 import asyncio
+import math
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from astrbot.core.agent.btw import i18n as work_i18n
+from astrbot.core.agent.btw.classifier import (
+    RoutingResult,
+    classify_request,
+    routing_state,
+)
 from astrbot.core.agent.btw.conversation_report import compose_work_report
 from astrbot.core.agent.btw.types import is_work_loop_enabled
 from astrbot.core.agent.btw.work_loop import WorkLoop
 from astrbot.core.agent.btw.work_sessions import WorkSessionManager
+from astrbot.core.message.components import Mention, Plain
+from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.typed_decision import ClassifierModel
 
 if TYPE_CHECKING:
     from astrbot.core.pipeline.context import PipelineContext
@@ -19,7 +29,7 @@ if TYPE_CHECKING:
 
 
 class ConversationLoop:
-    """Own conversation admission without choosing an automatic classifier."""
+    """Own conversation admission and the opt-in classifier experiment."""
 
     def __init__(self, agent_request: AgentRequestSubStage) -> None:
         self.agent_request = agent_request
@@ -34,6 +44,7 @@ class ConversationLoop:
     async def initialize(self, ctx: PipelineContext) -> None:
         """Initialize the shared Agent executor for this profile."""
         self.astrbot_config = ctx.astrbot_config
+        self.ctx = ctx
         btw = self.astrbot_config.get("btw", {})
         self._btw_enabled = isinstance(btw, dict) and bool(btw.get("enabled", False))
         await self.agent_request.initialize(ctx)
@@ -100,6 +111,8 @@ class ConversationLoop:
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
         """Process one admitted conversation using the current Agent path."""
+        if event.get_extra("btw_classifier_processed"):
+            return
         if (
             self._btw_enabled
             and event.get_extra("btw_force_work")
@@ -112,5 +125,110 @@ class ConversationLoop:
             return
         if self._btw_enabled:
             event.set_extra("btw_loop", "conversation")
+        settings = (
+            self.astrbot_config.get("btw", {}).get("classifier", {})
+            if self._btw_enabled
+            else {}
+        )
+        if self._can_classify(event, settings):
+            # Claim before the admission check's await as well as the model call.
+            event.set_extra("btw_classifier_processed", True)
+            event.set_extra("btw_classifier_no_handoff", True)
+            if (
+                not await self.agent_request.session_services.should_process_llm_request(
+                    event
+                )
+                or event.is_stopped()
+            ):
+                return
+            routing = await self._classify(event, settings)
+            event.set_extra("btw_classifier_result", asdict(routing))
+            if event.is_stopped():
+                return
+            if routing.decision == "work" and is_work_loop_enabled(self.astrbot_config):
+                assert self.work_loop is not None
+                async for response in self.work_loop.submit(event):
+                    yield response
+                return
+            if routing.decision == "unavailable" or (
+                settings.get("clarify_on_uncertain", False)
+                and (routing.decision == "clarify" or routing.source == "safe_default")
+            ):
+                key = "unavailable" if routing.decision == "unavailable" else "clarify"
+                event.set_result(
+                    MessageEventResult().message(
+                        work_i18n.text(
+                            work_i18n.resolve_event_locale(event),
+                            f"btw.classifier.{key}",
+                        )
+                    )
+                )
+                yield
+                return
         async for response in self.agent_request.process(event):
             yield response
+
+    def _can_classify(self, event: AstrMessageEvent, settings: object) -> bool:
+        """Only ordinary admitted text requests on the local Agent are eligible."""
+        return (
+            isinstance(settings, dict)
+            and settings.get("enabled") is True
+            and bool(
+                settings.get("provider_id") or settings.get("fallback_provider_id")
+            )
+            and is_work_loop_enabled(self.astrbot_config)
+            and self.astrbot_config.get("agent_runner", {}).get("runner_type", "local")
+            == "local"
+            and self.astrbot_config.get("provider_settings", {}).get("enable", True)
+            and not event.get_extra("provider_request")
+            and not event.get_extra("btw_work_session_id")
+            and not event.is_stopped()
+            and bool(event.message_str.strip())
+            and len(event.message_str) <= 8000
+            and all(
+                isinstance(part, Plain | Mention) for part in event.message_obj.message
+            )
+        )
+
+    async def _classify(self, event: AstrMessageEvent, settings: dict) -> RoutingResult:
+        from astrbot.core.astr_main_agent import (
+            _is_chat_model,
+            _select_provider,
+            resolve_btw_capabilities,
+        )
+
+        try:
+            threshold = settings.get("confidence_threshold", 0.85)
+            if (
+                type(threshold) not in (int, float)
+                or not math.isfinite(threshold)
+                or not 0 <= threshold <= 1
+            ):
+                return RoutingResult()
+            context = self.ctx.execution_context
+            capabilities = await resolve_btw_capabilities(event, context)
+            state = routing_state(event.message_str, capabilities)
+            provider_id = settings.get("provider_id", "")
+            classifier = (
+                context.get_provider_by_id(provider_id) if provider_id else None
+            )
+            fallback_id = settings.get("fallback_provider_id", "")
+            if fallback_id:
+                fallback = context.get_provider_by_id(fallback_id)
+            else:
+                loop_settings = self.astrbot_config.get("btw", {}).get(
+                    "conversation_loop", {}
+                )
+                fallback = _select_provider(
+                    event, context, loop_settings.get("provider_id", "")
+                )
+            return await classify_request(
+                state,
+                classifier if isinstance(classifier, ClassifierModel) else None,
+                fallback if _is_chat_model(fallback) else None,
+                confidence_threshold=threshold,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return RoutingResult()

@@ -19,6 +19,11 @@ function mountRenderer(special: string) {
     },
     global: {
       stubs: {
+        ProviderSelector: {
+          props: ['providerType', 'modelValue'],
+          emits: ['update:modelValue'],
+          template: '<button class="provider-stub" @click="$emit(\'update:modelValue\', \'jev\')">{{ providerType }}</button>',
+        },
         PluginLoopSelector: {
           template: '<div class="plugin-loop-stub"></div>',
         },
@@ -38,6 +43,13 @@ function mountRenderer(special: string) {
 }
 
 describe('ConfigItemRenderer loop-route specials', () => {
+  it('selects classifier providers and forwards the configured ID', async () => {
+    const wrapper = mountRenderer('select_provider_classifier');
+    expect(wrapper.find('.provider-stub').text()).toBe('classifier');
+    await wrapper.find('.provider-stub').trigger('click');
+    expect(wrapper.emitted('update:modelValue')).toEqual([['jev']]);
+    wrapper.unmount();
+  });
   it('renders PluginLoopSelector for plugin loop assignments', () => {
     const wrapper = mountRenderer('select_plugin_loop_routes');
     expect(wrapper.find('.plugin-loop-stub').exists()).toBe(true);

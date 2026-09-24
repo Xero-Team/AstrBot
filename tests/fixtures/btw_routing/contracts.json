@@ -1,0 +1,87 @@
+[
+  {
+    "case": "weather_work",
+    "jev": "work",
+    "confidence": 0.99,
+    "fallback": null,
+    "expected": "work"
+  },
+  {
+    "case": "weather_chat",
+    "jev": "conversation",
+    "confidence": 0.99,
+    "fallback": null,
+    "expected": "conversation"
+  },
+  {
+    "case": "missing_target",
+    "jev": "clarify",
+    "confidence": 0.99,
+    "fallback": null,
+    "expected": "clarify"
+  },
+  {
+    "case": "physical",
+    "jev": "unavailable",
+    "confidence": 0.99,
+    "fallback": null,
+    "expected": "unavailable"
+  },
+  {
+    "case": "weather_work",
+    "jev": "work",
+    "confidence": 0.4,
+    "fallback": {
+      "decision": "work",
+      "confidence": 0.99
+    },
+    "expected": "work"
+  },
+  {
+    "case": "weather_work",
+    "jev": "error",
+    "confidence": 0,
+    "fallback": {
+      "decision": "conversation",
+      "confidence": 0.99
+    },
+    "expected": "conversation"
+  },
+  {
+    "case": "weather_work",
+    "jev": "absent",
+    "confidence": 0,
+    "fallback": {
+      "decision": "work",
+      "confidence": 0.99
+    },
+    "expected": "work"
+  },
+  {
+    "case": "weather_work",
+    "jev": "work",
+    "confidence": 0.4,
+    "fallback": {
+      "decision": "work",
+      "confidence": 0.4
+    },
+    "expected": "conversation"
+  },
+  {
+    "case": "weather_work",
+    "jev": "error",
+    "confidence": 0,
+    "fallback": {
+      "decision": "invented",
+      "confidence": 1
+    },
+    "expected": "conversation"
+  },
+  {
+    "case": "physical",
+    "jev": "work",
+    "confidence": 0.99,
+    "fallback": null,
+    "expected": "unavailable"
+  }
+]

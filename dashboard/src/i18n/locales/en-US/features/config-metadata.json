@@ -521,6 +521,28 @@
         "skill_routes": {
           "description": "Skill loop assignments",
           "hint": "Skills default to both loops; explicitly restrict an enabled Skill to one loop when needed. Workspace Skills remain work-only with the local runtime."
+        },
+        "classifier": {
+          "enabled": {
+            "description": "Experimental automatic work routing",
+            "hint": "Off by default. With a classifier or fallback configured, send redacted message text and capability summaries for routing; uncertain requests stay in conversation."
+          },
+          "provider_id": {
+            "description": "Classifier provider",
+            "hint": "Choose a JEV System One classifier. Missing providers, failures and low confidence use the chat fallback."
+          },
+          "fallback_provider_id": {
+            "description": "Routing fallback chat model",
+            "hint": "Empty uses the conversation loop model. If both provider fields are empty, automatic classification stays off. The fallback returns only a typed decision and cannot call tools."
+          },
+          "confidence_threshold": {
+            "description": "Routing confidence threshold",
+            "hint": "Between 0 and 1, default 0.85. Low classifier confidence triggers fallback. An uncertain fallback stays in conversation and blocks work handoff for this request."
+          },
+          "clarify_on_uncertain": {
+            "description": "Ask for clarification when uncertain",
+            "hint": "Ask for task details after an ambiguous or failed decision. Off continues conversation without starting work."
+          }
         }
       }
     },

@@ -515,6 +515,28 @@
         "skill_routes": {
           "description": "Skills 循环分配",
           "hint": "Skill 默认注入两个循环；可为每个已启用 Skill 显式限制到单一循环。 工作区 Skill 仅在本地工作循环可用。"
+        },
+        "classifier": {
+          "enabled": {
+            "description": "实验性自动工作路由",
+            "hint": "默认关闭。配置分类器或兜底模型后，将脱敏消息与可用能力摘要发送给模型判定；不确定时留在对话。"
+          },
+          "provider_id": {
+            "description": "分类器提供商",
+            "hint": "选择 JEV System One 分类器。不可用、失败或低置信度时使用对话模型兜底。"
+          },
+          "fallback_provider_id": {
+            "description": "路由兜底对话模型",
+            "hint": "留空使用对话循环模型。分类器与此项均为空时不自动分类。兜底只返回结构化判定，不调用工具。"
+          },
+          "confidence_threshold": {
+            "description": "路由置信度阈值",
+            "hint": "0 到 1，默认 0.85。分类器低于阈值时调用兜底；兜底仍不确定时保持对话并禁用本次工作转交。"
+          },
+          "clarify_on_uncertain": {
+            "description": "路由不确定时请求澄清",
+            "hint": "开启后，需澄清或判定失败时直接请求补充信息；关闭则继续对话，但不启动工作任务。"
+          }
         }
       }
     },

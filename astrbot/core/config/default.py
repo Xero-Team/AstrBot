@@ -228,6 +228,13 @@ DEFAULT_CONFIG = {
     },
     "btw": {
         "enabled": False,
+        "classifier": {
+            "enabled": False,
+            "provider_id": "",
+            "fallback_provider_id": "",
+            "confidence_threshold": 0.85,
+            "clarify_on_uncertain": False,
+        },
         "conversation_loop": {"provider_id": ""},
         "work_loop": {
             "enabled": False,
@@ -4875,6 +4882,38 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
             "_special": "select_provider",
             "hint": "留空时沿用当前会话的模型选择。配置后优先使用此模型；该模型不可用时自动回退到当前会话或默认模型。",
             "condition": {"btw.enabled": True},
+        },
+        "btw.classifier.enabled": {
+            "description": "实验性自动工作路由",
+            "type": "bool",
+            "hint": "默认关闭。配置分类器或兜底模型后，将脱敏消息与可用能力摘要发送给模型判定；不确定时留在对话。",
+            "condition": {"btw.work_loop.enabled": True},
+        },
+        "btw.classifier.provider_id": {
+            "description": "分类器提供商",
+            "type": "string",
+            "_special": "select_provider_classifier",
+            "hint": "选择 JEV System One 分类器。不可用、失败或低置信度时使用对话模型兜底。",
+            "condition": {"btw.classifier.enabled": True},
+        },
+        "btw.classifier.fallback_provider_id": {
+            "description": "路由兜底对话模型",
+            "type": "string",
+            "_special": "select_provider",
+            "hint": "留空使用对话循环模型。分类器与此项均为空时不自动分类。兜底只返回结构化判定，不调用工具。",
+            "condition": {"btw.classifier.enabled": True},
+        },
+        "btw.classifier.confidence_threshold": {
+            "description": "路由置信度阈值",
+            "type": "float",
+            "hint": "0 到 1，默认 0.85。分类器低于阈值时调用兜底；兜底仍不确定时保持对话并禁用本次工作转交。",
+            "condition": {"btw.classifier.enabled": True},
+        },
+        "btw.classifier.clarify_on_uncertain": {
+            "description": "路由不确定时请求澄清",
+            "type": "bool",
+            "hint": "开启后，需澄清或判定失败时直接请求补充信息；关闭则继续对话，但不启动工作任务。",
+            "condition": {"btw.classifier.enabled": True},
         },
         "btw.work_loop.enabled": {
             "description": "启用工作循环",

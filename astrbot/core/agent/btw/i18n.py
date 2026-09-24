@@ -8,6 +8,8 @@ to ``zh-CN``.
 
 LOCALES: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "btw.classifier.clarify": "请补充任务目标和必要信息；如需启动工作任务，请明确使用 /work 提交完整任务。",
+        "btw.classifier.unavailable": "当前对话和工作循环都缺少完成此请求所需的能力。请调整可用工具或缩小任务范围。",
         "btw.work.started": "🔧 工作任务已开始处理。",
         "btw.work.status.pending": "工作任务正在排队。",
         "btw.work.status.running": "工作任务正在执行。",
@@ -22,6 +24,8 @@ LOCALES: dict[str, dict[str, str]] = {
         "btw.work.report.artifacts": "本次任务产出的文件：",
     },
     "en-US": {
+        "btw.classifier.clarify": "Please clarify the task and include the necessary details. To start work explicitly, submit the complete task with /work.",
+        "btw.classifier.unavailable": "Neither loop currently has the capabilities needed for this request. Adjust the available tools or narrow the task.",
         "btw.work.started": "🔧 Work task started.",
         "btw.work.status.pending": "The work task is queued.",
         "btw.work.status.running": "The work task is running.",

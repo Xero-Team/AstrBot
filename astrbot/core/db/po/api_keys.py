@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, SQLModel, UniqueConstraint
 
 from astrbot.core.db.po.mixins import TimestampMixin
@@ -27,9 +28,11 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     key_prefix: str = Field(max_length=24, nullable=False)
     scopes: list | None = Field(default=None, sa_type=JSON)
     created_by: str = Field(max_length=255, nullable=False)
-    last_used_at: datetime | None = Field(default=None)
-    expires_at: datetime | None = Field(default=None)
-    revoked_at: datetime | None = Field(default=None)
+    last_used_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
+    expires_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    revoked_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
 
     __table_args__ = (
         UniqueConstraint(

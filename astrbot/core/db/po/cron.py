@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, SQLModel, Text
 
 from astrbot.core.db.po.mixins import TimestampMixin
@@ -32,6 +33,8 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     persistent: bool = Field(default=True)
     run_once: bool = Field(default=False)
     status: str = Field(default="scheduled", max_length=32)
-    last_run_at: datetime | None = Field(default=None)
-    next_run_time: datetime | None = Field(default=None)
+    last_run_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    next_run_time: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
     last_error: str | None = Field(default=None, sa_type=Text)

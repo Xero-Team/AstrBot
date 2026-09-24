@@ -1,6 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, Index, SQLModel, Text, UniqueConstraint
 
 from astrbot.core.db.po.mixins import TimestampMixin
@@ -229,4 +230,6 @@ class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
     token_hash: str = Field(max_length=64, nullable=False, unique=True, index=True)
     account_id: str = Field(nullable=False, index=True, max_length=64)
     totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
-    expires_at: datetime = Field(nullable=False, index=True)
+    expires_at: datetime = Field(
+        nullable=False, index=True, sa_type=DateTime(timezone=False)
+    )

@@ -240,6 +240,10 @@ class CoreExecutionContext:
             ),
             get_locale=self._session_locale,
             get_platform_family=self._adapter_family,
+            html_renderer=html_renderer,
+            get_forward_card_enabled=lambda umo: bool(
+                self.get_config(umo).get("t2i_forward_card", True)
+            ),
             store=cast(SessionBridgeStore, db),
         )
         """Runtime-owned expiring cross-session watch state."""

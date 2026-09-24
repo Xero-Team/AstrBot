@@ -1196,6 +1196,16 @@
         },
         "empty_mention_waiting": {
           "description": "Wait after a prefix-only message"
+        },
+        "onebot_forward": {
+          "expand_on_ingress": {
+            "description": "Expand merged forwards on ingress",
+            "hint": "When a OneBot v11 adapter receives an unexpanded merged forward, it calls get_forward_msg to fill in content so bridges can rebuild a native card or an image. Failed fetches keep the placeholder and never block the message."
+          },
+          "max_fetch": {
+            "description": "Ingress expansion fetch limit",
+            "hint": "Maximum number of recursive get_forward_msg calls per message during ingress expansion."
+          }
         }
       },
       "command_prefixes": {
@@ -1475,6 +1485,10 @@
       "t2i_active_template": {
         "description": "Currently Active Text-to-Image Rendering Template",
         "hint": "This value is maintained by the text-to-image template management page."
+      },
+      "t2i_forward_card": {
+        "description": "Render merged forwards as an image card",
+        "hint": "When a session bridge delivers an expanded merged forward to a target that does not support native forwards, the forward is rendered as one image card. Rendering failures fall back to the labeled text transcript."
       },
       "log_level": {
         "description": "Console Log Level",

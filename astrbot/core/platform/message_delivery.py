@@ -32,6 +32,7 @@ from .message_i18n import (
     DEFAULT_LOCALE,
     LOCALES,
     localize,
+    localize_kind,
     localize_value,
     message_key,
 )
@@ -316,6 +317,118 @@ def _reconstruct_forward_chain(
     return MessageChain([Nodes(nodes=nodes)]).use_markdown(False)
 
 
+_FORWARD_CARD_MAX_NAME_UTF16 = 80
+_FORWARD_CARD_MAX_BODY_UTF16 = 1200
+
+
+def _truncate_utf16(text: str, limit: int) -> str:
+    """Bound text by UTF-16 code units, appending an ellipsis when cut."""
+    if limit <= 0:
+        return ""
+    units = 0
+    for index, char in enumerate(text):
+        units += 2 if ord(char) > 0xFFFF else 1
+        if units > limit:
+            return f"{text[:index]}…"
+    return text
+
+
+def _normalize_card_text(text: str) -> str:
+    """Collapse whitespace so each card row stays on one visual line."""
+    return " ".join(text.split())
+
+
+def _forward_card_item_text(
+    item: PortablePart | NativeContent,
+    *,
+    locale: str,
+) -> str:
+    """Render one forwarded item as text for the image card."""
+    if isinstance(item, NativeContent):
+        return localize_value(locale, item.fallback or f"[{item.kind}]")
+    if item.kind in {ContentKind.TEXT, ContentKind.LINK}:
+        return localize_value(locale, str(item.value))
+    if item.kind == ContentKind.MENTION:
+        data = item.value if isinstance(item.value, Mapping) else {}
+        label = str(data.get("name") or data.get("id") or "")
+        return f"@{label}" if label else "@"
+    if item.kind == ContentKind.MENTION_ALL:
+        return "@all"
+    return item.alt_text or localize_kind(locale, item.kind.value)
+
+
+def _forward_card_image_uri(item: PortablePart | NativeContent) -> str | None:
+    """Return the local file URI of a materialized image, else ``None``.
+
+    Only ``file://`` references are inlined so no remote resource can be
+    introduced into the rendered card.
+    """
+    if not isinstance(item, PortablePart) or item.kind != ContentKind.IMAGE:
+        return None
+    value = item.value
+    if not isinstance(value, MediaReference):
+        return None
+    return value.uri if value.uri.startswith("file://") else None
+
+
+def build_forward_card_rows(
+    content: Sequence[PortablePart | NativeContent],
+    *,
+    locale: str = DEFAULT_LOCALE,
+) -> list[dict[str, object]]:
+    """Group sender-stamped items into ``sender`` / ``body`` card rows.
+
+    Only the forward islands (items carrying a :class:`SenderSnapshot`) become
+    rows, so the source header and any ordinary parts are ignored. Each row
+    records its merged-forward nesting level so nested content can be indented.
+    """
+    rows: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+
+    def open_row(sender: SenderSnapshot, level: int) -> None:
+        nonlocal current
+        uin, name = _node_identity(sender, locale)
+        current = {
+            "name": _truncate_utf16(name, _FORWARD_CARD_MAX_NAME_UTF16),
+            "uin": uin,
+            "text": "",
+            "depth": max(0, level - 1),
+        }
+        rows.append(current)
+
+    for item in content:
+        sender = _item_sender(item)
+        if _is_author_separator(item, locale):
+            if sender is not None:
+                open_row(sender, item.depth)
+            continue
+        if sender is None:
+            continue
+        if current is None or current["uin"] != (sender.id or "0"):
+            open_row(sender, item.depth)
+        image_uri = _forward_card_image_uri(item)
+        if image_uri is not None:
+            images = current.setdefault("images", [])
+            if isinstance(images, list):
+                images.append(image_uri)
+            continue
+        text = _normalize_card_text(_forward_card_item_text(item, locale=locale))
+        if not text:
+            continue
+        if current["text"]:
+            current["text"] = f"{current['text']} {text}"
+        else:
+            current["text"] = text
+    return [
+        {
+            **row,
+            "text": _truncate_utf16(str(row["text"]), _FORWARD_CARD_MAX_BODY_UTF16),
+        }
+        for row in rows
+        if row["text"] or row.get("images")
+    ]
+
+
 def _with_quote(
     chain: MessageChain,
     quote: QuoteReference | None,
@@ -454,6 +567,7 @@ def iter_delivery_parts(batches: Iterable[DeliveryBatch]) -> Iterable[PortablePa
 
 __all__ = [
     "batch_to_message_chain",
+    "build_forward_card_rows",
     "iter_delivery_parts",
     "plan_message_delivery",
 ]

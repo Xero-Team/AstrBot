@@ -21,14 +21,21 @@ from astrbot.core.auth.models import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.session_lock import SessionLockManager
 
-from .message_delivery import plan_message_delivery
-from .message_i18n import DEFAULT_LOCALE, localize, localize_kind, normalize_locale
+from .message_delivery import build_forward_card_rows, plan_message_delivery
+from .message_i18n import (
+    DEFAULT_LOCALE,
+    localize,
+    localize_kind,
+    normalize_locale,
+)
 from .message_media import materialize_message_media
 from .message_projection import envelope_from_send_event
 from .message_protocol import (
     ContentKind,
+    MediaReference,
     MessageDeliveryCapabilities,
     MessageEnvelope,
+    NativeContent,
     PortablePart,
 )
 from .message_renderers import render_source_header
@@ -154,6 +161,7 @@ if TYPE_CHECKING:
     from astrbot.core.db.po.session_bridge import SessionBridgeRule
     from astrbot.core.db.protocols import SessionBridgeStore
     from astrbot.core.file_token_service import FileTokenService
+    from astrbot.core.utils.t2i.local_strategy import HtmlRenderer
 
     from .astr_message_event import AstrMessageEvent
 
@@ -175,6 +183,8 @@ class SessionBridgeManager:
         get_locale: Callable[[str], Awaitable[str]] | None = None,
         get_platform_family: Callable[[str], str] | None = None,
         get_self_id: Callable[[str], str | None] | None = None,
+        html_renderer: HtmlRenderer | None = None,
+        get_forward_card_enabled: Callable[[str], bool] | None = None,
         store: SessionBridgeStore,
         default_ttl_seconds: int = DEFAULT_WATCH_TTL_SECONDS,
         max_watches_per_subject: int = 16,
@@ -189,6 +199,8 @@ class SessionBridgeManager:
         self._get_locale = get_locale
         self._get_platform_family = get_platform_family
         self._get_self_id = get_self_id
+        self._html_renderer = html_renderer
+        self._get_forward_card_enabled = get_forward_card_enabled
         self._default_ttl_seconds = min(
             MAX_WATCH_TTL_SECONDS, max(MIN_WATCH_TTL_SECONDS, default_ttl_seconds)
         )
@@ -1116,6 +1128,9 @@ class SessionBridgeManager:
         async with materialize_message_media(
             envelope, capabilities, locale=locale
         ) as materialized:
+            materialized = await self._render_forward_card(
+                target_umo, materialized, capabilities, locale=locale
+            )
             if capabilities.public_media_urls:
                 materialized = await self._publish_media(
                     target_umo, materialized, locale=locale
@@ -1123,6 +1138,78 @@ class SessionBridgeManager:
             return await self._submit(
                 target_umo, materialized, check_authority, locale=locale
             )
+
+    async def _render_forward_card(
+        self,
+        target_umo: str,
+        envelope: MessageEnvelope,
+        capabilities: MessageDeliveryCapabilities,
+        *,
+        locale: str = DEFAULT_LOCALE,
+    ) -> MessageEnvelope:
+        """Replace forwarded islands with one rendered image for non-forward targets."""
+        if capabilities.forward or self._html_renderer is None:
+            return envelope
+        if (
+            self._get_forward_card_enabled is not None
+            and not self._get_forward_card_enabled(target_umo)
+        ):
+            return envelope
+        rows = build_forward_card_rows(envelope.content, locale=locale)
+        if not rows:
+            return envelope
+        try:
+            template = self._html_renderer.template_manager.get_template(
+                "astrbot_forward"
+            )
+            image_path = await self._html_renderer.render_custom_template(
+                template,
+                {
+                    "title": localize(locale, "astrbot.msg.forward_card.title"),
+                    "rows": rows,
+                    "footer": localize(
+                        locale,
+                        "astrbot.msg.forward_card.footer",
+                        count=len(rows),
+                    ),
+                },
+                options={
+                    "viewport_width": 720,
+                    "viewport_height": 120,
+                    "device_scale_factor_level": "ultra",
+                    "type": "png",
+                },
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Session bridge forward card render failed")
+            return envelope
+        if not image_path:
+            return envelope
+        return replace(
+            envelope,
+            content=self._replace_forward_islands(envelope.content, image_path),
+        )
+
+    @staticmethod
+    def _replace_forward_islands(
+        content: tuple[PortablePart | NativeContent, ...],
+        image_uri: str,
+    ) -> tuple[PortablePart | NativeContent, ...]:
+        """Swap sender-stamped islands for one image while keeping other parts."""
+        result: list[PortablePart | NativeContent] = []
+        inserted = False
+        for item in content:
+            if item.sender is not None:
+                if not inserted:
+                    result.append(
+                        PortablePart(ContentKind.IMAGE, MediaReference(uri=image_uri))
+                    )
+                    inserted = True
+                continue
+            result.append(item)
+        return tuple(result)
 
     async def _publish_media(
         self,

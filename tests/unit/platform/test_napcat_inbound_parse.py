@@ -676,6 +676,93 @@ async def test_napcat_forward_ws_client_parses_string_nonstandard_and_forward_se
 
 
 @pytest.mark.asyncio
+async def test_napcat_expands_id_only_forward_on_ingress():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(
+        queue,
+        settings={
+            "onebot_forward": {"expand_on_ingress": True, "max_fetch": 8},
+        },
+    )
+    adapter.client.get_forward_message = AsyncMock(
+        return_value={
+            "status": "ok",
+            "retcode": 0,
+            "data": {
+                "messages": [
+                    {
+                        "user_id": 111222,
+                        "nickname": "tester",
+                        "message": [{"type": "text", "data": {"text": "hello"}}],
+                    }
+                ]
+            },
+        }
+    )
+
+    await adapter.client._handle_ws_payload(
+        """
+        {
+          "post_type": "message",
+          "message_type": "private",
+          "sub_type": "friend",
+          "time": 1720000000,
+          "self_id": 123456,
+          "user_id": 111222,
+          "message_id": 787,
+          "font": 14,
+          "message_format": "string",
+          "raw_message": "[CQ:forward,id=forward-1]",
+          "sender": {"user_id": 111222, "nickname": "tester"},
+          "message": "[CQ:forward,id=forward-1]"
+        }
+        """
+    )
+
+    queued = queue.get_nowait()
+    forward = queued.get_messages()[-1]
+    assert isinstance(forward, Forward)
+    assert forward.id == "forward-1"
+    assert forward.content is not None
+    assert isinstance(forward.content[0], Node)
+    assert forward.content[0].content[0].text == "hello"
+    adapter.client.get_forward_message.assert_awaited_once_with("forward-1")
+
+
+@pytest.mark.asyncio
+async def test_napcat_ingress_expansion_disabled_keeps_content_none():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.get_forward_message = AsyncMock()
+
+    await adapter.client._handle_ws_payload(
+        """
+        {
+          "post_type": "message",
+          "message_type": "private",
+          "sub_type": "friend",
+          "time": 1720000000,
+          "self_id": 123456,
+          "user_id": 111222,
+          "message_id": 788,
+          "font": 14,
+          "message_format": "string",
+          "raw_message": "[CQ:forward,id=forward-2]",
+          "sender": {"user_id": 111222, "nickname": "tester"},
+          "message": "[CQ:forward,id=forward-2]"
+        }
+        """
+    )
+
+    queued = queue.get_nowait()
+    forward = queued.get_messages()[-1]
+    assert isinstance(forward, Forward)
+    assert forward.id == "forward-2"
+    assert forward.content is None
+    adapter.client.get_forward_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_napcat_unknown_string_segment_becomes_unknown_component():
     queue: asyncio.Queue = asyncio.Queue()
     adapter = _make_adapter(queue)

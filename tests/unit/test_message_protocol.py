@@ -900,7 +900,7 @@ def test_projection_bounds_forward_nesting_and_component_count():
     from astrbot.core.platform.message_i18n import message_key
 
     assert envelope.content[-1] == PortablePart(
-        ContentKind.TEXT, message_key("forward_limit")
+        ContentKind.TEXT, message_key("forward_limit"), depth=8
     )
     assert (
         plan_delivery(envelope, MessageDeliveryCapabilities())[0].parts[0].value
@@ -1412,6 +1412,132 @@ def test_projection_stamps_sender_on_native_forward_parts():
     assert all(
         item.sender is not None and item.sender.name == "Alice" for item in natives
     )
+
+
+def test_projection_degrades_unexpanded_forward_to_placeholder():
+    from astrbot.core.message.components import Forward
+    from astrbot.core.platform.message_i18n import message_key
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(_napcat_event([Forward(id="fwd-2", content=None)]))
+
+    assert envelope.content == (PortablePart(ContentKind.TEXT, message_key("forward")),)
+    assert not [item for item in envelope.content if isinstance(item, NativeContent)]
+    chains = plan_message_delivery(
+        envelope,
+        MESSAGE_CAPABILITIES["napcat"],
+        target_umo="napcat:GroupMessage:other",
+    )
+    assert [type(c).__name__ for chain in chains for c in chain.chain] == ["Plain"]
+
+
+def test_unexpanded_forward_placeholder_localizes_for_cross_platform():
+    from astrbot.core.message.components import Forward
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(_napcat_event([Forward(id="fwd-2", content=None)]))
+    zh = plan_message_delivery(
+        envelope,
+        MESSAGE_CAPABILITIES["telegram"],
+        target_umo="telegram:GroupMessage:other",
+    )
+    en = plan_message_delivery(
+        envelope,
+        MESSAGE_CAPABILITIES["telegram"],
+        target_umo="telegram:GroupMessage:other",
+        locale="en-US",
+    )
+    assert zh[0].get_plain_text() == "[转发消息]"
+    assert en[0].get_plain_text() == "[Forwarded messages]"
+
+
+def test_build_forward_card_rows_inlines_local_image():
+    from astrbot.core.platform.message_delivery import build_forward_card_rows
+    from astrbot.core.platform.message_protocol import MediaReference
+
+    sender = SenderSnapshot("1", "Alice")
+    rows = build_forward_card_rows(
+        (
+            PortablePart(ContentKind.TEXT, "[Alice]\n", sender=sender),
+            PortablePart(ContentKind.TEXT, "look", sender=sender),
+            PortablePart(
+                ContentKind.IMAGE,
+                MediaReference("file:///tmp/photo.png"),
+                sender=sender,
+            ),
+        )
+    )
+
+    assert rows == [
+        {
+            "name": "Alice",
+            "uin": "1",
+            "text": "look",
+            "depth": 0,
+            "images": ["file:///tmp/photo.png"],
+        }
+    ]
+
+
+def test_build_forward_card_rows_does_not_inline_remote_image():
+    from astrbot.core.platform.message_delivery import build_forward_card_rows
+    from astrbot.core.platform.message_protocol import MediaReference
+
+    sender = SenderSnapshot("1", "Alice")
+    rows = build_forward_card_rows(
+        (
+            PortablePart(ContentKind.TEXT, "[Alice]\n", sender=sender),
+            PortablePart(
+                ContentKind.IMAGE,
+                MediaReference("https://example.com/photo.png"),
+                sender=sender,
+            ),
+        )
+    )
+
+    assert rows[0]["text"] == "[图片]"
+    assert "images" not in rows[0]
+
+
+def test_build_forward_card_rows_marks_nested_depth():
+    from astrbot.core.message.components import Forward, Node, Nodes, Plain
+    from astrbot.core.platform.message_delivery import build_forward_card_rows
+    from astrbot.core.platform.message_projection import envelope_from_event
+
+    envelope = envelope_from_event(
+        _napcat_event(
+            [
+                Nodes(
+                    nodes=[
+                        Node(
+                            name="Alice",
+                            uin="1001",
+                            content=[
+                                Plain("top"),
+                                Forward(
+                                    id="nested",
+                                    content=[
+                                        Node(
+                                            name="Bob",
+                                            uin="1002",
+                                            content=[Plain("inner")],
+                                        )
+                                    ],
+                                ),
+                            ],
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+
+    rows = build_forward_card_rows(envelope.content)
+
+    assert [(row["name"], row["text"], row["depth"]) for row in rows] == [
+        ("Alice", "top", 0),
+        ("Bob", "inner", 1),
+    ]
 
 
 def test_plan_message_delivery_reconstructs_nodes_when_target_supports_forward():

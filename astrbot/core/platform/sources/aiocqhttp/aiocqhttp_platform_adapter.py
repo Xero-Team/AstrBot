@@ -4,7 +4,7 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Awaitable, Coroutine
+from collections.abc import Awaitable, Coroutine, Mapping
 from dataclasses import replace
 from typing import Any, cast
 
@@ -22,6 +22,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.onebot_forward import expand_unexpanded_forwards
 
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
@@ -72,6 +73,10 @@ class AiocqhttpAdapter(Platform):
         super().__init__(platform_config, event_queue)
 
         self.settings = platform_settings
+        forward_settings = platform_settings.get("onebot_forward")
+        if not isinstance(forward_settings, Mapping):
+            forward_settings = {}
+        self._onebot_forward_settings: Mapping[str, object] = forward_settings
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
         self.forward_message_max_retries = int(
@@ -243,6 +248,123 @@ class AiocqhttpAdapter(Platform):
                 abm.message.append(Poke(id=str(event["target_id"])))
 
         return abm
+
+    @staticmethod
+    def _coerce_forward_max_fetch(value: object) -> int:
+        if isinstance(value, bool):
+            return 8
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                return int(value)
+            except ValueError:
+                return 8
+        return 8
+
+    def _forward_settings(self) -> Mapping[str, object]:
+        settings = getattr(self, "_onebot_forward_settings", None)
+        return settings if isinstance(settings, Mapping) else {}
+
+    async def _expand_inbound_forwards(
+        self,
+        components: list[BaseMessageComponent],
+    ) -> list[BaseMessageComponent]:
+        settings = self._forward_settings()
+        if not settings.get("expand_on_ingress", False):
+            return components
+        return await expand_unexpanded_forwards(
+            components,
+            fetch=self._fetch_forward_payload,
+            parse=self._parse_forward_payload,
+            max_fetch=self._coerce_forward_max_fetch(settings.get("max_fetch", 8)),
+        )
+
+    async def _fetch_forward_payload(
+        self,
+        forward_id: str,
+    ) -> Mapping[str, object] | None:
+        payload = await self.bot.call_action("get_forward_msg", id=forward_id)
+        return payload if isinstance(payload, Mapping) else None
+
+    async def _parse_forward_segments(
+        self,
+        raw_content: object,
+    ) -> list[BaseMessageComponent]:
+        if isinstance(raw_content, str):
+            return [Plain(text=raw_content)] if raw_content else []
+        if not isinstance(raw_content, list):
+            return []
+        components: list[BaseMessageComponent] = []
+        for segment in raw_content:
+            if isinstance(segment, str):
+                if segment:
+                    components.append(Plain(text=segment))
+                continue
+            if not isinstance(segment, Mapping):
+                continue
+            segment_type = str(segment.get("type") or "")
+            data = segment.get("data")
+            if segment_type not in ComponentTypes or not isinstance(data, Mapping):
+                continue
+            try:
+                components.append(ComponentTypes[segment_type](**data))
+            except Exception:
+                continue
+        return components
+
+    async def _parse_forward_node(
+        self,
+        raw_node: Mapping[str, object],
+    ) -> Node | None:
+        if raw_node.get("type") == "node":
+            nested = raw_node.get("data")
+            if not isinstance(nested, Mapping):
+                return None
+            node_data: Mapping[str, object] = nested
+        else:
+            node_data = raw_node
+        sender = node_data.get("sender")
+        sender_data = sender if isinstance(sender, Mapping) else {}
+        name = str(
+            sender_data.get("card")
+            or sender_data.get("nickname")
+            or node_data.get("nickname")
+            or sender_data.get("user_id")
+            or node_data.get("user_id")
+            or ""
+        )
+        uin = str(sender_data.get("user_id") or node_data.get("user_id") or "0")
+        raw_content = node_data.get("content")
+        if raw_content is None:
+            raw_content = node_data.get("message")
+        return Node(
+            uin=uin,
+            name=name,
+            content=await self._parse_forward_segments(raw_content),
+        )
+
+    async def _parse_forward_payload(
+        self,
+        payload: Mapping[str, object],
+    ) -> list[BaseMessageComponent]:
+        raw = payload.get("data")
+        if isinstance(raw, Mapping):
+            messages = raw.get("messages")
+        elif isinstance(raw, list):
+            messages = raw
+        else:
+            messages = payload.get("messages")
+        if not isinstance(messages, list):
+            return []
+        nodes: list[BaseMessageComponent] = []
+        for raw_node in messages:
+            if not isinstance(raw_node, Mapping):
+                continue
+            node = await self._parse_forward_node(raw_node)
+            if node is not None:
+                nodes.append(node)
+        return nodes
 
     async def _convert_handle_message_event(
         self,
@@ -437,6 +559,7 @@ class AiocqhttpAdapter(Platform):
                         )
                         continue
 
+        abm.message = await self._expand_inbound_forwards(abm.message)
         abm.timestamp = int(time.time())
         abm.message_str = message_str
         abm.raw_message = event

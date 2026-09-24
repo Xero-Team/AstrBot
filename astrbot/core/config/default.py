@@ -142,6 +142,10 @@ DEFAULT_CONFIG = {
         "empty_mention_waiting_need_reply": True,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
+        "onebot_forward": {
+            "expand_on_ingress": True,
+            "max_fetch": 8,
+        },
     },
     "provider_sources": [],  # provider sources
     "provider": [],  # models from provider_sources
@@ -290,6 +294,7 @@ DEFAULT_CONFIG = {
     "t2i_word_threshold": 150,
     "t2i_use_file_service": False,
     "t2i_active_template": "base",
+    "t2i_forward_card": True,
     "http_proxy": "",
     "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*"],
     "dashboard": {
@@ -1305,6 +1310,13 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "此功能解决由于文件系统不一致导致路径不存在的问题。格式为 <原路径>:<映射路径>。如 `/app/.config/QQ:/var/lib/docker/volumes/xxxx/_data`。这样，当消息平台下发的事件中图片和语音路径以 `/app/.config/QQ` 开头时，开头被替换为 `/var/lib/docker/volumes/xxxx/_data`。这在 AstrBot 或者平台协议端使用 Docker 部署时特别有用。",
+                    },
+                    "onebot_forward": {
+                        "type": "object",
+                        "items": {
+                            "expand_on_ingress": {"type": "bool"},
+                            "max_fetch": {"type": "int"},
+                        },
                     },
                 },
             },
@@ -4520,6 +4532,19 @@ CONFIG_METADATA_3 = {
                         "description": "只打指令前缀是否触发等待",
                         "type": "bool",
                     },
+                    "platform_settings.onebot_forward.expand_on_ingress": {
+                        "description": "入口展开合并转发",
+                        "type": "bool",
+                        "hint": "OneBot v11 适配器收到未展开的合并转发时，调用 get_forward_msg 回填内容，使桥接能重建卡片或图片。拉取失败时保留占位，不阻塞消息。",
+                    },
+                    "platform_settings.onebot_forward.max_fetch": {
+                        "description": "入口展开拉取上限",
+                        "type": "int",
+                        "hint": "单条消息入口展开时递归调用 get_forward_msg 的最大次数。",
+                        "condition": {
+                            "platform_settings.onebot_forward.expand_on_ingress": True,
+                        },
+                    },
                 },
             },
             "admission": {
@@ -5024,6 +5049,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "string",
                         "hint": "此处的值由本地文转图模板管理页面进行维护。",
                         "invisible": True,
+                    },
+                    "t2i_forward_card": {
+                        "description": "合并转发渲染为图片卡片",
+                        "type": "bool",
+                        "hint": "会话桥接投递合并转发时，如果目标平台不支持原生合并转发，则把已展开的转发渲染成一张图片卡片；渲染失败时回退为文字转录。",
                     },
                     "log_level": {
                         "description": "控制台日志级别",

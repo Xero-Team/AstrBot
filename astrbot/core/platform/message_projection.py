@@ -123,6 +123,10 @@ def _project_component(
             {"type": component.sub_type, "id": str(component.id or "")},
             kind_key(ContentKind.CONTACT.value),
         ), None
+    if isinstance(component, Forward):
+        # An id-only merged forward cannot be replayed across sessions; degrade
+        # it to a localized placeholder instead of a source-scoped native id.
+        return PortablePart(ContentKind.TEXT, message_key("forward")), None
     if isinstance(component, (Markdown, MiniApp, Json, Xml)):
         kind = component.type.value.lower()
         return None, NativeContent(
@@ -145,14 +149,21 @@ def _expand_forwarded_content(
     components: Iterable[BaseMessageComponent],
     depth: int = 0,
     sender: SenderSnapshot | None = None,
-) -> Iterator[tuple[BaseMessageComponent, SenderSnapshot | None]]:
-    """Flatten forwarded transcripts while retaining their media and authors."""
+    level: int = 0,
+) -> Iterator[tuple[BaseMessageComponent, SenderSnapshot | None, int]]:
+    """Flatten forwarded transcripts while retaining media, authors, and nesting.
+
+    ``level`` counts enclosing merged forwards so the delivery layer can indent
+    nested card rows; ``depth`` guards runaway component recursion.
+    """
     if depth >= 8:
-        yield Plain(message_key("forward_limit")), sender
+        yield Plain(message_key("forward_limit")), sender, level
         return
     for component in components:
         if isinstance(component, Nodes):
-            yield from _expand_forwarded_content(component.nodes, depth + 1, sender)
+            yield from _expand_forwarded_content(
+                component.nodes, depth + 1, sender, level + 1
+            )
         elif isinstance(component, Node):
             node_sender = SenderSnapshot(
                 id=str(component.uin or ""), name=component.name or ""
@@ -161,22 +172,25 @@ def _expand_forwarded_content(
             yield (
                 Plain(f"[{author}]\n" if author else message_key("unknown_author")),
                 node_sender,
+                level,
             )
             yield from _expand_forwarded_content(
-                component.content, depth + 1, node_sender
+                component.content, depth + 1, node_sender, level
             )
         elif isinstance(component, Forward) and component.content:
-            yield from _expand_forwarded_content(component.content, depth + 1, sender)
+            yield from _expand_forwarded_content(
+                component.content, depth + 1, sender, level + 1
+            )
         elif isinstance(component, Reply) and depth:
             preview = component.message_str or component.text
             if preview:
-                yield (Plain(f"> {preview}\n"), sender)
+                yield (Plain(f"> {preview}\n"), sender, level)
             else:
-                yield (Plain("> "), sender)
-                yield (Plain(message_key("quote")), sender)
-                yield (Plain("\n"), sender)
+                yield (Plain("> "), sender, level)
+                yield (Plain(message_key("quote")), sender, level)
+                yield (Plain("\n"), sender, level)
         else:
-            yield component, sender
+            yield component, sender, level
 
 
 def _make_quote_resolver(
@@ -202,7 +216,7 @@ def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
     """Create an immutable portable snapshot from a normalized platform event."""
     content: list[PortablePart | NativeContent] = []
     quote: QuoteReference | None = None
-    for index, (component, forwarded_sender) in enumerate(
+    for index, (component, forwarded_sender, forwarded_level) in enumerate(
         _expand_forwarded_content(event.get_messages())
     ):
         if index >= 1024:
@@ -231,10 +245,14 @@ def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
         if part is not None:
             if forwarded_sender is not None:
                 part = replace(part, sender=forwarded_sender)
+            if forwarded_level:
+                part = replace(part, depth=forwarded_level)
             content.append(part)
         if native_component is not None:
             if forwarded_sender is not None:
                 native_component = replace(native_component, sender=forwarded_sender)
+            if forwarded_level:
+                native_component = replace(native_component, depth=forwarded_level)
             content.append(native_component)
 
     sender = SenderSnapshot(

@@ -1,3 +1,4 @@
+import re
 import secrets
 from time import time
 from types import SimpleNamespace
@@ -2567,3 +2568,172 @@ def test_health_rule_errors_are_bounded():
     assert len(health.rule_errors) == MAX_RULE_ERRORS_KEPT
     assert health.rule_errors[0].rule_id == f"{5:012x}"
     assert health.rule_errors[-1].rule_id == f"{MAX_RULE_ERRORS_KEPT + 4:012x}"
+
+
+class _ForwardCardRenderer:
+    def __init__(self, path: str | None = "/tmp/forward-card.png") -> None:
+        self.path = path
+        self.calls: list[tuple[str, dict, dict | None]] = []
+        manager = SimpleNamespace()
+
+        def get_template(name: str) -> str:
+            assert name == "astrbot_forward"
+            return "{{ title }}|{{ rows[0].name }}|{{ footer }}"
+
+        manager.get_template = get_template
+        self.template_manager = manager
+
+    async def render_custom_template(self, tmpl, data, options=None):
+        self.calls.append((tmpl, data, options))
+        return self.path
+
+
+def _forward_envelope(message_id: str = "fwd-1") -> MessageEnvelope:
+    sender = SenderSnapshot("1", "Alice", "napcat")
+    return MessageEnvelope(
+        PlatformRouteIdentity("target", MessageType.GROUP_MESSAGE, "room"),
+        source_message_id=message_id,
+        sender=sender,
+        content=(
+            PortablePart(ContentKind.TEXT, "[Alice]\n", sender=sender),
+            PortablePart(ContentKind.TEXT, "hello", sender=sender),
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_forward_card_replaces_island_for_non_forward_target():
+    from astrbot.core.message.components import Image
+
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send)
+    manager._get_capabilities = lambda _: MessageDeliveryCapabilities(
+        quote=True, media=frozenset({"image"}), forward=False
+    )
+    renderer = _ForwardCardRenderer()
+    manager._html_renderer = renderer
+    manager._get_forward_card_enabled = lambda _: True
+    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_forward_envelope())
+
+    images = [
+        component
+        for chain in sent
+        for component in chain.chain
+        if isinstance(component, Image)
+    ]
+    assert len(images) == 1
+    assert images[0].file == "/tmp/forward-card.png"
+    assert "hello" not in "".join(chain.get_plain_text() for chain in sent)
+    assert renderer.calls
+    _, data, options = renderer.calls[0]
+    assert data["rows"] == [{"name": "Alice", "uin": "1", "text": "hello", "depth": 0}]
+    assert options["viewport_width"] == 720
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_forward_card_skipped_when_target_supports_forward():
+    from astrbot.core.message.components import Nodes
+
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send)
+    manager._get_capabilities = lambda _: MessageDeliveryCapabilities(
+        quote=True, media=frozenset({"image"}), forward=True
+    )
+    renderer = _ForwardCardRenderer()
+    manager._html_renderer = renderer
+    manager._get_forward_card_enabled = lambda _: True
+    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_forward_envelope())
+
+    assert renderer.calls == []
+    assert any(
+        isinstance(component, Nodes) for chain in sent for component in chain.chain
+    )
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_forward_card_render_failure_falls_back_to_transcript():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    class _RaisingRenderer:
+        class template_manager:
+            @staticmethod
+            def get_template(name: str) -> str:
+                return "x"
+
+        async def render_custom_template(self, tmpl, data, options=None):
+            raise RuntimeError("render failed")
+
+    manager, _, _ = _manager(send)
+    manager._get_capabilities = lambda _: MessageDeliveryCapabilities(
+        quote=True, media=frozenset({"image"}), forward=False
+    )
+    manager._html_renderer = _RaisingRenderer()
+    manager._get_forward_card_enabled = lambda _: True
+    await manager.watch(_event(), "target:GroupMessage:room", ttl_seconds=60)
+    await manager.observe(_forward_envelope())
+
+    texts = "".join(chain.get_plain_text() for chain in sent)
+    assert "hello" in texts
+    assert manager.health().accepted == 1
+    await manager.terminate()
+
+
+def test_builtin_forward_card_template_is_offline_and_escaped():
+    from pathlib import Path
+
+    from astrbot.core.utils.t2i.local_strategy import HtmlRenderer
+
+    content = (
+        (
+            Path(__file__).resolve().parents[2]
+            / "astrbot"
+            / "core"
+            / "utils"
+            / "t2i"
+            / "template"
+            / "astrbot_forward.html"
+        )
+        .read_text(encoding="utf-8")
+        .replace("\r\n", "\n")
+    )
+    assert 'src="http' not in content
+    assert 'href="http' not in content
+    assert "cdn.jsdelivr.net" not in content
+
+    html = HtmlRenderer._render_template_sync(
+        content,
+        {
+            "title": "<b>x</b>",
+            "rows": [
+                {
+                    "name": '<img src="https://evil.example/a">',
+                    "uin": "1",
+                    "text": "<script>alert(1)</script>",
+                }
+            ],
+            "footer": "1",
+        },
+    )
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    assert '<img src="https://evil.example/a">' not in html
+    assert "&lt;img" in html
+    assert not re.search(r'(?:src|href)\s*=\s*["\']?https?://', html)

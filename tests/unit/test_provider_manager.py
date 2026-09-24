@@ -27,7 +27,8 @@ _original_prompt_mgr = sys.modules.get("astrbot.core.prompt_mgr")
 _stub_prompt_mgr = types.ModuleType("astrbot.core.prompt_mgr")
 
 
-class PromptManager: ...
+class PromptManager:
+    """Import-isolation stub for ``astrbot.core.provider.manager``."""
 
 
 setattr(_stub_prompt_mgr, "PromptManager", PromptManager)

@@ -549,11 +549,14 @@ class PromptStore(Protocol):
         custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
-    ) -> Prompt: ...
+    ) -> Prompt:
+        raise NotImplementedError
 
-    async def get_prompt_by_id(self, prompt_id: str) -> Prompt | None: ...
+    async def get_prompt_by_id(self, prompt_id: str) -> Prompt | None:
+        raise NotImplementedError
 
-    async def get_prompts(self) -> list[Prompt]: ...
+    async def get_prompts(self) -> list[Prompt]:
+        raise NotImplementedError
 
     async def update_prompt(
         self,
@@ -563,9 +566,11 @@ class PromptStore(Protocol):
         tools: list[str] | None | object = ...,
         skills: list[str] | None | object = ...,
         custom_error_message: str | None | object = ...,
-    ) -> Prompt | None: ...
+    ) -> Prompt | None:
+        raise NotImplementedError
 
-    async def delete_prompt(self, prompt_id: str) -> None: ...
+    async def delete_prompt(self, prompt_id: str) -> None:
+        raise NotImplementedError
 
     async def insert_prompt_folder(
         self,
@@ -573,15 +578,19 @@ class PromptStore(Protocol):
         parent_id: str | None = None,
         description: str | None = None,
         sort_order: int = 0,
-    ) -> PromptFolder: ...
+    ) -> PromptFolder:
+        raise NotImplementedError
 
-    async def get_prompt_folder_by_id(self, folder_id: str) -> PromptFolder | None: ...
+    async def get_prompt_folder_by_id(self, folder_id: str) -> PromptFolder | None:
+        raise NotImplementedError
 
     async def get_prompt_folders(
         self, parent_id: str | None = None
-    ) -> list[PromptFolder]: ...
+    ) -> list[PromptFolder]:
+        raise NotImplementedError
 
-    async def get_all_prompt_folders(self) -> list[PromptFolder]: ...
+    async def get_all_prompt_folders(self) -> list[PromptFolder]:
+        raise NotImplementedError
 
     async def update_prompt_folder(
         self,
@@ -590,22 +599,25 @@ class PromptStore(Protocol):
         parent_id: T.Any = ...,
         description: T.Any = ...,
         sort_order: int | None = None,
-    ) -> PromptFolder | None: ...
+    ) -> PromptFolder | None:
+        raise NotImplementedError
 
-    async def delete_prompt_folder(self, folder_id: str) -> None: ...
+    async def delete_prompt_folder(self, folder_id: str) -> None:
+        raise NotImplementedError
 
     async def move_prompt_to_folder(
         self, prompt_id: str, folder_id: str | None
-    ) -> Prompt | None: ...
+    ) -> Prompt | None:
+        raise NotImplementedError
 
-    async def get_prompts_by_folder(
-        self, folder_id: str | None = None
-    ) -> list[Prompt]: ...
+    async def get_prompts_by_folder(self, folder_id: str | None = None) -> list[Prompt]:
+        raise NotImplementedError
 
     async def batch_update_sort_order(
         self,
         items: list[dict],
-    ) -> None: ...
+    ) -> None:
+        raise NotImplementedError
 
 
 @runtime_checkable

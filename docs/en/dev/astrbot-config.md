@@ -242,7 +242,7 @@ messages over 8,000 characters retain their existing paths.
 
 The `choice` question offers `conversation`, `work`, `clarify`, and `unavailable`.
 Input capabilities come from each loop's existing tool catalog and frozen Skill
-snapshot, including Persona, plugin/MCP/Skill assignments, runtime and surface
+snapshot, including Prompt, plugin/MCP/Skill assignments, runtime and surface
 restrictions. There is no second capability registry. A high-confidence `work`
 decision requires a work-only capability and uses existing WorkLoop submission,
 request identity, delivery and execution authorization. It grants no permissions
@@ -267,7 +267,7 @@ produce a duplicate handoff.
 
 Only **current message text and resolved capability names/short summaries** are
 sent to JEV and, when needed, the fallback. `state` excludes conversation history,
-Persona prompts, raw tool schemas, Skill bodies, credential configuration,
+Prompt system text, raw tool schemas, Skill bodies, credential configuration,
 local-path metadata and unrelated profile data. Text is redacted before truncation
 to remove recognized credentials, tokens, URLs and absolute/relative paths. Do not
 put secrets in free text: redaction cannot recognize every arbitrary secret.

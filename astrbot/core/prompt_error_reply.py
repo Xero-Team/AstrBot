@@ -48,6 +48,7 @@ def set_prompt_custom_error_message_on_event(event: Any, message: object) -> str
         if event is not None and hasattr(event, "set_extra"):
             event.set_extra(PROMPT_CUSTOM_ERROR_MESSAGE_EXTRA_KEY, normalized)
     except Exception:
+        # Best-effort only: a broken event must not break the error reply.
         pass
     return normalized
 

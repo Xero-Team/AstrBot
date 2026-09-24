@@ -1468,7 +1468,7 @@ async def resolve_btw_capabilities(
 ) -> dict[str, list[dict[str, str]]]:
     """Preview both catalogs without running tools, hooks, models or creating history.
 
-    Uses the same persona resolution, Skill snapshots and catalog assembly as
+    Uses the same prompt resolution, Skill snapshots and catalog assembly as
     the main Agent. The returned allowlist contains no schemas or host paths;
     callers must redact its free-text fields before sending them off-device.
     """
@@ -1500,17 +1500,17 @@ async def resolve_btw_capabilities(
         )
         (
             _,
-            persona,
+            prompt,
             _,
             _,
-        ) = await plugin_context.persona_manager.resolve_selected_persona(
+        ) = await plugin_context.prompt_manager.resolve_selected_prompt(
             umo=event.unified_msg_origin,
-            conversation_persona_id=conversation.persona_id if conversation else None,
+            conversation_prompt_id=conversation.prompt_id if conversation else None,
             platform_name=event.get_platform_name(),
         )
         req = ProviderRequest()
         snapshot = _append_skills_prompt(
-            req, loop_config.provider_settings, persona, probe, plugin_context
+            req, loop_config.provider_settings, prompt, probe, plugin_context
         )
         _assemble_request_tool_catalog(probe, req, plugin_context, loop_config)
         tools = req.func_tool.tools if req.func_tool else []

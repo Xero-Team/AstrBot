@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -168,12 +168,34 @@ def _expand_forwarded_content(
         elif isinstance(component, Forward) and component.content:
             yield from _expand_forwarded_content(component.content, depth + 1, sender)
         elif isinstance(component, Reply) and depth:
-            yield (
-                Plain(f"> {component.message_str or component.text or component.id}\n"),
-                sender,
-            )
+            preview = component.message_str or component.text
+            if preview:
+                yield (Plain(f"> {preview}\n"), sender)
+            else:
+                yield (Plain("> "), sender)
+                yield (Plain(message_key("quote")), sender)
+                yield (Plain("\n"), sender)
         else:
             yield component, sender
+
+
+def _make_quote_resolver(
+    event: AstrMessageEvent, component: Reply
+) -> Callable[[], Awaitable[str | None]]:
+    """Return a lazy resolver for a quote whose text was not embedded."""
+
+    async def resolve() -> str | None:
+        try:
+            from astrbot.core.utils.quoted_message_parser import (
+                extract_quoted_message_text,
+            )
+
+            text = await extract_quoted_message_text(event, component)
+        except Exception:
+            return None
+        return text or None
+
+    return resolve
 
 
 def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
@@ -187,6 +209,7 @@ def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
             content.append(PortablePart(ContentKind.TEXT, message_key("content_limit")))
             break
         if isinstance(component, Reply):
+            preview = component.message_str or component.text or ""
             quote = QuoteReference(
                 source_route=event.route_identity,
                 message_id=str(component.id),
@@ -195,7 +218,10 @@ def envelope_from_event(event: AstrMessageEvent) -> MessageEnvelope:
                     name=component.sender_nickname or "",
                     platform=event.get_platform_name(),
                 ),
-                preview=component.message_str or component.text or "",
+                preview=preview,
+                resolve_preview=(
+                    None if preview else _make_quote_resolver(event, component)
+                ),
             )
             continue
         part, native_component = _project_component(

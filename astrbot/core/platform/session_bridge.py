@@ -1165,6 +1165,22 @@ class SessionBridgeManager:
             content.append(part)
         return replace(envelope, content=tuple(content))
 
+    async def _resolve_quote_preview(
+        self,
+        envelope: MessageEnvelope,
+    ) -> MessageEnvelope:
+        """Fill an unmapped cross-session quote with readable preview text."""
+        quote = envelope.quote
+        if quote is None or quote.preview or quote.resolve_preview is None:
+            return envelope
+        try:
+            preview = await quote.resolve_preview()
+        except Exception:
+            return envelope
+        if not preview:
+            return envelope
+        return replace(envelope, quote=replace(quote, preview=preview))
+
     async def _submit(
         self,
         target_umo: str,
@@ -1184,6 +1200,8 @@ class SessionBridgeManager:
                 quote_id = self._message_ids.get(
                     (quote_origin, envelope.quote.message_id, target_umo)
                 )
+        if not (capabilities.quote and quote_id):
+            envelope = await self._resolve_quote_preview(envelope)
         attempts: list[DeliveryAttempt] = []
         for chain in plan_message_delivery(
             envelope,

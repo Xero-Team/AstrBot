@@ -621,6 +621,93 @@ async def test_napcat_send_by_session_supports_forward_nodes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_napcat_send_by_session_returns_standard_message_id():
+    from astrbot.core.platform.sources.napcat.types import NapCatSendMessageResult
+
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock(
+        return_value=NapCatSendMessageResult(message_id=123)
+    )
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    result = await adapter.send_by_session(session, MessageChain([Plain("hello")]))
+
+    assert isinstance(result, PlatformSendResult)
+    assert result.message_id == "123"
+    assert result.message_ids == ("123",)
+
+
+@pytest.mark.asyncio
+async def test_napcat_send_by_session_returns_forward_and_mixed_message_ids(
+    monkeypatch,
+):
+    _zero_split_send_interval(monkeypatch)
+    from astrbot.core.platform.sources.napcat.types import NapCatSendMessageResult
+
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock(
+        side_effect=[
+            NapCatSendMessageResult(message_id=11),
+            NapCatSendMessageResult(message_id=22),
+        ]
+    )
+    adapter.client.send_group_forward_message = AsyncMock(
+        return_value=NapCatSendMessageResult(message_id=456)
+    )
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    result = await adapter.send_by_session(
+        session,
+        MessageChain(
+            [
+                Plain("before"),
+                Nodes(
+                    [
+                        Node(
+                            uin="1001",
+                            name="alice",
+                            content=[Plain("first node")],
+                        )
+                    ]
+                ),
+                Plain("after"),
+            ]
+        ),
+    )
+
+    assert isinstance(result, PlatformSendResult)
+    assert result.message_ids == ("11", "456", "22")
+
+
+@pytest.mark.asyncio
+async def test_napcat_send_by_session_ignores_non_result_send_doubles():
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    adapter.client.send_group_message = AsyncMock(return_value=object())
+    session = MessageSession(
+        platform_name="napcat-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    result = await adapter.send_by_session(session, MessageChain([Plain("hello")]))
+
+    assert isinstance(result, PlatformSendResult)
+    assert result.success is True
+    assert result.message_ids == ()
+
+
+@pytest.mark.asyncio
 async def test_napcat_send_by_session_splits_video_from_text_and_image(monkeypatch):
     _zero_split_send_interval(monkeypatch)
     queue: asyncio.Queue = asyncio.Queue()

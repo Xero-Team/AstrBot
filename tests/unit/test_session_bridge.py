@@ -2094,6 +2094,152 @@ async def test_restore_rehydrates_delivery_ledger_and_resolves_quote():
 
 
 @pytest.mark.asyncio
+async def test_submit_resolves_quote_preview_into_readable_fallback():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send=send)
+    resolver = AsyncMock(return_value="original text")
+    envelope = MessageEnvelope(
+        PlatformRouteIdentity("source", MessageType.FRIEND_MESSAGE, "sender"),
+        content=(PortablePart(ContentKind.TEXT, "the reply"),),
+        quote=QuoteReference(
+            source_route=PlatformRouteIdentity(
+                "source", MessageType.FRIEND_MESSAGE, "sender"
+            ),
+            message_id="7463920164812345678",
+            resolve_preview=resolver,
+        ),
+    )
+
+    await manager._submit(
+        "target:GroupMessage:room", envelope, AsyncMock(return_value=None)
+    )
+
+    resolver.assert_awaited_once()
+    text = sent[0].get_plain_text()
+    assert text == "> original text\nthe reply"
+    assert "7463920164812345678" not in text
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_submit_uses_placeholder_when_quote_resolution_fails():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send=send)
+    envelope = MessageEnvelope(
+        PlatformRouteIdentity("source", MessageType.FRIEND_MESSAGE, "sender"),
+        content=(PortablePart(ContentKind.TEXT, "the reply"),),
+        quote=QuoteReference(
+            source_route=PlatformRouteIdentity(
+                "source", MessageType.FRIEND_MESSAGE, "sender"
+            ),
+            message_id="7463920164812345678",
+            resolve_preview=AsyncMock(side_effect=RuntimeError("no client")),
+        ),
+    )
+
+    await manager._submit(
+        "target:GroupMessage:room", envelope, AsyncMock(return_value=None)
+    )
+
+    text = sent[0].get_plain_text()
+    assert text == "> [引用]\nthe reply"
+    assert "7463920164812345678" not in text
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_submit_prefers_native_quote_id_over_resolver():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send=send)
+    manager._message_ids[
+        (
+            "source:FriendMessage:sender",
+            "7463920164812345678",
+            "target:GroupMessage:room",
+        )
+    ] = "mapped-id"
+    resolver = AsyncMock(return_value="ignored")
+    envelope = MessageEnvelope(
+        PlatformRouteIdentity("source", MessageType.FRIEND_MESSAGE, "sender"),
+        content=(PortablePart(ContentKind.TEXT, "the reply"),),
+        quote=QuoteReference(
+            source_route=PlatformRouteIdentity(
+                "source", MessageType.FRIEND_MESSAGE, "sender"
+            ),
+            message_id="7463920164812345678",
+            resolve_preview=resolver,
+        ),
+    )
+
+    await manager._submit(
+        "target:GroupMessage:room", envelope, AsyncMock(return_value=None)
+    )
+
+    from astrbot.core.message.components import Reply
+
+    resolver.assert_not_awaited()
+    assert isinstance(sent[0].chain[0], Reply)
+    assert sent[0].chain[0].id == "mapped-id"
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_submit_resolves_preview_when_target_cannot_quote():
+    sent = []
+
+    async def send(session, chain):
+        sent.append(chain)
+        return PlatformSendResult(session.platform_id, True, str(session))
+
+    manager, _, _ = _manager(send=send)
+    manager._get_capabilities = lambda _: MessageDeliveryCapabilities(quote=False)
+    manager._message_ids[
+        (
+            "source:FriendMessage:sender",
+            "7463920164812345678",
+            "target:GroupMessage:room",
+        )
+    ] = "mapped-id"
+    resolver = AsyncMock(return_value="original text")
+    envelope = MessageEnvelope(
+        PlatformRouteIdentity("source", MessageType.FRIEND_MESSAGE, "sender"),
+        content=(PortablePart(ContentKind.TEXT, "the reply"),),
+        quote=QuoteReference(
+            source_route=PlatformRouteIdentity(
+                "source", MessageType.FRIEND_MESSAGE, "sender"
+            ),
+            message_id="7463920164812345678",
+            resolve_preview=resolver,
+        ),
+    )
+
+    await manager._submit(
+        "target:GroupMessage:room", envelope, AsyncMock(return_value=None)
+    )
+
+    resolver.assert_awaited_once()
+    text = sent[0].get_plain_text()
+    assert text == "> original text\nthe reply"
+    assert "7463920164812345678" not in text
+    await manager.terminate()
+
+
+@pytest.mark.asyncio
 async def test_restore_rebuilds_reverse_quote_mapping():
     store = FakeSessionBridgeStore()
     store.seed_delivery(

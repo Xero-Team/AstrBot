@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -6,6 +7,9 @@ import pytest
 import astrbot.core.message.components as Comp
 import astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event as aiocqhttp_send
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import MessageType
+from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.send_result import PlatformSendResult
 
 AiocqhttpMessageEvent = aiocqhttp_send.AiocqhttpMessageEvent
 
@@ -202,3 +206,115 @@ async def test_aiocqhttp_send_paces_consecutive_split_messages(monkeypatch):
     assert bot.send_group_msg.await_count == 3
     assert sleep.await_count == 2
     assert all(call.args == (0.5,) for call in sleep.await_args_list)
+
+
+async def _send_ids(
+    bot,
+    chain: MessageChain,
+    *,
+    is_group: bool = True,
+    session_id: str = "123456",
+) -> tuple[str, ...]:
+    return await AiocqhttpMessageEvent.send_message(
+        bot=bot,
+        message_chain=chain,
+        event=None,
+        is_group=is_group,
+        session_id=session_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_send_message_returns_standard_message_id():
+    bot = AsyncMock()
+    bot.send_group_msg = AsyncMock(return_value={"message_id": 123})
+
+    ids = await _send_ids(bot, MessageChain([Comp.Plain("hello")]))
+
+    assert ids == ("123",)
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_send_message_returns_forward_message_id():
+    bot = AsyncMock()
+    bot.call_action = AsyncMock(return_value={"message_id": 456})
+    chain = MessageChain(
+        [
+            Comp.Nodes(
+                [
+                    Comp.Node(
+                        uin="1001", name="alice", content=[Comp.Plain("first node")]
+                    )
+                ]
+            )
+        ]
+    )
+
+    ids = await _send_ids(bot, chain)
+
+    assert ids == ("456",)
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_send_message_preserves_mixed_message_id_order():
+    bot = AsyncMock()
+    bot.send_group_msg = AsyncMock(side_effect=[{"message_id": 11}, {"message_id": 22}])
+    bot.call_action = AsyncMock(return_value={"message_id": 456})
+    chain = MessageChain(
+        [
+            Comp.Plain("before"),
+            Comp.Nodes(
+                [
+                    Comp.Node(
+                        uin="1001", name="alice", content=[Comp.Plain("first node")]
+                    )
+                ]
+            ),
+            Comp.Plain("after"),
+        ]
+    )
+
+    ids = await _send_ids(bot, chain)
+
+    assert ids == ("11", "456", "22")
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_send_message_ignores_non_mapping_send_results():
+    bot = AsyncMock()
+    bot.send_group_msg = AsyncMock(return_value=object())
+
+    ids = await _send_ids(bot, MessageChain([Comp.Plain("hello")]))
+
+    assert ids == ()
+
+
+@pytest.mark.asyncio
+async def test_aiocqhttp_send_by_session_returns_message_ids():
+    from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
+        AiocqhttpAdapter,
+    )
+
+    adapter = AiocqhttpAdapter(
+        {
+            "id": "aiocqhttp-test",
+            "ws_reverse_host": "127.0.0.1",
+            "ws_reverse_port": 0,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.bot = SimpleNamespace(
+        send_group_msg=AsyncMock(return_value={"message_id": 789})
+    )
+    session = MessageSession(
+        platform_name="aiocqhttp-test",
+        message_type=MessageType.GROUP_MESSAGE,
+        session_id="654321",
+    )
+
+    result = await adapter.send_by_session(session, MessageChain([Comp.Plain("hello")]))
+
+    assert isinstance(result, PlatformSendResult)
+    assert result.message_id == "789"
+    assert result.message_ids == ("789",)

@@ -28,7 +28,13 @@ from astrbot.core.message.json_card import format_json_card_prompt
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.message.qq_face import format_qq_face
 
-from .message_i18n import DEFAULT_LOCALE, LOCALES, localize, message_key
+from .message_i18n import (
+    DEFAULT_LOCALE,
+    LOCALES,
+    localize,
+    localize_value,
+    message_key,
+)
 from .message_protocol import (
     ContentKind,
     DeliveryBatch,
@@ -177,7 +183,9 @@ def _plan_flat(
 ) -> tuple[MessageChain, ...]:
     envelope = _enrich_native_fallbacks(envelope)
     return tuple(
-        batch_to_message_chain(batch, capabilities=capabilities, quote_id=quote_id)
+        batch_to_message_chain(
+            batch, capabilities=capabilities, quote_id=quote_id, locale=locale
+        )
         for batch in plan_delivery(envelope, capabilities, locale=locale)
     )
 
@@ -294,6 +302,11 @@ def _reconstruct_forward_chain(
             if sender is None:
                 continue
             open_node(sender)
+        if isinstance(item, PortablePart) and item.kind in {
+            ContentKind.TEXT,
+            ContentKind.LINK,
+        }:
+            item = replace(item, value=localize_value(locale, str(item.value)))
         component = _item_to_node_component(item, cross_session=cross_session)
         if component is not None and current is not None:
             current.content.append(component)
@@ -309,12 +322,13 @@ def _with_quote(
     *,
     capabilities: MessageDeliveryCapabilities,
     quote_id: str | None,
+    locale: str = DEFAULT_LOCALE,
 ) -> MessageChain:
     if quote is None:
         return chain
     if capabilities.quote and quote_id:
         return MessageChain([Reply(id=quote_id), *chain.chain]).use_markdown(False)
-    preview = quote.preview or quote.message_id
+    preview = quote.preview or localize(locale, message_key("quote"))
     return MessageChain([Plain(f"> {preview}\n"), *chain.chain]).use_markdown(False)
 
 
@@ -342,6 +356,7 @@ def _deliver_island(
             sub_envelope.quote,
             capabilities=capabilities,
             quote_id=quote_id,
+            locale=locale,
         ),
     )
 
@@ -351,6 +366,7 @@ def batch_to_message_chain(
     *,
     capabilities: MessageDeliveryCapabilities,
     quote_id: str | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> MessageChain:
     """Convert one planned batch into a chain for the target adapter."""
     components: list[BaseMessageComponent] = []
@@ -358,7 +374,7 @@ def batch_to_message_chain(
         if capabilities.quote and quote_id:
             components.append(Reply(id=quote_id))
         else:
-            preview = batch.quote.preview or batch.quote.message_id
+            preview = batch.quote.preview or localize(locale, message_key("quote"))
             components.append(Plain(f"> {preview}\n"))
     for part in batch.parts:
         components.append(_portable_component(part))
@@ -392,7 +408,7 @@ def plan_message_delivery(
     if target_umo and target_umo.split(":", 1)[0] != envelope.source_route.platform_id:
         root_capabilities = replace(capabilities, native_namespaces=frozenset())
     if envelope.quote and not (root_capabilities.quote and quote_id):
-        preview = envelope.quote.preview or envelope.quote.message_id
+        preview = envelope.quote.preview or localize(locale, message_key("quote"))
         envelope = replace(
             envelope,
             quote=None,

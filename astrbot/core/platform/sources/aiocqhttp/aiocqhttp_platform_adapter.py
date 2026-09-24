@@ -5,6 +5,7 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable, Coroutine
+from dataclasses import replace
 from typing import Any, cast
 
 from aiocqhttp import CQHttp, Event
@@ -155,7 +156,7 @@ class AiocqhttpAdapter(Platform):
             session_id = session.session_id.split("_")[-1]
         else:
             session_id = session.session_id
-        await AiocqhttpMessageEvent.send_message(
+        message_ids = await AiocqhttpMessageEvent.send_message(
             bot=self.bot,
             message_chain=message_chain,
             event=None,  # 这里不需要 event，因为是通过 session 发送的
@@ -164,7 +165,14 @@ class AiocqhttpAdapter(Platform):
             forward_message_max_retries=self.forward_message_max_retries,
             forward_message_fallback_enabled=self.forward_message_fallback_enabled,
         )
-        return await super().send_by_session(session, message_chain)
+        result = await super().send_by_session(session, message_chain)
+        if result is None or not message_ids:
+            return result
+        return replace(
+            result,
+            message_id=message_ids[0],
+            message_ids=message_ids,
+        )
 
     async def convert_message(self, event: Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")

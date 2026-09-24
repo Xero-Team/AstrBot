@@ -1016,7 +1016,7 @@ class TestModelMappings:
         expected_tables = [
             "platform_stats",
             "conversations",
-            "personas",
+            "prompts",
             "preferences",
             "chatui_projects",
             "session_project_relations",

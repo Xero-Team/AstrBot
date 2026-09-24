@@ -33,12 +33,12 @@ AstrBot can discover Skills from several places:
 
 Workspace Skills are **request-scoped**. In local runtime, when AstrBot builds a request, it checks the current session workspace for a `skills/` directory and appends valid Skills to that request's Skill inventory. They are not shown in the WebUI Skills management page yet, and they are not written to the global Skills configuration.
 
-If a persona is configured to select specific Skills, that list filters only local, plugin-provided, and sandbox Skills. Workspace Skills are still discovered and injected as part of the current request. Workspace Skills are disabled only when the persona is explicitly configured to use no Skills.
+If a prompt is configured to select specific Skills, that list filters only local, plugin-provided, and sandbox Skills. Workspace Skills are still discovered and injected as part of the current request. Workspace Skills are disabled only when the prompt is explicitly configured to use no Skills.
 
 When multiple sources contain a Skill with the same name, request-time priority is:
 
-1. If the current persona is explicitly configured to use no Skills, no Skills are injected, including Workspace Skills.
-2. If the current persona selects a specific Skill list, that list does not filter Workspace Skills.
+1. If the current prompt is explicitly configured to use no Skills, no Skills are injected, including Workspace Skills.
+2. If the current prompt selects a specific Skill list, that list does not filter Workspace Skills.
 3. The current session's Workspace Skill has the highest priority. If it has the same name as a local, plugin, or sandbox Skill, it overrides that Skill for the current request only.
 4. Local Skills take priority over plugin-provided Skills and sandbox-only Skills.
 5. Plugin-provided Skills take priority over sandbox-only Skills.

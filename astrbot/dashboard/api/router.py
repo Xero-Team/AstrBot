@@ -21,10 +21,10 @@ from .knowledge_bases import router as knowledge_bases_router
 from .logs import router as logs_router
 from .memory import router as memory_router
 from .open_api import router as open_api_router
-from .personas import router as personas_router
 from .platform import router as platform_router
 from .plugin_dashboard import router as plugin_dashboard_router
 from .plugins import router as plugins_router
+from .prompts import router as prompts_router
 from .providers import router as providers_router
 from .sessions import router as sessions_router
 from .skills import router as skills_router
@@ -68,7 +68,7 @@ def build_api_router() -> APIRouter:
     router.include_router(tools_router)
     router.include_router(platform_router)
     router.include_router(t2i_router)
-    router.include_router(personas_router)
+    router.include_router(prompts_router)
     router.include_router(updates_router)
     router.include_router(open_api_router)
     router.include_router(webchat_router)

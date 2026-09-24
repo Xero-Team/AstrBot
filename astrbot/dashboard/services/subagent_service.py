@@ -89,7 +89,7 @@ class SubAgentService:
             for agent in agents:
                 if isinstance(agent, dict):
                     agent.setdefault("provider_id", None)
-                    agent.setdefault("persona_id", None)
+                    agent.setdefault("prompt_id", None)
 
         return data
 

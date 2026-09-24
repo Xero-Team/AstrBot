@@ -676,8 +676,8 @@ class T2iActiveTemplateRequest(BaseModel):
     name: str
 
 
-class PersonaRequest(OpenModel):
-    persona_id: str | None = None
+class PromptRequest(OpenModel):
+    prompt_id: str | None = None
     system_prompt: str | None = None
     begin_dialogs: list[Any] | None = None
     tools: list[str] | None = None
@@ -687,22 +687,22 @@ class PersonaRequest(OpenModel):
     sort_order: int | None = None
 
 
-class PersonaMoveRequest(BaseModel):
-    persona_id: str
+class PromptMoveRequest(BaseModel):
+    prompt_id: str
     folder_id: str | None = None
 
 
-class PersonaReorderItem(BaseModel):
+class PromptReorderItem(BaseModel):
     id: str
-    type: Literal["persona", "folder"]
+    type: Literal["prompt", "folder"]
     sort_order: int
 
 
-class PersonaReorderRequest(BaseModel):
-    items: list[PersonaReorderItem]
+class PromptReorderRequest(BaseModel):
+    items: list[PromptReorderItem]
 
 
-class PersonaFolderRequest(OpenModel):
+class PromptFolderRequest(OpenModel):
     folder_id: str | None = None
     name: str | None = None
     parent_id: str | None = None
@@ -734,7 +734,7 @@ class ConversationRef(BaseModel):
 class ConversationPatchRequest(OpenModel):
     user_id: str | None = None
     title: str | None = None
-    persona_id: str | None = None
+    prompt_id: str | None = None
 
 
 class ConversationMessagesReplaceRequest(OpenModel):

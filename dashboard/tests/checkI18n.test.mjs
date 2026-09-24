@@ -56,13 +56,13 @@ function writeFixture({
 test('stripComments ignores translator calls in line comments', () => {
   const source = [
     "const { tm } = useModuleI18n('core.shared');",
-    "return null; // PersonaForm uses tm('form.rootFolder')",
-    "const label = tm('personaSelector.rootFolder');",
+    "return null; // PromptForm uses tm('form.rootFolder')",
+    "const label = tm('promptSelector.rootFolder');",
   ].join('\n');
 
   const stripped = stripComments(source);
   assert.equal(stripped.includes("tm('form.rootFolder')"), false);
-  assert.equal(stripped.includes("tm('personaSelector.rootFolder')"), true);
+  assert.equal(stripped.includes("tm('promptSelector.rootFolder')"), true);
 });
 
 test('localeModuleKey remaps tool-use.json onto the runtime tooluse path', () => {

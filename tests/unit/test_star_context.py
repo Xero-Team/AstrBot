@@ -37,7 +37,7 @@ def make_initialized_context() -> CoreExecutionContext:
         platform_manager=MagicMock(),
         conversation_manager=MagicMock(),
         message_history_manager=MagicMock(),
-        persona_manager=MagicMock(),
+        prompt_manager=MagicMock(),
         astrbot_config_mgr=MagicMock(),
         knowledge_base_manager=MagicMock(),
         cron_manager=MagicMock(),

@@ -26,7 +26,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 ## 主要功能
 
 1. 💯 免费 & 开源。
-2. ✨ AI 大模型对话，多模态，Agent，MCP，Skills，知识库，人格设定，自动压缩对话。
+2. ✨ AI 大模型对话，多模态，Agent，MCP，Skills，知识库，提示词设定，自动压缩对话。
 3. 🤖 支持接入 Dify、阿里云百炼、Coze 等智能体平台。
 4. 🌐 多平台，支持 QQ、企业微信、飞书、钉钉、微信公众号、Telegram、Slack 以及[更多](#支持的消息平台)。
 5. 📦 插件扩展，提供社区插件市场和沙箱化的 Dashboard Extension Protocol。

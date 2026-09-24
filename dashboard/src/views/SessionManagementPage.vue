@@ -886,21 +886,21 @@
                   </v-btn>
                 </div>
 
-                <!-- Persona Config Section -->
+                <!-- Prompt Config Section -->
                 <div class="d-flex align-center mb-4 mt-4">
                   <h3 class="font-weight-bold mb-0">
-                    {{ tm('ruleEditor.personaConfig.title') }}
+                    {{ tm('ruleEditor.promptConfig.title') }}
                   </h3>
                 </div>
 
                 <v-row density="comfortable">
                   <v-col cols="12">
                     <v-select
-                      v-model="serviceConfig.persona_id"
-                      :items="personaOptions"
+                      v-model="serviceConfig.prompt_id"
+                      :items="promptOptions"
                       item-title="label"
                       item-value="value"
-                      :label="tm('ruleEditor.personaConfig.selectPersona')"
+                      :label="tm('ruleEditor.promptConfig.selectPrompt')"
                       variant="outlined"
                       hide-details
                       clearable
@@ -913,7 +913,7 @@
                       class="mt-2"
                       icon="mdi-information-outline"
                     >
-                      {{ tm('ruleEditor.personaConfig.hint') }}
+                      {{ tm('ruleEditor.promptConfig.hint') }}
                     </v-alert>
                   </v-col>
                 </v-row>
@@ -1214,7 +1214,7 @@ interface ProviderOption {
   model?: string;
 }
 
-interface PersonaOption {
+interface PromptOption {
   name: string;
 }
 
@@ -1236,7 +1236,7 @@ interface SessionServiceConfig {
   session_blocked?: boolean;
   blocked?: boolean;
   custom_name?: string;
-  persona_id?: string | null;
+  prompt_id?: string | null;
   [key: string]: unknown;
 }
 
@@ -1329,7 +1329,7 @@ const currentPage = ref(1);
 const itemsPerPage = ref(10);
 const totalItems = ref(0);
 
-const availablePersonas = ref<PersonaOption[]>([]);
+const availablePrompts = ref<PromptOption[]>([]);
 const availableChatProviders = ref<ProviderOption[]>([]);
 const availableSttProviders = ref<ProviderOption[]>([]);
 const availableTtsProviders = ref<ProviderOption[]>([]);
@@ -1371,7 +1371,7 @@ const serviceConfig = reactive<
     >
   > & {
     custom_name: string;
-    persona_id: string | null;
+    prompt_id: string | null;
   }
 >({
   session_enabled: false,
@@ -1379,7 +1379,7 @@ const serviceConfig = reactive<
   tts_enabled: false,
   session_blocked: false,
   custom_name: '',
-  persona_id: null,
+  prompt_id: null,
 });
 
 const providerConfig = reactive<Record<ProviderRuleType, string>>({
@@ -1461,11 +1461,11 @@ const headers = computed(() => [
 
 const filteredRulesList = computed(() => rulesList.value);
 
-const personaOptions = computed<SelectOption<string | null>[]>(() => [
-  { label: tm('persona.none'), value: null },
-  ...availablePersonas.value.map((persona) => ({
-    label: persona.name,
-    value: persona.name,
+const promptOptions = computed<SelectOption<string | null>[]>(() => [
+  { label: tm('prompt.none'), value: null },
+  ...availablePrompts.value.map((prompt) => ({
+    label: prompt.name,
+    value: prompt.name,
   })),
 ]);
 
@@ -1709,7 +1709,7 @@ function normalizeProviderOption(raw: unknown): ProviderOption | null {
   };
 }
 
-function normalizePersonaOption(raw: unknown): PersonaOption | null {
+function normalizePromptOption(raw: unknown): PromptOption | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
@@ -1774,7 +1774,7 @@ function normalizeSessionServiceConfig(
     tts_enabled: normalizeBoolean(source.tts_enabled, fallback),
     session_blocked: normalizeBoolean(source.session_blocked, false),
     custom_name: normalizeString(source.custom_name) || undefined,
-    persona_id: normalizeString(source.persona_id) || null,
+    prompt_id: normalizeString(source.prompt_id) || null,
   };
 }
 
@@ -2223,10 +2223,10 @@ async function loadData() {
     rulesList.value = normalizedRules;
     mergeUmoInfos(data.rules);
     totalItems.value = normalizeNumber(data.total, 0);
-    availablePersonas.value = Array.isArray(data.available_personas)
-      ? data.available_personas
-          .map((item) => normalizePersonaOption(item))
-          .filter((item): item is PersonaOption => item !== null)
+    availablePrompts.value = Array.isArray(data.available_prompts)
+      ? data.available_prompts
+          .map((item) => normalizePromptOption(item))
+          .filter((item): item is PromptOption => item !== null)
       : [];
     availableChatProviders.value = Array.isArray(data.available_chat_providers)
       ? data.available_chat_providers
@@ -2360,7 +2360,7 @@ function openRuleEditor(item: SessionRuleItem) {
   );
   serviceConfig.session_blocked = svcConfig.session_blocked === true;
   serviceConfig.custom_name = sessionAliasName(item);
-  serviceConfig.persona_id = svcConfig.persona_id || null;
+  serviceConfig.prompt_id = svcConfig.prompt_id || null;
   senderOverlay.blocked = svcConfig.blocked === true;
   senderOverlay.llm_enabled =
     typeof svcConfig.llm_enabled === 'boolean' ? svcConfig.llm_enabled : null;
@@ -2480,8 +2480,8 @@ async function saveServiceConfig() {
       session_blocked: serviceConfig.session_blocked,
       custom_name: serviceConfig.custom_name,
     };
-    if (serviceConfig.persona_id !== null) {
-      config.persona_id = serviceConfig.persona_id;
+    if (serviceConfig.prompt_id !== null) {
+      config.prompt_id = serviceConfig.prompt_id;
     }
 
     const response = await sessionApi.upsertRule({

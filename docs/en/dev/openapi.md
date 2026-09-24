@@ -38,7 +38,7 @@ When creating an API Key, you can configure `scopes`. Each scope controls the ra
 | ---------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `bot`      | Manage bot/platform configurations                                           | `GET/POST /api/v1/bots`, `PATCH /api/v1/bots/{bot_id}/enabled`                                                                  |
 | `provider` | Manage models and Provider sources                                           | `GET/POST /api/v1/providers`, `GET/PUT/DELETE /api/v1/provider-sources/{source_id}`                                             |
-| `persona`  | Manage Personas and Persona folders                                          | `GET/POST /api/v1/personas`, `GET/POST /api/v1/persona-folders`                                                                 |
+| `prompt`   | Manage Prompts and Prompt folders                                            | `GET/POST /api/v1/prompts`, `GET/POST /api/v1/prompt-folders`                                                                   |
 | `im`       | Send proactive IM messages and query the bot/platform list                   | `POST /api/v1/im/messages`, `GET /api/v1/im/bots`                                                                               |
 | `config`   | Manage profiles and system configuration; also includes `bot` and `provider` | `GET/PUT /api/v1/system-config`, `GET/POST /api/v1/config-profiles`, `GET /api/v1/subagents/config`                             |
 | `chat`     | Use chat and inspect or maintain WebChat sessions                            | `POST /api/v1/chat`, `GET /api/v1/chat/sessions`, `GET /api/v1/chat/configs`                                                    |
@@ -78,9 +78,9 @@ Interact with AstrBot's built-in Agent. Supports plugin calls, tool calls, and o
 - `GET /api/v1/providers`: list model provider configurations
 - `GET /api/v1/provider-sources`: list provider source configurations
 
-**Personas, Knowledge Base, Long-term Memory, Data, Plugins, MCP, and Skills**
+**Prompts, Knowledge Base, Long-term Memory, Data, Plugins, MCP, and Skills**
 
-- `GET /api/v1/personas`: list personas
+- `GET /api/v1/prompts`: list prompts
 - `GET /api/v1/knowledge-bases`: list knowledge bases
 - `GET /api/v1/memory/facts`: page through long-term-memory facts
 - `GET /api/v1/sessions`: list session state and rules

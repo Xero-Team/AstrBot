@@ -22,8 +22,8 @@
     "enabledAgents": "Enabled Agents",
     "enabledAgentsNote": "Agents available for handoff",
     "mainOrchestration": "Main Orchestration",
-    "boundPersonas": "Bound Personas",
-    "boundPersonasNote": "Agents with an attached persona"
+    "boundPrompts": "Bound Prompts",
+    "boundPromptsNote": "Agents with an attached prompt"
   },
   "switches": {
     "enable": "Enable SubAgent orchestration",
@@ -32,12 +32,12 @@
     "dedupeHint": "Remove duplicate tools from main agent"
   },
   "description": {
-    "disabled": "When off: SubAgent is disabled; the main LLM mounts tools via persona rules (all by default) and calls them directly.",
+    "disabled": "When off: SubAgent is disabled; the main LLM mounts tools via prompt rules (all by default) and calls them directly.",
     "enabled": "When on: the main LLM keeps its own tools and mounts transfer_to_* delegate tools. With deduplication, tools overlapping with SubAgents are removed from the main tool set."
   },
   "section": {
     "title": "SubAgents",
-    "subtitle": "Configure delegate agents, personas, and descriptions for the main LLM",
+    "subtitle": "Configure delegate agents, prompts, and descriptions for the main LLM",
     "globalSettings": "Global Settings",
     "agentSetup": "Agent Setup"
   },
@@ -48,32 +48,32 @@
     "transferPrefix": "transfer_to_{name}",
     "switchLabel": "Enable",
     "previewTitle": "Preview: handoff tool shown to the main LLM",
-    "personaChip": "Persona: {id}",
-    "personaPreview": "Persona Preview",
+    "promptChip": "Prompt: {id}",
+    "promptPreview": "Prompt Preview",
     "noDescription": "No description yet",
-    "previewHint": "Review the currently selected persona to verify the handoff target."
+    "previewHint": "Review the currently selected prompt to verify the handoff target."
   },
   "form": {
     "nameLabel": "Agent name (used for transfer_to_{name})",
     "nameHint": "Use lowercase letters + underscores; must be globally unique.",
     "providerLabel": "Chat Provider (optional)",
     "providerHint": "Leave empty to follow the global default provider.",
-    "personaLabel": "Choose Persona",
-    "personaHint": "The SubAgent inherits the selected Persona's system settings and tools.",
-    "personaPreview": "Persona Preview",
+    "promptLabel": "Choose Prompt",
+    "promptHint": "The SubAgent inherits the selected Prompt's system settings and tools.",
+    "promptPreview": "Prompt Preview",
     "descriptionLabel": "Description for the main LLM (used to decide handoff)",
     "descriptionHint": "Shown to the main LLM as the transfer_to_* tool description—keep it short and clear."
   },
   "messages": {
     "loadConfigFailed": "Failed to load config",
-    "loadPersonaFailed": "Failed to load persona list",
+    "loadPromptFailed": "Failed to load prompt list",
     "unsavedChangesNotice": "You have unsaved changes on this page. Save before leaving.",
     "unsavedChangesLeaveConfirm": "You have unsaved changes. Leaving will discard them. Continue?",
     "unsavedChangesReloadConfirm": "You have unsaved changes. Reloading will discard them. Continue?",
     "nameMissing": "A SubAgent is missing a name",
     "nameInvalid": "Invalid SubAgent name: only lowercase letters/numbers/underscores, starting with a letter",
     "nameDuplicate": "Duplicate SubAgent name: {name}",
-    "personaMissing": "SubAgent {name} has no persona selected",
+    "promptMissing": "SubAgent {name} has no prompt selected",
     "saveSuccess": "Saved successfully",
     "saveFailed": "Failed to save",
     "nameRequired": "Name is required",

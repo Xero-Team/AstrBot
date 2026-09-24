@@ -528,7 +528,6 @@ class WebChatService:
         session_id = message.get("session_id") or session.session_id
         selected_provider = message.get("selected_provider")
         selected_model = message.get("selected_model")
-        persona_prompt = message.get("persona_prompt")
         show_reasoning = message.get("show_reasoning")
         enable_streaming = message.get("enable_streaming", True)
         raw_step_up_tokens = message.get("webchat_step_up_tokens")
@@ -619,7 +618,6 @@ class WebChatService:
                     "message": message_parts,
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
-                    "persona_prompt": persona_prompt,
                     "show_reasoning": show_reasoning,
                     "enable_streaming": enable_streaming,
                     "llm_checkpoint_id": llm_checkpoint_id,

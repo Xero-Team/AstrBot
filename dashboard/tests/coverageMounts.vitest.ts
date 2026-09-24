@@ -68,7 +68,7 @@ vi.mock('@/api/v1', () => {
   return {
     appearanceApi: makeApi(),
     dataFilesApi: makeApi(),
-    personaApi: makeApi(),
+    promptApi: makeApi(),
     botApi: makeApi(),
     sessionApi: makeApi(),
     authApi: makeApi(),
@@ -117,7 +117,7 @@ import ExtensionCard from '@/components/shared/ExtensionCard.vue';
 import MessageList from '@/components/chat/MessageList.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import Settings from '@/views/Settings.vue';
-import PersonaManager from '@/views/persona/PersonaManager.vue';
+import PromptManager from '@/views/prompt/PromptManager.vue';
 import ExtensionPage from '@/views/ExtensionPage.vue';
 import DataFilesPage from '@/views/DataFilesPage.vue';
 import SessionManagementPage from '@/views/SessionManagementPage.vue';
@@ -141,7 +141,7 @@ import { I18nLoader } from '@/i18n/loader';
 import BaseFolderTree from '@/components/folder/BaseFolderTree.vue';
 import BaseFolderCard from '@/components/folder/BaseFolderCard.vue';
 import ComponentPanel from '@/components/extension/componentPanel/index.vue';
-import PersonaCard from '@/views/persona/PersonaCard.vue';
+import PromptCard from '@/views/prompt/PromptCard.vue';
 import DocumentDetail from '@/views/knowledge-base/DocumentDetail.vue';
 import RetrievalTab from '@/views/knowledge-base/components/RetrievalTab.vue';
 import SettingsTab from '@/views/knowledge-base/components/SettingsTab.vue';
@@ -158,7 +158,7 @@ const monacoStubs = {
   StorageCleanupPanel: { template: '<div />' },
   DashboardTwoFactorDialog: { template: '<div />' },
   DashboardStepUpDialog: { template: '<div />' },
-  PersonaForm: { template: '<div />' },
+  PromptForm: { template: '<div />' },
   FolderTree: { template: '<div />' },
   InstalledPluginsTab: { template: '<div data-testid="installed" />' },
   MarketPluginsTab: { template: '<div />' },
@@ -312,13 +312,13 @@ describe('high-value coverage mounts', () => {
     settings.unmount();
   });
 
-  it('mounts PersonaManager and ExtensionPage host', async () => {
-    const persona = mountWithVuetify(PersonaManager, {
+  it('mounts PromptManager and ExtensionPage host', async () => {
+    const prompt = mountWithVuetify(PromptManager, {
       global: { stubs: monacoStubs },
     });
     await flushPromises();
-    expect(persona.exists()).toBe(true);
-    persona.unmount();
+    expect(prompt.exists()).toBe(true);
+    prompt.unmount();
 
     const page = mountWithVuetify(ExtensionPage, {
       global: { stubs: monacoStubs },
@@ -472,10 +472,10 @@ describe('high-value coverage mounts', () => {
     expect(panel.exists()).toBe(true);
     panel.unmount();
 
-    const personaCard = mountWithVuetify(PersonaCard, {
+    const promptCard = mountWithVuetify(PromptCard, {
       props: {
-        persona: {
-          persona_id: 'p1',
+        prompt: {
+          prompt_id: 'p1',
           system_prompt: 'hi',
           begin_dialogs: [],
           tools: [],
@@ -486,8 +486,8 @@ describe('high-value coverage mounts', () => {
       },
       global: { stubs: monacoStubs },
     });
-    expect(personaCard.text()).toContain('p1');
-    personaCard.unmount();
+    expect(promptCard.text()).toContain('p1');
+    promptCard.unmount();
 
     const document = mountWithVuetify(DocumentDetail, {
       global: { stubs: monacoStubs },

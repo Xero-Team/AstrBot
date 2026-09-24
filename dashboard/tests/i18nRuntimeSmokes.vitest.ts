@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { initI18n } from '@/i18n/composables';
 import TemplateListEditor from '@/components/shared/TemplateListEditor.vue';
-import PersonaSelector from '@/components/shared/PersonaSelector.vue';
+import PromptSelector from '@/components/shared/PromptSelector.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
 vi.mock('@/utils/monacoLoader', () => ({}));
 
 vi.mock('@/api/v1', () => ({
-  personaApi: {
+  promptApi: {
     tree: vi.fn(async () => ({
       data: {
         status: 'ok',
@@ -80,10 +80,10 @@ describe('i18n runtime smokes', () => {
     ).toBe(false);
   });
 
-  it('resolves PersonaSelector edit label in en-US without missing-key warnings', async () => {
+  it('resolves PromptSelector edit label in en-US without missing-key warnings', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const wrapper = mountWithVuetify(PersonaSelector, {
+    const wrapper = mountWithVuetify(PromptSelector, {
       props: {
         modelValue: '',
       },
@@ -92,10 +92,10 @@ describe('i18n runtime smokes', () => {
           BaseFolderItemSelector: {
             props: ['labels'],
             template:
-              '<div class="persona-selector-stub">{{ labels.editButton }}</div>',
+              '<div class="prompt-selector-stub">{{ labels.editButton }}</div>',
           },
-          PersonaForm: {
-            template: '<div class="persona-form-stub"></div>',
+          PromptForm: {
+            template: '<div class="prompt-form-stub"></div>',
           },
         },
       },
@@ -103,14 +103,14 @@ describe('i18n runtime smokes', () => {
 
     await flushPromises();
 
-    expect(wrapper.find('.persona-selector-stub').text()).toBe(
-      'Edit current persona',
+    expect(wrapper.find('.prompt-selector-stub').text()).toBe(
+      'Edit current prompt',
     );
     expect(
       warnSpy.mock.calls.some((args) =>
         args.some((arg) =>
           String(arg).includes(
-            'Translation key not found: core.shared.personaSelector.editPersona',
+            'Translation key not found: core.shared.promptSelector.editPrompt',
           ),
         ),
       ),

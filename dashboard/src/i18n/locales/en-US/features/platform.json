@@ -101,7 +101,7 @@
     },
     "configFileTitle": "Config File",
     "optional": "Optional",
-    "configHint": "How do you want to configure the bot? The config file includes model, persona, knowledge base, plugins, and more.",
+    "configHint": "How do you want to configure the bot? The config file includes model, prompt, knowledge base, plugins, and more.",
     "configDefaultHint": "Uses the default config file \"default\" by default. You can configure it later.",
     "useExistingConfig": "Use existing config file",
     "selectConfigLabel": "Select config file",

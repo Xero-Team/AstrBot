@@ -35,7 +35,7 @@ from astrbot.core.astr_agent_hooks import MainAgentHooks
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
-    CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+    CHATUI_SPECIAL_DEFAULT_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
@@ -52,15 +52,15 @@ from astrbot.core.conversation_models import Conversation
 from astrbot.core.db.protocols import PlatformSessionStore
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.json_card import coalesce_prompt_with_json_cards
-from astrbot.core.persona_error_reply import (
-    extract_persona_custom_error_message_from_persona,
-    set_persona_custom_error_message_on_event,
-)
-from astrbot.core.persona_models import Personality
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.prompt_error_reply import (
+    extract_prompt_custom_error_message_from_prompt,
+    set_prompt_custom_error_message_on_event,
+)
+from astrbot.core.prompt_models import PromptSpec
 from astrbot.core.skills._skill_snapshot import (
-    PERSONA_TOOLS_EXTRA_KEY,
+    PROMPT_TOOLS_EXTRA_KEY,
     SKILL_SNAPSHOT_EXTRA_KEY,
     SkillSnapshot,
     freeze_skill_snapshot,
@@ -252,7 +252,7 @@ def local_agent_runtime_from_profile(
 ) -> tuple[MainAgentBuildConfig, int]:
     """Assemble local-agent build config and step bound from a profile.
 
-    Reads ``agent_runner.config`` for model fallback/retries, persona,
+    Reads ``agent_runner.config`` for model fallback/retries, prompt,
     compression, and misc fields. Callers may override individual
     ``MainAgentBuildConfig`` fields.
 
@@ -267,7 +267,6 @@ def local_agent_runtime_from_profile(
     agent_runner = _mapping(profile.get("agent_runner"))
     runner_config = _mapping(agent_runner.get("config"))
     model_config = _mapping(runner_config.get("model"))
-    persona_config = _mapping(runner_config.get("persona"))
     compression_config = _mapping(runner_config.get("compression"))
     misc_config = _mapping(runner_config.get("misc"))
     settings = _mapping(profile.get("provider_settings"))
@@ -326,8 +325,8 @@ def local_agent_runtime_from_profile(
         "fallback_max_context_tokens": compression_config.get(
             "fallback_max_tokens", 128000
         ),
-        "llm_safety_mode": persona_config.get("safety_mode", True),
-        "safety_mode_strategy": persona_config.get(
+        "llm_safety_mode": runner_config.get("safety_mode", True),
+        "safety_mode_strategy": runner_config.get(
             "safety_mode_strategy", "system_prompt"
         ),
         "computer_use_runtime": settings.get("computer_use_runtime", "none"),
@@ -725,7 +724,7 @@ async def _inject_memory_context(
 def _append_skills_prompt(
     req: ProviderRequest,
     cfg: dict,
-    persona: Personality | None,
+    prompt: PromptSpec | None,
     event: AstrMessageEvent,
     plugin_context: CoreExecutionContext,
 ) -> SkillSnapshot:
@@ -761,13 +760,13 @@ def _append_skills_prompt(
         if runtime == "local" and (not btw_enabled or loop_mode == "work")
         else []
     )
-    if persona and persona.get("skills") is not None:
-        if not persona["skills"]:
+    if prompt and prompt.get("skills") is not None:
+        if not prompt["skills"]:
             skills = []
         else:
-            allowed = set(persona["skills"])
+            allowed = set(prompt["skills"])
             skills = [skill for skill in skills if skill.name in allowed]
-    if workspace_skills and (not persona or persona.get("skills") != []):
+    if workspace_skills and (not prompt or prompt.get("skills") != []):
         skills_by_name = {skill.name: skill for skill in skills}
         for skill in workspace_skills:
             skills_by_name[skill.name] = skill
@@ -775,8 +774,8 @@ def _append_skills_prompt(
     snapshot = freeze_skill_snapshot(skills, runtime=runtime)
     event.set_extra(SKILL_SNAPSHOT_EXTRA_KEY, snapshot)
     event.set_extra(
-        PERSONA_TOOLS_EXTRA_KEY,
-        None if not persona else persona.get("tools"),
+        PROMPT_TOOLS_EXTRA_KEY,
+        None if not prompt else prompt.get("tools"),
     )
     if not snapshot.skills:
         return snapshot
@@ -826,16 +825,14 @@ def _add_subagent_tools(
         for agent in agents:
             if not isinstance(agent, dict) or agent.get("enabled", True) is False:
                 continue
-            persona_tools = None
-            if persona_id := agent.get("persona_id"):
-                persona = plugin_context.persona_manager.get_runtime_persona_by_id(
-                    persona_id
+            prompt_tools = None
+            if prompt_id := agent.get("prompt_id"):
+                prompt = plugin_context.prompt_manager.get_runtime_prompt_by_id(
+                    prompt_id
                 )
-                if persona is not None:
-                    persona_tools = persona.get("tools")
-            tools = (
-                persona_tools if persona_tools is not None else agent.get("tools", [])
-            )
+                if prompt is not None:
+                    prompt_tools = prompt.get("tools")
+            tools = prompt_tools if prompt_tools is not None else agent.get("tools", [])
             if tools is None:
                 assigned_tools.update(
                     tool.name
@@ -863,52 +860,52 @@ def _add_subagent_tools(
         req.system_prompt += f"\n{router_prompt}\n"
 
 
-async def _ensure_persona_and_skills(
+async def _ensure_prompt_and_skills(
     req: ProviderRequest,
     cfg: dict,
     plugin_context: CoreExecutionContext,
     event: AstrMessageEvent,
 ) -> None:
-    """Ensure persona and skills are applied to the request's system prompt or user prompt."""
+    """Ensure prompt and skills are applied to the request's system prompt or user prompt."""
     if not req.conversation:
         return
 
     (
-        persona_id,
-        persona,
+        prompt_id,
+        prompt_spec,
         _,
         use_webchat_special_default,
-    ) = await plugin_context.persona_manager.resolve_selected_persona(
+    ) = await plugin_context.prompt_manager.resolve_selected_prompt(
         umo=event.unified_msg_origin,
-        conversation_persona_id=req.conversation.persona_id,
+        conversation_prompt_id=req.conversation.prompt_id,
         platform_name=event.get_platform_name(),
     )
 
-    set_persona_custom_error_message_on_event(
-        event, extract_persona_custom_error_message_from_persona(persona)
+    set_prompt_custom_error_message_on_event(
+        event, extract_prompt_custom_error_message_from_prompt(prompt_spec)
     )
 
     if req.system_prompt is None:
         req.system_prompt = ""
 
-    if persona:
-        # Inject persona system prompt
-        if prompt := persona["prompt"]:
-            req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
-        if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
+    if prompt_spec:
+        # Inject prompt system prompt
+        if prompt_text := prompt_spec["prompt"]:
+            req.system_prompt += f"\n# Prompt Instructions\n\n{prompt_text}\n"
+        if begin_dialogs := copy.deepcopy(prompt_spec.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
     elif use_webchat_special_default:
-        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PROMPT
 
     memory_manager = _get_context_runtime_attr(plugin_context, "memory_manager")
     await _inject_memory_context(req, event, memory_manager)
 
-    _append_skills_prompt(req, cfg, persona, event, plugin_context)
+    _append_skills_prompt(req, cfg, prompt_spec, event, plugin_context)
     try:
         event.trace.record(
-            "sel_persona",
-            persona_id=persona_id,
-            persona_toolset=[],
+            "sel_prompt",
+            prompt_id=prompt_id,
+            prompt_toolset=[],
         )
     except Exception:
         pass
@@ -1307,7 +1304,7 @@ async def _decorate_llm_request(
     quote_images_already_captioned = False
 
     if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+        await _ensure_prompt_and_skills(req, cfg, plugin_context, event)
 
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
@@ -1375,9 +1372,9 @@ def _assemble_request_tool_catalog(
     snapshot = event.get_extra(SKILL_SNAPSHOT_EXTRA_KEY)
     if not isinstance(snapshot, SkillSnapshot):
         snapshot = SkillSnapshot(skills=(), runtime=config.computer_use_runtime)
-    persona_tools = event.get_extra(PERSONA_TOOLS_EXTRA_KEY)
-    if persona_tools is not None and not isinstance(persona_tools, list | tuple):
-        persona_tools = None
+    prompt_tools = event.get_extra(PROMPT_TOOLS_EXTRA_KEY)
+    if prompt_tools is not None and not isinstance(prompt_tools, list | tuple):
+        prompt_tools = None
     auth_context = getattr(event, "auth_context", None)
     source = getattr(auth_context, "source", None) or "im"
     authenticated = bool(getattr(auth_context, "authenticated", False))
@@ -1426,7 +1423,7 @@ def _assemble_request_tool_catalog(
     loop_mode = "work" if event.get_extra("btw_loop") == "work" else "conversation"
     catalog_inputs = ToolCatalogInputs(
         snapshot=snapshot,
-        persona_tools=persona_tools,
+        prompt_tools=prompt_tools,
         surface=surface,
         computer_use_runtime=config.computer_use_runtime,
         allow_computer_tools=config.allow_computer_tools,

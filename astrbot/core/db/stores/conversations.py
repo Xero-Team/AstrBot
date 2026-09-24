@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 from sqlmodel import col, delete, desc, func, or_, select, update
 
-from astrbot.core.db.po import ConversationV2, Persona, PlatformSession, Preference
+from astrbot.core.db.po import ConversationV2, PlatformSession, Preference, Prompt
 from astrbot.core.db.stores.mixin import DatabaseStoreMixin, store_session
 
 
@@ -271,7 +271,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
         platform_id: str,
         content: list[dict] | None = None,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         cid: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -291,7 +291,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                     content=content or [],
                     platform_id=platform_id,
                     title=title,
-                    persona_id=persona_id,
+                    prompt_id=prompt_id,
                     **kwargs,
                 )
                 session.add(new_conversation)
@@ -301,7 +301,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
         self,
         cid: str,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         content: list[dict] | None = None,
         token_usage: int | None = None,
     ) -> ConversationV2 | None:
@@ -314,8 +314,8 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                 values = {}
                 if title is not None:
                     values["title"] = title
-                if persona_id is not None:
-                    values["persona_id"] = persona_id
+                if prompt_id is not None:
+                    values["prompt_id"] = prompt_id
                 if content is not None:
                     values["content"] = content
                 if token_usage is not None:
@@ -353,7 +353,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
         search_query=None,
         platform=None,
     ) -> tuple[list[dict], int]:
-        """Get paginated session conversations with joined conversation and persona details."""
+        """Get paginated session conversations with joined conversation and prompt details."""
         async with store_session(self) as session:
             session: AsyncSession
             offset = (page - 1) * page_size
@@ -364,9 +364,9 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                     func.json_extract(Preference.value, "$.val").label(
                         "conversation_id",
                     ),  # type: ignore
-                    col(ConversationV2.persona_id).label("persona_id"),
+                    col(ConversationV2.prompt_id).label("prompt_id"),
                     col(ConversationV2.title).label("title"),
-                    col(Persona.persona_id).label("persona_name"),
+                    col(Prompt.prompt_id).label("prompt_name"),
                 )
                 .select_from(Preference)
                 .outerjoin(
@@ -375,8 +375,8 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                     == ConversationV2.conversation_id,
                 )
                 .outerjoin(
-                    Persona,
-                    col(ConversationV2.persona_id) == Persona.persona_id,
+                    Prompt,
+                    col(ConversationV2.prompt_id) == Prompt.prompt_id,
                 )
                 .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
             )
@@ -388,7 +388,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                     or_(
                         col(Preference.scope_id).ilike(search_pattern),
                         col(ConversationV2.title).ilike(search_pattern),
-                        col(Persona.persona_id).ilike(search_pattern),
+                        col(Prompt.prompt_id).ilike(search_pattern),
                     ),
                 )
 
@@ -417,8 +417,8 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                     == ConversationV2.conversation_id,
                 )
                 .outerjoin(
-                    Persona,
-                    col(ConversationV2.persona_id) == Persona.persona_id,
+                    Prompt,
+                    col(ConversationV2.prompt_id) == Prompt.prompt_id,
                 )
                 .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
             )
@@ -430,7 +430,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                     or_(
                         col(Preference.scope_id).ilike(search_pattern),
                         col(ConversationV2.title).ilike(search_pattern),
-                        col(Persona.persona_id).ilike(search_pattern),
+                        col(Prompt.prompt_id).ilike(search_pattern),
                     ),
                 )
 
@@ -447,9 +447,9 @@ class ConversationStoreMixin(DatabaseStoreMixin):
                 {
                     "session_id": row.session_id,
                     "conversation_id": row.conversation_id,
-                    "persona_id": row.persona_id,
+                    "prompt_id": row.prompt_id,
                     "title": row.title,
-                    "persona_name": row.persona_name,
+                    "prompt_name": row.prompt_name,
                 }
                 for row in rows
             ]

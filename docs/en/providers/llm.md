@@ -26,7 +26,7 @@ A model needs a unique ID, the exact remote model name, and a `provider_source_i
 - tool calling: expose Agent tools only when the service implements function/tool calling correctly.
 - generation parameters: ensure temperature, top-p, max tokens, and similar fields are accepted by that model.
 
-One source can back several models. Do not duplicate IDs by copying JSON; Provider Manager resolves defaults, fallback, and profile or Persona references by ID.
+One source can back several models. Do not duplicate IDs by copying JSON; Provider Manager resolves defaults, fallback, and profile or Prompt references by ID.
 
 ## OpenAI Responses
 

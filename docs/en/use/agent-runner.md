@@ -41,4 +41,4 @@ If you need Dify, Coze, Bailian Application, or DeerFlow, switch the runner type
 
 In the WebUI, open Configuration -> Agent Execution Method, choose a runner type, fill in that type's fields on the same page (API key, app ID, and so on), and save.
 
-The built-in Agent's chat model, persona, compression, and tool settings also live on the same profile. They are no longer separate model providers.
+The built-in Agent's chat model, prompt, compression, and tool settings also live on the same profile. They are no longer separate model providers.

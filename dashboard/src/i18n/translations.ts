@@ -31,7 +31,7 @@ import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
 import zhCNKnowledgeBaseIndex from './locales/zh-CN/features/knowledge-base/index.json';
 import zhCNKnowledgeBaseDetail from './locales/zh-CN/features/knowledge-base/detail.json';
 import zhCNKnowledgeBaseDocument from './locales/zh-CN/features/knowledge-base/document.json';
-import zhCNPersona from './locales/zh-CN/features/persona.json';
+import zhCNPrompt from './locales/zh-CN/features/prompt.json';
 import zhCNCommand from './locales/zh-CN/features/command.json';
 import zhCNSubagent from './locales/zh-CN/features/subagent.json';
 import zhCNWelcome from './locales/zh-CN/features/welcome.json';
@@ -72,7 +72,7 @@ import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
 import enUSKnowledgeBaseIndex from './locales/en-US/features/knowledge-base/index.json';
 import enUSKnowledgeBaseDetail from './locales/en-US/features/knowledge-base/detail.json';
 import enUSKnowledgeBaseDocument from './locales/en-US/features/knowledge-base/document.json';
-import enUSPersona from './locales/en-US/features/persona.json';
+import enUSPrompt from './locales/en-US/features/prompt.json';
 import enUSCommand from './locales/en-US/features/command.json';
 import enUSSubagent from './locales/en-US/features/subagent.json';
 import enUSWelcome from './locales/en-US/features/welcome.json';
@@ -121,7 +121,7 @@ export const translations = {
         detail: zhCNKnowledgeBaseDetail,
         document: zhCNKnowledgeBaseDocument,
       },
-      persona: zhCNPersona,
+      prompt: zhCNPrompt,
       command: zhCNCommand,
       subagent: zhCNSubagent,
       welcome: zhCNWelcome,
@@ -170,7 +170,7 @@ export const translations = {
         detail: enUSKnowledgeBaseDetail,
         document: enUSKnowledgeBaseDocument,
       },
-      persona: enUSPersona,
+      prompt: enUSPrompt,
       command: enUSCommand,
       subagent: enUSSubagent,
       welcome: enUSWelcome,

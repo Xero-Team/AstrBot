@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from astrbot.core.execution_context import CoreExecutionContext
     from astrbot.core.file_token_service import FileTokenService
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
-    from astrbot.core.persona_mgr import PersonaManager
+    from astrbot.core.prompt_mgr import PromptManager
     from astrbot.core.provider.manager import ProviderManager
     from astrbot.core.runtime_catalogs import RuntimeCatalogs
     from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -647,7 +647,7 @@ class ConversationCapability:
         *,
         content: list[dict] | None = None,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
     ) -> str:
         """Create and select a conversation for a session."""
         return await self._manager.new_conversation(
@@ -655,7 +655,7 @@ class ConversationCapability:
             platform_id,
             content=content,
             title=title,
-            persona_id=persona_id,
+            prompt_id=prompt_id,
         )
 
     async def update(
@@ -665,7 +665,7 @@ class ConversationCapability:
         conversation_id: str | None = None,
         history: list[dict] | None = None,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         token_usage: int | None = None,
     ) -> None:
         """Update one conversation selected by ID or current session state."""
@@ -674,7 +674,7 @@ class ConversationCapability:
             conversation_id,
             history,
             title,
-            persona_id,
+            prompt_id,
             token_usage,
         )
 
@@ -855,41 +855,41 @@ class ConversationCapability:
             )
 
 
-class PersonaCapability:
-    """Read and select personas without exposing PersonaManager."""
+class PromptCapability:
+    """Read and select prompts without exposing PromptManager."""
 
     __slots__ = ("_manager",)
 
-    def __init__(self, manager: PersonaManager) -> None:
+    def __init__(self, manager: PromptManager) -> None:
         self._manager = manager
 
     async def default(self, umo: str | MessageSession | None = None) -> Any:
-        """Return the configured default runtime persona."""
-        return await self._manager.get_default_runtime_persona(umo)
+        """Return the configured default runtime prompt."""
+        return await self._manager.get_default_runtime_prompt(umo)
 
-    def get(self, persona_id: str | None) -> Any:
-        """Return one runtime persona by identifier."""
-        return self._manager.get_runtime_persona_by_id(persona_id)
+    def get(self, prompt_id: str | None) -> Any:
+        """Return one runtime prompt by identifier."""
+        return self._manager.get_runtime_prompt_by_id(prompt_id)
 
     async def folders(self) -> list[dict]:
-        """Return the current persona folder hierarchy."""
+        """Return the current prompt folder hierarchy."""
         return await self._manager.get_folder_tree()
 
     def all(self) -> tuple[Any, ...]:
-        """Return an immutable snapshot of configured personas."""
-        return tuple(self._manager.personas)
+        """Return an immutable snapshot of configured prompts."""
+        return tuple(self._manager.prompts)
 
     async def resolve(
         self,
         *,
         umo: str,
-        conversation_persona_id: str | None,
+        conversation_prompt_id: str | None,
         platform_name: str,
     ) -> tuple[str | None, Any, str | None, Any]:
-        """Resolve the effective persona under session routing rules."""
-        return await self._manager.resolve_selected_persona(
+        """Resolve the effective prompt under session routing rules."""
+        return await self._manager.resolve_selected_prompt(
             umo=umo,
-            conversation_persona_id=conversation_persona_id,
+            conversation_prompt_id=conversation_prompt_id,
             platform_name=platform_name,
         )
 
@@ -1527,7 +1527,7 @@ class PluginContext:
         "preferences",
         "config",
         "conversations",
-        "personas",
+        "prompts",
         "cron",
         "knowledge",
         "platform_actions",
@@ -1553,7 +1553,7 @@ class PluginContext:
         preferences: PreferenceCapability,
         config: ConfigurationCapability,
         conversations: ConversationCapability,
-        personas: PersonaCapability,
+        prompts: PromptCapability,
         cron: CronCapability,
         knowledge: KnowledgeCapability,
         platform_actions: PlatformActionsCapability,
@@ -1575,7 +1575,7 @@ class PluginContext:
         self.preferences = preferences
         self.config = config
         self.conversations = conversations
-        self.personas = personas
+        self.prompts = prompts
         self.cron = cron
         self.knowledge = knowledge
         self.platform_actions = platform_actions
@@ -1614,7 +1614,7 @@ class PluginContext:
                 execution.conversation_manager,
                 execution.database,
             ),
-            personas=PersonaCapability(execution.persona_manager),
+            prompts=PromptCapability(execution.prompt_manager),
             cron=CronCapability(execution.cron_manager),
             knowledge=KnowledgeCapability(execution.kb_manager),
             platform_actions=PlatformActionsCapability(execution),
@@ -1655,7 +1655,7 @@ class PluginContext:
             preferences=self.preferences,
             config=self.config,
             conversations=self.conversations,
-            personas=self.personas,
+            prompts=self.prompts,
             cron=self.cron,
             knowledge=self.knowledge,
             platform_actions=self.platform_actions,
@@ -1699,7 +1699,7 @@ __all__ = [
     "MessageCapability",
     "SessionBridgeCapability",
     "ModelCapability",
-    "PersonaCapability",
+    "PromptCapability",
     "PlatformActionsCapability",
     "OneBotCapability",
     "TelegramCapability",

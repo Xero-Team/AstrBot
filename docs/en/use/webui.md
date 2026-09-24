@@ -20,6 +20,7 @@ These entries match the default WebUI sidebar. If you customized the sidebar, ch
 | Command Management                          | Plugins → Manage behavior → Commands                                                |
 | Standalone MCP / Skills entries             | Plugins → MCP / Skills                                                              |
 | Config → AI → Capabilities → BTW dual loops | More Features → BTW Dual Loop (`/btw`)                                              |
+| Persona / Persona Settings                  | Prompts / Prompt Settings                                                           |
 
 Legacy log, trace, conversation, and statistics URLs still redirect to the matching tabs. Agent runners are now saved with each profile instead of being created as a provider; see [Agent Runner](./agent-runner.md).
 
@@ -152,7 +153,7 @@ high-risk run.
 
 This does not grant access to global Dashboard operations such as changing
 accounts, providers, plugins, system settings, exports, or restarts. The
-account's Persona, tool, sandbox, and path restrictions still apply. Anonymous
+account's Prompt, tool, sandbox, and path restrictions still apply. Anonymous
 WebChat, API keys, IM messages, plugins, and background continuations cannot
 reuse this authorization. IM senders use a different path: bind the Subject ID
 from `/session info` as `instance_operator` on that config. See
@@ -201,11 +202,11 @@ You can also click the + button in the bottom right corner to manually install p
 
 If a plugin fails to load, the admin panel will display the error message and provide a **"Try one-click reload fix"** button. This allows you to quickly reload the plugin after fixing the environment (e.g., installing missing dependencies) or modifying the code, without having to restart the entire application.
 
-## Personas
+## Prompts
 
-The Personas page can create folders, move or reorder personas, and import or export one persona at a time. Exported JSON contains the persona ID, system prompt, and preset dialogs only; it intentionally excludes tools and Skills. Recheck and configure tools, Skills, and provider choices after importing.
+The Prompts page can create folders, move or reorder prompts, and import or export one prompt at a time. Exported JSON contains the prompt ID, system prompt, and preset dialogs only; it intentionally excludes tools and Skills. Recheck and configure tools, Skills, and provider choices after importing.
 
-If an imported persona ID already exists, WebUI creates a new ID with an `_imported` suffix instead of overwriting the existing persona. Review JSON from untrusted sources before attaching it to an Agent with privileged tools.
+If an imported prompt ID already exists, WebUI creates a new ID with an `_imported` suffix instead of overwriting the existing prompt. Review JSON from untrusted sources before attaching it to an Agent with privileged tools.
 
 ## Command Management
 

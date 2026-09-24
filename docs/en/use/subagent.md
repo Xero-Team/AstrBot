@@ -24,15 +24,15 @@ When orchestration is enabled:
 
 Open **SubAgents** in the WebUI sidebar.
 
-### 1. Prepare a Persona
+### 1. Prepare a Prompt
 
-The current UI requires each SubAgent to be bound to a Persona. The SubAgent reads these Persona fields:
+The current UI requires each SubAgent to be bound to a Prompt. The SubAgent reads these Prompt fields:
 
 - system prompt;
 - opening dialogue;
-- tool list. When the Persona means “all tools,” the SubAgent receives all currently active regular tools and applicable Computer tools, but not other `transfer_to_*` tools.
+- tool list. When the Prompt means “all tools,” the SubAgent receives all currently active regular tools and applicable Computer tools, but not other `transfer_to_*` tools.
 
-Persona Skills and the custom error reply are not currently inherited as isolated SubAgent settings. Put required behavioral rules in the Persona system prompt and grant only the tools needed for that role.
+Prompt Skills and the custom error reply are not currently inherited as isolated SubAgent settings. Put required behavioral rules in the Prompt system prompt and grant only the tools needed for that role.
 
 ### 2. Add a SubAgent
 
@@ -40,8 +40,8 @@ Select **Add SubAgent** and configure:
 
 - **Agent name**: must start with a lowercase ASCII letter and contain only lowercase letters, digits, and underscores. It must also be globally unique. For example, `web_search` creates `transfer_to_web_search`.
 - **Chat Provider (optional)**: overrides the chat model used by this SubAgent. When empty, AstrBot follows the provider resolved for the current session.
-- **Persona**: supplies the prompt, opening dialogue, and tool permissions.
-- **Description for the main LLM**: becomes the handoff tool description. State when to delegate, what input is required, and what the Agent returns; do not copy a long Persona prompt here.
+- **Prompt**: supplies the prompt, opening dialogue, and tool permissions.
+- **Description for the main LLM**: becomes the handoff tool description. State when to delegate, what input is required, and what the Agent returns; do not copy a long Prompt prompt here.
 
 After saving, use the card preview to verify the tool name and description shown to the main Agent. Individual SubAgents can be disabled independently.
 
@@ -52,7 +52,7 @@ Deduplication is off by default, which is useful during rollout: the main Agent 
 With **Deduplicate main LLM tools** enabled, every same-named tool assigned to an enabled SubAgent is removed from the main Agent. This reduces the main tool schema but makes that capability depend on a handoff. Before enabling it, verify that:
 
 - each SubAgent description gives the model a reliable routing signal;
-- no Persona accidentally grants all tools;
+- no Prompt accidentally grants all tools;
 - critical tools work with the model selected for the SubAgent.
 
 ## Design guidance
@@ -66,6 +66,6 @@ With **Deduplicate main LLM tools** enabled, every same-named tool assigned to a
 ## Current limitations
 
 - The feature is experimental and its configuration and behavior may continue to change.
-- SubAgents do not persist separate conversation histories. Each handoff builds context from that invocation, the Persona's opening dialogue, and tool results.
-- Persona Skills are not currently isolated and inherited by SubAgents.
+- SubAgents do not persist separate conversation histories. Each handoff builds context from that invocation, the Prompt's opening dialogue, and tool results.
+- Prompt Skills are not currently isolated and inherited by SubAgents.
 - SubAgents use profile-wide settings such as `agent_runner.config.misc.max_steps`, streaming behavior, and tool timeout; there is no separate per-SubAgent step limit.

@@ -323,7 +323,7 @@ async def test_v1_sender_session_rule_uses_sender_preferences(
             "target_type": "sender",
             "sender_id": sender_id,
             "rule_key": "session_service_config",
-            "rule_value": {"blocked": True, "persona_id": "p1"},
+            "rule_value": {"blocked": True, "prompt_id": "p1"},
         },
         headers=headers,
     )
@@ -671,47 +671,47 @@ async def test_v1_skill_archive_errors_return_http_status(
 
 
 @pytest.mark.asyncio
-async def test_v1_safe_persona_routes_accept_slash_ids(
+async def test_v1_safe_prompt_routes_accept_slash_ids(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
-    persona_id = "persona/foo"
+    prompt_id = "prompt/foo"
     headers = _jwt_headers()
-    persona_mgr = fake_core_lifecycle.persona_mgr
+    prompt_mgr = fake_core_lifecycle.prompt_mgr
 
     detail_response = await asgi_client.get(
-        "/api/v1/personas/persona%2Ffoo",
+        "/api/v1/prompts/prompt%2Ffoo",
         headers=headers,
     )
     update_response = await asgi_client.put(
-        "/api/v1/personas/persona%2Ffoo",
-        json={"name": "Demo Persona"},
+        "/api/v1/prompts/prompt%2Ffoo",
+        json={"name": "Demo Prompt"},
         headers=headers,
     )
     delete_response = await asgi_client.delete(
-        "/api/v1/personas/persona%2Ffoo",
+        "/api/v1/prompts/prompt%2Ffoo",
         headers=headers,
     )
 
     assert detail_response.status_code == 200
-    assert detail_response.json()["data"]["persona_id"] == persona_id
-    assert detail_response.json()["data"]["system_prompt"] == "Demo persona"
+    assert detail_response.json()["data"]["prompt_id"] == prompt_id
+    assert detail_response.json()["data"]["system_prompt"] == "Demo prompt"
     assert update_response.status_code == 200
-    assert update_response.json()["data"] == {"message": "人格更新成功"}
+    assert update_response.json()["data"] == {"message": "提示词更新成功"}
     assert delete_response.status_code == 200
-    assert delete_response.json()["data"] == {"message": "人格删除成功"}
-    assert persona_id not in persona_mgr.personas
+    assert delete_response.json()["data"] == {"message": "提示词删除成功"}
+    assert prompt_id not in prompt_mgr.prompts
 
 
 @pytest.mark.asyncio
-async def test_v1_persona_create_preserves_explicit_empty_tools_and_skills(
+async def test_v1_prompt_create_preserves_explicit_empty_tools_and_skills(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
     response = await asgi_client.post(
-        "/api/v1/personas",
+        "/api/v1/prompts",
         json={
-            "persona_id": "persona/no-capabilities",
+            "prompt_id": "prompt/no-capabilities",
             "system_prompt": "Do not use capabilities.",
             "tools": [],
             "skills": [],
@@ -720,32 +720,32 @@ async def test_v1_persona_create_preserves_explicit_empty_tools_and_skills(
     )
 
     assert response.status_code == 200
-    persona = fake_core_lifecycle.persona_mgr.personas["persona/no-capabilities"]
-    assert persona.tools == []
-    assert persona.skills == []
+    prompt = fake_core_lifecycle.prompt_mgr.prompts["prompt/no-capabilities"]
+    assert prompt.tools == []
+    assert prompt.skills == []
 
 
 @pytest.mark.asyncio
-async def test_v1_persona_by_id_update_preserves_explicit_null_tools_and_skills(
+async def test_v1_prompt_by_id_update_preserves_explicit_null_tools_and_skills(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
-    persona_id = "persona/foo"
+    prompt_id = "prompt/foo"
     headers = _jwt_headers()
-    persona = fake_core_lifecycle.persona_mgr.personas[persona_id]
-    persona.tools = ["tool-a"]
-    persona.skills = ["skill-a"]
+    prompt = fake_core_lifecycle.prompt_mgr.prompts[prompt_id]
+    prompt.tools = ["tool-a"]
+    prompt.skills = ["skill-a"]
 
     response = await asgi_client.put(
-        "/api/v1/personas/persona%2Ffoo",
+        "/api/v1/prompts/prompt%2Ffoo",
         json={"tools": None, "skills": None},
         headers=headers,
     )
 
     assert response.status_code == 200
-    assert response.json()["data"] == {"message": "人格更新成功"}
-    assert persona.tools is None
-    assert persona.skills is None
+    assert response.json()["data"] == {"message": "提示词更新成功"}
+    assert prompt.tools is None
+    assert prompt.skills is None
 
 
 @pytest.mark.asyncio

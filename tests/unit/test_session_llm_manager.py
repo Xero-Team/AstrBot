@@ -336,7 +336,7 @@ async def test_sender_setters_replace_non_dict_and_drop_extra_keys():
         "llm_enabled": True,
         "session_enabled": False,
         "tts_enabled": False,
-        "persona_id": "p1",
+        "prompt_id": "p1",
         "kb_ids": ["kb-1"],
         "provider_id": "openai",
     }
@@ -348,7 +348,7 @@ async def test_sender_setters_replace_non_dict_and_drop_extra_keys():
 
 
 def test_sender_service_config_clears_none_fields():
-    existing = {"blocked": True, "llm_enabled": False, "persona_id": "p1"}
+    existing = {"blocked": True, "llm_enabled": False, "prompt_id": "p1"}
 
     assert sender_service_config(existing, llm_enabled=None) == {"blocked": True}
     assert sender_service_config(existing, blocked=None, llm_enabled=None) == {}

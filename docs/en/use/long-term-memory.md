@@ -26,14 +26,14 @@ Before each local-Agent request, AstrBot retrieves for the current user and mess
 
 They are added to the request as temporary `<memory_context>` content with an instruction to use them only as internal context and not quote them verbatim. This temporary content is not written back as an ordinary conversation message, but it is sent to the active chat Provider.
 
-When a Persona allows all tools, the Agent also receives these tools automatically:
+When a Prompt allows all tools, the Agent also receives these tools automatically:
 
 - `search_memory` searches current-user facts;
 - `get_person_profile` reads the current profile;
 - `query_episode` searches episode summaries;
 - `maintain_memory` previews, soft-deletes, or restores a fact.
 
-These tools are not automatically added when a Persona uses an explicit tool allowlist; select them explicitly if needed. Automatic retrieval and writeback still run without the tools.
+These tools are not automatically added when a Prompt uses an explicit tool allowlist; select them explicitly if needed. Automatic retrieval and writeback still run without the tools.
 
 ## User identity and scope
 
@@ -74,5 +74,5 @@ Deployments that require permanent erasure, user opt-out, or retention limits mu
 - Do not send passwords, API keys, identity documents, or other secrets that should never be retained.
 - Audit facts, profiles, episode counts, and operation logs regularly instead of checking only Agent response quality.
 - Fact extraction and retrieval are currently lightweight rules and text matching, so memories can be missed, misclassified, or become stale. Do not rely on memory alone for important decisions.
-- A [Persona](./persona) defines role and permissions; long-term memory is stored by user and message session. They are separate data sets.
+- A [Prompt](./prompt) defines role and permissions; long-term memory is stored by user and message session. They are separate data sets.
 - [Group chat context awareness](./group-chat-context) injects recent group messages into the next LLM request. It is not long-term memory. The `provider_ltm_settings` key belongs to that feature.

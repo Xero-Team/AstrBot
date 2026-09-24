@@ -316,7 +316,7 @@ const runnerSettingsTitle = computed(() =>
 
 const localTabs = computed(() => [
   { value: 'model', label: tm('aiSettings.tabs.model') },
-  { value: 'persona', label: tm('aiSettings.tabs.persona') },
+  { value: 'prompt', label: tm('aiSettings.tabs.prompt') },
   { value: 'capabilities', label: tm('aiSettings.tabs.capabilities') },
   { value: 'advanced', label: tm('aiSettings.tabs.advanced') },
 ]);
@@ -360,8 +360,8 @@ const localTabGroups = computed(() => {
 
   return {
     model: [modelGroup].filter(Boolean),
-    persona: props.metadata?.persona
-      ? [{ key: 'persona', metadata: props.metadata.persona }]
+    prompt: props.metadata?.prompt
+      ? [{ key: 'prompt', metadata: props.metadata.prompt }]
       : [],
     capabilities: [
       'knowledgebase',

@@ -105,12 +105,12 @@ def test_plugin_assignments_match_main_and_handoff(
     assert set(handoff.names()) == expected
 
 
-def test_plugin_assignment_does_not_restore_persona_filtered_tool(plugin_context):
+def test_plugin_assignment_does_not_restore_prompt_filtered_tool(plugin_context):
     tools = plugin_context.get_llm_tool_manager().func_list
     catalog = assemble_tool_catalog(
         ToolCatalogInputs(
             snapshot=SkillSnapshot(skills=(), runtime="none"),
-            persona_tools=[],
+            prompt_tools=[],
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -211,7 +211,7 @@ def test_mcp_both_assignment_preserves_surface_authorization():
     catalog = assemble_tool_catalog(
         ToolCatalogInputs(
             snapshot=SkillSnapshot(skills=(), runtime="none"),
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -243,7 +243,7 @@ def test_work_submission_tool_is_offered_only_when_asked_for():
     tool = SubmitWorkTaskTool()
     inputs = {
         "snapshot": SkillSnapshot(skills=(), runtime="none"),
-        "persona_tools": None,
+        "prompt_tools": None,
         "surface": "im",
         "computer_use_runtime": "none",
         "plugin_names": None,

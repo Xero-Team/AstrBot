@@ -126,7 +126,7 @@ def _build_service(temp_db, preferences: _Preferences, providers: _ProviderManag
         temp_db,
         preferences,
         providers,
-        SimpleNamespace(personas=[]),
+        SimpleNamespace(prompts=[]),
         PluginRegistry(),
         SimpleNamespace(list_kbs=AsyncMock(return_value=[])),
     )
@@ -747,7 +747,7 @@ async def test_sender_rules_share_preference_rows_and_drop_session_fields(
         "sender",
         sender_id,
         "session_service_config",
-        {"val": {"blocked": True, "persona_id": "p1", "tts_enabled": False}},
+        {"val": {"blocked": True, "prompt_id": "p1", "tts_enabled": False}},
     )
     await _put_rule(
         temp_db,
@@ -810,7 +810,7 @@ async def test_sender_rules_share_preference_rows_and_drop_session_fields(
                 "target_type": "sender",
                 "sender_id": sender_id,
                 "rule_key": "session_service_config",
-                "rule_value": {"persona_id": "p1"},
+                "rule_value": {"prompt_id": "p1"},
             }
         )
     with pytest.raises(SessionManagementServiceError, match="blocked"):
@@ -831,7 +831,7 @@ async def test_sender_rules_share_preference_rows_and_drop_session_fields(
             "rule_value": {
                 "blocked": True,
                 "llm_enabled": False,
-                "persona_id": "p1",
+                "prompt_id": "p1",
                 "session_blocked": True,
             },
         }

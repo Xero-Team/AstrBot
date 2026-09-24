@@ -370,7 +370,7 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/skills/archive" not in spec["paths"]
     assert "/api/v1/skills/files" not in spec["paths"]
     assert "/api/v1/skills/file" not in spec["paths"]
-    assert "/api/v1/personas/by-id" not in spec["paths"]
+    assert "/api/v1/prompts/by-id" not in spec["paths"]
 
 
 def test_static_openapi_v1_paths_include_api_version():

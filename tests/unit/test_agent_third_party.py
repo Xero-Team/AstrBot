@@ -109,12 +109,12 @@ def test_runner_result_aggregator_prefers_final_response_and_has_fallbacks():
     )
     assert fallback_is_error is True
 
-    custom_empty_aggregator = third_party._RunnerResultAggregator("persona failure")
+    custom_empty_aggregator = third_party._RunnerResultAggregator("prompt failure")
     custom_fallback_chain, custom_fallback_is_error = custom_empty_aggregator.finalize(
         None
     )
     assert MessageChain(chain=custom_fallback_chain).get_plain_text() == (
-        "persona failure"
+        "prompt failure"
     )
     assert custom_fallback_is_error is True
 
@@ -453,7 +453,7 @@ async def test_close_runner_if_supported_handles_sync_async_and_close_errors():
 
 
 @pytest.mark.asyncio
-async def test_resolve_persona_custom_error_message_returns_none_on_failure(
+async def test_resolve_prompt_custom_error_message_returns_none_on_failure(
     monkeypatch,
 ):
     stage = third_party.ThirdPartyAgentSubStage.__new__(
@@ -462,7 +462,7 @@ async def test_resolve_persona_custom_error_message_returns_none_on_failure(
     stage.ctx = _pipeline_context(
         SimpleNamespace(
             conversation_manager=object(),
-            persona_manager=object(),
+            prompt_manager=object(),
         )
     )
     stage.conf = {"provider_settings": {}}
@@ -470,12 +470,12 @@ async def test_resolve_persona_custom_error_message_returns_none_on_failure(
 
     monkeypatch.setattr(
         third_party,
-        "resolve_event_conversation_persona_id",
-        AsyncMock(side_effect=RuntimeError("persona lookup failed")),
+        "resolve_event_conversation_prompt_id",
+        AsyncMock(side_effect=RuntimeError("prompt lookup failed")),
     )
     monkeypatch.setattr(third_party.logger, "debug", logger_debug)
 
-    result = await stage._resolve_persona_custom_error_message(FakeEvent())
+    result = await stage._resolve_prompt_custom_error_message(FakeEvent())
 
     assert result is None
     logger_debug.assert_called_once()
@@ -515,10 +515,10 @@ async def test_third_party_process_uses_json_card_summary_when_prompt_is_empty(
         captured.append(kwargs)
         yield
 
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -583,10 +583,10 @@ async def test_third_party_process_raises_for_unsupported_runner_type(monkeypatc
     stage.conf = {"provider": [{"id": "runner-1", "name": "Runner One"}]}
     event = FakeInternalProcessEvent(message_str="ask hello")
 
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -635,10 +635,10 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
         yield
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -709,10 +709,10 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
         yield
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -794,10 +794,10 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
         return task
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -861,10 +861,10 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
             return cls
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -923,10 +923,10 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
         yield
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -980,10 +980,10 @@ async def test_third_party_process_stops_when_llm_request_hook_blocks(monkeypatc
             return cls
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=True))
@@ -1034,10 +1034,10 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
             yield MessageChain().message("unused")
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
@@ -1117,12 +1117,12 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
         yield
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
-    set_persona_error = MagicMock()
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
+    set_prompt_error = MagicMock()
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
-        set_persona_error,
+        "set_prompt_custom_error_message_on_event",
+        set_prompt_error,
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))
     monkeypatch.setattr(third_party, "DifyAgentRunner", FakeDifyRunner)
@@ -1153,7 +1153,7 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     assert req.prompt == ""
     assert req.image_urls == [str(image_path)]
     assert req.audio_urls == ["/tmp/audio.wav"]
-    set_persona_error.assert_called_once_with(event, None)
+    set_prompt_error.assert_called_once_with(event, None)
     assert runner.close.await_count == 1
     assert metric_upload.await_count == 1
 
@@ -1194,10 +1194,10 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
         yield
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     request_hook = AsyncMock(return_value=False)
@@ -1272,10 +1272,10 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
             return cls
 
     stage.conf["provider"] = [{"id": "runner-1", "name": "Runner One"}]
-    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    stage._resolve_prompt_custom_error_message = AsyncMock(return_value=None)
     monkeypatch.setattr(
         third_party,
-        "set_persona_custom_error_message_on_event",
+        "set_prompt_custom_error_message_on_event",
         MagicMock(),
     )
     monkeypatch.setattr(third_party, "call_event_hook", AsyncMock(return_value=False))

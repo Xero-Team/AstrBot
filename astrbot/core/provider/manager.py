@@ -12,7 +12,7 @@ from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
-from ..persona_mgr import PersonaManager
+from ..prompt_mgr import PromptManager
 from .catalog import ProviderAdapterDescriptor, ProviderCatalog
 from .entities import ProviderType
 from .provider import (
@@ -36,14 +36,14 @@ class ProviderManager:
     def __init__(
         self,
         acm: AstrBotConfigManager,
-        persona_mgr: PersonaManager,
+        prompt_mgr: PromptManager,
         preferences: SharedPreferences,
         catalog: ProviderCatalog,
         tools: FunctionToolManager,
     ) -> None:
         self.reload_lock = asyncio.Lock()
         self.resource_lock = asyncio.Lock()
-        self.persona_mgr = persona_mgr
+        self.prompt_mgr = prompt_mgr
         self.acm = acm
         self.catalog = catalog
         config = acm.confs["default"]
@@ -60,8 +60,8 @@ class ProviderManager:
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
-        # Kept only because some runtime code still reads the current default persona name directly.
-        self.default_persona_name = persona_mgr.default_persona
+        # Kept only because some runtime code still reads the current default prompt name directly.
+        self.default_prompt_name = prompt_mgr.default_prompt
 
         self.provider_insts: list[Provider] = []
         """加载的 Provider 的实例"""

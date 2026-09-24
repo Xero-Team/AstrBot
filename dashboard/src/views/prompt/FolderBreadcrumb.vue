@@ -11,18 +11,18 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { usePersonaStore } from '@/stores/personaStore';
+import { usePromptStore } from '@/stores/promptStore';
 import { storeToRefs } from 'pinia';
 import BaseFolderBreadcrumb from '@/components/folder/BaseFolderBreadcrumb.vue';
 
-const { tm } = useModuleI18n('features/persona');
-const personaStore = usePersonaStore();
-const { breadcrumbPath, currentFolderId } = storeToRefs(personaStore);
+const { tm } = useModuleI18n('features/prompt');
+const promptStore = usePromptStore();
+const { breadcrumbPath, currentFolderId } = storeToRefs(promptStore);
 
 const rootName = computed(() => tm('folder.rootFolder'));
 
 function handleClick(folderId: string | null) {
-  void personaStore.navigateToFolder(folderId);
+  void promptStore.navigateToFolder(folderId);
 }
 </script>
 

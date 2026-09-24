@@ -122,7 +122,7 @@ class ConversationManager:
             cid=conv_v2.conversation_id,
             history="[]" if content_unloaded else json.dumps(conv_v2.content or []),
             title=conv_v2.title,
-            persona_id=conv_v2.persona_id,
+            prompt_id=conv_v2.prompt_id,
             created_at=created_at,
             updated_at=updated_at,
             token_usage=conv_v2.token_usage,
@@ -134,7 +134,7 @@ class ConversationManager:
         platform_id: str | None = None,
         content: list[dict] | None = None,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         scope: str = DIALOGUE_LOOP_SCOPE,
     ) -> str:
         """新建对话，并将当前会话的对话转移到新对话.
@@ -159,7 +159,7 @@ class ConversationManager:
             platform_id=platform_id,
             content=content,
             title=title,
-            persona_id=persona_id,
+            prompt_id=prompt_id,
         )
         self.session_conversations[_scoped_cache_key(unified_msg_origin, scope)] = (
             conv.conversation_id
@@ -340,7 +340,7 @@ class ConversationManager:
         conversation_id: str | None = None,
         history: list[dict] | None = None,
         title: str | None = None,
-        persona_id: str | None = None,
+        prompt_id: str | None = None,
         token_usage: int | None = None,
     ) -> None:
         """更新会话的对话.
@@ -359,7 +359,7 @@ class ConversationManager:
             await self.db.update_conversation(
                 cid=conversation_id,
                 title=title,
-                persona_id=persona_id,
+                prompt_id=prompt_id,
                 content=history,
                 token_usage=token_usage,
             )
@@ -386,26 +386,26 @@ class ConversationManager:
             title=title,
         )
 
-    async def update_conversation_persona_id(
+    async def update_conversation_prompt_id(
         self,
         unified_msg_origin: str,
-        persona_id: str,
+        prompt_id: str,
         conversation_id: str | None = None,
     ) -> None:
-        """更新会话的对话 Persona ID.
+        """更新会话的对话 Prompt ID.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
-            persona_id (str): 对话 Persona ID
+            prompt_id (str): 对话 Prompt ID
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         Deprecated:
-            Use `update_conversation` with `persona_id` parameter instead.
+            Use `update_conversation` with `prompt_id` parameter instead.
 
         """
         await self.update_conversation(
             unified_msg_origin=unified_msg_origin,
             conversation_id=conversation_id,
-            persona_id=persona_id,
+            prompt_id=prompt_id,
         )
 
     async def add_message_pair(

@@ -68,7 +68,7 @@ vi.mock('@/api/v1', () => {
   return {
     appearanceApi: makeApi(),
     dataFilesApi: makeApi(),
-    personaApi: makeApi(),
+    promptApi: makeApi(),
     botApi: makeApi(),
     sessionApi: makeApi(),
     authApi: makeApi(),
@@ -115,7 +115,7 @@ import BaseMoveToFolderDialog from '@/components/folder/BaseMoveToFolderDialog.v
 import BaseMoveTargetNode from '@/components/folder/BaseMoveTargetNode.vue';
 import BaseFolderTreeNode from '@/components/folder/BaseFolderTreeNode.vue';
 import ToolTable from '@/components/extension/componentPanel/components/ToolTable.vue';
-import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue';
+import PromptQuickPreview from '@/components/shared/PromptQuickPreview.vue';
 import UpgradeRecoveryDialog from '@/components/shared/UpgradeRecoveryDialog.vue';
 import UninstallConfirmDialog from '@/components/shared/UninstallConfirmDialog.vue';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
@@ -128,7 +128,7 @@ import DashboardTotpSetupDialog from '@/components/shared/DashboardTotpSetupDial
 import DashboardTotpManageDialog from '@/components/shared/DashboardTotpManageDialog.vue';
 import DashboardTotpManager from '@/components/shared/DashboardTotpManager.vue';
 import MarketPluginCard from '@/components/extension/MarketPluginCard.vue';
-import FolderTree from '@/views/persona/FolderTree.vue';
+import FolderTree from '@/views/prompt/FolderTree.vue';
 import RegenerateMenu from '@/components/chat/RegenerateMenu.vue';
 import NavItem from '@/layouts/full/vertical-sidebar/NavItem.vue';
 import App from '@/App.vue';
@@ -157,7 +157,7 @@ import {
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
 import { fetchWithAuth } from '@/api/http';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
-import FolderCard from '@/views/persona/FolderCard.vue';
+import FolderCard from '@/views/prompt/FolderCard.vue';
 import PluginSortControl from '@/components/extension/PluginSortControl.vue';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
@@ -317,7 +317,7 @@ describe('remaining coverage', () => {
         },
       ],
       [ToolTable, { props: { items: [] } }],
-      [PersonaQuickPreview, { props: { modelValue: 'default' } }],
+      [PromptQuickPreview, { props: { modelValue: 'default' } }],
       [UpgradeRecoveryDialog, {}],
       [
         UninstallConfirmDialog,

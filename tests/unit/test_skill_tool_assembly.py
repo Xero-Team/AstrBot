@@ -241,7 +241,7 @@ def test_same_name_precedence_and_sandbox_path_validation(tmp_path: Path):
         resolve_sandbox_skill_file(frozen, "SKILL.md", "/other")
 
 
-def test_persona_tools_matrix_and_duplicate_skill_tools(tmp_path: Path):
+def test_prompt_tools_matrix_and_duplicate_skill_tools(tmp_path: Path):
     skill_a = _skill(tmp_path, "a", tools=["search_memory", "astrbot_execute_shell"])
     skill_b = _skill(tmp_path, "b", tools=["search_memory"])
     snapshot = freeze_skill_snapshot([skill_a, skill_b], runtime="none")
@@ -257,7 +257,7 @@ def test_persona_tools_matrix_and_duplicate_skill_tools(tmp_path: Path):
     none_names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -273,7 +273,7 @@ def test_persona_tools_matrix_and_duplicate_skill_tools(tmp_path: Path):
     empty_names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=[],
+            prompt_tools=[],
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -285,7 +285,7 @@ def test_persona_tools_matrix_and_duplicate_skill_tools(tmp_path: Path):
     listed = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=["plugin_tool"],
+            prompt_tools=["plugin_tool"],
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -307,7 +307,7 @@ def test_allowed_tools_only_skill_adds_nothing(tmp_path: Path):
     names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -320,7 +320,7 @@ def test_allowed_tools_only_skill_adds_nothing(tmp_path: Path):
     assert names == ("read_skill",)
 
 
-def test_existing_tools_reingest_through_persona_and_surface(tmp_path: Path):
+def test_existing_tools_reingest_through_prompt_and_surface(tmp_path: Path):
     snapshot = freeze_skill_snapshot([_skill(tmp_path, "notes")], runtime="none")
     shell = _tool("astrbot_execute_shell", actions=("tool.local_exec",))
     extra = _tool("extra_tool")
@@ -331,7 +331,7 @@ def test_existing_tools_reingest_through_persona_and_surface(tmp_path: Path):
     )
     inputs = ToolCatalogInputs(
         snapshot=snapshot,
-        persona_tools=[],
+        prompt_tools=[],
         surface="im",
         computer_use_runtime="local",
         plugin_names=None,
@@ -347,7 +347,7 @@ def test_runtime_none_keeps_read_skill_without_computer_tools(tmp_path: Path):
     names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="none",
             plugin_names=None,
@@ -397,7 +397,7 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
     im_names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="local",
             plugin_names=None,
@@ -408,7 +408,7 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
     api_names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="api_key",
             computer_use_runtime="local",
             plugin_names=None,
@@ -419,7 +419,7 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
     webchat_names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="webchat_authenticated",
             computer_use_runtime="local",
             plugin_names=None,
@@ -431,7 +431,7 @@ def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
     partial_step_up = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="webchat_authenticated",
             computer_use_runtime="local",
             plugin_names=None,
@@ -478,7 +478,7 @@ def test_im_instance_operator_keeps_full_instance_tool_group(tmp_path: Path):
     names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="local",
             plugin_names=None,
@@ -515,7 +515,7 @@ def test_im_elevated_actions_follow_expanded_instance_tool_group(
     names = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=snapshot,
-            persona_tools=None,
+            prompt_tools=None,
             surface="im",
             computer_use_runtime="local",
             plugin_names=None,
@@ -543,7 +543,7 @@ def test_skills_like_does_not_change_catalog_set(tmp_path: Path):
     snapshot = freeze_skill_snapshot([_skill(tmp_path, "notes")], runtime="none")
     inputs = ToolCatalogInputs(
         snapshot=snapshot,
-        persona_tools=None,
+        prompt_tools=None,
         surface="im",
         computer_use_runtime="none",
         plugin_names=None,
@@ -574,7 +574,7 @@ def test_neo_lifecycle_tools_are_on_demand_computer_layer():
     runtime_none = assemble_tool_catalog_names(
         ToolCatalogInputs(
             snapshot=freeze_skill_snapshot([], runtime="none"),
-            persona_tools=None,
+            prompt_tools=None,
             surface="webchat_authenticated",
             computer_use_runtime="none",
             plugin_names=None,

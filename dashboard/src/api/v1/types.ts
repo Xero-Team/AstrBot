@@ -239,7 +239,7 @@ export interface ChatBatchDeleteData {
 export interface SessionRuleListData {
   rules?: OpenConfig[];
   total?: number;
-  available_personas?: OpenConfig[];
+  available_prompts?: OpenConfig[];
   available_chat_providers?: OpenConfig[];
   available_stt_providers?: OpenConfig[];
   available_tts_providers?: OpenConfig[];
@@ -288,7 +288,7 @@ export type SkillListData =
       [key: string]: unknown;
     };
 
-export interface PersonaFolderData {
+export interface PromptFolderData {
   folder_id: string;
   name: string;
   parent_id: string | null;
@@ -296,12 +296,12 @@ export interface PersonaFolderData {
   sort_order: number;
   created_at: string;
   updated_at: string;
-  children: PersonaFolderData[];
+  children: PromptFolderData[];
   [key: string]: unknown;
 }
 
-export interface PersonaData {
-  persona_id: string;
+export interface PromptData {
+  prompt_id: string;
   system_prompt: string;
   custom_error_message: string | null;
   begin_dialogs: string[];
@@ -314,20 +314,20 @@ export interface PersonaData {
   [key: string]: unknown;
 }
 
-export interface PersonaFolderMutationData {
-  folder?: PersonaFolderData;
+export interface PromptFolderMutationData {
+  folder?: PromptFolderData;
   [key: string]: unknown;
 }
 
-export interface PersonaFolderInput {
+export interface PromptFolderInput {
   name?: string;
   parent_id?: string | null;
   description?: string | null;
   [key: string]: unknown;
 }
 
-export interface PersonaInput {
-  persona_id: string;
+export interface PromptInput {
+  prompt_id: string;
   system_prompt: string;
   begin_dialogs?: string[];
   tools?: string[] | null;

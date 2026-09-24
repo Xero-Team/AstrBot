@@ -4,12 +4,12 @@ Star 应通过 `astrbot.api` 的事件、`PluginContext` 能力和工具接口�
 
 ## 选择调用方式
 
-| 需求                                                           | 推荐接口                                         |
-| -------------------------------------------------------------- | ------------------------------------------------ |
-| 让当前消息继续走 AstrBot 的标准 Persona、会话和 Agent pipeline | `yield event.request_llm(...)`                   |
-| 直接调用一个指定聊天模型，不自动执行工具                       | `await self.context.models.generate(...)`        |
-| 在插件内运行指定工具集的多 step Agent                          | `await self.context.models.tool_loop(...)`       |
-| 为普通 AstrBot 对话注册一个可被模型调用的工具                  | `@filter.llm_tool` 或 `self.context.tools.add()` |
+| 需求                                                          | 推荐接口                                         |
+| ------------------------------------------------------------- | ------------------------------------------------ |
+| 让当前消息继续走 AstrBot 的标准 Prompt、会话和 Agent pipeline | `yield event.request_llm(...)`                   |
+| 直接调用一个指定聊天模型，不自动执行工具                      | `await self.context.models.generate(...)`        |
+| 在插件内运行指定工具集的多 step Agent                         | `await self.context.models.tool_loop(...)`       |
+| 为普通 AstrBot 对话注册一个可被模型调用的工具                 | `@filter.llm_tool` 或 `self.context.tools.add()` |
 
 ## 使用当前会话模型
 
@@ -23,7 +23,7 @@ provider_id = await self.context.models.current_chat_provider_id(
 
 ## 交给标准 pipeline
 
-事件处理器希望复用当前会话、Persona、Skills、知识库和默认 Agent 时，生成 `ProviderRequest` 并 yield：
+事件处理器希望复用当前会话、Prompt、Skills、知识库和默认 Agent 时，生成 `ProviderRequest` 并 yield：
 
 ```python
 from astrbot.api.event import AstrMessageEvent, filter
@@ -155,7 +155,7 @@ yield event.plain_result(response.completion_text)
 
 ## Agent-as-tool 与子代理
 
-`astrbot.api.agent` 可以注册一个 Agent handoff 工具，`RegisteringAgent.llm_tool()` 可以把工具绑定到该 Agent。它适合由代码定义、职责固定的 agent-as-tool；普通运维场景优先使用 WebUI 的[子代理编排](../../../use/subagent)，便于审计 Persona、Provider 和工具权限。
+`astrbot.api.agent` 可以注册一个 Agent handoff 工具，`RegisteringAgent.llm_tool()` 可以把工具绑定到该 Agent。它适合由代码定义、职责固定的 agent-as-tool；普通运维场景优先使用 WebUI 的[子代理编排](../../../use/subagent)，便于审计 Prompt、Provider 和工具权限。
 
 子代理不是权限隔离容器。无论通过装饰器还是 WebUI 创建，都应采用最小工具集、清晰描述和有限 step，并避免递归委派。
 

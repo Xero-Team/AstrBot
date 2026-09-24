@@ -23,7 +23,7 @@ doubt; cite `--standard` / `--standard-clause` on findings.
 | `builtin-stars`    | `agent-skills`, `asvs-5`                                                                                                                           |
 | `knowledge-base`   | `llm-top-10`, `asvs-5`, `iso-25010`                                                                                                                |
 | `memory`           | `asvs-5`                                                                                                                                           |
-| `persona`          | `asvs-5`                                                                                                                                           |
+| `prompt`           | `asvs-5`                                                                                                                                           |
 | `conversation`     | `asvs-5`                                                                                                                                           |
 | `cron`             | `asvs-5`                                                                                                                                           |
 | `skills`           | `agent-skills`, `agents-md`, `agent-usability`                                                                                                     |
@@ -136,7 +136,7 @@ WebChat. Name the skipped ones.
   `HeaderMismatch`, MRTR). Remote HTTP: Origin check, no redirect
   follow, default deny private/loopback unless `allow_private_network`.
   Do not treat HTTP+SSE or `Mcp-Session-Id` as current product surface.
-- Tool permission = user ∩ persona ∩ tool; handoff cannot escalate.
+- Tool permission = user ∩ prompt ∩ tool; handoff cannot escalate.
 - History sanitizer / compactors do not drop safety-relevant tool errors.
 - Runners stay under `agent/runners/`.
 - Prompt-injection surfaces: IM, memory, KB, tool output, plugin. A finding
@@ -191,9 +191,9 @@ WebChat. Name the skipped ones.
   prompt text; same boundary bar as `agent`.
 - Tuning/tasks have cancellation and bounds.
 
-## `persona`
+## `prompt`
 
-- Persona tool policy intersects user authz.
+- Prompt tool policy intersects user authz.
 
 ## `conversation`
 

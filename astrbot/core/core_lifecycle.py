@@ -29,12 +29,12 @@ from astrbot.core.execution_context import CoreExecutionContext
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.log import LogBroker, LogManager
 from astrbot.core.memory import MemoryManager
-from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.pipeline.turn_window import TurnWindowManager
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.process_reboot import ProcessRebooter
+from astrbot.core.prompt_mgr import PromptManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.runtime_services import RuntimeServices
 from astrbot.core.skills.skill_manager import SkillManager
@@ -80,7 +80,7 @@ class AstrBotCoreLifecycle:
         self.temp_dir_cleaner: TempDirCleaner | None = None
         self.umop_config_router: UmopConfigRouter | None = None
         self.astrbot_config_mgr: AstrBotConfigManager | None = None
-        self.persona_mgr: PersonaManager | None = None
+        self.prompt_mgr: PromptManager | None = None
         self.memory_manager: MemoryManager | None = None
         self.provider_manager: ProviderManager | None = None
         self.platform_manager: PlatformManager | None = None
@@ -240,10 +240,10 @@ class AstrBotCoreLifecycle:
         to manage enable/disable and tool registration details.
         """
         provider_manager = self.provider_manager
-        persona_mgr = self.persona_mgr
-        if provider_manager is None or persona_mgr is None:
+        prompt_mgr = self.prompt_mgr
+        if provider_manager is None or prompt_mgr is None:
             raise RuntimeError(
-                "Subagent orchestrator requires initialized provider and persona managers"
+                "Subagent orchestrator requires initialized provider and prompt managers"
             )
 
         try:
@@ -251,7 +251,7 @@ class AstrBotCoreLifecycle:
             if orchestrator is None:
                 orchestrator = SubAgentOrchestrator(
                     provider_manager.tool_manager,
-                    persona_mgr,
+                    prompt_mgr,
                 )
                 self.subagent_orchestrator = orchestrator
             await orchestrator.reload_from_config(
@@ -394,13 +394,13 @@ class AstrBotCoreLifecycle:
         self.event_queue = Queue(maxsize=EVENT_QUEUE_MAXSIZE)
         self.turn_window_manager = TurnWindowManager(self._enqueue_turn_event)
 
-        # 初始化人格管理器
-        self.persona_mgr = PersonaManager(
+        # 初始化提示词管理器
+        self.prompt_mgr = PromptManager(
             self.db,
             self.astrbot_config_mgr,
             self.services.preferences,
         )
-        await self.persona_mgr.initialize()
+        await self.prompt_mgr.initialize()
 
         self.memory_manager = MemoryManager(self.db)
         self._register_cleanup("memory manager", self.memory_manager.terminate)
@@ -409,7 +409,7 @@ class AstrBotCoreLifecycle:
         # 初始化供应商管理器
         self.provider_manager = ProviderManager(
             self.astrbot_config_mgr,
-            self.persona_mgr,
+            self.prompt_mgr,
             self.services.preferences,
             self.services.catalogs.providers,
             self.services.catalogs.tools,
@@ -455,7 +455,7 @@ class AstrBotCoreLifecycle:
             self.platform_manager,
             self.conversation_manager,
             self.platform_message_history_manager,
-            self.persona_mgr,
+            self.prompt_mgr,
             self.astrbot_config_mgr,
             self.kb_manager,
             self.cron_manager,
@@ -583,7 +583,7 @@ class AstrBotCoreLifecycle:
         assert self.platform_manager is not None
         assert self.conversation_manager is not None
         assert self.platform_message_history_manager is not None
-        assert self.persona_mgr is not None
+        assert self.prompt_mgr is not None
         assert self.memory_manager is not None
         assert self.kb_manager is not None
         assert self.cron_manager is not None
@@ -604,7 +604,7 @@ class AstrBotCoreLifecycle:
             platform_manager=self.platform_manager,
             conversation_manager=self.conversation_manager,
             platform_message_history_manager=self.platform_message_history_manager,
-            persona_mgr=self.persona_mgr,
+            prompt_mgr=self.prompt_mgr,
             memory_manager=self.memory_manager,
             knowledge_base_manager=self.kb_manager,
             cron_manager=self.cron_manager,

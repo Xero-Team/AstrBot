@@ -15,7 +15,7 @@ async def test_update_conversation_returns_none_for_empty_update_and_applies_par
         platform_id="telegram",
         title="Original",
         content=[{"text": "before"}],
-        persona_id="persona-before",
+        prompt_id="prompt-before",
         cid="conv-update",
     )
 
@@ -31,7 +31,7 @@ async def test_update_conversation_returns_none_for_empty_update_and_applies_par
     assert updated is not None
     assert updated.conversation_id == conversation.conversation_id
     assert updated.title == "Updated"
-    assert updated.persona_id == "persona-before"
+    assert updated.prompt_id == "prompt-before"
     assert updated.content == [{"text": "after"}]
     assert updated.token_usage == 12
 
@@ -378,18 +378,18 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
 
 
 @pytest.mark.asyncio
-async def test_get_session_conversations_joins_preferences_conversations_and_personas(
+async def test_get_session_conversations_joins_preferences_conversations_and_prompts(
     temp_db: SQLiteDatabase,
 ):
-    persona = await temp_db.insert_persona(
-        persona_id="persona-a",
+    prompt = await temp_db.insert_prompt(
+        prompt_id="prompt-a",
         system_prompt="prompt",
     )
     await temp_db.create_conversation(
         user_id="umo-1",
         platform_id="webchat",
         title="Session Alpha",
-        persona_id=persona.persona_id,
+        prompt_id=prompt.prompt_id,
         cid="conv-a",
     )
     await temp_db.create_conversation(
@@ -423,9 +423,9 @@ async def test_get_session_conversations_joins_preferences_conversations_and_per
         {
             "session_id": "webchat:FriendMessage:webchat!alice!session-a",
             "conversation_id": "conv-a",
-            "persona_id": "persona-a",
+            "prompt_id": "prompt-a",
             "title": "Session Alpha",
-            "persona_name": "persona-a",
+            "prompt_name": "prompt-a",
         }
     ]
 
@@ -473,18 +473,18 @@ async def test_get_session_conversations_handles_missing_related_rows_and_pagina
         {
             "session_id": "a:webchat:session",
             "conversation_id": "missing-conv",
-            "persona_id": None,
+            "prompt_id": None,
             "title": None,
-            "persona_name": None,
+            "prompt_name": None,
         }
     ]
     assert page_two == [
         {
             "session_id": "b:webchat:session",
             "conversation_id": "conv-a",
-            "persona_id": None,
+            "prompt_id": None,
             "title": "Alpha",
-            "persona_name": None,
+            "prompt_name": None,
         }
     ]
     assert missing == ([], 0)

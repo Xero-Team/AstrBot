@@ -86,7 +86,7 @@ const defaultLabels: DefaultLabels = {
 type DropPayload = {
   id?: string;
   item_id?: string;
-  persona_id?: string;
+  prompt_id?: string;
   type?: string;
 };
 
@@ -149,7 +149,7 @@ function handleDrop(event: DragEvent) {
       event.dataTransfer.getData('application/json'),
     ) as DropPayload;
     const itemType = data.type;
-    const itemId = data.id ?? data.persona_id ?? data.item_id;
+    const itemId = data.id ?? data.prompt_id ?? data.item_id;
     if (
       !itemType ||
       !itemId ||

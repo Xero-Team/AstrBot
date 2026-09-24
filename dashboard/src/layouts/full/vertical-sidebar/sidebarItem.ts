@@ -79,9 +79,9 @@ const sidebarItem: menu[] = [
     to: '/knowledge-base',
   },
   {
-    title: 'core.navigation.persona',
+    title: 'core.navigation.prompt',
     icon: 'mdi-heart',
-    to: '/persona',
+    to: '/prompt',
   },
   {
     title: 'core.navigation.alkaidMemory',

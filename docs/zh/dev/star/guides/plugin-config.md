@@ -74,7 +74,7 @@ Schema 文件必须是**严格 JSON**，不能包含注释、尾随逗号或 Pyt
 插件可稳定使用的常见 `_special` 值包括：
 
 - `select_provider`、`select_provider_tts`、`select_provider_stt`：返回 Provider ID 字符串；
-- `select_persona`：返回 Persona ID 字符串；
+- `select_prompt`：返回 Prompt ID 字符串；
 - `select_knowledgebase`：返回知识库 ID 列表，对应字段应为 `list`。
 
 Core 内部还使用其他 `_special` 值，但它们不是插件 SDK 契约，不要从核心配置复制。

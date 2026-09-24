@@ -6,19 +6,19 @@
     persistent
   >
     <v-card
-      class="persona-form-card"
-      :class="{ 'persona-form-card-mobile': smAndDown }"
+      class="prompt-form-card"
+      :class="{ 'prompt-form-card-mobile': smAndDown }"
     >
-      <v-card-title class="persona-form-title text-h2 px-6 pt-6 pl-6">
+      <v-card-title class="prompt-form-title text-h2 px-6 pt-6 pl-6">
         {{
-          editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title')
+          editingPrompt ? tm('dialog.edit.title') : tm('dialog.create.title')
         }}
       </v-card-title>
 
-      <v-card-text class="persona-form-content">
+      <v-card-text class="prompt-form-content">
         <!-- 创建位置提示 -->
         <v-alert
-          v-if="!editingPersona"
+          v-if="!editingPrompt"
           type="info"
           variant="tonal"
           density="compact"
@@ -29,20 +29,20 @@
         </v-alert>
 
         <v-form v-model="formValid">
-          <v-row class="persona-form-layout">
-            <v-col cols="12" md="6" class="persona-basic-col">
+          <v-row class="prompt-form-layout">
+            <v-col cols="12" md="6" class="prompt-basic-col">
               <v-text-field
-                v-model="personaForm.persona_id"
-                :label="tm('form.personaId')"
-                :rules="personaIdRules"
-                :disabled="Boolean(editingPersona)"
+                v-model="promptForm.prompt_id"
+                :label="tm('form.promptId')"
+                :rules="promptIdRules"
+                :disabled="Boolean(editingPrompt)"
                 variant="outlined"
                 density="comfortable"
                 class="mb-4"
               />
 
               <v-textarea
-                v-model="personaForm.system_prompt"
+                v-model="promptForm.system_prompt"
                 :label="tm('form.systemPrompt')"
                 :rules="systemPromptRules"
                 variant="outlined"
@@ -51,7 +51,7 @@
               />
 
               <v-textarea
-                v-model="personaForm.custom_error_message"
+                v-model="promptForm.custom_error_message"
                 :label="tm('form.customErrorMessage')"
                 :hint="tm('form.customErrorMessageHelp')"
                 variant="outlined"
@@ -62,7 +62,7 @@
               />
             </v-col>
 
-            <v-col cols="12" md="6" class="persona-panels-col">
+            <v-col cols="12" md="6" class="prompt-panels-col">
               <v-expansion-panels v-model="expandedPanels" multiple>
                 <!-- 工具选择面板 -->
                 <v-expansion-panel value="tools">
@@ -71,15 +71,15 @@
                     {{ tm('form.tools') }}
                     <v-chip
                       v-if="
-                        Array.isArray(personaForm.tools) &&
-                        personaForm.tools.length > 0
+                        Array.isArray(promptForm.tools) &&
+                        promptForm.tools.length > 0
                       "
                       size="small"
                       color="primary"
                       variant="tonal"
                       class="ml-2"
                     >
-                      {{ personaForm.tools.length }}
+                      {{ promptForm.tools.length }}
                     </v-chip>
                   </v-expansion-panel-title>
 
@@ -262,24 +262,24 @@
                         <h4 class="text-subtitle-2 mb-2">
                           {{ tm('form.selectedTools') }}
                           <span
-                            v-if="personaForm.tools === null"
+                            v-if="promptForm.tools === null"
                             class="text-success"
                           >
                             ({{ tm('form.allSelected') }})
                           </span>
-                          <span v-else-if="Array.isArray(personaForm.tools)">
-                            ({{ personaForm.tools.length }})
+                          <span v-else-if="Array.isArray(promptForm.tools)">
+                            ({{ promptForm.tools.length }})
                           </span>
                         </h4>
                         <div
                           v-if="
-                            Array.isArray(personaForm.tools) &&
-                            personaForm.tools.length > 0
+                            Array.isArray(promptForm.tools) &&
+                            promptForm.tools.length > 0
                           "
-                          class="persona-form__selected-list d-flex flex-wrap ga-1"
+                          class="prompt-form__selected-list d-flex flex-wrap ga-1"
                         >
                           <v-tooltip
-                            v-for="toolName in personaForm.tools"
+                            v-for="toolName in promptForm.tools"
                             :key="toolName"
                             :disabled="!isBuiltinToolName(toolName)"
                             location="top"
@@ -316,15 +316,15 @@
                     {{ tm('form.skills') }}
                     <v-chip
                       v-if="
-                        Array.isArray(personaForm.skills) &&
-                        personaForm.skills.length > 0
+                        Array.isArray(promptForm.skills) &&
+                        promptForm.skills.length > 0
                       "
                       size="small"
                       color="primary"
                       variant="tonal"
                       class="ml-2"
                     >
-                      {{ personaForm.skills.length }}
+                      {{ promptForm.skills.length }}
                     </v-chip>
                   </v-expansion-panel-title>
 
@@ -442,24 +442,24 @@
                         <h4 class="text-subtitle-2 mb-2">
                           {{ tm('form.selectedSkills') }}
                           <span
-                            v-if="personaForm.skills === null"
+                            v-if="promptForm.skills === null"
                             class="text-success"
                           >
                             ({{ tm('form.allSelected') }})
                           </span>
-                          <span v-else-if="Array.isArray(personaForm.skills)">
-                            ({{ personaForm.skills.length }})
+                          <span v-else-if="Array.isArray(promptForm.skills)">
+                            ({{ promptForm.skills.length }})
                           </span>
                         </h4>
                         <div
                           v-if="
-                            Array.isArray(personaForm.skills) &&
-                            personaForm.skills.length > 0
+                            Array.isArray(promptForm.skills) &&
+                            promptForm.skills.length > 0
                           "
-                          class="persona-form__selected-list d-flex flex-wrap ga-1"
+                          class="prompt-form__selected-list d-flex flex-wrap ga-1"
                         >
                           <v-chip
-                            v-for="skillName in personaForm.skills"
+                            v-for="skillName in promptForm.skills"
                             :key="skillName"
                             size="small"
                             color="primary"
@@ -484,13 +484,13 @@
                     <v-icon class="mr-2">mdi-chat</v-icon>
                     {{ tm('form.presetDialogs') }}
                     <v-chip
-                      v-if="personaForm.begin_dialogs.length > 0"
+                      v-if="promptForm.begin_dialogs.length > 0"
                       size="small"
                       color="primary"
                       variant="tonal"
                       class="ml-2"
                     >
-                      {{ personaForm.begin_dialogs.length / 2 }}
+                      {{ promptForm.begin_dialogs.length / 2 }}
                     </v-chip>
                   </v-expansion-panel-title>
 
@@ -502,12 +502,12 @@
                     </div>
 
                     <div
-                      v-for="(dialog, index) in personaForm.begin_dialogs"
+                      v-for="(dialog, index) in promptForm.begin_dialogs"
                       :key="index"
                       class="mb-3"
                     >
                       <v-textarea
-                        v-model="personaForm.begin_dialogs[index]"
+                        v-model="promptForm.begin_dialogs[index]"
                         :label="
                           index % 2 === 0
                             ? tm('form.userMessage')
@@ -546,12 +546,12 @@
         </v-form>
       </v-card-text>
 
-      <v-card-actions class="persona-form-actions">
+      <v-card-actions class="prompt-form-actions">
         <v-btn
-          v-if="editingPersona"
+          v-if="editingPrompt"
           color="error"
           variant="text"
-          @click="deletePersona"
+          @click="deletePrompt"
         >
           {{ tm('buttons.delete') }}
         </v-btn>
@@ -564,7 +564,7 @@
           variant="flat"
           :loading="saving"
           :disabled="!formValid"
-          @click="savePersona"
+          @click="savePrompt"
         >
           {{ tm('buttons.save') }}
         </v-btn>
@@ -577,11 +577,11 @@
 import { computed, reactive, ref, watch } from 'vue';
 import {
   mcpApi,
-  personaApi,
+  promptApi,
   skillApi,
   toolApi,
-  type PersonaData,
-  type PersonaInput,
+  type PromptData,
+  type PromptInput,
 } from '@/api/v1';
 import type { ToolItem } from '@/domain/tools';
 import { useModuleI18n } from '@/i18n/composables';
@@ -594,20 +594,20 @@ import { useDisplay } from 'vuetify';
 type SelectionMode = '0' | '1';
 type PanelKey = 'tools' | 'skills' | 'dialogs';
 type RuleResult = true | string;
-type PersonaRule = (value: string) => RuleResult;
+type PromptRule = (value: string) => RuleResult;
 
-interface EditablePersona {
-  persona_id: PersonaData['persona_id'];
-  system_prompt: PersonaData['system_prompt'];
-  custom_error_message?: PersonaData['custom_error_message'];
+interface EditablePrompt {
+  prompt_id: PromptData['prompt_id'];
+  system_prompt: PromptData['system_prompt'];
+  custom_error_message?: PromptData['custom_error_message'];
   begin_dialogs?: string[] | null;
   tools?: string[] | null;
   skills?: string[] | null;
   folder_id?: string | null;
 }
 
-interface PersonaFormState {
-  persona_id: string;
+interface PromptFormState {
+  prompt_id: string;
   system_prompt: string;
   custom_error_message: string;
   begin_dialogs: string[];
@@ -621,7 +621,7 @@ interface McpServerItem {
   tools: string[];
 }
 
-interface PersonaToolItem extends Pick<
+interface PromptToolItem extends Pick<
   ToolItem,
   'name' | 'description' | 'origin' | 'origin_name' | 'readonly'
 > {
@@ -640,13 +640,13 @@ interface SkillItemOption {
 const props = withDefaults(
   defineProps<{
     modelValue?: boolean;
-    editingPersona?: EditablePersona | null;
+    editingPrompt?: EditablePrompt | null;
     currentFolderId?: string | null;
     currentFolderName?: string | null;
   }>(),
   {
     modelValue: false,
-    editingPersona: null,
+    editingPrompt: null,
     currentFolderId: null,
     currentFolderName: null,
   },
@@ -659,7 +659,7 @@ const emit = defineEmits<{
   (event: 'deleted', message: string): void;
 }>();
 
-const { tm } = useModuleI18n('features/persona');
+const { tm } = useModuleI18n('features/prompt');
 const confirmDialog = useConfirmDialog();
 const { smAndDown } = useDisplay();
 
@@ -669,15 +669,15 @@ const saving = ref(false);
 const expandedPanels = ref<PanelKey[]>([]);
 const formValid = ref(false);
 const mcpServers = ref<McpServerItem[]>([]);
-const availableTools = ref<PersonaToolItem[]>([]);
+const availableTools = ref<PromptToolItem[]>([]);
 const loadingTools = ref(false);
 const availableSkills = ref<SkillItemOption[]>([]);
 const loadingSkills = ref(false);
-const existingPersonaIds = ref<string[]>([]);
+const existingPromptIds = ref<string[]>([]);
 const toolSearch = ref('');
 const skillSearch = ref('');
-const personaForm = reactive<PersonaFormState>(
-  createEmptyPersonaForm(props.currentFolderId),
+const promptForm = reactive<PromptFormState>(
+  createEmptyPromptForm(props.currentFolderId),
 );
 
 const showDialog = computed({
@@ -685,17 +685,17 @@ const showDialog = computed({
   set: (value: boolean) => void emit('update:modelValue', value),
 });
 
-const personaIdRules = computed<PersonaRule[]>(() => [
+const promptIdRules = computed<PromptRule[]>(() => [
   (value) => Boolean(value) || tm('validation.required'),
   (value) =>
     (value.length >= 1 && true) || tm('validation.minLength', { min: 1 }),
   (value) =>
-    props.editingPersona?.persona_id === value ||
-    !existingPersonaIds.value.includes(value) ||
-    tm('validation.personaIdExists'),
+    props.editingPrompt?.prompt_id === value ||
+    !existingPromptIds.value.includes(value) ||
+    tm('validation.promptIdExists'),
 ]);
 
-const systemPromptRules = computed<PersonaRule[]>(() => [
+const systemPromptRules = computed<PromptRule[]>(() => [
   (value) => Boolean(value) || tm('validation.required'),
   (value) =>
     (value.trim().length >= 10 && true) ||
@@ -743,11 +743,11 @@ watch(
     if (!newValue) {
       return;
     }
-    if (props.editingPersona) {
-      initFormWithPersona(props.editingPersona);
+    if (props.editingPrompt) {
+      initFormWithPrompt(props.editingPrompt);
     } else {
       initForm();
-      void loadExistingPersonaIds();
+      void loadExistingPromptIds();
     }
     void loadMcpServers();
     void loadTools();
@@ -756,13 +756,13 @@ watch(
 );
 
 watch(
-  () => props.editingPersona,
-  (newPersona) => {
+  () => props.editingPrompt,
+  (newPrompt) => {
     if (!props.modelValue) {
       return;
     }
-    if (newPersona) {
-      initFormWithPersona(newPersona);
+    if (newPrompt) {
+      initFormWithPrompt(newPrompt);
       return;
     }
     initForm();
@@ -772,25 +772,25 @@ watch(
 
 watch(toolSelectValue, (newValue) => {
   if (newValue === '0') {
-    personaForm.tools = null;
-  } else if (personaForm.tools === null) {
-    personaForm.tools = [];
+    promptForm.tools = null;
+  } else if (promptForm.tools === null) {
+    promptForm.tools = [];
   }
 });
 
 watch(skillSelectValue, (newValue) => {
   if (newValue === '0') {
-    personaForm.skills = null;
-  } else if (personaForm.skills === null) {
-    personaForm.skills = [];
+    promptForm.skills = null;
+  } else if (promptForm.skills === null) {
+    promptForm.skills = [];
   }
 });
 
-function createEmptyPersonaForm(
+function createEmptyPromptForm(
   folderId: string | null | undefined,
-): PersonaFormState {
+): PromptFormState {
   return {
-    persona_id: '',
+    prompt_id: '',
     system_prompt: '',
     custom_error_message: '',
     begin_dialogs: [],
@@ -807,37 +807,37 @@ function cloneStringList(value: string[] | null | undefined): string[] | null {
   return Array.isArray(value) ? [...value] : [];
 }
 
-function applyPersonaForm(next: PersonaFormState) {
-  personaForm.persona_id = next.persona_id;
-  personaForm.system_prompt = next.system_prompt;
-  personaForm.custom_error_message = next.custom_error_message;
-  personaForm.begin_dialogs = [...next.begin_dialogs];
-  personaForm.tools = cloneStringList(next.tools);
-  personaForm.skills = cloneStringList(next.skills);
-  personaForm.folder_id = next.folder_id;
+function applyPromptForm(next: PromptFormState) {
+  promptForm.prompt_id = next.prompt_id;
+  promptForm.system_prompt = next.system_prompt;
+  promptForm.custom_error_message = next.custom_error_message;
+  promptForm.begin_dialogs = [...next.begin_dialogs];
+  promptForm.tools = cloneStringList(next.tools);
+  promptForm.skills = cloneStringList(next.skills);
+  promptForm.folder_id = next.folder_id;
 }
 
 function initForm() {
-  applyPersonaForm(createEmptyPersonaForm(props.currentFolderId));
+  applyPromptForm(createEmptyPromptForm(props.currentFolderId));
   toolSelectValue.value = '0';
   skillSelectValue.value = '0';
   expandedPanels.value = getDefaultExpandedPanels();
 }
 
-function initFormWithPersona(persona: EditablePersona) {
-  applyPersonaForm({
-    persona_id: persona.persona_id,
-    system_prompt: persona.system_prompt,
-    custom_error_message: persona.custom_error_message ?? '',
-    begin_dialogs: Array.isArray(persona.begin_dialogs)
-      ? [...persona.begin_dialogs]
+function initFormWithPrompt(prompt: EditablePrompt) {
+  applyPromptForm({
+    prompt_id: prompt.prompt_id,
+    system_prompt: prompt.system_prompt,
+    custom_error_message: prompt.custom_error_message ?? '',
+    begin_dialogs: Array.isArray(prompt.begin_dialogs)
+      ? [...prompt.begin_dialogs]
       : [],
-    tools: cloneStringList(persona.tools),
-    skills: cloneStringList(persona.skills),
-    folder_id: persona.folder_id ?? null,
+    tools: cloneStringList(prompt.tools),
+    skills: cloneStringList(prompt.skills),
+    folder_id: prompt.folder_id ?? null,
   });
-  toolSelectValue.value = persona.tools === null ? '0' : '1';
-  skillSelectValue.value = persona.skills === null ? '0' : '1';
+  toolSelectValue.value = prompt.tools === null ? '0' : '1';
+  skillSelectValue.value = prompt.skills === null ? '0' : '1';
   expandedPanels.value = getDefaultExpandedPanels();
 }
 
@@ -899,7 +899,7 @@ function normalizeMcpServer(value: unknown): McpServerItem | null {
   };
 }
 
-function normalizeToolItem(value: unknown): PersonaToolItem | null {
+function normalizeToolItem(value: unknown): PromptToolItem | null {
   const record = asRecord(value);
   if (!record) {
     return null;
@@ -937,18 +937,18 @@ function normalizeSkillItem(value: unknown): SkillItemOption | null {
   };
 }
 
-function normalizePersonaSummary(value: unknown): EditablePersona | null {
+function normalizePromptSummary(value: unknown): EditablePrompt | null {
   const record = asRecord(value);
   if (!record) {
     return null;
   }
-  const personaId = getString(record?.persona_id);
+  const promptId = getString(record?.prompt_id);
   const systemPrompt = getString(record?.system_prompt);
-  if (!personaId || !systemPrompt) {
+  if (!promptId || !systemPrompt) {
     return null;
   }
   return {
-    persona_id: personaId,
+    prompt_id: promptId,
     system_prompt: systemPrompt,
     custom_error_message: getString(record.custom_error_message),
     begin_dialogs: getStringArray(record.begin_dialogs),
@@ -990,7 +990,7 @@ async function loadTools() {
     const payload = Array.isArray(response.data.data) ? response.data.data : [];
     availableTools.value = payload
       .map(normalizeToolItem)
-      .filter((tool): tool is PersonaToolItem => tool !== null);
+      .filter((tool): tool is PromptToolItem => tool !== null);
   } catch (error) {
     emit('error', getApiErrorMessage(error, 'Failed to load tools'));
     availableTools.value = [];
@@ -1031,41 +1031,41 @@ async function loadSkills() {
   }
 }
 
-async function loadExistingPersonaIds() {
+async function loadExistingPromptIds() {
   try {
-    const response = await personaApi.list();
+    const response = await promptApi.list();
     if (response.data.status !== 'ok') {
-      existingPersonaIds.value = [];
+      existingPromptIds.value = [];
       return;
     }
     const payload = Array.isArray(response.data.data) ? response.data.data : [];
-    existingPersonaIds.value = payload
-      .map(normalizePersonaSummary)
-      .filter((persona): persona is EditablePersona => persona !== null)
-      .map((persona) => persona.persona_id);
+    existingPromptIds.value = payload
+      .map(normalizePromptSummary)
+      .filter((prompt): prompt is EditablePrompt => prompt !== null)
+      .map((prompt) => prompt.prompt_id);
   } catch {
-    existingPersonaIds.value = [];
+    existingPromptIds.value = [];
   }
 }
 
-function buildPersonaPayload(): PersonaInput {
+function buildPromptPayload(): PromptInput {
   return {
-    persona_id: personaForm.persona_id,
-    system_prompt: personaForm.system_prompt,
-    custom_error_message: personaForm.custom_error_message || null,
-    begin_dialogs: [...personaForm.begin_dialogs],
-    tools: cloneStringList(personaForm.tools),
-    skills: cloneStringList(personaForm.skills),
-    folder_id: personaForm.folder_id,
+    prompt_id: promptForm.prompt_id,
+    system_prompt: promptForm.system_prompt,
+    custom_error_message: promptForm.custom_error_message || null,
+    begin_dialogs: [...promptForm.begin_dialogs],
+    tools: cloneStringList(promptForm.tools),
+    skills: cloneStringList(promptForm.skills),
+    folder_id: promptForm.folder_id,
   };
 }
 
-async function savePersona() {
+async function savePrompt() {
   if (!formValid.value) {
     return;
   }
-  for (let index = 0; index < personaForm.begin_dialogs.length; index += 1) {
-    const dialog = personaForm.begin_dialogs[index];
+  for (let index = 0; index < promptForm.begin_dialogs.length; index += 1) {
+    const dialog = promptForm.begin_dialogs[index];
     if (!dialog || dialog.trim() === '') {
       const dialogType =
         index % 2 === 0 ? tm('form.userMessage') : tm('form.assistantMessage');
@@ -1076,9 +1076,9 @@ async function savePersona() {
 
   saving.value = true;
   try {
-    const payload = buildPersonaPayload();
-    const response = props.editingPersona
-      ? await personaApi.update(payload.persona_id, {
+    const payload = buildPromptPayload();
+    const response = props.editingPrompt
+      ? await promptApi.update(payload.prompt_id, {
           system_prompt: payload.system_prompt,
           custom_error_message: payload.custom_error_message,
           begin_dialogs: payload.begin_dialogs,
@@ -1086,7 +1086,7 @@ async function savePersona() {
           skills: payload.skills,
           folder_id: payload.folder_id,
         })
-      : await personaApi.create(payload);
+      : await promptApi.create(payload);
 
     if (response.data.status === 'ok') {
       emit('saved', response.data.message || tm('messages.saveSuccess'));
@@ -1101,13 +1101,13 @@ async function savePersona() {
   }
 }
 
-async function deletePersona() {
-  if (!props.editingPersona) {
+async function deletePrompt() {
+  if (!props.editingPrompt) {
     return;
   }
   const confirmed = await askForConfirmationDialog(
     tm('messages.deleteConfirm', {
-      id: props.editingPersona.persona_id,
+      id: props.editingPrompt.prompt_id,
     }),
     confirmDialog,
   );
@@ -1117,7 +1117,7 @@ async function deletePersona() {
 
   saving.value = true;
   try {
-    const response = await personaApi.delete(props.editingPersona.persona_id);
+    const response = await promptApi.delete(props.editingPrompt.prompt_id);
     if (response.data.status === 'ok') {
       emit('deleted', response.data.message || tm('messages.deleteSuccess'));
       closeDialog();
@@ -1132,17 +1132,17 @@ async function deletePersona() {
 }
 
 function addDialogPair() {
-  personaForm.begin_dialogs.push('', '');
+  promptForm.begin_dialogs.push('', '');
   if (!expandedPanels.value.includes('dialogs')) {
     expandedPanels.value.push('dialogs');
   }
 }
 
 function removeDialog(index: number) {
-  if (index % 2 === 0 && index + 1 < personaForm.begin_dialogs.length) {
-    personaForm.begin_dialogs.splice(index, 2);
+  if (index % 2 === 0 && index + 1 < promptForm.begin_dialogs.length) {
+    promptForm.begin_dialogs.splice(index, 2);
   } else if (index % 2 === 1 && index - 1 >= 0) {
-    personaForm.begin_dialogs.splice(index - 1, 2);
+    promptForm.begin_dialogs.splice(index - 1, 2);
   }
 }
 
@@ -1150,30 +1150,30 @@ function toggleMcpServer(server: McpServerItem) {
   if (server.tools.length === 0) {
     return;
   }
-  if (personaForm.tools === null) {
-    personaForm.tools = availableTools.value
+  if (promptForm.tools === null) {
+    promptForm.tools = availableTools.value
       .map((tool) => tool.name)
       .filter((toolName) => !server.tools.includes(toolName));
     toolSelectValue.value = '1';
     return;
   }
-  if (!Array.isArray(personaForm.tools)) {
-    personaForm.tools = [];
+  if (!Array.isArray(promptForm.tools)) {
+    promptForm.tools = [];
     toolSelectValue.value = '1';
   }
 
   const allSelected = server.tools.every((toolName) =>
-    personaForm.tools?.includes(toolName),
+    promptForm.tools?.includes(toolName),
   );
   if (allSelected) {
-    personaForm.tools = personaForm.tools.filter(
+    promptForm.tools = promptForm.tools.filter(
       (toolName) => !server.tools.includes(toolName),
     );
     return;
   }
   for (const toolName of server.tools) {
-    if (!personaForm.tools.includes(toolName)) {
-      personaForm.tools.push(toolName);
+    if (!promptForm.tools.includes(toolName)) {
+      promptForm.tools.push(toolName);
     }
   }
 }
@@ -1182,23 +1182,23 @@ function toggleTool(toolName: string) {
   if (isBuiltinToolName(toolName)) {
     return;
   }
-  if (personaForm.tools === null) {
-    personaForm.tools = availableTools.value
+  if (promptForm.tools === null) {
+    promptForm.tools = availableTools.value
       .map((tool) => tool.name)
       .filter((name) => name !== toolName);
     toolSelectValue.value = '1';
     return;
   }
-  if (Array.isArray(personaForm.tools)) {
-    const index = personaForm.tools.indexOf(toolName);
+  if (Array.isArray(promptForm.tools)) {
+    const index = promptForm.tools.indexOf(toolName);
     if (index !== -1) {
-      personaForm.tools.splice(index, 1);
+      promptForm.tools.splice(index, 1);
     } else {
-      personaForm.tools.push(toolName);
+      promptForm.tools.push(toolName);
     }
     return;
   }
-  personaForm.tools = [toolName];
+  promptForm.tools = [toolName];
   toolSelectValue.value = '1';
 }
 
@@ -1206,57 +1206,57 @@ function removeTool(toolName: string) {
   if (isBuiltinToolName(toolName)) {
     return;
   }
-  if (personaForm.tools === null) {
-    personaForm.tools = availableTools.value
+  if (promptForm.tools === null) {
+    promptForm.tools = availableTools.value
       .map((tool) => tool.name)
       .filter((name) => name !== toolName);
     toolSelectValue.value = '1';
     return;
   }
-  if (!Array.isArray(personaForm.tools)) {
+  if (!Array.isArray(promptForm.tools)) {
     return;
   }
-  const index = personaForm.tools.indexOf(toolName);
+  const index = promptForm.tools.indexOf(toolName);
   if (index !== -1) {
-    personaForm.tools.splice(index, 1);
+    promptForm.tools.splice(index, 1);
   }
 }
 
 function toggleSkill(skillName: string) {
-  if (personaForm.skills === null) {
-    personaForm.skills = availableSkills.value
+  if (promptForm.skills === null) {
+    promptForm.skills = availableSkills.value
       .map((skill) => skill.name)
       .filter((name) => name !== skillName);
     skillSelectValue.value = '1';
     return;
   }
-  if (Array.isArray(personaForm.skills)) {
-    const index = personaForm.skills.indexOf(skillName);
+  if (Array.isArray(promptForm.skills)) {
+    const index = promptForm.skills.indexOf(skillName);
     if (index !== -1) {
-      personaForm.skills.splice(index, 1);
+      promptForm.skills.splice(index, 1);
     } else {
-      personaForm.skills.push(skillName);
+      promptForm.skills.push(skillName);
     }
     return;
   }
-  personaForm.skills = [skillName];
+  promptForm.skills = [skillName];
   skillSelectValue.value = '1';
 }
 
 function removeSkill(skillName: string) {
-  if (personaForm.skills === null) {
-    personaForm.skills = availableSkills.value
+  if (promptForm.skills === null) {
+    promptForm.skills = availableSkills.value
       .map((skill) => skill.name)
       .filter((name) => name !== skillName);
     skillSelectValue.value = '1';
     return;
   }
-  if (!Array.isArray(personaForm.skills)) {
+  if (!Array.isArray(promptForm.skills)) {
     return;
   }
-  const index = personaForm.skills.indexOf(skillName);
+  const index = promptForm.skills.indexOf(skillName);
   if (index !== -1) {
-    personaForm.skills.splice(index, 1);
+    promptForm.skills.splice(index, 1);
   }
 }
 
@@ -1267,7 +1267,7 @@ function truncateText(text: string | null | undefined, maxLength: number) {
   return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
 }
 
-function isBuiltinTool(tool: PersonaToolItem) {
+function isBuiltinTool(tool: PromptToolItem) {
   return tool.origin === 'builtin' || tool.readonly === true;
 }
 
@@ -1277,7 +1277,7 @@ function isBuiltinToolName(toolName: string) {
   );
 }
 
-function getDialogRules(index: number): PersonaRule[] {
+function getDialogRules(index: number): PromptRule[] {
   const dialogType =
     index % 2 === 0 ? tm('form.userMessage') : tm('form.assistantMessage');
   return [
@@ -1290,20 +1290,18 @@ function getDialogRules(index: number): PersonaRule[] {
 }
 
 function isToolSelected(toolName: string) {
-  if (personaForm.tools === null) {
+  if (promptForm.tools === null) {
     return true;
   }
-  return (
-    Array.isArray(personaForm.tools) && personaForm.tools.includes(toolName)
-  );
+  return Array.isArray(promptForm.tools) && promptForm.tools.includes(toolName);
 }
 
 function isSkillSelected(skillName: string) {
-  if (personaForm.skills === null) {
+  if (promptForm.skills === null) {
     return true;
   }
   return (
-    Array.isArray(personaForm.skills) && personaForm.skills.includes(skillName)
+    Array.isArray(promptForm.skills) && promptForm.skills.includes(skillName)
   );
 }
 
@@ -1311,37 +1309,37 @@ function isServerSelected(server: McpServerItem) {
   if (server.tools.length === 0) {
     return false;
   }
-  if (personaForm.tools === null) {
+  if (promptForm.tools === null) {
     return true;
   }
   return (
-    Array.isArray(personaForm.tools) &&
-    server.tools.every((toolName) => personaForm.tools?.includes(toolName))
+    Array.isArray(promptForm.tools) &&
+    server.tools.every((toolName) => promptForm.tools?.includes(toolName))
   );
 }
 </script>
 
 <style scoped>
-.persona-form-card {
+.prompt-form-card {
   border-radius: 12px;
   overflow: hidden;
 }
 
-.persona-form__selected-list {
+.prompt-form__selected-list {
   max-height: 100px;
   overflow-y: auto;
 }
 
-.persona-form-content {
+.prompt-form-content {
   max-height: min(78vh, 760px);
   overflow-y: auto;
 }
 
-.persona-form-title {
+.prompt-form-title {
   line-height: 1.3;
 }
 
-.persona-form-actions {
+.prompt-form-actions {
   position: sticky;
   bottom: 0;
   z-index: 2;
@@ -1353,7 +1351,7 @@ function isServerSelected(server: McpServerItem) {
   margin-left: 32px;
 }
 
-.persona-form-layout {
+.prompt-form-layout {
   align-items: flex-start;
 }
 
@@ -1378,21 +1376,21 @@ function isServerSelected(server: McpServerItem) {
 }
 
 @media (max-width: 600px) {
-  .persona-form-card-mobile {
+  .prompt-form-card-mobile {
     border-radius: 0;
   }
 
-  .persona-form-content {
+  .prompt-form-content {
     max-height: calc(100vh - 128px);
     padding: 16px !important;
   }
 
-  .persona-basic-col,
-  .persona-panels-col {
+  .prompt-basic-col,
+  .prompt-panels-col {
     padding-top: 0 !important;
   }
 
-  .persona-form-title {
+  .prompt-form-title {
     font-size: 1.15rem !important;
     padding: 12px 16px !important;
   }
@@ -1406,12 +1404,12 @@ function isServerSelected(server: McpServerItem) {
     max-height: 38vh;
   }
 
-  .persona-form-actions {
+  .prompt-form-actions {
     padding: 12px 16px !important;
     gap: 8px;
   }
 
-  .persona-form-actions .v-btn {
+  .prompt-form-actions .v-btn {
     min-width: 0;
   }
 }

@@ -316,7 +316,7 @@ async def prepare_provider_request(
     History is copied and sanitized, media is locally materialized with MIME and
     size checks, and unsupported or unsafe media is downgraded to a concise text
     marker. It does not invoke plugin hooks or add main-Agent-only policy,
-    persona, knowledge-base, or tool capabilities.
+    prompt, knowledge-base, or tool capabilities.
     """
     prepared_request = clone_provider_request(request)
     contexts = prepared_request.contexts

@@ -135,8 +135,24 @@ describe('frontend modules', () => {
     expect(normalizeTextInput(1)).toBe('');
     expect(normalizeTextInput('ok')).toBe('ok');
     expect(stepUpHeaders('tok')['X-AstrBot-Step-Up']).toBe('tok');
-    expect(getProviderIcon('openai')).toContain('openai');
-    expect(getProviderIcon('opencode-go')).toContain('opencode.svg');
+    // Provider icons are bundled locally, never served from a third-party CDN.
+    for (const provider of [
+      'openai',
+      'anthropic',
+      'deepseek',
+      'xiaomi',
+      'ssycloud',
+      'tokenpony',
+      'compshare',
+    ]) {
+      const icon = getProviderIcon(provider);
+      expect(icon).toBeTruthy();
+      if (!icon.startsWith('data:')) {
+        expect(new URL(icon, window.location.origin).origin).toBe(
+          window.location.origin,
+        );
+      }
+    }
     expect(isMonochromeProviderIcon('opencode-go')).toBe(true);
     expect(isMonochromeProviderIcon('openai')).toBe(true);
     expect(isMonochromeProviderIcon('google')).toBe(false);

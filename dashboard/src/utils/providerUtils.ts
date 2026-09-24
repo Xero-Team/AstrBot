@@ -1,74 +1,139 @@
 const PROVIDER_ICONS: Record<string, string> = {
-  openai:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
-  azure:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
-  xai: 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg',
-  anthropic:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthropic.svg',
-  ollama:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/ollama.svg',
-  google:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/gemini-color.svg',
-  deepseek:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg',
-  modelscope:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/modelscope.svg',
-  zhipu:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg',
-  nvidia:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/nvidia-color.svg',
-  siliconflow:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/siliconcloud.svg',
-  moonshot:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
-  kimi: 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
-  'kimi-code':
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
-  longcat:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/longcat-color.svg',
-  ppio: 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/ppio.svg',
-  dify: 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/dify-color.svg',
-  coze: 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.66.0/icons/coze.svg',
-  dashscope:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/alibabacloud-color.svg',
-  deerflow:
-    'https://cdn.jsdelivr.net/gh/bytedance/deer-flow@main/frontend/public/images/deer.svg',
-  fastgpt:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/fastgpt-color.svg',
-  lm_studio:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/lmstudio.svg',
-  fishaudio:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/fishaudio.svg',
-  minimax:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg',
-  'minimax-token-plan':
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg',
-  mimo: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
-  xiaomi: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
-  'xiaomi-token-plan':
-    'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
-  '302ai':
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.53.0/icons/ai302-color.svg',
-  microsoft:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/microsoft.svg',
-  vllm: 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/vllm.svg',
-  groq: 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/groq.svg',
-  aihubmix:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/aihubmix-color.svg',
-  openrouter:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
-  'opencode-go':
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/opencode.svg',
-  ssycloud: 'https://admin.shengsuanyun.com/assets/logo-BoujJhP-.png',
-  tokenpony: 'https://tokenpony.cn/tokenpony-web/logo.png',
-  compshare: 'https://compshare.cn/favicon.ico',
-  xinference:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xinference-color.svg',
-  bailian:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg',
-  volcengine:
-    'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
+  openai: new URL('@/assets/images/provider_logos/openai.svg', import.meta.url)
+    .href,
+  azure: new URL('@/assets/images/provider_logos/azure.svg', import.meta.url)
+    .href,
+  xai: new URL('@/assets/images/provider_logos/xai.svg', import.meta.url).href,
+  anthropic: new URL(
+    '@/assets/images/provider_logos/anthropic.svg',
+    import.meta.url,
+  ).href,
+  ollama: new URL('@/assets/images/provider_logos/ollama.svg', import.meta.url)
+    .href,
+  google: new URL(
+    '@/assets/images/provider_logos/gemini-color.svg',
+    import.meta.url,
+  ).href,
+  deepseek: new URL(
+    '@/assets/images/provider_logos/deepseek.svg',
+    import.meta.url,
+  ).href,
+  modelscope: new URL(
+    '@/assets/images/provider_logos/modelscope.svg',
+    import.meta.url,
+  ).href,
+  zhipu: new URL('@/assets/images/provider_logos/zhipu.svg', import.meta.url)
+    .href,
+  nvidia: new URL(
+    '@/assets/images/provider_logos/nvidia-color.svg',
+    import.meta.url,
+  ).href,
+  siliconflow: new URL(
+    '@/assets/images/provider_logos/siliconcloud.svg',
+    import.meta.url,
+  ).href,
+  moonshot: new URL('@/assets/images/provider_logos/kimi.svg', import.meta.url)
+    .href,
+  kimi: new URL('@/assets/images/provider_logos/kimi.svg', import.meta.url)
+    .href,
+  'kimi-code': new URL(
+    '@/assets/images/provider_logos/kimi.svg',
+    import.meta.url,
+  ).href,
+  longcat: new URL(
+    '@/assets/images/provider_logos/longcat-color.svg',
+    import.meta.url,
+  ).href,
+  ppio: new URL('@/assets/images/provider_logos/ppio.svg', import.meta.url)
+    .href,
+  dify: new URL(
+    '@/assets/images/provider_logos/dify-color.svg',
+    import.meta.url,
+  ).href,
+  coze: new URL('@/assets/images/provider_logos/coze.svg', import.meta.url)
+    .href,
+  dashscope: new URL(
+    '@/assets/images/provider_logos/alibabacloud-color.svg',
+    import.meta.url,
+  ).href,
+  deerflow: new URL('@/assets/images/provider_logos/deer.svg', import.meta.url)
+    .href,
+  fastgpt: new URL(
+    '@/assets/images/provider_logos/fastgpt-color.svg',
+    import.meta.url,
+  ).href,
+  lm_studio: new URL(
+    '@/assets/images/provider_logos/lmstudio.svg',
+    import.meta.url,
+  ).href,
+  fishaudio: new URL(
+    '@/assets/images/provider_logos/fishaudio.svg',
+    import.meta.url,
+  ).href,
+  minimax: new URL(
+    '@/assets/images/provider_logos/minimax.svg',
+    import.meta.url,
+  ).href,
+  'minimax-token-plan': new URL(
+    '@/assets/images/provider_logos/minimax.svg',
+    import.meta.url,
+  ).href,
+  mimo: new URL('@/assets/images/provider_logos/xiaomi.svg', import.meta.url)
+    .href,
+  xiaomi: new URL('@/assets/images/provider_logos/xiaomi.svg', import.meta.url)
+    .href,
+  'xiaomi-token-plan': new URL(
+    '@/assets/images/provider_logos/xiaomi.svg',
+    import.meta.url,
+  ).href,
+  '302ai': new URL(
+    '@/assets/images/provider_logos/ai302-color.svg',
+    import.meta.url,
+  ).href,
+  microsoft: new URL(
+    '@/assets/images/provider_logos/microsoft.svg',
+    import.meta.url,
+  ).href,
+  vllm: new URL('@/assets/images/provider_logos/vllm.svg', import.meta.url)
+    .href,
+  groq: new URL('@/assets/images/provider_logos/groq.svg', import.meta.url)
+    .href,
+  aihubmix: new URL(
+    '@/assets/images/provider_logos/aihubmix-color.svg',
+    import.meta.url,
+  ).href,
+  openrouter: new URL(
+    '@/assets/images/provider_logos/openrouter.svg',
+    import.meta.url,
+  ).href,
+  'opencode-go': new URL(
+    '@/assets/images/provider_logos/opencode.svg',
+    import.meta.url,
+  ).href,
+  ssycloud: new URL(
+    '@/assets/images/provider_logos/shengsuanyun.png',
+    import.meta.url,
+  ).href,
+  tokenpony: new URL(
+    '@/assets/images/provider_logos/tokenpony.png',
+    import.meta.url,
+  ).href,
+  compshare: new URL(
+    '@/assets/images/provider_logos/compshare.ico',
+    import.meta.url,
+  ).href,
+  xinference: new URL(
+    '@/assets/images/provider_logos/xinference-color.svg',
+    import.meta.url,
+  ).href,
+  bailian: new URL(
+    '@/assets/images/provider_logos/bailian-color.svg',
+    import.meta.url,
+  ).href,
+  volcengine: new URL(
+    '@/assets/images/provider_logos/volcengine-color.svg',
+    import.meta.url,
+  ).href,
   typesafe: new URL(
     '@/assets/images/provider_logos/typesafe.svg',
     import.meta.url,

@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 
 from astrbot.dashboard.services.static_file_service import StaticFileService
 from astrbot.dashboard.static_encoding import (
+    MAX_GZIP_BYTES,
     accepts_gzip,
     gzip_static_body,
     is_compressible_media_type,
@@ -27,6 +28,11 @@ def _media_type(file_path: Path) -> str | None:
 
 
 def _read_gzip_body(file_path: Path) -> bytes | None:
+    try:
+        if file_path.stat().st_size > MAX_GZIP_BYTES:
+            return None
+    except OSError:
+        return None
     return gzip_static_body(file_path.read_bytes())
 
 

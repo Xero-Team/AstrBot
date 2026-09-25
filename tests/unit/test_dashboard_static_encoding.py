@@ -3,6 +3,7 @@
 import gzip
 
 from astrbot.dashboard.static_encoding import (
+    MAX_GZIP_BYTES,
     accepts_gzip,
     gzip_static_body,
     is_compressible_media_type,
@@ -42,6 +43,7 @@ def test_gzip_static_body_shrinks_text_and_skips_tiny_payloads():
     assert len(compressed) < len(raw)
     assert gzip.decompress(compressed) == raw
     assert gzip_static_body(b"tiny") is None
+    assert gzip_static_body(b"x" * (MAX_GZIP_BYTES + 1)) is None
 
 
 def test_gzip_headers_keep_cache_control():

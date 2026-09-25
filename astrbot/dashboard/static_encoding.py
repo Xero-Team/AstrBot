@@ -25,6 +25,10 @@ COMPRESSIBLE_MEDIA_TYPES = frozenset(
 # Gzip of a few hundred bytes is often larger than the original.
 MIN_GZIP_BYTES = 1024
 
+# Bound the in-memory gzip path. Larger assets fall back to the streaming
+# FileResponse so concurrent requests cannot each buffer the whole file.
+MAX_GZIP_BYTES = 4 * 1024 * 1024
+
 
 def accepts_gzip(header: str | None) -> bool:
     """Return whether Accept-Encoding explicitly allows gzip with q > 0."""
@@ -56,7 +60,7 @@ def is_compressible_media_type(media_type: str | None) -> bool:
 
 def gzip_static_body(data: bytes) -> bytes | None:
     """Return a smaller gzip body, or None when compression should be skipped."""
-    if len(data) < MIN_GZIP_BYTES:
+    if len(data) < MIN_GZIP_BYTES or len(data) > MAX_GZIP_BYTES:
         return None
     compressed = gzip.compress(data, compresslevel=6)
     if len(compressed) >= len(data):

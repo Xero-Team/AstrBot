@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot.dashboard.static_encoding import MAX_GZIP_BYTES
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403
 
 
@@ -1433,6 +1434,22 @@ async def test_dashboard_static_routes_stay_uncompressed_for_ranges(
     assert response.status_code == 206
     assert "Content-Encoding" not in response.headers
     assert response.headers["Content-Range"] == f"bytes 0-9/{len(payload)}"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_static_routes_skip_gzip_for_oversized_assets(
+    app: FastAPI, tmp_path: Path
+):
+    payload = "x" * (MAX_GZIP_BYTES + 1)
+    (tmp_path / "app.js").write_text(payload, encoding="utf-8")
+    app.state.dashboard_static_folder = str(tmp_path)
+    response = await DashboardTestClient(app).get(
+        "/app.js", headers={"Accept-Encoding": "gzip"}
+    )
+
+    assert response.status_code == 200
+    assert "Content-Encoding" not in response.headers
+    assert await response.get_data() == payload.encode()
 
 
 @pytest.mark.asyncio

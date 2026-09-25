@@ -12,10 +12,11 @@ last_synced:
   note: >-
     Reviewed 95e98b8aed75d56713666eff39e31bafffd95426..67c74b7ed8d5b8df170f849faaa431fc329c4ddc
     (2 commits): adapted #10211 (pin legacy naive SQLite datetime storage with
-    sa_type=DateTime(timezone=False), remapped from upstream astrbot/core/db/po.py
+    sa_type=DateTime, remapped from upstream astrbot/core/db/po.py
     onto the fork's astrbot.core.db.po package plus the relocated
     astrbot.core.db.vec_db.document_storage and astrbot.core.knowledge_base.models)
     and #10187 (gzip dashboard JS/CSS/HTML static responses, wired into the fork's
-    static_files router together with the static_encoding module and unit tests).
+    static_files router with a fork-only 4 MiB in-memory cap that keeps oversized
+    assets on the streaming FileResponse path, plus router-level regression tests).
     No upstream version change in this interval, so no version or changelog
     update. Focused pytest and Ruff checks passed.

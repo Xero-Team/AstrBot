@@ -10,7 +10,7 @@ from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.tools.registry import builtin_tool
 
 _KNOWLEDGE_BASE_TOOL_CONFIG = {
-    "kb_agentic_mode": True,
+    "knowledge_base.agentic_mode": True,
 }
 
 

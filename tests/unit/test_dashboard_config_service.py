@@ -14,7 +14,7 @@ from astrbot.core.platform.sources.napcat.napcat_platform_adapter import (
 from astrbot.core.provider.catalog import ProviderCatalog
 from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
 from astrbot.core.utils.totp import TotpRuntimeState
-from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.responses import ApiError, DashboardValidationError
 from astrbot.dashboard.services import config_service
 
 
@@ -626,6 +626,56 @@ async def test_save_config_async_restores_redacted_sensitive_values(
     assert current.saved["provider"][0]["key"] == ["sk-live-1", "sk-live-2"]
     assert current.saved["provider"][1]["embedding_api_key"] == "embed-secret"
     assert current.saved["agent_runner"]["config"]["model"]["provider_id"] == "embed"
+
+
+@pytest.mark.asyncio
+async def test_save_config_async_validates_grouped_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        config_service,
+        "detect_local_runtime_info",
+        lambda **_kwargs: {
+            "os": "linux",
+            "sandbox": {"status": "detected", "backend": "bubblewrap"},
+        },
+    )
+
+    class FakeConfig(dict):
+        def __init__(self, initial: dict) -> None:
+            super().__init__(copy.deepcopy(initial))
+            self.saved = None
+
+        async def save_config_async(
+            self,
+            post_config=None,
+            *,
+            indent: int = 2,
+        ) -> bool:  # noqa: ARG002
+            self.saved = copy.deepcopy(post_config)
+            self.clear()
+            self.update(post_config)
+            return True
+
+    current = FakeConfig(
+        {
+            "knowledge_base": {
+                "names": [],
+                "fusion_top_k": 20,
+                "final_top_k": 5,
+                "agentic_mode": False,
+            }
+        }
+    )
+
+    posted = copy.deepcopy(dict(current))
+    posted["knowledge_base"]["final_top_k"] = "7"
+    await config_service.save_config_async(posted, current, is_core=True)
+    assert current.saved["knowledge_base"]["final_top_k"] == 7
+
+    posted["knowledge_base"]["agentic_mode"] = "false"
+    with pytest.raises(DashboardValidationError):
+        await config_service.save_config_async(posted, current, is_core=True)
 
 
 @pytest.mark.asyncio

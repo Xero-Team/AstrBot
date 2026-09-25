@@ -3376,11 +3376,13 @@ CONFIG_METADATA_2 = {
                     "max_typing_wait": {"type": "float"},
                 },
             },
-            "t2i.enable": {
-                "type": "bool",
-            },
-            "t2i.word_threshold": {
-                "type": "int",
+            "t2i": {
+                "type": "object",
+                "items": {
+                    "enable": {"type": "bool"},
+                    "word_threshold": {"type": "int"},
+                    "use_file_service": {"type": "bool"},
+                },
             },
             "http_proxy": {
                 "type": "string",
@@ -3402,9 +3404,17 @@ CONFIG_METADATA_2 = {
                 "type": "bool",
                 "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
             },
-            "log.level": {
-                "type": "string",
-                "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            "log": {
+                "type": "object",
+                "items": {
+                    "level": {
+                        "type": "string",
+                        "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                    },
+                    "file_enable": {"type": "bool"},
+                    "file_path": {"type": "string"},
+                    "file_max_mb": {"type": "int"},
+                },
             },
             "dashboard.ssl.enable": {"type": "bool"},
             "dashboard.trust_proxy_headers": {"type": "bool"},
@@ -3423,21 +3433,14 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "condition": {"dashboard.ssl.enable": True},
             },
-            "log.file_enable": {"type": "bool"},
-            "log.file_path": {"type": "string", "condition": {"log.file_enable": True}},
-            "log.file_max_mb": {"type": "int", "condition": {"log.file_enable": True}},
             "temp_dir_max_size": {"type": "int"},
-            "trace.log_enable": {"type": "bool"},
-            "trace.log_path": {
-                "type": "string",
-                "condition": {"trace.log_enable": True},
-            },
-            "trace.log_max_mb": {
-                "type": "int",
-                "condition": {"trace.log_enable": True},
-            },
-            "t2i.use_file_service": {
-                "type": "bool",
+            "trace": {
+                "type": "object",
+                "items": {
+                    "log_enable": {"type": "bool"},
+                    "log_path": {"type": "string"},
+                    "log_max_mb": {"type": "int"},
+                },
             },
             "pip_install_arg": {
                 "type": "string",
@@ -3445,10 +3448,15 @@ CONFIG_METADATA_2 = {
             "pypi_index_url": {
                 "type": "string",
             },
-            "knowledge_base.names": {"type": "list", "items": {"type": "string"}},
-            "knowledge_base.fusion_top_k": {"type": "int", "default": 20},
-            "knowledge_base.final_top_k": {"type": "int", "default": 5},
-            "knowledge_base.agentic_mode": {"type": "bool"},
+            "knowledge_base": {
+                "type": "object",
+                "items": {
+                    "names": {"type": "list", "items": {"type": "string"}},
+                    "fusion_top_k": {"type": "int", "default": 20},
+                    "final_top_k": {"type": "int", "default": 5},
+                    "agentic_mode": {"type": "bool"},
+                },
+            },
         },
     },
 }

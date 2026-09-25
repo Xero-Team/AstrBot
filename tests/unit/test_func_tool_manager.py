@@ -41,6 +41,29 @@ def test_get_builtin_tool_by_class_returns_cached_instance():
     assert tool_by_class.name == "send_message_to_user"
 
 
+def test_knowledge_base_tool_config_status_tracks_grouped_key():
+    manager = FunctionToolManager()
+
+    statuses = manager.get_builtin_tool_config_statuses(
+        "astr_kb_search",
+        [
+            {
+                "conf_id": "default",
+                "conf_name": "default",
+                "config": {"knowledge_base": {"agentic_mode": True}},
+            },
+            {
+                "conf_id": "disabled",
+                "conf_name": "disabled",
+                "config": {"knowledge_base": {"agentic_mode": False}},
+            },
+        ],
+    )
+
+    assert [status["enabled"] for status in statuses] == [True, False]
+    assert statuses[1]["failed_conditions"][0]["key"] == "knowledge_base.agentic_mode"
+
+
 def test_builtin_tool_discovery_is_scoped_to_each_manager_instance():
     """A previous runtime's discovery cannot populate another runtime's tools."""
     first = FunctionToolManager()

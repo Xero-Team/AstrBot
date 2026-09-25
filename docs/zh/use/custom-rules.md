@@ -32,7 +32,7 @@ UMO 唯一指定某个平台下的一个会话。发送者覆盖用完整主体 
 
 聊天里的 `/bot enable`、`/bot disable`、`/tts enable`、`/tts disable`、`/session block`、`/session unblock` 仍按 UMO 写服务规则。IM 里的 `/llm enable` 和 `/llm disable` 写的是规范会话键，所以隔离会话开启时会关掉整个群的 LLM。Dashboard 自定义规则页仍按 UMO 保存提示词和 TTS，但会把 `llm_enabled` / `session_enabled` / `session_blocked` 双写到规范会话键。`/bot status` 可以查看当前会话的整体开关、LLM、TTS 和完全禁用状态。这些指令需要 `session.manage` 或 `session.block`，见 [内置指令](./command)。
 
-`unlisted_sessions=deny` 时，准入阶段看规范会话键上的覆盖。IM `/llm` 和本页 Dashboard 规则都会列入该键。会话是否启用、是否完全禁用仍由后面的会话状态阶段按 UMO 处理。
+`unlisted_sessions=deny` 时，准入阶段看规范会话键上的覆盖，以及本配置档升级时的列入集。IM `/llm` 和本页 Dashboard 规则都会列入该键。会话是否启用、是否完全禁用仍由后面的会话状态阶段按 UMO 处理。
 
 ### 发送者覆盖（sender）
 

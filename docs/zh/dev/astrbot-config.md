@@ -30,6 +30,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 | 键                                                | 用途                                                                                                                                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `config_version`                                  | 当前核心配置结构版本，默认 `4`，不要手动降级。                                                                                                                     |
 | `platform_settings`                               | 所有消息平台共用的收发、限流和分段回复行为。                                                                                                                       |
 | `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                                                                                               |
 | `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                                                                                                 |
@@ -67,7 +68,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 没有 `session_enabled` / `llm_enabled` / `tts_enabled` 覆盖时，IM 群聊和私聊默认关闭，Dashboard WebChat 默认开启。会话关闭后只透传 `/bot status` 和 `/bot enable`；要开 LLM 需先打开会话。
 
-未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖的群或私聊。未列入发送者由 `admission.unlisted_senders` 控制，同样默认 `allow`。`deny` 只放行已有 `blocked` 或 `llm_enabled` 覆盖的 IM 主体。用 `/user block`、`/user unblock`、`/user llm on|off`，或 Dashboard [自定义规则](../use/custom-rules) 的发送者目标写入这些覆盖。WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
+未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖、或该配置档升级列入集里的群或私聊。未列入发送者由 `admission.unlisted_senders` 控制，同样默认 `allow`。`deny` 只放行已有 `blocked` 或 `llm_enabled` 覆盖的 IM 主体。用 `/user block`、`/user unblock`、`/user llm on|off`，或 Dashboard [自定义规则](../use/custom-rules) 的发送者目标写入这些覆盖。WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
 
 ## `platform_settings`
 
@@ -135,7 +136,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 ### 步数、工具与代理
 
 - `agent_runner.runner_type`：`local` 使用内置 Agent；也可选择 Dify、Coze、DashScope 或 DeerFlow。第三方 Runner 的密钥和应用 ID 写在 `agent_runner.config` 中。
-- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `128`，也适用于当前子代理执行。
+- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `128`，也适用于当前子代理执行。已保存的 `30` 会在 `config_version` 升到 `4` 时升级一次。
 - `agent_runner.config.max_steps`：第三方 Runner 的 step 上限，默认 `128`。
 - `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
 - `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema，只藏参数，不改变工具目录。

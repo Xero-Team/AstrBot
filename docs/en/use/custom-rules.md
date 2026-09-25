@@ -32,7 +32,7 @@ Session rules bind to one UMO and may include several overlays. Sender rules bin
 
 `/bot enable`, `/bot disable`, `/tts enable`, `/tts disable`, `/session block`, and `/session unblock` still write this service rule against the UMO. IM `/llm enable` and `/llm disable` write the canonical session key, so they disable LLM for the whole group when isolated sessions are on. Dashboard custom rules still save prompt and TTS against the UMO, and dual-write `llm_enabled` / `session_enabled` / `session_blocked` onto the canonical session key. `/bot status` shows the session, LLM, TTS, and full-block switches. Those commands need `session.manage` or `session.block`. See [Built-in commands](./command).
 
-When `unlisted_sessions=deny`, the admission stage looks at overlays on the canonical session key. IM `/llm` and Dashboard rules on this page both list that key. Session on/off and full block still belong to the later session-status stage, which still reads the UMO.
+When `unlisted_sessions=deny`, the admission stage looks at overlays on the canonical session key and this profile's upgrade listed set. IM `/llm` and Dashboard rules on this page both list that key. Session on/off and full block still belong to the later session-status stage, which still reads the UMO.
 
 ### Sender overlays (sender)
 

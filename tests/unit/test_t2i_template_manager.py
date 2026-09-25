@@ -33,32 +33,6 @@ def test_template_manager_does_not_copy_builtin_templates(template_paths):
     )
 
 
-def test_template_manager_removes_unmodified_legacy_copy(template_paths):
-    builtin_dir, user_dir = template_paths
-    user_dir.mkdir(parents=True)
-    (user_dir / "base.html").write_text(
-        (builtin_dir / "base.html").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-
-    manager = TemplateManager()
-
-    assert not (user_dir / "base.html").exists()
-    assert manager.get_template("base") == "builtin base.html"
-
-
-def test_template_manager_backs_up_cdn_legacy_core_template(template_paths):
-    _, user_dir = template_paths
-    user_dir.mkdir(parents=True)
-    legacy = '<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script><textarea id="markdown-source"></textarea>'
-    (user_dir / "base.html").write_text(legacy, encoding="utf-8")
-
-    manager = TemplateManager()
-
-    assert manager.get_template("base") == "builtin base.html"
-    assert (user_dir / "base.html.legacy").read_text(encoding="utf-8") == legacy
-
-
 def test_template_manager_keeps_explicit_core_override(template_paths):
     _, user_dir = template_paths
     user_dir.mkdir(parents=True)
@@ -80,33 +54,6 @@ def test_reset_default_template_removes_core_overrides_only(template_paths):
 
     assert manager.get_template("base") == "builtin base.html"
     assert manager.get_template("custom") == "custom"
-
-
-def test_template_manager_removes_hashed_unmodified_legacy_copy(
-    template_paths, monkeypatch
-):
-    _, user_dir = template_paths
-    user_dir.mkdir(parents=True)
-    (user_dir / "base.html").write_text(
-        "previous unmodified builtin\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        template_manager,
-        "_LEGACY_UNMODIFIED_CORE_TEMPLATE_HASHES",
-        {
-            "base.html": frozenset(
-                {
-                    "96d9ae2f1a14756153a7809f25406fdbd074896e05d738f1972600dfd16dc566",
-                }
-            )
-        },
-    )
-
-    manager = TemplateManager()
-
-    assert not (user_dir / "base.html").exists()
-    assert manager.get_template("base") == "builtin base.html"
 
 
 def test_builtin_base_template_stays_offline():

@@ -21,9 +21,8 @@ def test_storage_cleaner_status_includes_logs_and_cache(tmp_path):
 
     cleaner = StorageCleaner(
         {
-            "log_file_enable": True,
-            "log_file_path": "logs/astrbot.log",
-            "trace_log_enable": False,
+            "log": {"file_enable": True, "file_path": "logs/astrbot.log"},
+            "trace": {"log_enable": False},
         },
         data_dir=data_dir,
         temp_dir=temp_dir,
@@ -56,10 +55,8 @@ def test_storage_cleaner_cleanup_truncates_active_log_and_removes_cache(tmp_path
 
     cleaner = StorageCleaner(
         {
-            "log_file_enable": True,
-            "log_file_path": "logs/astrbot.log",
-            "trace_log_enable": True,
-            "trace_log_path": "logs/astrbot.trace.log",
+            "log": {"file_enable": True, "file_path": "logs/astrbot.log"},
+            "trace": {"log_enable": True, "log_path": "logs/astrbot.trace.log"},
         },
         data_dir=data_dir,
         temp_dir=temp_dir,

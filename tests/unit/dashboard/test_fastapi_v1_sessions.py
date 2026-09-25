@@ -398,7 +398,7 @@ async def test_v1_trace_settings_use_enabled_field(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
-    fake_core_lifecycle.astrbot_config["trace_enable"] = False
+    fake_core_lifecycle.astrbot_config["trace"] = {"enable": False}
 
     get_response = await asgi_client.get(
         "/api/v1/trace/settings",
@@ -414,7 +414,7 @@ async def test_v1_trace_settings_use_enabled_field(
     assert get_response.json()["data"] == {"enabled": False}
     assert update_response.status_code == 200
     assert update_response.json()["message"] == "Trace 设置已更新"
-    assert fake_core_lifecycle.astrbot_config["trace_enable"] is True
+    assert fake_core_lifecycle.astrbot_config["trace"]["enable"] is True
 
 
 @pytest.mark.asyncio

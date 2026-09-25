@@ -184,13 +184,13 @@ async def test_dashboard_jwt_secret_is_not_used_when_save_is_superseded() -> Non
 @pytest.mark.asyncio
 async def test_log_settings_use_async_config_persistence() -> None:
     events: list[object] = []
-    config = TrackedConfig({"trace_enable": False}, events)
+    config = TrackedConfig({"trace": {"enable": False}}, events)
     service = LogService(SimpleNamespace(), config)
 
     message = await service.update_trace_settings(True)
 
     assert message == "Trace 设置已更新"
-    assert config["trace_enable"] is True
+    assert config["trace"]["enable"] is True
     assert events == ["persist"]
 
 
@@ -209,7 +209,7 @@ async def test_log_settings_do_not_report_success_when_save_is_superseded() -> N
             return False
 
     service = LogService(
-        SimpleNamespace(), SupersededConfig({"trace_enable": False}, events)
+        SimpleNamespace(), SupersededConfig({"trace": {"enable": False}}, events)
     )
 
     with pytest.raises(LogServiceError, match="superseded"):
@@ -267,8 +267,8 @@ async def test_subagent_config_does_not_reload_when_save_is_superseded() -> None
 @pytest.mark.asyncio
 async def test_t2i_configurations_persist_before_scheduler_reload() -> None:
     events: list[object] = []
-    first = TrackedConfig({"t2i_active_template": "base"}, events)
-    second = TrackedConfig({"t2i_active_template": "base"}, events)
+    first = TrackedConfig({"t2i": {"active_template": "base"}}, events)
+    second = TrackedConfig({"t2i": {"active_template": "base"}}, events)
 
     async def reload_pipeline_scheduler(config_id: str) -> None:
         events.append(("reload", config_id))
@@ -283,8 +283,8 @@ async def test_t2i_configurations_persist_before_scheduler_reload() -> None:
         manager=SimpleNamespace(),
     ).sync_active_template_to_all_configs("cinematic")
 
-    assert first["t2i_active_template"] == "cinematic"
-    assert second["t2i_active_template"] == "cinematic"
+    assert first["t2i"]["active_template"] == "cinematic"
+    assert second["t2i"]["active_template"] == "cinematic"
     assert events == [
         "persist",
         "persist",
@@ -307,7 +307,7 @@ async def test_t2i_does_not_reload_schedulers_when_save_is_superseded() -> None:
             await super().save_config_async(replace_config, indent=indent)
             return False
 
-    config = SupersededConfig({"t2i_active_template": "base"}, events)
+    config = SupersededConfig({"t2i": {"active_template": "base"}}, events)
     reload_pipeline_scheduler = AsyncMock()
     config_manager = SimpleNamespace(confs={"first": config})
     control = SimpleNamespace(reload_pipeline_scheduler=reload_pipeline_scheduler)

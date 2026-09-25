@@ -11,11 +11,11 @@ Open **Config → Platform**. Segmented replies live under **Ext.** Fields belon
 | `admission.unlisted_sessions` | `allow` | `allow` admits sessions with no overlay; `deny` admits only listed groups or DMs            |
 | `admission.unlisted_senders`  | `allow` | `allow` admits senders with no overlay; `deny` admits only IM subjects that have an overlay |
 
-The default is `allow`: new groups and DMs pass this stage. They still stay silent until `/bot enable` then `/llm enable`, because unwritten session, LLM, and TTS overlays default off. After you switch to `deny`, only sessions that already have an overlay on the canonical session key, or that this profile listed during upgrade, pass this stage. Overlays come from IM `/bot`, `/llm`, and Dashboard [custom rules](./custom-rules) writing `llm_enabled` / `session_enabled` / `session_blocked`. Upgrade allowlists are stored per profile; they do not write `session_enabled` into preferences.
+The default is `allow`: new groups and DMs pass this stage. They still stay silent until `/bot enable` then `/llm enable`, because unwritten session, LLM, and TTS overlays default off. After you switch to `deny`, only sessions that already have an overlay on the canonical session key pass this stage. Overlays come from IM `/bot`, `/llm`, and Dashboard [custom rules](./custom-rules) writing `llm_enabled` / `session_enabled` / `session_blocked`.
 
 Group admission uses the canonical session key (`session:{platform instance}:group:{group id}`), not a unique-session rewritten UMO. Direct messages use `session:{platform instance}:private:{peer id}`. Sender overlays live on `im:{platform instance}:{bot account}:{sender id}` and apply instance-wide. WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this stage. The default is `unlisted_senders=allow`: senders with no overlay still pass. After you switch to `deny`, only senders with a written `blocked` or `llm_enabled` overlay are listed. The Sender target on Dashboard [custom rules](./custom-rules) and `/user block`, `/user unblock`, and `/user llm on|off` write the same sender overlay. Any written `blocked` or `llm_enabled` value lists that sender.
 
-`id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone. Dashboard writes that include them fail. On upgrade, an empty or disabled list becomes `allow`. A non-empty enabled list becomes `deny` and each entry is listed on that profile. Bare IDs expand to one group key per `platform[].id` on that profile. Unique-session UMOs unwrap to the group id from `sender_id_group_id` / `sender_id%group_id`.
+`id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone. Dashboard writes that include them fail. This fork does not convert them on load: delete `data/cmd_config.json` (and any `data/config/abconf_*.json`), start from the current defaults, and configure `admission.unlisted_sessions` directly.
 
 ## Rate limit
 
@@ -52,7 +52,7 @@ Streaming replies, and groups with sender concurrency, do not use this splitter.
 
 ## Text to image
 
-`t2i` is off by default. Past `t2i_word_threshold` (default 150 characters), long text can be rendered as an image. Templates and CJK fonts live under **Settings**; the font must actually be installed in the container. See [FAQ](/en/faq#cjk-text-is-garbled-in-t2i-output).
+`t2i.enable` is off by default. Past `t2i.word_threshold` (default 150 characters), long text can be rendered as an image. Templates and CJK fonts live under **Settings**; the font must actually be installed in the container. See [FAQ](/en/faq#cjk-text-is-garbled-in-t2i-output).
 
 ## Other common fields
 

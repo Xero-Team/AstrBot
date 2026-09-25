@@ -115,7 +115,7 @@ def test_configure_logger_syncs_console_and_root_level(
         monkeypatch.setattr(LogManager, "_configured", False)
         monkeypatch.setattr(LogManager, "_console_sink_id", None)
         LogManager._setup_loguru()
-        LogManager.configure_logger(global_logger, {"log_level": "WARNING"})
+        LogManager.configure_logger(global_logger, {"log": {"level": "WARNING"}})
 
         assert global_logger.level == logging.WARNING
         assert logging.getLogger().level == logging.WARNING
@@ -142,7 +142,7 @@ def test_global_level_sync_updates_plugins_without_overrides(
     monkeypatch.setattr(LogManager, "_plugin_level_overrides", {})
 
     try:
-        LogManager.configure_logger(global_logger, {"log_level": "WARNING"})
+        LogManager.configure_logger(global_logger, {"log": {"level": "WARNING"}})
         assert plugin_logger.level == logging.WARNING
     finally:
         plugin_logger.setLevel(previous_level)

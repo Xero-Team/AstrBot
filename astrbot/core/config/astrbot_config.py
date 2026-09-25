@@ -6,11 +6,8 @@ import logging
 import os
 import tempfile
 import threading
-from pathlib import Path
 
-from astrbot.core.config.admission_migration import migrate_admission_on_load
 from astrbot.core.config.agent_runner import normalize_agent_runner_for_load
-from astrbot.core.config.agent_runner_migration import migrate_config_on_load
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
@@ -79,10 +76,8 @@ class AstrBotConfig(dict):
                 True,
             )
         # 检查配置完整性，并插入
-        has_new = self._migrate_openai_chat_completions_type(conf)
+        has_new = False
         if default_config is DEFAULT_CONFIG:
-            has_new |= migrate_config_on_load(conf, Path(config_path))
-            has_new |= migrate_admission_on_load(conf, Path(config_path))
             normalized_runner = normalize_agent_runner_for_load(
                 conf.get("agent_runner")
             )
@@ -98,27 +93,6 @@ class AstrBotConfig(dict):
             self.save_config()
 
         self.update(conf)
-
-    @staticmethod
-    def _migrate_openai_chat_completions_type(conf: dict) -> bool:
-        """Migrate the persisted OpenAI Chat Completions adapter identifier once."""
-        migrated = False
-        for key in ("provider_sources", "provider"):
-            configs = conf.get(key)
-            if not isinstance(configs, list):
-                continue
-            for config in configs:
-                if (
-                    isinstance(config, dict)
-                    and config.get("type") == "openai_chat_completion"
-                ):
-                    config["type"] = "openai_chat_completions"
-                    migrated = True
-        if migrated:
-            logger.info(
-                "Migrated OpenAI Chat Completions provider type to the current identifier."
-            )
-        return migrated
 
     def _resolve_default_config(
         self, default_config: dict, schema: dict | None

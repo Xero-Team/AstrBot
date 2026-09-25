@@ -2124,6 +2124,12 @@ class TestEnsurePromptAndSkills:
         assert config.computer_use_runtime == "local"
         assert config.llm_safety_mode is False
 
+    def test_local_agent_runtime_from_profile_reads_grouped_kb_agentic_mode(self):
+        config, _ = ama.local_agent_runtime_from_profile(
+            {"knowledge_base": {"agentic_mode": True}}
+        )
+        assert config.kb_agentic_mode is True
+
     @pytest.mark.asyncio
     async def test_subagent_dedupe_uses_default_prompt_tools(
         self, mock_event, mock_context

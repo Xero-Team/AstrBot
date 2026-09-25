@@ -61,7 +61,7 @@ The main SQLite database uses SQLModel tables as the schema source of truth. Acc
 
 ## Main SQLite database
 
-The main database file is `data/data_v4.db` under the runtime root. SQLModel tables are the only schema source of truth: tables, columns, ordinary unique constraints, and ordinary indexes live on the models. Access ports are the domain store protocols in `astrbot/core/db/protocols.py`. `SQLiteDatabase` composes those protocols with mixins; callers still import that class. This fork does not add Alembic, sqlc, or a main-database `.sql` schema.
+The main database file is `data/data_v4.db` under the runtime root. SQLModel tables are the only schema source of truth: tables, columns, ordinary unique constraints, and ordinary indexes live on the models. Access ports are the domain store protocols in `astrbot/core/db/protocols.py`. `SQLiteDatabase` composes those protocols with mixins; callers still import that class. This fork does not add Alembic, sqlc, or a main-database `.sql` schema. No SQLite store or configuration file runs an in-place migration: each is created from its current SQLModel tables or defaults, and a breaking change is handled by deleting that store or config and rebuilding.
 
 `create_runtime_services()` constructs `SQLiteDatabase(DB_PATH)`. If the factory fails after constructing the database and before returning `RuntimeServices`, it `await`s `db.close()` to dispose the async engine, then re-raises the original exception. The lifecycle explicitly calls `db.initialize()`; `get_db()` keeps lazy initialization as a fallback. Explicit initialization, the first `get_db()`, and concurrent initialization share one lock, so schema work runs once.
 
@@ -92,7 +92,7 @@ astrbot/core/db/
 2. `SQLModel.metadata.create_all`
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-Startup does not inspect `PRAGMA table_info` or run `ALTER TABLE` on an existing file. `create_all` creates missing tables only; leftover columns on an old `data_v4.db` stay in place. Upgrading to 4.27.5 means deleting `data/data_v4.db*` and starting from an empty file. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
+Startup does not inspect `PRAGMA table_info` or run `ALTER TABLE` on an existing file. `create_all` creates missing tables only; leftover columns on an old `data_v4.db` stay in place. Upgrading to a breaking schema means deleting the affected store (`data/data_v4.db*`, `data/knowledge_base/`, or `data/cmd_config.json`) and starting from an empty file, then reconfiguring. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
 
 Mixins obtain sessions through the typed `store_session(self)` helper and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
 

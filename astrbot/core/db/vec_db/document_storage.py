@@ -1,12 +1,11 @@
 import json
-import os
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from weakref import WeakSet
 
-from sqlalchemy import Column, DateTime, Text, bindparam
+from sqlalchemy import Column, Computed, DateTime, Text, bindparam
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
@@ -45,6 +44,24 @@ class Document(BaseDocModel, table=True):
     doc_id: str = Field(nullable=False, unique=True)
     text: str = Field(nullable=False)
     metadata_: str | None = Field(default=None, sa_column=Column("metadata", Text))
+    kb_doc_id: str | None = Field(
+        default=None,
+        sa_column=Column(
+            "kb_doc_id",
+            Text,
+            Computed("json_extract(metadata, '$.kb_doc_id')", persisted=True),
+            index=True,
+        ),
+    )
+    user_id: str | None = Field(
+        default=None,
+        sa_column=Column(
+            "user_id",
+            Text,
+            Computed("json_extract(metadata, '$.user_id')", persisted=True),
+            index=True,
+        ),
+    )
     # Retain the legacy local timestamps without reinterpreting them as UTC.
     created_at: datetime | None = Field(default=None, sa_type=DateTime)
     updated_at: datetime | None = Field(default=None, sa_type=DateTime)
@@ -57,10 +74,6 @@ class DocumentStorage:
         self.engine: AsyncEngine | None = None
         self.async_session_maker: sessionmaker | None = None
         self._aiosqlite_workers: WeakSet[threading.Thread] | None = None
-        self.sqlite_init_path = os.path.join(
-            os.path.dirname(__file__),
-            "sqlite_init.sql",
-        )
         self.fts5_available = False
         self._fts_contentless_delete = False
         self._fts_index_ready = False
@@ -72,34 +85,6 @@ class DocumentStorage:
         async with self.engine.begin() as conn:  # type: ignore
             # Create tables using SQLModel
             await conn.run_sync(BaseDocModel.metadata.create_all)
-
-            try:
-                await conn.execute(
-                    text(
-                        "ALTER TABLE documents ADD COLUMN kb_doc_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_doc_id')) STORED",
-                    ),
-                )
-                await conn.execute(
-                    text(
-                        "ALTER TABLE documents ADD COLUMN user_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) STORED",
-                    ),
-                )
-
-                # Create indexes
-                await conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_documents_kb_doc_id ON documents(kb_doc_id)",
-                    ),
-                )
-                await conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
-                    ),
-                )
-            except Exception:
-                pass
 
             await conn.execute(
                 text(

@@ -11,11 +11,11 @@
 | `admission.unlisted_sessions` | `allow` | `allow` 放行没有覆盖的会话；`deny` 只放行已有会话覆盖的群或私聊     |
 | `admission.unlisted_senders`  | `allow` | `allow` 放行没有覆盖的发送者；`deny` 只放行已有发送者覆盖的 IM 主体 |
 
-默认 `allow`：新群和新私聊会通过这一关，但在 `/bot enable` 再 `/llm enable` 之前仍然保持静默，因为没有覆盖时会话、LLM、TTS 默认关闭。改成 `deny` 后，只有规范会话键上已有覆盖、或本配置档升级列入集里的会话会通过这一关。覆盖来自 IM `/bot`、`/llm`、Dashboard [自定义规则](./custom-rules) 写入的 `llm_enabled` / `session_enabled` / `session_blocked`。升级时旧白名单按配置档记入列入集，不会把 `session_enabled` 写到偏好里。
+默认 `allow`：新群和新私聊会通过这一关，但在 `/bot enable` 再 `/llm enable` 之前仍然保持静默，因为没有覆盖时会话、LLM、TTS 默认关闭。改成 `deny` 后，只有规范会话键上已有覆盖的会话会通过这一关。覆盖来自 IM `/bot`、`/llm`、Dashboard [自定义规则](./custom-rules) 写入的 `llm_enabled` / `session_enabled` / `session_blocked`。
 
 群准入用的是规范会话键（`session:{平台实例}:group:{群 ID}`），不是隔离会话改写后的 UMO。私聊用 `session:{平台实例}:private:{对方 ID}`。发送者覆盖写在 `im:{平台实例}:{机器人账号}:{发送者 ID}` 上，对本机器人实例全局生效。WebChat、OneBot 的 `notice` / `request`，以及当前实例上拥有 `provider.manage` 的发送者，会跳过这一关。默认 `unlisted_senders=allow`：没有发送者覆盖的人仍然放行。改成 `deny` 后，只有已写入 `blocked` 或 `llm_enabled` 的发送者会被列入。Dashboard [自定义规则](./custom-rules) 的发送者目标和 `/user block`、`/user unblock`、`/user llm on|off` 写入同一份发送者覆盖。写入任意 `blocked` 或 `llm_enabled` 都会列入该发送者。
 
-旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除，Dashboard 写入这些字段会失败。升级时：空列表或关闭的白名单变成 `allow`；非空且开启的列表变成 `deny`，并把条目列入该配置档。裸 ID 会按该配置档里每个 `platform[].id` 展开成群会话键。隔离会话 UMO 会按 `sender_id_group_id` / `sender_id%group_id` 解开成群 ID。
+旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除，Dashboard 写入这些字段会失败。本 fork 不在加载时转换它们：删除 `data/cmd_config.json`（以及 `data/config/abconf_*.json`），从当前默认值启动，并直接配置 `admission.unlisted_sessions`。
 
 ## 速率限制
 
@@ -52,7 +52,7 @@
 
 ## 文本转图像
 
-`t2i` 默认关闭。超过 `t2i_word_threshold`（默认 150 字）时，可以把长文本渲染成图片再发送。模板和中文字体在 **设置** 里维护；容器内必须实际安装对应字体。乱码排查见 [FAQ](/faq#t2i-中文乱码)。
+`t2i.enable` 默认关闭。超过 `t2i.word_threshold`（默认 150 字）时，可以把长文本渲染成图片再发送。模板和中文字体在 **设置** 里维护；容器内必须实际安装对应字体。乱码排查见 [FAQ](/faq#t2i-中文乱码)。
 
 ## 其他常用项
 

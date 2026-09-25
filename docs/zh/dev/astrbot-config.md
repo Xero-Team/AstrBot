@@ -30,7 +30,6 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 | 键                                                | 用途                                                                                                                                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `config_version`                                  | 当前核心配置结构版本，默认 `4`，不要手动降级。                                                                                                                     |
 | `platform_settings`                               | 所有消息平台共用的收发、限流和分段回复行为。                                                                                                                       |
 | `provider_sources`                                | API 端点和凭据等 Provider 来源。由“提供商”页面维护。                                                                                                               |
 | `provider`                                        | 具体聊天、STT、TTS、Embedding、Rerank 等模型实例。                                                                                                                 |
@@ -50,6 +49,8 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 `provider_sources`、`provider` 和 `platform` 中的对象结构由各类型注册的当前模板决定。不要从旧文档复制对象；在 WebUI 创建后再检查保存结果。模型通过 `provider_source_id` 引用来源，重命名或删除来源时应让 WebUI 同步引用。
 
+未知键（包括旧的 `config_version`）会在加载时删除。配置按当前 `DEFAULT_CONFIG` 和配置档 schema 构建；Agent Runner 仍按当前 `runner_type` 规范化字段。除该规范化外，配置不做就地迁移；破坏性变更时删除 `data/cmd_config.json`（以及 `data/config/abconf_*.json`）后重新配置。
+
 ## 入站路由
 
 用户向步骤见 [群聊何时会理我](../use/group-wake)。`command_prefixes` 和 `llm_access` 都读取事件实际选中的配置档。`command_prefixes` 只负责指令头，不会与 LLM 前缀自动拼接。`llm_access.prefixes` 的每一项都是用户实际输入的完整字符串，按词边界和最长匹配处理。非空 LLM 前缀会在同一配置档占用其第一个指令根；如果与已启用指令冲突，Dashboard 会拒绝保存。
@@ -68,7 +69,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 没有 `session_enabled` / `llm_enabled` / `tts_enabled` 覆盖时，IM 群聊和私聊默认关闭，Dashboard WebChat 默认开启。会话关闭后只透传 `/bot status` 和 `/bot enable`；要开 LLM 需先打开会话。
 
-未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖、或该配置档升级列入集里的群或私聊。未列入发送者由 `admission.unlisted_senders` 控制，同样默认 `allow`。`deny` 只放行已有 `blocked` 或 `llm_enabled` 覆盖的 IM 主体。用 `/user block`、`/user unblock`、`/user llm on|off`，或 Dashboard [自定义规则](../use/custom-rules) 的发送者目标写入这些覆盖。WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除。
+未列入会话由顶层 `admission.unlisted_sessions` 控制，默认 `allow`。`deny` 只放行规范会话键上已有覆盖的群或私聊。未列入发送者由 `admission.unlisted_senders` 控制，同样默认 `allow`。`deny` 只放行已有 `blocked` 或 `llm_enabled` 覆盖的 IM 主体。用 `/user block`、`/user unblock`、`/user llm on|off`，或 Dashboard [自定义规则](../use/custom-rules) 的发送者目标写入这些覆盖。WebChat、OneBot `notice` / `request` 以及当前实例上拥有 `provider.manage` 的发送者会跳过。旧的 `id_whitelist`、`enable_id_white_list` 和 `wl_ignore_admin_*` 已删除，升级时不做转换。
 
 ## `platform_settings`
 
@@ -136,7 +137,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 ### 步数、工具与代理
 
 - `agent_runner.runner_type`：`local` 使用内置 Agent；也可选择 Dify、Coze、DashScope 或 DeerFlow。第三方 Runner 的密钥和应用 ID 写在 `agent_runner.config` 中。
-- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `128`，也适用于当前子代理执行。已保存的 `30` 会在 `config_version` 升到 `4` 时升级一次。
+- `agent_runner.config.misc.max_steps`：本地 Agent 单次运行最大 step，默认 `128`，也适用于当前子代理执行。
 - `agent_runner.config.max_steps`：第三方 Runner 的 step 上限，默认 `128`。
 - `agent_runner.config.misc.tool_call_timeout`：单次工具调用超时秒数，默认 `120`。
 - `agent_runner.config.misc.tool_schema_mode`：`full` 发送完整工具 schema；`skills_like` 使用较轻的两阶段 schema，只藏参数，不改变工具目录。
@@ -316,8 +317,8 @@ uv run python scripts/evaluate_btw_classifier.py \
 - `router_system_prompt` 和 `agents`：路由提示词与子 Agent 定义。推荐通过专用页面维护，详见 [子代理编排](../use/subagent)。
 - `provider_stt_settings`：STT 总开关和默认模型。
 - `provider_tts_settings`：TTS 模型、双输出、文件服务和 `0`–`1` 触发概率。
-- `kb_names`、`kb_fusion_top_k`、`kb_final_top_k`：默认知识库和检索数量。
-- `kb_agentic_mode`：将知识库检索作为工具交给模型自主调用。
+- `knowledge_base.names`、`knowledge_base.fusion_top_k`、`knowledge_base.final_top_k`：默认知识库和检索数量。
+- `knowledge_base.agentic_mode`：将知识库检索作为工具交给模型自主调用。
 
 Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置；不要把 `provider_ltm_settings` 当作长期记忆开关。群聊近期消息注入见 [群聊上下文感知](../use/group-chat-context)。
 
@@ -382,15 +383,15 @@ Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和
 
 ## 系统、日志与输出装饰
 
-- `t2i`、`t2i_word_threshold`：将超过阈值的**输出结果**渲染为图片；`t2i_active_template` 由模板管理页面维护。
-- `t2i_use_file_service`：用文件 token URL 暴露渲染结果，需要正确设置 `callback_api_base`。
+- `t2i.enable`、`t2i.word_threshold`：将超过阈值的**输出结果**渲染为图片；`t2i.active_template` 由模板管理页面维护。
+- `t2i.use_file_service`：用文件 token URL 暴露渲染结果，需要正确设置 `callback_api_base`。
 - `http_proxy` / `no_proxy`：全局出站代理和直连名单。它们不再写入进程级 `HTTP_PROXY`。Docker 部署时请填写容器能访问到的地址，见 [Docker 部署](/deploy/astrbot/docker#在-docker-中配置-http-代理)。
 - Telegram 会将该显式路由同时用于 Bot API 请求和 `getUpdates` 长轮询。没有适用代理时，两个客户端都会直连且不会继承进程代理变量。
 - Provider / Platform 使用三态 `proxy_mode`：`inherit` 跟随全局配置，`direct` 明确直连并忽略环境变量代理，`custom` 只使用本项 `proxy_url`。空字符串不再同时表示继承和直连。
 - GitHub 镜像默认不提供。插件 `download_url` 和镜像前缀必须是公开 HTTPS origin，私网和非 HTTPS 会被拒绝。
 - `platform_settings.segmented_reply` 仍是默认关闭的体验分段。Telegram / Discord / 企业微信的平台硬限制分段由发送层负责，二者不要混用。
-- `log_level`、`log_file_*`：控制台 Loguru sink、根 logger、未单独覆盖的插件 logger，以及轮转文件日志。`log_level` 会同步到终端输出，不只写文件。文件日志走同一脱敏出口：已识别的密钥字段、Bearer、URL 和绝对路径会在写入前替换。Cookie、私聊和自定义 secret 不保证被剥离；分享前仍需人工检查。
-- `trace_enable`：Trace 采集总开关；`trace_log_*` 控制独立 Trace 文件。
+- `log.level`、`log.file_*`：控制台 Loguru sink、根 logger、未单独覆盖的插件 logger，以及轮转文件日志。`log.level` 会同步到终端输出，不只写文件。文件日志走同一脱敏出口：已识别的密钥字段、Bearer、URL 和绝对路径会在写入前替换。Cookie、私聊和自定义 secret 不保证被剥离；分享前仍需人工检查。
+- `trace.enable`：Trace 采集总开关；`trace.log_*` 控制独立 Trace 文件。
 - `temp_dir_max_size`：`data/temp` 上限（MiB），默认 `1024`；后台定期清理旧文件。
 - `timezone`：IANA 时区名称，默认 `Asia/Shanghai`。
 - `callback_api_base`：外部服务访问 AstrBot 回调/文件 URL 的公开基地址，不改变监听地址。

@@ -169,29 +169,39 @@ class StorageCleaner:
         return files
 
     def _log_file_configs(self) -> list[LogFileConfig]:
+        log_config = self._section("log")
+        trace_config = self._section("trace")
         return [
             LogFileConfig(
                 path=self._resolve_log_path(
-                    self._get_optional_str("log_file_path"),
+                    self._get_optional_str(log_config, "file_path"),
                     default_relative_path="logs/astrbot.log",
                 ),
-                enabled=self._get_bool("log_file_enable", False),
+                enabled=self._get_bool(log_config, "file_enable", False),
             ),
             LogFileConfig(
                 path=self._resolve_log_path(
-                    self._get_optional_str("trace_log_path"),
+                    self._get_optional_str(trace_config, "log_path"),
                     default_relative_path="logs/astrbot.trace.log",
                 ),
-                enabled=self._get_bool("trace_log_enable", False),
+                enabled=self._get_bool(trace_config, "log_enable", False),
             ),
         ]
 
-    def _get_optional_str(self, key: str) -> str | None:
+    def _section(self, key: str) -> Mapping[str, object]:
         value = self._config.get(key)
+        return value if isinstance(value, Mapping) else {}
+
+    @staticmethod
+    def _get_optional_str(config: Mapping[str, object], key: str) -> str | None:
+        value = config.get(key)
         return value if isinstance(value, str) else None
 
-    def _get_bool(self, key: str, default: bool = False) -> bool:
-        value = self._config.get(key, default)
+    @staticmethod
+    def _get_bool(
+        config: Mapping[str, object], key: str, default: bool = False
+    ) -> bool:
+        value = config.get(key, default)
         return value if isinstance(value, bool) else default
 
     def _configured_log_paths(self) -> set[Path]:

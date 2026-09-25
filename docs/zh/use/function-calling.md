@@ -54,7 +54,7 @@ outline: deep
 
 ## 知识库的 Agentic 检索
 
-配置文件打开 `kb_agentic_mode` 后，知识库检索变成工具 `astr_kb_search`，由模型决定何时查询。关闭时（默认），检索结果会直接注入当前请求。见 [知识库](./knowledge-base#agentic-检索)。
+配置文件打开 `knowledge_base.agentic_mode` 后，知识库检索变成工具 `astr_kb_search`，由模型决定何时查询。关闭时（默认），检索结果会直接注入当前请求。见 [知识库](./knowledge-base#agentic-检索)。
 
 ## 常见误配
 

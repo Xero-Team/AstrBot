@@ -158,6 +158,28 @@ def test_config_content_request_rejects_id_whitelist():
         )
 
 
+def test_validate_config_core_validates_grouped_sections():
+    data = {
+        "t2i": {"enable": "false", "word_threshold": "150"},
+        "log": {"level": "DEBUG", "file_max_mb": "abc"},
+        "trace": {"log_enable": "yes"},
+        "knowledge_base": {
+            "names": ["kb1"],
+            "final_top_k": "7",
+            "agentic_mode": True,
+        },
+    }
+
+    errors, validated = validate_config(data, CONFIG_METADATA_2, is_core=True)
+
+    assert validated["knowledge_base"]["final_top_k"] == 7
+    assert validated["t2i"]["word_threshold"] == 150
+    assert validated["log"]["level"] == "DEBUG"
+    assert any("t2i.enable" in error for error in errors)
+    assert any("log.file_max_mb" in error for error in errors)
+    assert any("trace.log_enable" in error for error in errors)
+
+
 def test_validate_config_core_keeps_default_keys_and_drops_unknown():
     data = {
         "dashboard": {"enable": True},

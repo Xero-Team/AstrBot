@@ -678,7 +678,7 @@ class LogManager:
         if not config:
             return
 
-        level = override_level or config.get("log_level")
+        level = override_level or (config.get("log") or {}).get("level")
         if level:
             try:
                 logger.setLevel(level)
@@ -720,9 +720,10 @@ class LogManager:
                         logger.level
                     )
 
-        enable_file = bool(config.get("log_file_enable", False))
-        file_path = config.get("log_file_path")
-        max_mb = config.get("log_file_max_mb")
+        log_config = config.get("log") or {}
+        enable_file = bool(log_config.get("file_enable", False))
+        file_path = log_config.get("file_path")
+        max_mb = log_config.get("file_max_mb")
 
         cls._remove_sink(cls._file_sink_id)
         cls._file_sink_id = None
@@ -746,9 +747,10 @@ class LogManager:
         if not config:
             return
 
-        enable = bool(config.get("trace_log_enable"))
-        path = config.get("trace_log_path")
-        max_mb = config.get("trace_log_max_mb")
+        trace_config = config.get("trace") or {}
+        enable = bool(trace_config.get("log_enable"))
+        path = trace_config.get("log_path")
+        max_mb = trace_config.get("log_max_mb")
 
         trace_logger = logging.getLogger("astrbot.trace")
         cls._ensure_logger_enricher_filter(trace_logger)

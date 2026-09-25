@@ -567,7 +567,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
         assert "default" in conf_ids
         for conf_id in conf_ids:
             conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
-            assert conf.get("t2i_active_template") == template_name
+            assert (conf.get("t2i") or {}).get("active_template") == template_name
             assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
     finally:
         await test_client.put(
@@ -639,7 +639,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
         assert "default" in conf_ids
         for conf_id in conf_ids:
             conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
-            assert conf.get("t2i_active_template") == "base"
+            assert (conf.get("t2i") or {}).get("active_template") == "base"
             assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
     finally:
         await test_client.put(

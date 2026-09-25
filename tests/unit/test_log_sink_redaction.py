@@ -392,7 +392,7 @@ def test_trace_span_record_redacts_nested_fields(monkeypatch) -> None:
     trace_logger = logging.getLogger("astrbot.trace")
     previous_level = trace_logger.level
     previous_propagate = trace_logger.propagate
-    monkeypatch.setattr(trace_mod, "_config", {"trace_enable": True})
+    monkeypatch.setattr(trace_mod, "_config", {"trace": {"enable": True}})
     monkeypatch.setattr(trace_mod, "_trace_logger", trace_logger)
     monkeypatch.setattr(trace_mod, "_cached_log_broker", broker)
     LogManager._ensure_logger_sanitize_filter(trace_logger)
@@ -425,7 +425,7 @@ def test_configure_logger_replacement_console_sink_disables_diagnose() -> None:
     previous_level = logger.level
     previous_root_level = logging.getLogger().level
     try:
-        LogManager.configure_logger(logger, {"log_level": "DEBUG"})
+        LogManager.configure_logger(logger, {"log": {"level": "DEBUG"}})
         sink_id = LogManager._console_sink_id
         assert sink_id is not None
         formatter = _loguru._core.handlers[sink_id]._exception_formatter

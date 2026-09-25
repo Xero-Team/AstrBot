@@ -277,21 +277,23 @@
     "knowledgebase": {
       "description": "Knowledge Base",
       "hint": "AstrBot's external brain.",
-      "kb_names": {
-        "description": "Knowledge Base List",
-        "hint": "Supports multiple selections"
-      },
-      "kb_fusion_top_k": {
-        "description": "Fusion Search Results Count",
-        "hint": "Number of results returned after fusing search results from multiple knowledge bases"
-      },
-      "kb_final_top_k": {
-        "description": "Final Results Count",
-        "hint": "Number of results retrieved from the knowledge base. Higher values may provide more relevant information but could also introduce noise. Adjust based on actual needs"
-      },
-      "kb_agentic_mode": {
-        "description": "Agentic Knowledge Base Retrieval",
-        "hint": "When enabled, knowledge base retrieval becomes an LLM Tool, allowing the model to autonomously decide when to query the knowledge base. Requires the model to support function calling."
+      "knowledge_base": {
+        "names": {
+          "description": "Knowledge Base List",
+          "hint": "Supports multiple selections"
+        },
+        "fusion_top_k": {
+          "description": "Fusion Search Results Count",
+          "hint": "Number of results returned after fusing search results from multiple knowledge bases"
+        },
+        "final_top_k": {
+          "description": "Final Results Count",
+          "hint": "Number of results retrieved from the knowledge base. Higher values may provide more relevant information but could also introduce noise. Adjust based on actual needs"
+        },
+        "agentic_mode": {
+          "description": "Agentic Knowledge Base Retrieval",
+          "hint": "When enabled, knowledge base retrieval becomes an LLM Tool, allowing the model to autonomously decide when to query the knowledge base. Requires the model to support function calling."
+        }
       }
     },
     "websearch": {
@@ -1306,10 +1308,12 @@
     "t2i": {
       "description": "Text-to-Image",
       "t2i": {
-        "description": "Text-to-Image Output"
-      },
-      "t2i_word_threshold": {
-        "description": "Text-to-Image Word Count Threshold"
+        "enable": {
+          "description": "Text-to-Image Output"
+        },
+        "word_threshold": {
+          "description": "Text-to-Image Word Count Threshold"
+        }
       }
     },
     "others": {
@@ -1478,49 +1482,9 @@
         "description": "Text-to-Image Custom Template",
         "hint": "When enabled, you can customize HTML templates for text-to-image rendering."
       },
-      "t2i_use_file_service": {
-        "description": "Expose Local Text-to-Image Results Through the File Service",
-        "hint": "When enabled, text-to-image results are registered as AstrBot file token URLs. Configure the externally accessible callback API address correctly."
-      },
-      "t2i_active_template": {
-        "description": "Currently Active Text-to-Image Rendering Template",
-        "hint": "This value is maintained by the text-to-image template management page."
-      },
-      "t2i_forward_card": {
-        "description": "Render merged forwards as an image card",
-        "hint": "When a session bridge delivers an expanded merged forward to a target that does not support native forwards, the forward is rendered as one image card. Rendering failures fall back to the labeled text transcript."
-      },
-      "log_level": {
-        "description": "Console Log Level",
-        "hint": "Log level for console output."
-      },
-      "log_file_enable": {
-        "description": "Enable File Logging",
-        "hint": "Write logs to a file in addition to the console."
-      },
-      "log_file_path": {
-        "description": "Log File Path",
-        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.log; absolute paths are supported."
-      },
-      "log_file_max_mb": {
-        "description": "Log File Max Size (MB)",
-        "hint": "Rotate when exceeding this size; default 20MB."
-      },
       "temp_dir_max_size": {
         "description": "Temp Directory Size Limit (MB)",
         "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
-      },
-      "trace_log_enable": {
-        "description": "Enable Trace File Logging",
-        "hint": "Write trace events to a separate file (does not change console output)."
-      },
-      "trace_log_path": {
-        "description": "Trace Log File Path",
-        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
-      },
-      "trace_log_max_mb": {
-        "description": "Trace Log Max Size (MB)",
-        "hint": "Rotate when exceeding this size; default 20MB."
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
@@ -1632,6 +1596,52 @@
       },
       "no_proxy": {
         "description": "Direct Connection Address List"
+      },
+      "t2i": {
+        "use_file_service": {
+          "description": "Expose Local Text-to-Image Results Through the File Service",
+          "hint": "When enabled, text-to-image results are registered as AstrBot file token URLs. Configure the externally accessible callback API address correctly."
+        },
+        "active_template": {
+          "description": "Currently Active Text-to-Image Rendering Template",
+          "hint": "This value is maintained by the text-to-image template management page."
+        },
+        "forward_card": {
+          "description": "Render merged forwards as an image card",
+          "hint": "When a session bridge delivers an expanded merged forward to a target that does not support native forwards, the forward is rendered as one image card. Rendering failures fall back to the labeled text transcript."
+        }
+      },
+      "log": {
+        "level": {
+          "description": "Console Log Level",
+          "hint": "Log level for console output."
+        },
+        "file_enable": {
+          "description": "Enable File Logging",
+          "hint": "Write logs to a file in addition to the console."
+        },
+        "file_path": {
+          "description": "Log File Path",
+          "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.log; absolute paths are supported."
+        },
+        "file_max_mb": {
+          "description": "Log File Max Size (MB)",
+          "hint": "Rotate when exceeding this size; default 20MB."
+        }
+      },
+      "trace": {
+        "log_enable": {
+          "description": "Enable Trace File Logging",
+          "hint": "Write trace events to a separate file (does not change console output)."
+        },
+        "log_path": {
+          "description": "Trace Log File Path",
+          "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+        },
+        "log_max_mb": {
+          "description": "Trace Log Max Size (MB)",
+          "hint": "Rotate when exceeding this size; default 20MB."
+        }
       }
     }
   },

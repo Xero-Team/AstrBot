@@ -56,7 +56,7 @@ These live on the profile, not Settings:
 - [When the bot replies in groups](./group-wake): `llm_access`, command prefixes, isolated sessions
 - [Platform handling](./platform-settings): unlisted sessions and senders, rate limit, content safety, inbound coalesce
 - [Speech STT / TTS](./speech)
-- [Knowledge base](./knowledge-base) `kb_names`
+- [Knowledge base](./knowledge-base) `knowledge_base.names`
 - [Plugins](./plugin) `plugin_set`
 - [Prompts](./prompt), [Agent runner](./agent-runner)
 

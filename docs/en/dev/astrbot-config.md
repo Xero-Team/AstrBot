@@ -330,8 +330,8 @@ Loop assignments narrow the enabled Skills before the request's Skill snapshot i
 - `router_system_prompt` and `agents` define routing and SubAgents. Maintain them through the dedicated page; see [SubAgent Orchestration](../use/subagent).
 - `provider_stt_settings` controls STT and its default model.
 - `provider_tts_settings` controls the TTS model, dual output, file service, and a `0`–`1` trigger probability.
-- `kb_names`, `kb_fusion_top_k`, and `kb_final_top_k` select default knowledge bases and retrieval counts.
-- `kb_agentic_mode` exposes knowledge-base retrieval as a model-controlled tool.
+- `knowledge_base.names`, `knowledge_base.fusion_top_k`, and `knowledge_base.final_top_k` select default knowledge bases and retrieval counts.
+- `knowledge_base.agentic_mode` exposes knowledge-base retrieval as a model-controlled tool.
 
 Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disable configuration. Do not treat `provider_ltm_settings` as its switch. For recent group-message injection, see [Group Chat Context Awareness](../use/group-chat-context).
 
@@ -396,15 +396,15 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 
 ## System, logging, and response decoration
 
-- `t2i` and `t2i_word_threshold` render long **output results** as images. `t2i_active_template` is maintained by the template manager.
-- `t2i_use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
+- `t2i.enable` and `t2i.word_threshold` render long **output results** as images. `t2i.active_template` is maintained by the template manager.
+- `t2i.use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
 - `http_proxy` / `no_proxy` are the global outbound proxy and bypass list. They are no longer exported as process `HTTP_PROXY`. When AstrBot runs in Docker, use an address reachable from the container; see [Deploy with Docker](/en/deploy/astrbot/docker#configure-an-http-proxy-in-docker).
 - Telegram applies this explicit route to both Bot API requests and `getUpdates` long polling. When no proxy applies, both clients connect directly without inheriting process proxy variables.
 - Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
 - No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
 - `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.
-- `log_level` and `log_file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log_level` applies to terminal output, not only the file sink. File logs use the same redacting sink: recognized secret fields, Bearer tokens, URLs, and absolute paths are replaced before write. Cookies, private chat, and custom secrets are not guaranteed; review logs before sharing.
-- `trace_enable` is the Trace collection switch; `trace_log_*` controls its separate rotating file.
+- `log.level` and `log.file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log.level` applies to terminal output, not only the file sink. File logs use the same redacting sink: recognized secret fields, Bearer tokens, URLs, and absolute paths are replaced before write. Cookies, private chat, and custom secrets are not guaranteed; review logs before sharing.
+- `trace.enable` is the Trace collection switch; `trace.log_*` controls its separate rotating file.
 - `temp_dir_max_size` limits `data/temp` in MiB and defaults to `1024`; a background task removes older files when the limit is exceeded.
 - `timezone` is an IANA timezone and defaults to `Asia/Shanghai`.
 - `callback_api_base` is the externally reachable base used to build callback and file URLs. It does not change the listening address.

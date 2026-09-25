@@ -54,7 +54,7 @@ Results are written back in call order even when execution finishes out of order
 
 ## Agentic knowledge-base retrieval
 
-When the profile sets `kb_agentic_mode`, retrieval becomes the `astr_kb_search` tool and the model decides when to query. When it is off (default), results are injected into the current request. See [Knowledge base](./knowledge-base#agentic-retrieval).
+When the profile sets `knowledge_base.agentic_mode`, retrieval becomes the `astr_kb_search` tool and the model decides when to query. When it is off (default), results are injected into the current request. See [Knowledge base](./knowledge-base#agentic-retrieval).
 
 ## Common misconfigurations
 

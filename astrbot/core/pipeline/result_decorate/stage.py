@@ -36,15 +36,16 @@ class ResultDecorateStage(Stage):
         self.reply_with_quote = ctx.astrbot_config["platform_settings"][
             "reply_with_quote"
         ]
-        self.t2i_word_threshold = ctx.astrbot_config["t2i_word_threshold"]
+        t2i_config = ctx.astrbot_config["t2i"]
+        self.t2i_word_threshold = t2i_config["word_threshold"]
         try:
             self.t2i_word_threshold = int(self.t2i_word_threshold)
             self.t2i_word_threshold = max(self.t2i_word_threshold, 50)
         except Exception:
             self.t2i_word_threshold = 150
-        self.t2i_active_template = ctx.astrbot_config["t2i_active_template"]
+        self.t2i_active_template = t2i_config["active_template"]
         self.t2i_use_file_service = bool(
-            ctx.astrbot_config.get("t2i_use_file_service", False),
+            t2i_config.get("use_file_service", False),
         )
 
         self.forward_threshold = ctx.astrbot_config["platform_settings"][
@@ -352,7 +353,7 @@ class ResultDecorateStage(Stage):
 
     async def _apply_t2i(self, event, result) -> None:
         if not (
-            (result.use_t2i_ is None and self.ctx.astrbot_config["t2i"])
+            (result.use_t2i_ is None and self.ctx.astrbot_config["t2i"]["enable"])
             or result.use_t2i_
         ):
             return

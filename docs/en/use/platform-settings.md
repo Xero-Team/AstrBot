@@ -52,7 +52,7 @@ Streaming replies, and groups with sender concurrency, do not use this splitter.
 
 ## Text to image
 
-`t2i` is off by default. Past `t2i_word_threshold` (default 150 characters), long text can be rendered as an image. Templates and CJK fonts live under **Settings**; the font must actually be installed in the container. See [FAQ](/en/faq#cjk-text-is-garbled-in-t2i-output).
+`t2i.enable` is off by default. Past `t2i.word_threshold` (default 150 characters), long text can be rendered as an image. Templates and CJK fonts live under **Settings**; the font must actually be installed in the container. See [FAQ](/en/faq#cjk-text-is-garbled-in-t2i-output).
 
 ## Other common fields
 

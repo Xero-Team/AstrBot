@@ -1363,7 +1363,7 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
                     "dual_output": False,
                 },
                 "callback_api_base": "",
-                "t2i": False,
+                "t2i": {"enable": False},
             },
         ),
     )

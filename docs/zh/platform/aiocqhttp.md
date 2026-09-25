@@ -45,7 +45,7 @@ AstrBot 的 `OneBot v11`（`aiocqhttp`）平台使用**反向 WebSocket**：Astr
 
 - `platform_settings.onebot_forward.expand_on_ingress`：默认开启。收到只带 `forward` id、没有展开内容的合并转发时，适配器先调用 `get_forward_msg` 回填节点内容；拉取失败或超时会保留原样，不阻塞消息。
 - `platform_settings.onebot_forward.max_fetch`：单条消息入口展开时递归调用 `get_forward_msg` 的最大次数，默认 8。
-- `t2i_forward_card`：全局系统配置，默认开启。会话桥接把已展开的合并转发投递到**不支持**原生 `forward` 的目标时，会渲染成一张图片卡片；渲染失败时回退为带作者标签的文字转录。目标支持 `forward` 时仍重建合并转发卡片。
+- `t2i.forward_card`：全局系统配置，默认开启。会话桥接把已展开的合并转发投递到**不支持**原生 `forward` 的目标时，会渲染成一张图片卡片；渲染失败时回退为带作者标签的文字转录。目标支持 `forward` 时仍重建合并转发卡片。
 
 ## 2. 配置 OneBot 实现
 

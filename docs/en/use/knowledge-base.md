@@ -45,14 +45,14 @@ Chat does not search every knowledge base you created. You must name them on the
 
 **Config → Knowledge Base**:
 
-| Field             | Default | Notes                                                       |
-| ----------------- | ------- | ----------------------------------------------------------- |
-| `kb_names`        | Empty   | Default knowledge-base names for this profile. Multi-select |
-| `kb_fusion_top_k` | `20`    | Rows kept after multi-base fusion                           |
-| `kb_final_top_k`  | `5`     | Rows injected or returned                                   |
-| `kb_agentic_mode` | Off     | Next section                                                |
+| Field                         | Default | Notes                                                       |
+| ----------------------------- | ------- | ----------------------------------------------------------- |
+| `knowledge_base.names`        | Empty   | Default knowledge-base names for this profile. Multi-select |
+| `knowledge_base.fusion_top_k` | `20`    | Rows kept after multi-base fusion                           |
+| `knowledge_base.final_top_k`  | `5`     | Rows injected or returned                                   |
+| `knowledge_base.agentic_mode` | Off     | Next section                                                |
 
-Empty `kb_names` means this profile does not retrieve. Different profiles can bind different lists. See [Configuration profiles](./config-profiles).
+Empty `knowledge_base.names` means this profile does not retrieve. Different profiles can bind different lists. See [Configuration profiles](./config-profiles).
 
 ### Custom rules
 
@@ -62,7 +62,7 @@ The **Retrieval** tab on the knowledge-base page can test recall without sending
 
 ## Agentic retrieval
 
-Default (`kb_agentic_mode = false`): every LLM request retrieves against the user text and injects hits as temporary context.
+Default (`knowledge_base.agentic_mode = false`): every LLM request retrieves against the user text and injects hits as temporary context.
 
 When Agentic is on: retrieval becomes the `astr_kb_search` tool and the model decides when to call it. The model must support function calling, and the tool panel must not disable that tool. See [Function calling](./function-calling).
 
@@ -70,7 +70,7 @@ Use Agentic when some turns need documents and some are small talk. Use default 
 
 ## Common misconfigurations
 
-1. The knowledge base exists, but profile `kb_names` is still empty.
+1. The knowledge base exists, but profile `knowledge_base.names` is still empty.
 2. You changed the embedding model or dimension and kept the old index. Reindex refuses that case; it does not silently corrupt the index.
 3. A custom rule `kb_ids` points at a deleted base, so retrieval looks dead.
 4. Agentic is on, but the model cannot call tools or the Prompt forbids the tool.

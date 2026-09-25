@@ -311,7 +311,9 @@ def local_agent_runtime_from_profile(
         "sanitize_context_by_modalities": bool(
             misc_config.get("sanitize_context_by_modalities", False)
         ),
-        "kb_agentic_mode": bool(profile.get("kb_agentic_mode", False)),
+        "kb_agentic_mode": bool(
+            (profile.get("knowledge_base") or {}).get("agentic_mode", False)
+        ),
         "context_limit_reached_strategy": compression_config.get(
             "overflow_strategy", "llm_compress"
         ),

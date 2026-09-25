@@ -54,7 +54,7 @@ See [Plugins](./plugin).
 
 ### Knowledge-base rules (`kb_config`)
 
-- `kb_ids` overrides the profile `kb_names`. An empty list means this session uses no knowledge base.
+- `kb_ids` overrides the profile `knowledge_base.names`. An empty list means this session uses no knowledge base.
 - `top_k` and rerank apply only to this session.
 
 See [Knowledge base](./knowledge-base#attach-to-a-session).

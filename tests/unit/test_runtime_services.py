@@ -223,9 +223,8 @@ class StopAfterLoggerSetup:
 
 
 runtime_services.AstrBotConfig = lambda: {
-    "log_level": "INFO",
-    "log_file_enable": False,
-    "trace_log_enable": False,
+    "log": {"level": "INFO", "file_enable": False},
+    "trace": {"log_enable": False},
 }
 runtime_services.SQLiteDatabase = lambda _path: object()
 runtime_services.WebChatQueueManager = lambda: object()

@@ -49,7 +49,7 @@ WebUI 创建的其他配置档位于 `data/config/abconf_<uuid>.json`。消息�
 
 `provider_sources`、`provider` 和 `platform` 中的对象结构由各类型注册的当前模板决定。不要从旧文档复制对象；在 WebUI 创建后再检查保存结果。模型通过 `provider_source_id` 引用来源，重命名或删除来源时应让 WebUI 同步引用。
 
-未知键（包括旧的 `config_version`）会在加载时删除。配置不做任何就地迁移：按当前 `DEFAULT_CONFIG` 和配置档 schema 构建；破坏性变更时删除 `data/cmd_config.json`（以及 `data/config/abconf_*.json`）后重新配置。
+未知键（包括旧的 `config_version`）会在加载时删除。配置按当前 `DEFAULT_CONFIG` 和配置档 schema 构建；Agent Runner 仍按当前 `runner_type` 规范化字段。除该规范化外，配置不做就地迁移；破坏性变更时删除 `data/cmd_config.json`（以及 `data/config/abconf_*.json`）后重新配置。
 
 ## 入站路由
 

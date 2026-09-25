@@ -1402,6 +1402,40 @@ async def test_dashboard_static_routes_disable_cache(app: FastAPI, tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_dashboard_static_routes_gzip_compressible_assets(
+    app: FastAPI, tmp_path: Path
+):
+    payload = "<html>" + ("dashboard " * 500) + "</html>"
+    (tmp_path / "index.html").write_text(payload, encoding="utf-8")
+    app.state.dashboard_static_folder = str(tmp_path)
+    response = await DashboardTestClient(app).get(
+        "/", headers={"Accept-Encoding": "gzip"}
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Content-Encoding"] == "gzip"
+    assert response.headers["Vary"] == "Accept-Encoding"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert await response.get_data() == payload.encode()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_static_routes_stay_uncompressed_for_ranges(
+    app: FastAPI, tmp_path: Path
+):
+    payload = "<html>" + ("dashboard " * 500) + "</html>"
+    (tmp_path / "index.html").write_text(payload, encoding="utf-8")
+    app.state.dashboard_static_folder = str(tmp_path)
+    response = await DashboardTestClient(app).get(
+        "/", headers={"Accept-Encoding": "gzip", "Range": "bytes=0-9"}
+    )
+
+    assert response.status_code == 206
+    assert "Content-Encoding" not in response.headers
+    assert response.headers["Content-Range"] == f"bytes 0-9/{len(payload)}"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "path",
     [

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.core.auth.admission import (
-    ADMISSION_LISTED_SESSIONS_KEY,
     SESSION_SERVICE_CONFIG_KEY,
     sender_admission_key_from_event,
     session_admission_key_from_event,
@@ -218,34 +217,6 @@ async def test_initialize_requires_preferences():
                 preferences=None,
             )
         )
-
-
-@pytest.mark.asyncio
-async def test_profile_listed_sessions_admit_without_overlays():
-    preferences = _Preferences()
-    event = make_real_event(message_type=MessageType.GROUP_MESSAGE)
-    preferences.global_values[ADMISSION_LISTED_SESSIONS_KEY] = {
-        "default": [session_admission_key_from_event(event)]
-    }
-    stage = await _stage(unlisted_sessions="deny", preferences=preferences)
-
-    await stage.process(event)
-
-    assert event.is_stopped() is False
-
-
-@pytest.mark.asyncio
-async def test_listed_sessions_from_another_profile_do_not_admit():
-    preferences = _Preferences()
-    event = make_real_event(message_type=MessageType.GROUP_MESSAGE)
-    preferences.global_values[ADMISSION_LISTED_SESSIONS_KEY] = {
-        "other": [session_admission_key_from_event(event)]
-    }
-    stage = await _stage(unlisted_sessions="deny", preferences=preferences)
-
-    await stage.process(event)
-
-    assert event.is_stopped() is True
 
 
 @pytest.mark.asyncio

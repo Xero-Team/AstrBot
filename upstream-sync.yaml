@@ -5,21 +5,18 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 95e98b8aed75d56713666eff39e31bafffd95426
-  synced_at_utc: 2026-09-21T17:13:20Z
+  commit: 67c74b7ed8d5b8df170f849faaa431fc329c4ddc
+  synced_at_utc: 2026-09-24T23:01:35Z
   sync_method: adapt
-  source_pr: '10162, 10163, 10156'
+  source_pr: '10211, 10187'
   note: >-
-    Reviewed 6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334..95e98b8aed75d56713666eff39e31bafffd95426
-    (4 commits): adapted #10162 (Docker outbound HTTP proxy docs, bilingual,
-    re-authored for the fork's source-build doc layout), #10163 (apply session
-    plugin_set filters to cron agent events via CronMessageEvent.plugins_name in
-    CronJobManager._woke_main_agent), and #10156 (resolve the authenticated WebUI
-    version from the served asset directory through a shared
-    _resolve_dashboard_version helper). Skipped #10118: the fork already exposes
-    distinct conversation reset/create commands under session.manage and
-    intentionally does not create a local conversation for third-party runners,
-    matching the recorded #10004 skip. The upstream UpdateService portion of
-    #10156 does not apply because the fork removed the dashboard self-update
-    path. No upstream version change in this interval, so no version or changelog
-    update. Focused pytest, Ruff, and Prettier checks passed. The fork also applies the same plugin_set filter to the fork-only background-wake path in astr_agent_tool_exec.py and the BTW work event in btw/submission.py so every synthetic agent event honors the session policy.
+    Reviewed 95e98b8aed75d56713666eff39e31bafffd95426..67c74b7ed8d5b8df170f849faaa431fc329c4ddc
+    (2 commits): adapted #10211 (pin legacy naive SQLite datetime storage with
+    sa_type=DateTime, remapped from upstream astrbot/core/db/po.py
+    onto the fork's astrbot.core.db.po package plus the relocated
+    astrbot.core.db.vec_db.document_storage and astrbot.core.knowledge_base.models)
+    and #10187 (gzip dashboard JS/CSS/HTML static responses, wired into the fork's
+    static_files router with a fork-only 4 MiB in-memory cap that keeps oversized
+    assets on the streaming FileResponse path, plus router-level regression tests).
+    No upstream version change in this interval, so no version or changelog
+    update. Focused pytest and Ruff checks passed.

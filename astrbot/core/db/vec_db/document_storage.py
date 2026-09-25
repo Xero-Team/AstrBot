@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from weakref import WeakSet
 
-from sqlalchemy import Column, Computed, Text, bindparam
+from sqlalchemy import Column, Computed, DateTime, Text, bindparam
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
@@ -62,8 +62,9 @@ class Document(BaseDocModel, table=True):
             index=True,
         ),
     )
-    created_at: datetime | None = Field(default=None)
-    updated_at: datetime | None = Field(default=None)
+    # Retain the legacy local timestamps without reinterpreting them as UTC.
+    created_at: datetime | None = Field(default=None, sa_type=DateTime)
+    updated_at: datetime | None = Field(default=None, sa_type=DateTime)
 
 
 class DocumentStorage:

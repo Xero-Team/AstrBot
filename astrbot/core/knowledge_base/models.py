@@ -1,6 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import DateTime
 from sqlmodel import Field, MetaData, SQLModel, Text, UniqueConstraint
 
 
@@ -40,9 +41,14 @@ class KnowledgeBase(BaseKBModel, table=True):
     top_k_dense: int | None = Field(default=50, nullable=True)
     top_k_sparse: int | None = Field(default=50, nullable=True)
     top_m_final: int | None = Field(default=5, nullable=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Keep existing database timestamps unchanged across SQLModel upgrades.
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
         sa_column_kwargs={"onupdate": datetime.now(UTC)},
     )
     doc_count: int = Field(default=0, nullable=False)
@@ -87,9 +93,13 @@ class KBDocument(BaseKBModel, table=True):
     content_hash: str = Field(max_length=64, nullable=False, default="")
     source_kind: str = Field(max_length=20, nullable=False, default="file")
     source_url: str | None = Field(default=None, max_length=2048)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
         sa_column_kwargs={"onupdate": datetime.now(UTC)},
     )
 
@@ -129,4 +139,7 @@ class KBMedia(BaseKBModel, table=True):
     file_path: str = Field(max_length=512, nullable=False)
     file_size: int = Field(nullable=False)
     mime_type: str = Field(max_length=100, nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )

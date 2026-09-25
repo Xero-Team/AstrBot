@@ -58,6 +58,50 @@ async def test_document_storage_fts_rebuilds_existing_documents(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_document_storage_generated_identity_columns(tmp_path):
+    db_path = tmp_path / "doc.db"
+    storage = DocumentStorage(str(db_path))
+    await storage.initialize()
+
+    await storage.insert_document(
+        doc_id="chunk-1",
+        text="identity columns",
+        metadata={"kb_doc_id": "doc-1", "user_id": "user-1"},
+    )
+
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute("PRAGMA table_xinfo(documents)").fetchall()
+        generated = {
+            row[1]
+            for row in rows
+            if len(row) > 6 and row[6] == 3  # hidden=3 means a stored generated column
+        }
+        assert {"kb_doc_id", "user_id"}.issubset(generated)
+        index_names = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='documents'",
+            ).fetchall()
+        }
+        assert {
+            "ix_documents_kb_doc_id",
+            "ix_documents_user_id",
+        }.issubset(index_names)
+        projected = conn.execute(
+            "SELECT kb_doc_id, user_id FROM documents WHERE doc_id = 'chunk-1'",
+        ).fetchone()
+        assert projected == ("doc-1", "user-1")
+    finally:
+        conn.close()
+
+    user_ids = await storage.get_user_ids()
+    assert user_ids == ["user-1"]
+
+    await storage.close()
+
+
+@pytest.mark.asyncio
 async def test_document_storage_fts_delete_skips_missing_fts_row(tmp_path):
     storage = DocumentStorage(str(tmp_path / "doc.db"))
     await storage.initialize()

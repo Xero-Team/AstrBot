@@ -30,7 +30,6 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 | Key                                               | Purpose                                                                                                                                                                                                                                                         |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config_version`                                  | Current core configuration version, default `4`. Do not downgrade it manually.                                                                                                                                                                                  |
 | `platform_settings`                               | Cross-platform receive, send, rate-limit, and segmented-reply behavior.                                                                                                                                                                                         |
 | `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                                                                                                                                           |
 | `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                                                                                                                                          |
@@ -50,6 +49,8 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 Object layouts inside `provider_sources`, `provider`, and `platform` come from the currently registered type templates. Do not copy old objects from documentation. Create them in the WebUI and inspect the saved result if necessary. A model references its source through `provider_source_id`; use the WebUI when renaming or deleting a source so references are updated together.
 
+Unknown keys, including any legacy `config_version`, are removed at load time. The configuration applies no in-place migration: a config is built from the current `DEFAULT_CONFIG` and profile schema, and a breaking change means deleting `data/cmd_config.json` (and any `data/config/abconf_*.json`) and reconfiguring.
+
 ## Inbound routing
 
 User-facing steps are in [When the bot replies in groups](../use/group-wake). `command_prefixes` and `llm_access` are read from the configuration profile selected for the event. `command_prefixes` only frames command headers; it is never combined with an LLM prefix. Each `llm_access.prefixes` entry is the complete string users type, uses token-boundary matching, and follows longest-match semantics. Non-empty LLM prefixes reserve their first command-root token in the same profile, so a prefix that conflicts with an enabled command is rejected by the Dashboard.
@@ -68,7 +69,7 @@ Routing checks commands before LLM access. A matched command wins; a bare comman
 
 Unwritten `session_enabled` / `llm_enabled` / `tts_enabled` overlays default off for IM groups and DMs, and on for Dashboard WebChat. A disabled session only passes `/bot status` and `/bot enable`; enable the session before `/llm enable`.
 
-Unlisted sessions are controlled by top-level `admission.unlisted_sessions`, default `allow`. `deny` admits groups or DMs that already have an overlay on the canonical session key, or that this profile listed during upgrade. Unlisted senders are controlled by `admission.unlisted_senders`, also default `allow`. `deny` admits only IM subjects that already have a `blocked` or `llm_enabled` overlay. Write those overlays with `/user block`, `/user unblock`, `/user llm on|off`, or the Sender target on Dashboard [custom rules](../use/custom-rules). WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this gate. `id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone.
+Unlisted sessions are controlled by top-level `admission.unlisted_sessions`, default `allow`. `deny` admits groups or DMs that already have an overlay on the canonical session key. Unlisted senders are controlled by `admission.unlisted_senders`, also default `allow`. `deny` admits only IM subjects that already have a `blocked` or `llm_enabled` overlay. Write those overlays with `/user block`, `/user unblock`, `/user llm on|off`, or the Sender target on Dashboard [custom rules](../use/custom-rules). WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this gate. `id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone and are not converted on upgrade.
 
 ## `platform_settings`
 
@@ -134,7 +135,7 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 ### Steps, tools, and proxy
 
 - `agent_runner.runner_type` selects the built-in `local` Agent or Dify, Coze, DashScope, or DeerFlow. Third-party keys and app IDs live in `agent_runner.config`.
-- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `128`, and also applies to current SubAgent executions. Stored `30` values upgrade once when `config_version` advances to `4`.
+- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `128`, and also applies to current SubAgent executions.
 - `agent_runner.config.max_steps` is the third-party runner step cap, default `128`.
 - `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
 - `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode. `skills_like` hides parameters; it does not shrink the tool catalog.

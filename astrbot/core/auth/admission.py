@@ -15,7 +15,6 @@ from astrbot.core.auth.models import Subject, normalize_subject_component
 from astrbot.core.platform.message_type import MessageType
 
 SESSION_SERVICE_CONFIG_KEY = "session_service_config"
-ADMISSION_LISTED_SESSIONS_KEY = "admission_listed_sessions"
 _SESSION_LISTED_FIELDS = ("session_enabled", "session_blocked", "llm_enabled")
 _UNIQUE_SESSION_GROUP_SEPARATORS = ("%", "_")
 _WEBCHAT_PLATFORM = "webchat"

@@ -1,6 +1,5 @@
 # astrbot/core/utils/t2i/template_manager.py
 
-import hashlib
 import logging
 import re
 from pathlib import Path
@@ -10,16 +9,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_p
 logger = logging.getLogger("astrbot")
 
 _ALLOWED_VARS = frozenset({"rendered_html", "shiki_runtime", "text", "version"})
-
-# Unmodified copies of previous built-in templates. Matching hashes are safe
-# to drop so the current Playwright-rendered built-in template is used.
-_LEGACY_UNMODIFIED_CORE_TEMPLATE_HASHES = {
-    "base.html": frozenset(
-        {
-            "260af3eda8558d36ee307aa84698cf3708fdf1cc9e2a55f193b15615b98555b3",
-        }
-    )
-}
 
 _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
     (
@@ -79,7 +68,6 @@ class TemplateManager:
         self.user_template_dir = Path(get_astrbot_data_path()) / "t2i_templates"
 
         self.user_template_dir.mkdir(parents=True, exist_ok=True)
-        self._migrate_core_template_overrides()
 
     def _get_user_template_path(self, name: str) -> Path:
         """获取用户模板的完整路径，防止路径遍历漏洞。"""
@@ -91,38 +79,6 @@ class TemplateManager:
     def _read_file(path: Path) -> str:
         """读取文件内容。"""
         return path.read_text(encoding="utf-8")
-
-    def _migrate_core_template_overrides(self) -> None:
-        """Remove unmodified core copies and back up incompatible legacy overrides."""
-        for filename in self.CORE_TEMPLATES:
-            builtin_path = self.builtin_template_dir / filename
-            user_path = self.user_template_dir / filename
-            if not builtin_path.exists() or not user_path.exists():
-                continue
-
-            try:
-                user_content = self._read_file(user_path)
-                normalized = user_content.replace("\r\n", "\n")
-                content_hash = hashlib.sha256(normalized.encode()).hexdigest()
-                if user_content == self._read_file(
-                    builtin_path
-                ) or content_hash in _LEGACY_UNMODIFIED_CORE_TEMPLATE_HASHES.get(
-                    filename, ()
-                ):
-                    user_path.unlink()
-                elif (
-                    "marked.min.js" in user_content
-                    and "markdown-source" in user_content
-                ):
-                    backup_path = user_path.with_suffix(".html.legacy")
-                    backup_path.unlink(missing_ok=True)
-                    user_path.replace(backup_path)
-                    logger.warning(
-                        "Moved legacy T2I template override to %s; the current built-in template will be used.",
-                        backup_path,
-                    )
-            except OSError as exc:
-                logger.warning("Failed to migrate T2I template %s: %s", user_path, exc)
 
     def list_templates(self) -> list[dict]:
         """列出所有可用模板。

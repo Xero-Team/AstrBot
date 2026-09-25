@@ -61,7 +61,7 @@ outline: deep
 
 ## 主 SQLite 库
 
-主库文件是 runtime root 下的 `data/data_v4.db`。SQLModel 表是 schema 的唯一真源：表、列、普通唯一约束和普通索引都写在模型上。访问口是 `astrbot/core/db/protocols.py` 中的域存储协议；`SQLiteDatabase` 用 mixin 组合这些协议，调用方仍导入该类。本 fork 不引入 Alembic、sqlc 或主库 `.sql` schema。
+主库文件是 runtime root 下的 `data/data_v4.db`。SQLModel 表是 schema 的唯一真源：表、列、普通唯一约束和普通索引都写在模型上。访问口是 `astrbot/core/db/protocols.py` 中的域存储协议；`SQLiteDatabase` 用 mixin 组合这些协议，调用方仍导入该类。本 fork 不引入 Alembic、sqlc 或主库 `.sql` schema。任何 SQLite 存储或配置文件都不做就地迁移：各自按当前 SQLModel 表或默认值创建，破坏性变更通过删除该存储或配置后重建处理。
 
 `create_runtime_services()` 构造 `SQLiteDatabase(DB_PATH)`。若工厂在构造数据库之后、交出 `RuntimeServices` 之前失败，会先 `await db.close()` 释放异步引擎，再抛出原异常。生命周期会显式调用 `db.initialize()`；`get_db()` 保留懒初始化兜底。显式初始化、第一次 `get_db()` 和并发初始化共用同一把锁，schema 工作只执行一次。
 
@@ -92,7 +92,7 @@ astrbot/core/db/
 2. `SQLModel.metadata.create_all`
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-启动时不检查 `PRAGMA table_info`，也不对已有文件执行 `ALTER TABLE`。`create_all` 只创建缺失表；旧 `data_v4.db` 上的残留列会留在原地。升级到 4.27.5 需要删除 `data/data_v4.db*` 后从空文件启动。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
+启动时不检查 `PRAGMA table_info`，也不对已有文件执行 `ALTER TABLE`。`create_all` 只创建缺失表；旧 `data_v4.db` 上的残留列会留在原地。遇到破坏性 schema 变更时，删除对应存储（`data/data_v4.db*`、`data/knowledge_base/` 或 `data/cmd_config.json`）后从空文件启动并重新配置。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
 
 Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
 

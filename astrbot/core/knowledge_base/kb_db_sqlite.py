@@ -1,6 +1,5 @@
 import hashlib
 import unicodedata
-from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
@@ -28,12 +27,6 @@ if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss import FaissVecDB
 
 _FILE_IDENTITY_POSIX_MAX = 700
-_IDENTITY_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("identity_key", "VARCHAR(768) NOT NULL DEFAULT ''"),
-    ("content_hash", "VARCHAR(64) NOT NULL DEFAULT ''"),
-    ("source_kind", "VARCHAR(20) NOT NULL DEFAULT ''"),
-    ("source_url", "VARCHAR(2048)"),
-)
 
 
 def posix_identity_input(raw: str) -> str:
@@ -138,107 +131,7 @@ class KBSQLiteDatabase:
             await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
 
-        await self._migrate_document_identity()
         self.inited = True
-
-    async def _migrate_document_identity(self) -> None:
-        """Add identity columns, backfill keys, then create the unique index."""
-        async with self.engine.begin() as conn:
-            pragma = await conn.execute(text("PRAGMA table_info(kb_documents)"))
-            existing = {row[1] for row in pragma.fetchall()}
-            for column_name, column_sql in _IDENTITY_COLUMNS:
-                if column_name in existing:
-                    continue
-                await conn.execute(
-                    text(
-                        f"ALTER TABLE kb_documents ADD COLUMN {column_name} {column_sql}"
-                    ),
-                )
-
-        await self._backfill_document_identity()
-        await self._create_document_identity_index()
-
-    async def _backfill_document_identity(self) -> None:
-        """Assign identity keys to rows that still have an empty key."""
-        async with self.get_db() as session, session.begin():
-            result = await session.execute(
-                select(KBDocument).where(col(KBDocument.identity_key) == ""),
-            )
-            pending = list(result.scalars().all())
-            by_kb: dict[str, list[KBDocument]] = defaultdict(list)
-            for doc in pending:
-                by_kb[doc.kb_id].append(doc)
-
-            for docs in by_kb.values():
-                file_docs = [doc for doc in docs if doc.file_type != "url"]
-                name_groups: dict[str, list[KBDocument]] = defaultdict(list)
-                for doc in file_docs:
-                    name_groups[doc.doc_name].append(doc)
-
-                for doc in docs:
-                    if doc.file_type == "url":
-                        doc.identity_key = f"legacy:{doc.doc_id}"
-                        doc.source_kind = "url"
-                        continue
-                    if len(name_groups[doc.doc_name]) > 1:
-                        doc.identity_key = f"legacy:{doc.doc_id}"
-                        doc.source_kind = "file"
-                        continue
-                    posix = posix_identity_input(doc.doc_name)
-                    doc.source_kind = "file"
-                    if not posix:
-                        doc.identity_key = f"legacy:{doc.doc_id}"
-                        continue
-                    doc.identity_key = file_identity_key(posix)
-
-            await session.flush()
-
-            all_rows = list(
-                (
-                    await session.execute(
-                        select(KBDocument).order_by(
-                            col(KBDocument.created_at),
-                            col(KBDocument.doc_id),
-                        ),
-                    )
-                )
-                .scalars()
-                .all(),
-            )
-            seen: set[tuple[str, str]] = set()
-            for doc in all_rows:
-                if not doc.identity_key:
-                    doc.identity_key = f"legacy:{doc.doc_id}"
-                    continue
-                pair = (doc.kb_id, doc.identity_key)
-                if pair in seen:
-                    doc.identity_key = f"legacy:{doc.doc_id}"
-                    continue
-                seen.add(pair)
-
-    async def _create_document_identity_index(self) -> None:
-        """Create the unique identity index after keys are populated."""
-        async with self.get_db() as session:
-            empty = await session.execute(
-                select(func.count(col(KBDocument.id))).where(
-                    col(KBDocument.identity_key) == "",
-                ),
-            )
-            empty_count = empty.scalar() or 0
-            if empty_count:
-                logger.warning(
-                    "Skipping unique identity index; %s documents still have empty keys",
-                    empty_count,
-                )
-                return
-
-        async with self.engine.begin() as conn:
-            await conn.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS uix_kb_identity "
-                    "ON kb_documents (kb_id, identity_key)",
-                ),
-            )
 
     async def close(self) -> None:
         """关闭数据库连接"""

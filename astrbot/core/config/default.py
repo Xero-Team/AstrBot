@@ -105,7 +105,6 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 4,
     "platform_settings": {
         "unique_session": False,
         "group_sender_concurrency": False,

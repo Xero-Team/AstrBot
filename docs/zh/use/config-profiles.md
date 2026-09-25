@@ -56,7 +56,7 @@ UMO 三段都可以用通配：
 - [群聊何时会理我](./group-wake)：`llm_access`、指令前缀、隔离会话
 - [平台处理](./platform-settings)：未列入会话和发送者、限流、内容安全、入站合并
 - [语音 STT / TTS](./speech)
-- [知识库](./knowledge-base) 的 `kb_names`
+- [知识库](./knowledge-base) 的 `knowledge_base.names`
 - [插件](./plugin) 的 `plugin_set`
 - [Prompt](./prompt)、[Agent 执行器](./agent-runner)
 

@@ -70,7 +70,7 @@ def _validate_callback_api_base(value: str) -> str:
 # Configuration items settable via CLI, mapping config keys to validator functions
 CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
     "timezone": _validate_timezone,
-    "log_level": _validate_log_level,
+    "log.level": _validate_log_level,
     "dashboard.port": _validate_dashboard_port,
     "dashboard.username": _validate_dashboard_username,
     "dashboard.password": _validate_dashboard_password,
@@ -159,7 +159,7 @@ def conf() -> None:
 
     - timezone: Timezone setting (e.g. Asia/Shanghai)
 
-    - log_level: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+    - log.level: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
 
     - dashboard.port: Dashboard port
 

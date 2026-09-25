@@ -50,7 +50,7 @@ class Star(PluginKVStoreMixin):
         template_name = None
         if hasattr(config_obj, "get"):
             try:
-                template_name = config_obj.get("t2i_active_template")
+                template_name = (config_obj.get("t2i") or {}).get("active_template")
             except Exception:
                 template_name = None
         return await self.context.rendering.text_to_image(

@@ -242,7 +242,7 @@ class CoreExecutionContext:
             get_platform_family=self._adapter_family,
             html_renderer=html_renderer,
             get_forward_card_enabled=lambda umo: bool(
-                self.get_config(umo).get("t2i_forward_card", True)
+                (self.get_config(umo).get("t2i") or {}).get("forward_card", True)
             ),
             store=cast(SessionBridgeStore, db),
         )

@@ -39,7 +39,7 @@ class TestStarBase:
         mock_context = MagicMock()
         mock_config = MagicMock()
         mock_config.get.side_effect = lambda key, default=None: {
-            "t2i_active_template": "default_template",
+            "t2i": {"active_template": "default_template"},
         }.get(key, default)
         mock_context.config.get.return_value = mock_config
 

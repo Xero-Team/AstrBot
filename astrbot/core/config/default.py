@@ -290,11 +290,13 @@ DEFAULT_CONFIG = {
         "internal_keywords": {"enable": True, "extra_keywords": []},
         "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
     },
-    "t2i": False,
-    "t2i_word_threshold": 150,
-    "t2i_use_file_service": False,
-    "t2i_active_template": "base",
-    "t2i_forward_card": True,
+    "t2i": {
+        "enable": False,
+        "word_threshold": 150,
+        "use_file_service": False,
+        "active_template": "base",
+        "forward_card": True,
+    },
     "http_proxy": "",
     "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*"],
     "dashboard": {
@@ -358,24 +360,30 @@ DEFAULT_CONFIG = {
         "max_total_seconds": 12.0,
         "max_typing_wait": 30.0,
     },
-    "log_level": "INFO",
-    "log_file_enable": False,
-    "log_file_path": "logs/astrbot.log",
-    "log_file_max_mb": 20,
+    "log": {
+        "level": "INFO",
+        "file_enable": False,
+        "file_path": "logs/astrbot.log",
+        "file_max_mb": 20,
+    },
     "temp_dir_max_size": 1024,
-    "trace_enable": False,
-    "trace_log_enable": False,
-    "trace_log_path": "logs/astrbot.trace.log",
-    "trace_log_max_mb": 20,
+    "trace": {
+        "enable": False,
+        "log_enable": False,
+        "log_path": "logs/astrbot.trace.log",
+        "log_max_mb": 20,
+    },
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
-    "kb_names": [],  # 默认知识库名称列表
-    "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
-    "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
-    "kb_agentic_mode": False,
+    "knowledge_base": {
+        "names": [],  # 默认知识库名称列表
+        "fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
+        "final_top_k": 5,  # 知识库检索最终返回结果数量
+        "agentic_mode": False,
+    },
     "disable_metrics": False,
 }
 
@@ -3368,10 +3376,10 @@ CONFIG_METADATA_2 = {
                     "max_typing_wait": {"type": "float"},
                 },
             },
-            "t2i": {
+            "t2i.enable": {
                 "type": "bool",
             },
-            "t2i_word_threshold": {
+            "t2i.word_threshold": {
                 "type": "int",
             },
             "http_proxy": {
@@ -3394,7 +3402,7 @@ CONFIG_METADATA_2 = {
                 "type": "bool",
                 "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
             },
-            "log_level": {
+            "log.level": {
                 "type": "string",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
@@ -3415,20 +3423,20 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "condition": {"dashboard.ssl.enable": True},
             },
-            "log_file_enable": {"type": "bool"},
-            "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
-            "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
+            "log.file_enable": {"type": "bool"},
+            "log.file_path": {"type": "string", "condition": {"log.file_enable": True}},
+            "log.file_max_mb": {"type": "int", "condition": {"log.file_enable": True}},
             "temp_dir_max_size": {"type": "int"},
-            "trace_log_enable": {"type": "bool"},
-            "trace_log_path": {
+            "trace.log_enable": {"type": "bool"},
+            "trace.log_path": {
                 "type": "string",
-                "condition": {"trace_log_enable": True},
+                "condition": {"trace.log_enable": True},
             },
-            "trace_log_max_mb": {
+            "trace.log_max_mb": {
                 "type": "int",
-                "condition": {"trace_log_enable": True},
+                "condition": {"trace.log_enable": True},
             },
-            "t2i_use_file_service": {
+            "t2i.use_file_service": {
                 "type": "bool",
             },
             "pip_install_arg": {
@@ -3437,10 +3445,10 @@ CONFIG_METADATA_2 = {
             "pypi_index_url": {
                 "type": "string",
             },
-            "kb_names": {"type": "list", "items": {"type": "string"}},
-            "kb_fusion_top_k": {"type": "int", "default": 20},
-            "kb_final_top_k": {"type": "int", "default": 5},
-            "kb_agentic_mode": {"type": "bool"},
+            "knowledge_base.names": {"type": "list", "items": {"type": "string"}},
+            "knowledge_base.fusion_top_k": {"type": "int", "default": 20},
+            "knowledge_base.final_top_k": {"type": "int", "default": 5},
+            "knowledge_base.agentic_mode": {"type": "bool"},
         },
     },
 }
@@ -3869,24 +3877,24 @@ CONFIG_METADATA_3 = {
                 "docs": "use/knowledge-base.html",
                 "type": "object",
                 "items": {
-                    "kb_names": {
+                    "knowledge_base.names": {
                         "description": "知识库列表",
                         "type": "list",
                         "items": {"type": "string"},
                         "_special": "select_knowledgebase",
                         "hint": "支持多选",
                     },
-                    "kb_fusion_top_k": {
+                    "knowledge_base.fusion_top_k": {
                         "description": "融合检索结果数",
                         "type": "int",
                         "hint": "多个知识库检索结果融合后的返回结果数量",
                     },
-                    "kb_final_top_k": {
+                    "knowledge_base.final_top_k": {
                         "description": "最终返回结果数",
                         "type": "int",
                         "hint": "从知识库中检索到的结果数量，越大可能获得越多相关信息，但也可能引入噪音。建议根据实际需求调整",
                     },
-                    "kb_agentic_mode": {
+                    "knowledge_base.agentic_mode": {
                         "description": "Agentic 知识库检索",
                         "type": "bool",
                         "hint": "启用后，知识库检索将作为 LLM Tool，由模型自主决定何时调用知识库进行查询。需要模型支持函数调用能力。",
@@ -4640,11 +4648,11 @@ CONFIG_METADATA_3 = {
                 "docs": "use/platform-settings.html",
                 "type": "object",
                 "items": {
-                    "t2i": {
+                    "t2i.enable": {
                         "description": "文本转图像输出",
                         "type": "bool",
                     },
-                    "t2i_word_threshold": {
+                    "t2i.word_threshold": {
                         "description": "文本转图像字数阈值",
                         "type": "int",
                     },
@@ -5039,23 +5047,23 @@ CONFIG_METADATA_3_SYSTEM = {
                         "hint": "管理本地 Playwright 渲染使用的 HTML 模板。",
                         "_special": "t2i_template",
                     },
-                    "t2i_use_file_service": {
+                    "t2i.use_file_service": {
                         "description": "通过文件服务公开本地文转图结果",
                         "type": "bool",
                         "hint": "启用后，文转图结果会优先注册为 AstrBot 文件 token URL。需要正确配置 callback_api_base。",
                     },
-                    "t2i_active_template": {
+                    "t2i.active_template": {
                         "description": "当前应用的文转图渲染模板",
                         "type": "string",
                         "hint": "此处的值由本地文转图模板管理页面进行维护。",
                         "invisible": True,
                     },
-                    "t2i_forward_card": {
+                    "t2i.forward_card": {
                         "description": "合并转发渲染为图片卡片",
                         "type": "bool",
                         "hint": "会话桥接投递合并转发时，如果目标平台不支持原生合并转发，则把已展开的转发渲染成一张图片卡片；渲染失败时回退为文字转录。",
                     },
-                    "log_level": {
+                    "log.level": {
                         "description": "控制台日志级别",
                         "type": "string",
                         "hint": "控制台输出日志的级别。",
@@ -5112,17 +5120,17 @@ CONFIG_METADATA_3_SYSTEM = {
                         "hint": "可选。用于指定 CA 证书文件路径。",
                         "condition": {"dashboard.ssl.enable": True},
                     },
-                    "log_file_enable": {
+                    "log.file_enable": {
                         "description": "启用文件日志",
                         "type": "bool",
                         "hint": "开启后会将日志写入指定文件。",
                     },
-                    "log_file_path": {
+                    "log.file_path": {
                         "description": "日志文件路径",
                         "type": "string",
                         "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.log；支持绝对路径。",
                     },
-                    "log_file_max_mb": {
+                    "log.file_max_mb": {
                         "description": "日志文件大小上限 (MB)",
                         "type": "int",
                         "hint": "超过大小后自动轮转，默认 20MB。",
@@ -5132,17 +5140,17 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "int",
                         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。",
                     },
-                    "trace_log_enable": {
+                    "trace.log_enable": {
                         "description": "启用 Trace 文件日志",
                         "type": "bool",
                         "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。",
                     },
-                    "trace_log_path": {
+                    "trace.log_path": {
                         "description": "Trace 日志文件路径",
                         "type": "string",
                         "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。",
                     },
-                    "trace_log_max_mb": {
+                    "trace.log_max_mb": {
                         "description": "Trace 日志大小上限 (MB)",
                         "type": "int",
                         "hint": "超过大小后自动轮转，默认 20MB。",

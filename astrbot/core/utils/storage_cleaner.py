@@ -169,30 +169,24 @@ class StorageCleaner:
         return files
 
     def _log_file_configs(self) -> list[LogFileConfig]:
+        log_config = self._config.get("log") or {}
+        trace_config = self._config.get("trace") or {}
         return [
             LogFileConfig(
                 path=self._resolve_log_path(
-                    self._get_optional_str("log_file_path"),
+                    log_config.get("file_path"),
                     default_relative_path="logs/astrbot.log",
                 ),
-                enabled=self._get_bool("log_file_enable", False),
+                enabled=bool(log_config.get("file_enable", False)),
             ),
             LogFileConfig(
                 path=self._resolve_log_path(
-                    self._get_optional_str("trace_log_path"),
+                    trace_config.get("log_path"),
                     default_relative_path="logs/astrbot.trace.log",
                 ),
-                enabled=self._get_bool("trace_log_enable", False),
+                enabled=bool(trace_config.get("log_enable", False)),
             ),
         ]
-
-    def _get_optional_str(self, key: str) -> str | None:
-        value = self._config.get(key)
-        return value if isinstance(value, str) else None
-
-    def _get_bool(self, key: str, default: bool = False) -> bool:
-        value = self._config.get(key, default)
-        return value if isinstance(value, bool) else default
 
     def _configured_log_paths(self) -> set[Path]:
         return {config.path for config in self._log_file_configs()}

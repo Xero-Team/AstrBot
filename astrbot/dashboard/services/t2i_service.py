@@ -30,7 +30,9 @@ class T2iService:
 
     async def sync_active_template_to_all_configs(self, name: str) -> None:
         for config in self.config_manager.confs.values():
-            committed = await config.save_config_async({"t2i_active_template": name})
+            t2i_config = dict(config.get("t2i") or {})
+            t2i_config["active_template"] = name
+            committed = await config.save_config_async({"t2i": t2i_config})
             if not committed:
                 raise T2iServiceError(
                     "T2I template configuration save was superseded by a newer update."
@@ -45,7 +47,11 @@ class T2iService:
 
     def get_active_template(self) -> dict:
         try:
-            return {"active_template": self.config.get("t2i_active_template", "base")}
+            return {
+                "active_template": (self.config.get("t2i") or {}).get(
+                    "active_template", "base"
+                )
+            }
         except Exception as exc:
             logger.error("Error in get_active_template", exc_info=True)
             raise T2iServiceError(str(exc)) from exc
@@ -84,7 +90,9 @@ class T2iService:
 
         try:
             self.manager.update_template(name, content)
-            active_template = self.config.get("t2i_active_template", "base")
+            active_template = (self.config.get("t2i") or {}).get(
+                "active_template", "base"
+            )
             if name == active_template:
                 await self.reload_all_pipeline_schedulers()
                 message = f"模板 '{name}' 已更新并重新加载。"

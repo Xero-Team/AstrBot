@@ -48,7 +48,7 @@ def _make_stage(
                 "dual_output": False,
             },
             "callback_api_base": callback_api_base,
-            "t2i": True,
+            "t2i": {"enable": True},
         },
         html_renderer=SimpleNamespace(render_t2i=AsyncMock()),
         file_token_service=SimpleNamespace(register_file=AsyncMock()),
@@ -176,7 +176,7 @@ async def test_result_decorate_tts_dual_output_and_t2i_are_mutually_exclusive():
         {"enable": True, "dual_output": True}
     )
     stage.tts_trigger_probability = 1
-    stage.ctx.astrbot_config["t2i"] = True
+    stage.ctx.astrbot_config["t2i"] = {"enable": True}
     provider = SimpleNamespace(get_audio=AsyncMock(return_value="D:/temp/a.mp3"))
     stage.ctx.execution_context.get_using_tts_provider = lambda _umo: provider
     result = MessageEventResult(
@@ -196,7 +196,7 @@ async def test_result_decorate_invalid_segment_regex_falls_back():
     stage.split_mode = "regex"
     stage.regex = "["
     stage.words_count_threshold = 100
-    stage.ctx.astrbot_config["t2i"] = False
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
     result = MessageEventResult(chain=[Plain("one。two。")])
 
     await _consume(stage, _make_event(result))
@@ -232,7 +232,7 @@ async def test_result_decorate_streaming_result_short_circuits():
 @pytest.mark.asyncio
 async def test_result_decorate_adds_mention_then_quote():
     stage = _make_stage(use_file_service=False, callback_api_base="")
-    stage.ctx.astrbot_config["t2i"] = False
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
     stage.reply_with_mention = True
     stage.reply_with_quote = True
     result = MessageEventResult(chain=[Plain("hello")])

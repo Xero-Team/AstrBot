@@ -59,7 +59,7 @@ class TraceSpan:
 
     def record(self, action: str, **fields: Any) -> None:
         # Check if trace recording is enabled
-        if _config is not None and not _config.get("trace_enable", True):
+        if _config is not None and not (_config.get("trace") or {}).get("enable", True):
             return
 
         payload = {

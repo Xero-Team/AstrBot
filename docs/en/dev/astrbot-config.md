@@ -30,7 +30,6 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 | Key                                               | Purpose                                                                                                                                                                                                                                                         |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config_version`                                  | Current core configuration version, default `4`. Do not downgrade it manually.                                                                                                                                                                                  |
 | `platform_settings`                               | Cross-platform receive, send, rate-limit, and segmented-reply behavior.                                                                                                                                                                                         |
 | `provider_sources`                                | Provider endpoints and credentials, maintained by the Providers page.                                                                                                                                                                                           |
 | `provider`                                        | Concrete chat, STT, TTS, embedding, rerank, and other model instances.                                                                                                                                                                                          |
@@ -68,7 +67,7 @@ Routing checks commands before LLM access. A matched command wins; a bare comman
 
 Unwritten `session_enabled` / `llm_enabled` / `tts_enabled` overlays default off for IM groups and DMs, and on for Dashboard WebChat. A disabled session only passes `/bot status` and `/bot enable`; enable the session before `/llm enable`.
 
-Unlisted sessions are controlled by top-level `admission.unlisted_sessions`, default `allow`. `deny` admits groups or DMs that already have an overlay on the canonical session key, or that this profile listed during upgrade. Unlisted senders are controlled by `admission.unlisted_senders`, also default `allow`. `deny` admits only IM subjects that already have a `blocked` or `llm_enabled` overlay. Write those overlays with `/user block`, `/user unblock`, `/user llm on|off`, or the Sender target on Dashboard [custom rules](../use/custom-rules). WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this gate. `id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone.
+Unlisted sessions are controlled by top-level `admission.unlisted_sessions`, default `allow`. `deny` admits groups or DMs that already have an overlay on the canonical session key. Unlisted senders are controlled by `admission.unlisted_senders`, also default `allow`. `deny` admits only IM subjects that already have a `blocked` or `llm_enabled` overlay. Write those overlays with `/user block`, `/user unblock`, `/user llm on|off`, or the Sender target on Dashboard [custom rules](../use/custom-rules). WebChat, OneBot `notice` / `request`, and senders with `provider.manage` on the current instance skip this gate. `id_whitelist`, `enable_id_white_list`, and `wl_ignore_admin_*` are gone.
 
 ## `platform_settings`
 
@@ -134,7 +133,7 @@ See [Automatic Context Compression](../use/context-compress) for the full behavi
 ### Steps, tools, and proxy
 
 - `agent_runner.runner_type` selects the built-in `local` Agent or Dify, Coze, DashScope, or DeerFlow. Third-party keys and app IDs live in `agent_runner.config`.
-- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `128`, and also applies to current SubAgent executions. Stored `30` values upgrade once when `config_version` advances to `4`.
+- `agent_runner.config.misc.max_steps` is the local Agent step cap, default `128`, and also applies to current SubAgent executions.
 - `agent_runner.config.max_steps` is the third-party runner step cap, default `128`.
 - `agent_runner.config.misc.tool_call_timeout` is the per-tool timeout in seconds, default `120`.
 - `agent_runner.config.misc.tool_schema_mode` uses `full` schemas or the lighter two-stage `skills_like` mode. `skills_like` hides parameters; it does not shrink the tool catalog.
@@ -330,8 +329,8 @@ Loop assignments narrow the enabled Skills before the request's Skill snapshot i
 - `router_system_prompt` and `agents` define routing and SubAgents. Maintain them through the dedicated page; see [SubAgent Orchestration](../use/subagent).
 - `provider_stt_settings` controls STT and its default model.
 - `provider_tts_settings` controls the TTS model, dual output, file service, and a `0`–`1` trigger probability.
-- `kb_names`, `kb_fusion_top_k`, and `kb_final_top_k` select default knowledge bases and retrieval counts.
-- `kb_agentic_mode` exposes knowledge-base retrieval as a model-controlled tool.
+- `knowledge_base.names`, `knowledge_base.fusion_top_k`, and `knowledge_base.final_top_k` select default knowledge bases and retrieval counts.
+- `knowledge_base.agentic_mode` exposes knowledge-base retrieval as a model-controlled tool.
 
 Alkaid [Long-term Memory](../use/long-term-memory) currently has no enable/disable configuration. Do not treat `provider_ltm_settings` as its switch. For recent group-message injection, see [Group Chat Context Awareness](../use/group-chat-context).
 
@@ -396,15 +395,15 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 
 ## System, logging, and response decoration
 
-- `t2i` and `t2i_word_threshold` render long **output results** as images. `t2i_active_template` is maintained by the template manager.
-- `t2i_use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
+- `t2i.enable` and `t2i.word_threshold` render long **output results** as images. `t2i.active_template` is maintained by the template manager.
+- `t2i.use_file_service` publishes rendered output through a file-token URL and requires a correct `callback_api_base`.
 - `http_proxy` / `no_proxy` are the global outbound proxy and bypass list. They are no longer exported as process `HTTP_PROXY`. When AstrBot runs in Docker, use an address reachable from the container; see [Deploy with Docker](/en/deploy/astrbot/docker#configure-an-http-proxy-in-docker).
 - Telegram applies this explicit route to both Bot API requests and `getUpdates` long polling. When no proxy applies, both clients connect directly without inheriting process proxy variables.
 - Providers and platforms use three-state `proxy_mode`: `inherit` follows the global config, `direct` disables environment proxies, and `custom` uses only that item's `proxy_url`. An empty string no longer means both inherit and direct.
 - No GitHub mirrors are provided by default. Plugin `download_url` values and prefix mirrors must be public HTTPS origins; private and non-HTTPS targets are rejected.
 - `platform_settings.segmented_reply` remains a UX feature and stays off by default. Telegram, Discord, and WeCom hard-limit splitting is handled by the send path.
-- `log_level` and `log_file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log_level` applies to terminal output, not only the file sink. File logs use the same redacting sink: recognized secret fields, Bearer tokens, URLs, and absolute paths are replaced before write. Cookies, private chat, and custom secrets are not guaranteed; review logs before sharing.
-- `trace_enable` is the Trace collection switch; `trace_log_*` controls its separate rotating file.
+- `log.level` and `log.file_*` control the console Loguru sink, the root logger, plugin loggers without an override, and rotating file logs. `log.level` applies to terminal output, not only the file sink. File logs use the same redacting sink: recognized secret fields, Bearer tokens, URLs, and absolute paths are replaced before write. Cookies, private chat, and custom secrets are not guaranteed; review logs before sharing.
+- `trace.enable` is the Trace collection switch; `trace.log_*` controls its separate rotating file.
 - `temp_dir_max_size` limits `data/temp` in MiB and defaults to `1024`; a background task removes older files when the limit is exceeded.
 - `timezone` is an IANA timezone and defaults to `Asia/Shanghai`.
 - `callback_api_base` is the externally reachable base used to build callback and file URLs. It does not change the listening address.

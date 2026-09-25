@@ -825,19 +825,19 @@ const systemConfigGroups = computed(() => {
       'dashboard.totp.enable',
     ]),
     createGroup('logs', [
-      'log_level',
-      'log_file_enable',
-      'log_file_path',
-      'log_file_max_mb',
-      'trace_log_enable',
-      'trace_log_path',
-      'trace_log_max_mb',
+      'log.level',
+      'log.file_enable',
+      'log.file_path',
+      'log.file_max_mb',
+      'trace.log_enable',
+      'trace.log_path',
+      'trace.log_max_mb',
     ]),
     createGroup('tempStorage', ['temp_dir_max_size']),
     createGroup('t2iRendering', [
       't2i_template',
-      't2i_use_file_service',
-      't2i_active_template',
+      't2i.use_file_service',
+      't2i.active_template',
     ]),
   ].filter((group) => Object.keys(group.metadata[group.key].items).length > 0);
 });

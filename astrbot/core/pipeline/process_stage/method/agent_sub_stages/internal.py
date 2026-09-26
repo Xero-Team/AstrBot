@@ -649,16 +649,14 @@ class InternalAgentSubStage:
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
         checkpoint_id = checkpoint_id if isinstance(checkpoint_id, str) else None
-        if not user_aborted and (
-            llm_response is None or llm_response.role != "assistant"
-        ):
-            return None
-
         if user_aborted:
             llm_response = LLMResponse(
                 role="assistant",
                 completion_text=_STOP_HISTORY_ASSISTANT_TEXT,
             )
+
+        if llm_response is None or llm_response.role != "assistant":
+            return None
 
         if not llm_response.completion_text:
             logger.debug("LLM 响应为空，不保存记录。")

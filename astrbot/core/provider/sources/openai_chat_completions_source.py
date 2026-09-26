@@ -1411,6 +1411,7 @@ class ProviderOpenAIChatCompletions(Provider):
 
         if llm_response is None:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
+            assert last_exception is not None
             raise last_exception
         return llm_response
 

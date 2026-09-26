@@ -19,7 +19,6 @@ from astrbot.core.log import (
     _LoguruInterceptHandler,
     sanitize_log_payload,
     sanitize_log_record,
-    sanitize_log_text,
     sanitize_log_value,
 )
 
@@ -465,12 +464,22 @@ def test_sanitize_log_value_escapes_newlines_and_controls() -> None:
     assert "\x1b" not in cleaned
 
 
-def test_sanitize_log_text_preserves_intentional_newlines() -> None:
-    text = "line1\nline2\rrewritten\x07"
-    cleaned = sanitize_log_text(text)
-    assert "line1\nline2" in cleaned
-    assert "\r" not in cleaned
-    assert "\x07" not in cleaned
+def test_sanitize_log_record_neutralizes_formatted_message() -> None:
+    # f-string call sites interpolate untrusted values into ``msg`` directly,
+    # leaving ``record.args`` empty.
+    record = logging.LogRecord(
+        "astrbot",
+        logging.INFO,
+        __file__,
+        1,
+        "plugin evil\n2026-01-01 ERROR forged line",
+        (),
+        None,
+    )
+    sanitize_log_record(record)
+    assert "\n" not in record.msg
+    assert "\\n" in record.msg
+    assert "evil" in record.msg
 
 
 def test_sanitize_log_record_neutralizes_arguments() -> None:

@@ -40,33 +40,18 @@ _LOG_NEWLINE_ESCAPES = str.maketrans({"\r": "\\r", "\n": "\\n"})
 
 
 def sanitize_log_value(value: str) -> str:
-    """Neutralize log-forging characters in an untrusted log argument.
+    """Neutralize log-forging characters in untrusted log text.
 
     Newlines and carriage returns are escaped and non-printable control
     characters are removed so a value cannot inject or corrupt log lines.
 
     Args:
-        value: Untrusted text supplied as a log argument.
+        value: Untrusted text, either a log argument or a formatted message.
 
     Returns:
         The value with control characters neutralized.
     """
     return _LOG_CONTROL_CHARS.sub("", value).translate(_LOG_NEWLINE_ESCAPES)
-
-
-def sanitize_log_text(text: str) -> str:
-    """Remove control characters from an already formatted log message.
-
-    Line feeds are preserved so intentional multi-line messages keep their
-    layout; carriage returns are escaped to prevent line rewriting.
-
-    Args:
-        text: A formatted log message.
-
-    Returns:
-        The text with control characters neutralized.
-    """
-    return _LOG_CONTROL_CHARS.sub("", text).replace("\r", "\\r")
 
 
 def _sanitize_log_arg(value: object) -> object:
@@ -119,11 +104,12 @@ def sanitize_log_record(record: logging.LogRecord) -> logging.LogRecord:
     if record.args:
         record.args = _sanitize_log_args(record.args)
     formatted = _formatted_log_message(record)
-    record.msg = redact_sensitive_text(sanitize_log_text(formatted))
+    # The message body itself may already embed untrusted values (f-string call
+    # sites have no ``record.args``), so CR/LF are escaped here rather than only
+    # in arguments. Nothing downstream may treat a log message as multi-line.
+    record.msg = redact_sensitive_text(sanitize_log_value(formatted))
     record.args = ()
     if record.exc_info:
-        # Exception and stack text can embed user-controlled newlines, so they
-        # are newline-escaped rather than treated as intentional multi-line text.
         record.exc_text = sanitize_log_value(
             redact_sensitive_text(_format_exception_text(record.exc_info))
         )
@@ -260,7 +246,7 @@ def _build_source_file(pathname: str | None) -> str:
 def _sanitize_loguru_record(record: Record) -> None:
     message = record["message"]
     if isinstance(message, str):
-        record["message"] = redact_sensitive_text(sanitize_log_text(message))
+        record["message"] = redact_sensitive_text(sanitize_log_value(message))
     extra = record["extra"]
     summary = extra.get("summary")
     if isinstance(summary, str):

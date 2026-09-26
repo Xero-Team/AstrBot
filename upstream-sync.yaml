@@ -23,7 +23,9 @@ last_synced:
     query_kwargs in the Anthropic/OpenAI text paths; for Gemini, replaced the
     upstream provider-wide temporary-header mutation and its request lock with a
     per-request HttpOptions header on the GenerateContentConfig, so concurrent
-    conversations are isolated without serializing streams). Skipped #10222 (desktop
+    conversations are isolated without serializing streams; an httpx request hook
+    reasserts the AstrBot user agent, which the per-request options would
+    otherwise turn into a duplicate SDK User-Agent header). Skipped #10222 (desktop
     workspace directory picker) because its client-controlled custom project
     workspace path conflicts with the fork's server-derived
     astrbot/core/project_workspace.py roots and the fork project API has no

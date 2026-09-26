@@ -199,6 +199,39 @@ async def test_provider_sdk_sends_exactly_one_user_agent(
 
 
 @pytest.mark.asyncio
+async def test_gemini_conversation_request_sends_single_user_agent(
+    provider_http_server,
+):
+    """A conversation-scoped Gemini request keeps exactly one user agent."""
+    base_url, requests = provider_http_server
+    provider = ProviderGoogleGenAI(
+        {
+            "id": "test-provider",
+            "model": "test-model",
+            "key": ["test-key"],
+            "api_key": "test-key",
+            "api_base": base_url,
+        },
+        {},
+    )
+    try:
+        config = await provider._prepare_query_config(
+            {"model": "test-model"},
+            conversation_id="conversation-1",
+        )
+        await provider.client.models.generate_content(
+            model="test-model",
+            contents="hello",
+            config=config,
+        )
+    finally:
+        await provider.terminate()
+    assert requests
+    assert requests[0].getall("User-Agent") == [DEFAULT_USER_AGENT]
+    assert requests[0].get("x-astrbot-conversation-id") == "conversation-1"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "provider_cls",
     [

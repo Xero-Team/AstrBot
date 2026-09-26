@@ -19,6 +19,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.headers import (
+    DEFAULT_USER_AGENT,
     build_conversation_headers,
     drop_sdk_user_agent,
 )
@@ -110,7 +111,10 @@ class ProviderGoogleGenAI(Provider):
         if self._http_client is not None:
             self._stale_http_clients = [self._http_client]
 
-        self._http_client = httpx.AsyncClient(**async_client_kwargs)
+        self._http_client = httpx.AsyncClient(
+            event_hooks={"request": [self._enforce_astrbot_user_agent]},
+            **async_client_kwargs,
+        )
         http_options.httpx_async_client = self._http_client
 
         self.client = genai.Client(
@@ -118,6 +122,16 @@ class ProviderGoogleGenAI(Provider):
             http_options=http_options,
         ).aio
         drop_sdk_user_agent(self.client)
+
+    async def _enforce_astrbot_user_agent(self, request: httpx.Request) -> None:
+        """Restore the AstrBot user agent after the SDK patches request options.
+
+        A per-request ``HttpOptions`` makes the SDK re-append its library user
+        agent, so reassert the configured header on every outgoing request.
+        """
+        request.headers["user-agent"] = self.request_headers.get(
+            "User-Agent", DEFAULT_USER_AGENT
+        )
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""

@@ -778,7 +778,13 @@ def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
         provider._stale_http_clients == [provider._http_client]
         or len(created_http_clients) == 1
     )
-    assert created_http_clients[0].kwargs == {
+    created_kwargs = created_http_clients[0].kwargs
+    assert created_kwargs["event_hooks"] == {
+        "request": [provider._enforce_astrbot_user_agent]
+    }
+    assert {
+        key: value for key, value in created_kwargs.items() if key != "event_hooks"
+    } == {
         "base_url": "https://gemini.example",
         "timeout": 30,
         "trust_env": False,

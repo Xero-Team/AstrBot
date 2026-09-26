@@ -25,7 +25,6 @@ from astrbot.core.log import LogBroker
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    hash_md5_dashboard_password,
     verify_dashboard_password,
 )
 from astrbot.core.utils.pip_installer import PipInstallError
@@ -76,10 +75,6 @@ def _create_dashboard(
             webui_dir,
         )
     )
-
-
-def _removed_md5_hint_alias_key() -> str:
-    return "le" + "gacy_pwd_hint"
 
 
 def _assert_cookie_samesite_strict(cookie_header: str) -> None:
@@ -231,6 +226,20 @@ async def _set_dashboard_account_password(
             ).scalar_one()
             account.username = username
             account.password_hash = password_hash
+
+
+async def _get_dashboard_account_password_hash(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+) -> str:
+    async with core_lifecycle_td.db.get_db() as session:
+        account = (
+            await session.execute(
+                select(DashboardAccount)
+                .where(col(DashboardAccount.is_active).is_(True))
+                .limit(1)
+            )
+        ).scalar_one()
+        return account.password_hash
 
 
 async def _restore_dashboard_password_state(

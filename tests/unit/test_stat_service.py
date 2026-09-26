@@ -178,12 +178,6 @@ async def test_stat_service_get_version_reads_served_dashboard_folder(
     monkeypatch.setattr(
         stat_service, "is_password_storage_upgraded", AsyncMock(return_value=True)
     )
-    monkeypatch.setattr(
-        stat_service, "get_dashboard_password_hash", lambda *args, **kwargs: ""
-    )
-    monkeypatch.setattr(
-        stat_service, "is_md5_dashboard_password", lambda *args, **kwargs: False
-    )
     monkeypatch.setattr(StatService, "is_default_cred", AsyncMock(return_value=False))
     fallback = AsyncMock(return_value="0.0.1")
     monkeypatch.setattr(stat_service, "get_dashboard_version", fallback)

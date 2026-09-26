@@ -64,7 +64,6 @@ export interface VersionData {
   version?: string;
   dashboard_version?: string;
   change_pwd_hint?: boolean;
-  md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
   runtime?: RuntimeInfo;
   [key: string]: unknown;
@@ -99,7 +98,6 @@ export interface AuthLoginData {
   username?: string;
   token?: string;
   password_upgrade_required?: boolean;
-  md5_pwd_hint?: boolean;
   change_pwd_hint?: boolean;
   [key: string]: unknown;
 }

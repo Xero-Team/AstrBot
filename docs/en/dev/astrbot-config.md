@@ -387,7 +387,7 @@ Important `dashboard` defaults:
 | `totp.*`                 | Managed by WebUI | Dashboard TOTP snapshot retained for configuration export; it is not the authority for account authentication.                   |
 | `ssl.enable`             | `false`          | Terminate TLS in AstrBot using the certificate, key, and optional CA path fields.                                                |
 
-Passwords are stored as PBKDF2 hashes in `pbkdf2_password`. New writes leave `password` empty. Existing MD5 values in `password` are still accepted until the next password change. Never write plaintext into either field or manually exchange hashes. To recover access, run:
+Passwords are stored as PBKDF2 hashes in `pbkdf2_password`. New writes clear the legacy `password` field. MD5 values written by older releases are no longer accepted for login: startup rotates them to a newly generated random password stored in `pbkdf2_password` and requires a change after login. Never write plaintext into either field or manually exchange hashes. To recover access, run:
 
 ```bash
 uv run astrbot run --reset-password

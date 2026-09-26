@@ -935,7 +935,6 @@ describe('coverage closeout', () => {
       username: 'u',
       token: 'tok',
       change_pwd_hint: true,
-      md5_pwd_hint: false,
     });
   });
 

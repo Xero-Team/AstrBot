@@ -27,10 +27,7 @@ from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
 from astrbot.core.utils.astrbot_path import get_astrbot_path
-from astrbot.core.utils.auth_password import (
-    is_default_dashboard_password,
-    is_md5_dashboard_password,
-)
+from astrbot.core.utils.auth_password import is_default_dashboard_password
 from astrbot.core.utils.io import get_dashboard_dist_version, get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
@@ -114,17 +111,10 @@ class StatService:
         storage_upgraded = await is_password_storage_upgraded(
             self.config,
         )
-        password = get_dashboard_password_hash(
-            self.config,
-            upgraded=storage_upgraded,
-        )
-
-        md5_pwd_hint = is_md5_dashboard_password(password)
         return {
             "version": VERSION,
             "dashboard_version": await self._resolve_dashboard_version(),
             "change_pwd_hint": await self.is_default_cred(),
-            "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
             "runtime": self.runtime,
         }

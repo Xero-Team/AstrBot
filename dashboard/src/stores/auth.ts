@@ -14,7 +14,6 @@ interface AuthSessionData {
   username: string;
   token: string;
   password_upgrade_required?: boolean;
-  md5_pwd_hint?: boolean;
   change_pwd_hint?: boolean;
 }
 
@@ -39,20 +38,11 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
       const passwordUpgradeRequired = Boolean(data?.password_upgrade_required);
-      const md5PwdHint = Boolean(data?.md5_pwd_hint);
-      const passwordWarning =
-        Boolean(data?.change_pwd_hint) ||
-        (md5PwdHint && !passwordUpgradeRequired);
+      const passwordWarning = Boolean(data?.change_pwd_hint);
       if (passwordWarning) {
         localStorage.setItem('change_pwd_hint', 'true');
-        if (md5PwdHint && !passwordUpgradeRequired) {
-          localStorage.setItem('md5_pwd_hint', 'true');
-        } else {
-          localStorage.removeItem('md5_pwd_hint');
-        }
       } else {
         localStorage.removeItem('change_pwd_hint');
-        localStorage.removeItem('md5_pwd_hint');
       }
       if (passwordUpgradeRequired) {
         localStorage.setItem('password_upgrade_required', 'true');
@@ -199,7 +189,6 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       localStorage.removeItem('change_pwd_hint');
-      localStorage.removeItem('md5_pwd_hint');
       localStorage.removeItem('password_upgrade_required');
       void authApi.logout().catch(() => undefined);
       void router.push('/auth/login');

@@ -3,7 +3,7 @@ from collections.abc import MutableMapping
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    is_md5_dashboard_password,
+    is_pbkdf2_dashboard_password,
 )
 
 PASSWORD_STORAGE_UPGRADED_KEY = "password_storage_upgraded"
@@ -22,22 +22,7 @@ async def _set_dashboard_flag(
 
 
 def _has_usable_pbkdf2_password(config: AstrBotConfig) -> bool:
-    password = config["dashboard"].get("pbkdf2_password", "")
-    if not isinstance(password, str) or not password.startswith("pbkdf2_sha256$"):
-        return False
-
-    parts = password.split("$")
-    if len(parts) != 4:
-        return False
-
-    _, iterations, salt, digest = parts
-    try:
-        int(iterations)
-        bytes.fromhex(salt)
-        bytes.fromhex(digest)
-    except ValueError:
-        return False
-    return True
+    return is_pbkdf2_dashboard_password(config["dashboard"].get("pbkdf2_password", ""))
 
 
 async def is_password_storage_upgraded(
@@ -105,11 +90,7 @@ async def set_password_change_required(
 def get_dashboard_password_hash(config: AstrBotConfig, *, upgraded: bool) -> str:
     if upgraded and _has_usable_pbkdf2_password(config):
         return config["dashboard"].get("pbkdf2_password", "")
-
-    md5_password = config["dashboard"].get("password", "")
-    if upgraded and not is_md5_dashboard_password(md5_password):
-        return ""
-    return md5_password
+    return ""
 
 
 def set_dashboard_password_hashes(

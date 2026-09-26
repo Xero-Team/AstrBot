@@ -28,7 +28,7 @@ from astrbot.core.db.protocols import DatabaseSessionStore
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
     is_default_dashboard_password,
-    is_md5_dashboard_password,
+    is_pbkdf2_dashboard_password,
     validate_dashboard_password,
     verify_dashboard_password,
 )
@@ -71,13 +71,6 @@ DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "登录失败。如果您是初次使用，旧版默认 astrbot 密码已改为启动日志中输出的"
     "随机强密码。请使用日志中提供的的初始密码来登录。了解更多："
     f"{docs_href('faq.html')}"
-)
-MD5_PASSWORD_LOGIN_FAILURE_MESSAGE = (
-    "Incorrect username or password. If you cannot log in after upgrading "
-    "AstrBot even though the password is correct, see "
-    f"{docs_href('faq.html', english=True)}\n\n"
-    "用户名或密码错误。如果你在升级 AstrBot 后遇到了密码正确但无法登录的情况，"
-    f"请参考 {docs_href('faq.html')}"
 )
 TOTP_TRUSTED_DEVICE_COOKIE_NAME = _TOTP_TRUSTED_DEVICE_COOKIE_NAME
 TOTP_TRUSTED_DEVICE_MAX_AGE = _TOTP_TRUSTED_DEVICE_MAX_AGE
@@ -830,7 +823,6 @@ class AuthService:
                 "token": token,
                 "username": username,
                 "change_pwd_hint": False,
-                "md5_pwd_hint": False,
                 "password_upgrade_required": False,
             },
             message="Setup completed successfully",
@@ -868,7 +860,16 @@ class AuthService:
             and req_username == configured_username
             and not await self.has_dashboard_accounts()
         )
-        if bootstrap_account:
+        # A legacy non-PBKDF2 account hash (for example an MD5 value persisted
+        # by an older release) can no longer be verified directly. Only the
+        # configured bootstrap principal may recover it from the configured
+        # credential, so a non-bootstrap account cannot be taken over.
+        legacy_account_hash = (
+            account is not None
+            and account.username == configured_username
+            and not is_pbkdf2_dashboard_password(account.password_hash)
+        )
+        if bootstrap_account or legacy_account_hash:
             # A fresh deployment verifies the configured bootstrap credential
             # once, then persists the account as the authorization principal.
             login_verified = verify_dashboard_password(password, req_password)
@@ -881,8 +882,6 @@ class AuthService:
             await asyncio.sleep(3)
             if req_password == "astrbot":
                 return self.error(DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE)
-            if is_md5_dashboard_password(password):
-                return self.error(MD5_PASSWORD_LOGIN_FAILURE_MESSAGE)
             return self.error("用户名或密码错误", status_code=401)
 
         if account is None:
@@ -952,8 +951,14 @@ class AuthService:
                 else:
                     return self.error("恢复码无效", status_code=401)
 
+        if legacy_account_hash:
+            # Rehash only after every authentication factor succeeded, so a
+            # failed TOTP challenge cannot mutate the stored credential.
+            account = await self._ensure_dashboard_account(
+                account.username, password, sync_password=True
+            )
+
         change_pwd_hint = False
-        md5_pwd_hint = is_md5_dashboard_password(password)
         password_change_required = await is_password_change_required(
             self.config,
         )
@@ -964,7 +969,6 @@ class AuthService:
             and not self.demo_mode
         ):
             change_pwd_hint = True
-            md5_pwd_hint = True
             logger.warning("为了保证安全，请尽快修改默认密码。")
         if password_change_required and not self.demo_mode:
             change_pwd_hint = True
@@ -994,7 +998,6 @@ class AuthService:
                 "token": token,
                 "username": username,
                 "change_pwd_hint": change_pwd_hint,
-                "md5_pwd_hint": md5_pwd_hint,
                 "password_upgrade_required": not storage_upgraded,
             },
             jwt_token=token,

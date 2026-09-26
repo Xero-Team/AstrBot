@@ -12,6 +12,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
+    is_pbkdf2_dashboard_password,
     validate_dashboard_password,
 )
 
@@ -122,11 +123,11 @@ class AstrBotConfig(dict):
             return False
         if self._consume_reset_dashboard_password_flag():
             return True
-        if not dashboard_conf.get("pbkdf2_password") and not dashboard_conf.get(
-            "password"
-        ):
-            return True
-        return False
+        # Legacy plaintext-free MD5 values no longer count as a usable password;
+        # rotate to a generated PBKDF2 password so the old format can be removed.
+        return not is_pbkdf2_dashboard_password(
+            dashboard_conf.get("pbkdf2_password", "")
+        )
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()

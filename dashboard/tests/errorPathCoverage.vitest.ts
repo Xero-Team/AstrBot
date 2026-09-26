@@ -461,13 +461,11 @@ describe('error-path coverage', () => {
       username: 'u',
       token: 't',
       password_upgrade_required: true,
-      md5_pwd_hint: true,
     });
     await auth.finishAuthenticatedSession({
       username: 'u',
       token: 't',
       change_pwd_hint: false,
-      md5_pwd_hint: false,
     });
 
     api.chatApi.updateProject = vi.fn().mockRejectedValue(new Error('fail'));

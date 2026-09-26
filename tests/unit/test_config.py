@@ -17,7 +17,7 @@ from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
     hash_dashboard_password,
-    hash_md5_dashboard_password,
+    is_pbkdf2_dashboard_password,
     validate_dashboard_password,
     verify_dashboard_password,
 )
@@ -392,7 +392,10 @@ class TestAstrBotConfigLoad:
                 "password_change_required": False,
             },
         }
-        stored_pbkdf2_password = "pbkdf2_sha256$600000$00$00"
+        stored_pbkdf2_password = (
+            "pbkdf2_sha256$600000$00112233445566778899aabbccddeeff$"
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
         with open(temp_config_path, "w", encoding="utf-8") as f:
             json.dump(
                 {
@@ -431,7 +434,10 @@ class TestAstrBotConfigLoad:
                 "password_change_required": False,
             },
         }
-        stored_pbkdf2_password = "pbkdf2_sha256$600000$00$00"
+        stored_pbkdf2_password = (
+            "pbkdf2_sha256$600000$00112233445566778899aabbccddeeff$"
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
         with open(temp_config_path, "w", encoding="utf-8") as f:
             json.dump(
                 {
@@ -477,7 +483,7 @@ class TestAstrBotConfigLoad:
                 {
                     "dashboard": {
                         "username": "astrbot",
-                        "password": hash_md5_dashboard_password(old_password),
+                        "password": "77b90590a8945a7d36c963981a307dc9",
                         "pbkdf2_password": hash_dashboard_password(old_password),
                         "password_change_required": False,
                         "password_storage_upgraded": True,
@@ -505,10 +511,8 @@ class TestAstrBotConfigLoad:
         )
         assert config["dashboard"]["password"] == ""
 
-    def test_legacy_astrbot_user_without_change_flag_keeps_legacy_password(
-        self, temp_config_path
-    ):
-        """Test old MD5 configs keep legacy auth until the manual upgrade."""
+    def test_legacy_md5_config_is_rotated_to_generated_pbkdf2(self, temp_config_path):
+        """Test an MD5-only config is rotated to a generated PBKDF2 password."""
         default_config = {
             "dashboard": {
                 "username": "astrbot",
@@ -533,18 +537,39 @@ class TestAstrBotConfigLoad:
         )
         generated_password = getattr(config, "_generated_dashboard_password", None)
 
-        assert generated_password is None
-        assert config["dashboard"]["pbkdf2_password"] == ""
+        assert isinstance(generated_password, str)
+        assert config["dashboard"]["password"] == ""
+        assert config["dashboard"]["pbkdf2_password"].startswith("pbkdf2_sha256$")
+        assert config["dashboard"]["password_storage_upgraded"] is True
+        assert config["dashboard"]["password_change_required"] is True
         assert verify_dashboard_password(
-            config["dashboard"]["password"], DEFAULT_DASHBOARD_PASSWORD
+            config["dashboard"]["pbkdf2_password"], generated_password
         )
 
-    def test_legacy_md5_password_requires_plain_password(self):
-        """Test that a leaked legacy MD5 hash cannot be used as the login password."""
+    def test_legacy_md5_hash_is_not_verifiable(self):
+        """Test a leaked legacy MD5 hash cannot authenticate at all."""
         legacy_hash = "77b90590a8945a7d36c963981a307dc9"
 
-        assert verify_dashboard_password(legacy_hash, DEFAULT_DASHBOARD_PASSWORD)
+        assert not verify_dashboard_password(legacy_hash, DEFAULT_DASHBOARD_PASSWORD)
         assert not verify_dashboard_password(legacy_hash, legacy_hash)
+
+    def test_malformed_pbkdf2_hash_is_rejected(self):
+        """A prefixed but unusable PBKDF2 value must never be treated as valid."""
+        assert not is_pbkdf2_dashboard_password("pbkdf2_sha256$0$$")
+        assert not is_pbkdf2_dashboard_password("pbkdf2_sha256$600000$00$00")
+        assert not is_pbkdf2_dashboard_password(
+            "pbkdf2_sha256$-1$00112233445566778899aabbccddeeff$"
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
+        assert not is_pbkdf2_dashboard_password(
+            "pbkdf2_sha256$600001$00112233445566778899aabbccddeeff$"
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
+        assert not verify_dashboard_password("pbkdf2_sha256$0$$", "anything")
+        assert is_pbkdf2_dashboard_password(
+            "pbkdf2_sha256$600000$00112233445566778899aabbccddeeff$"
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
 
 
 class TestConfigValidation:

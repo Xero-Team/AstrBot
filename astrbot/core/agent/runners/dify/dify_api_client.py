@@ -67,9 +67,14 @@ class DifyAPIClient:
         if files is None:
             files = []
         url = f"{self.api_base}/chat-messages"
-        payload = locals()
-        payload.pop("self")
-        payload.pop("timeout_seconds")
+        payload = {
+            "inputs": inputs,
+            "query": query,
+            "user": user,
+            "response_mode": response_mode,
+            "conversation_id": conversation_id,
+            "files": files,
+        }
         logger.info(f"chat_messages payload: {payload}")
         async with self.session.post(
             url,
@@ -97,9 +102,12 @@ class DifyAPIClient:
         if files is None:
             files = []
         url = f"{self.api_base}/workflows/run"
-        payload = locals()
-        payload.pop("self")
-        payload.pop("timeout_seconds")
+        payload = {
+            "inputs": inputs,
+            "user": user,
+            "response_mode": response_mode,
+            "files": files,
+        }
         logger.info(f"workflow_run payload: {payload}")
         async with self.session.post(
             url,

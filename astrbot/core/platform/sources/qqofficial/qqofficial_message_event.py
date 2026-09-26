@@ -896,8 +896,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         keyboard: message.Keyboard | None = None,
         stream: dict | None = None,
     ) -> message.Message | None:
-        payload = locals()
-        payload.pop("self", None)
+        payload = {
+            "openid": openid,
+            "msg_type": msg_type,
+            "content": content,
+            "embed": embed,
+            "ark": ark,
+            "message_reference": message_reference,
+            "media": media,
+            "msg_id": msg_id,
+            "msg_seq": msg_seq,
+            "event_id": event_id,
+            "markdown": markdown,
+            "keyboard": keyboard,
+            "stream": stream,
+        }
         if payload.get("msg_id") is None:
             payload.pop("msg_id", None)
         # QQ API does not accept stream.id=None; remove it when not yet assigned

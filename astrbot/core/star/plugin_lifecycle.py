@@ -317,6 +317,7 @@ class PluginLifecycle:
                         "Plugin disappeared while its reload generation was staged",
                     )
                 previous = self._catalog.snapshot_package(current)
+                promoted = False
                 try:
                     self._catalog.promote_staged_package(
                         current,
@@ -326,11 +327,12 @@ class PluginLifecycle:
                     self._promote_staged_modules(staged)
                     self._catalog.refresh_plugin_log_modules(staged.metadata)
                     self._promote_staged_context(staged)
-                except BaseException:
-                    self._catalog.restore_package(previous)
-                    self._restore_staged_modules(staged)
-                    self._catalog.refresh_plugin_log_modules(previous.metadata)
-                    raise
+                    promoted = True
+                finally:
+                    if not promoted:
+                        self._catalog.restore_package(previous)
+                        self._restore_staged_modules(staged)
+                        self._catalog.refresh_plugin_log_modules(previous.metadata)
                 promotion_journal.append(
                     _PromotionJournalEntry(staged=staged, previous=previous),
                 )

@@ -1021,11 +1021,6 @@ class ProviderOpenAIChatCompletions(Provider):
                 if isinstance(tool_call, str):
                     # workaround for #1359
                     tool_call = json.loads(tool_call)
-                if tools is None:
-                    # 工具集未提供
-                    # Should be unreachable
-                    raise Exception("工具集未提供")
-
                 if tool_call.type == "function":
                     # workaround for #1454
                     if isinstance(tool_call.function.arguments, str):
@@ -1416,8 +1411,7 @@ class ProviderOpenAIChatCompletions(Provider):
 
         if llm_response is None:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
-            if last_exception is None:
-                raise Exception("未知错误")
+            assert last_exception is not None
             raise last_exception
         return llm_response
 

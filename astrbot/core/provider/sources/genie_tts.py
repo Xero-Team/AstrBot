@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import uuid
 from pathlib import Path
 from typing import Protocol, cast
@@ -42,7 +43,7 @@ class _GenieModule(Protocol):
 
 
 try:
-    import genie_tts as genie_module
+    genie_module = importlib.import_module("genie_tts")
 except ImportError:
     genie_module = None
 

@@ -226,12 +226,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             )
             return Comp.File(name=name, file=local_path)
 
-        if not url:
-            return (
-                f"error: messages[{index}] must include path or url for "
-                f"{component_type} component."
-            )
-
+        # The earlier guard requires path or url, and the path branch returned,
+        # so url is set here; assert the invariant for the type checker.
+        assert url is not None
         if component_type == "image":
             return Comp.Image.fromURL(url=url)
         if component_type == "record":

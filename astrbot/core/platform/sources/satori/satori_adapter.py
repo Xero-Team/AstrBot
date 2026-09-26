@@ -491,7 +491,6 @@ class SatoriPlatformAdapter(Platform):
         """提取<quote>标签信息"""
         try:
             # 处理命名空间前缀问题
-            processed_content = content
             if ":" in content and not content.startswith("<root"):
                 prefixes = self._extract_namespace_prefixes(content)
 
@@ -630,7 +629,6 @@ class SatoriPlatformAdapter(Platform):
 
         try:
             # 处理命名空间前缀问题
-            processed_content = content
             if ":" in content and not content.startswith("<root"):
                 prefixes = self._extract_namespace_prefixes(content)
 

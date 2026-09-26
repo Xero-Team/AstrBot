@@ -7,15 +7,15 @@ from . import HandlerFilter
 
 
 class CustomFilterMeta(ABCMeta):
-    def __and__(cls, other):
-        if not issubclass(other, CustomFilter):
-            raise TypeError("Operands must be subclasses of CustomFilter.")
-        return CustomFilterAnd(cls(), other())
+    def __and__(self, other):
+        if not (isinstance(other, type) and issubclass(other, CustomFilter)):
+            return NotImplemented
+        return CustomFilterAnd(self(), other())
 
-    def __or__(cls, other):
-        if not issubclass(other, CustomFilter):
-            raise TypeError("Operands must be subclasses of CustomFilter.")
-        return CustomFilterOr(cls(), other())
+    def __or__(self, other):
+        if not (isinstance(other, type) and issubclass(other, CustomFilter)):
+            return NotImplemented
+        return CustomFilterOr(self(), other())
 
 
 class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):

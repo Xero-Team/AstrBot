@@ -2560,3 +2560,15 @@ async def test_start_blocks_legacy_scoped_key_without_capabilities(tmp_path):
         for item in report.blocking
     )
     await db.close()
+
+
+def test_identifier_validator_accepts_urlsafe_session_ids():
+    """URL-safe session IDs may contain ``_`` and must not be rejected."""
+
+    session_id = "session_id-with_underscores_and-dashes"
+    subject = Subject.dashboard_session(session_id)
+    resource = Resource.named("provider", session_id)
+
+    assert subject.id == f"dashboard-session:{session_id}"
+    assert subject.kind == "dashboard-session"
+    assert resource.type == "provider"

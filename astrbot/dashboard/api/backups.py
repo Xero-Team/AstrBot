@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from astrbot import logger
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ok
 from astrbot.dashboard.schemas import (
     BackupImportRequest,
     BackupRenameRequest,
@@ -20,7 +20,7 @@ from astrbot.dashboard.services.backup_service import (
 from astrbot.dashboard.upload_utils import UploadFileAdapter
 
 from .auth import AuthContext, require_scope
-from .error_handling import internal_error_response
+from .error_handling import internal_error_response, service_error_response
 
 router = APIRouter(tags=["Backups"])
 _ARCHIVE_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -61,7 +61,7 @@ async def _run(operation, *, prefix: str):
         result = await run_maybe_async(operation)
         return _ok_result(result)
     except BackupServiceError as exc:
-        return error(str(exc))
+        return service_error_response(exc)
     except Exception as exc:
         return internal_error_response(logger, prefix, exc)
 
@@ -79,7 +79,7 @@ def _download_backup(*, filename: str | None, service: BackupService):
         filename = _safe_backup_filename(filename)
         return _download_response(service.prepare_download(filename=filename))
     except BackupServiceError as exc:
-        return JSONResponse(error(str(exc)), status_code=exc.status_code)
+        return JSONResponse(service_error_response(exc), status_code=exc.status_code)
     except Exception as exc:
         return internal_error_response(logger, "下载备份失败", exc)
 

@@ -21,6 +21,7 @@ from astrbot.dashboard.services.chat_service import (
 )
 
 from .auth import AuthContext, require_scope
+from .error_handling import service_error_response
 
 router = APIRouter(tags=["Chat"])
 _SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -52,7 +53,7 @@ async def _run(operation):
         result = await run_maybe_async(operation)
         return ok(result)
     except ChatServiceError as exc:
-        return error(str(exc))
+        return service_error_response(exc)
 
 
 def _file_response(file_path: str, mimetype: str | None):
@@ -118,7 +119,7 @@ async def _send_chat(
             dashboard_principal=dashboard_principal,
         )
     except ChatServiceError as exc:
-        return JSONResponse(error(str(exc)))
+        return JSONResponse(service_error_response(exc))
 
     return StreamingResponse(
         stream,
@@ -269,7 +270,7 @@ async def regenerate_chat_message(
             {"session_id": session_id, "message_id": message_id, **body},
         )
     except ChatServiceError as exc:
-        return JSONResponse(error(str(exc)))
+        return JSONResponse(service_error_response(exc))
     return await _send_chat(
         request=request,
         username=auth.username,
@@ -330,7 +331,7 @@ async def send_chat_thread_message(
             {"thread_id": thread_id, **model_patch_dict(payload)},
         )
     except ChatServiceError as exc:
-        return JSONResponse(error(str(exc)))
+        return JSONResponse(service_error_response(exc))
     return await _send_chat(
         request=request,
         username=auth.username,

@@ -11,7 +11,7 @@ _AUTH_JSON_FIELD_PATTERN = re.compile(
     r"(?i)(?P<prefix>(?P<kq>['\"])authorization(?P=kq)\s*:\s*)(?P<vq>['\"])bearer\s+[^'\"]+(?P=vq)"
 )
 _QUERY_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>{_SECRET_KEYS}\s*=\s*)(?P<value>[^&'\" ]+)"
+    rf"(?i)(?P<prefix>{_SECRET_KEYS}\s*[:=]\s*)(?P<value>[^&'\" ]+)"
 )
 _QUERY_PARAM_PATTERN = re.compile(
     r"(?i)(?P<prefix>[?&](?:api_?key|key|access_?token|auth_?token)=)(?P<value>[^&'\" ]+)"
@@ -113,3 +113,27 @@ def safe_error(
     if redact:
         text = redact_sensitive_text(text)
     return prefix + text
+
+
+def sanitize_error_text(message: object, *, redact_paths: bool = True) -> str:
+    """Render an error message without secrets, paths, or control characters.
+
+    Args:
+        message: Value whose text should be rendered safely.
+        redact_paths: Forwarded to :func:`redact_sensitive_text`.
+
+    Returns:
+        A single-line, redacted rendering of ``message``.
+    """
+    try:
+        text = str(message)
+    except Exception:
+        try:
+            text = repr(message)
+        except Exception:
+            text = "<unprintable error>"
+    # Strip control characters first: an embedded newline such as
+    # ``pass\nword: hunter2`` would otherwise reassemble into a secret the
+    # redactor already passed over.
+    text = re.sub(r"[\x00-\x1f\x7f]", "", text)
+    return redact_sensitive_text(text, redact_paths=redact_paths)

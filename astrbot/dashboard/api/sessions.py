@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from astrbot import logger
 from astrbot.core.auth.models import AuthorizationValueError, Resource
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import ApiError, error, ok
+from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
     BatchSessionProviderRequest,
     BatchSessionServiceRequest,
@@ -18,7 +18,7 @@ from astrbot.dashboard.services.session_management_service import (
 )
 
 from .auth import AuthContext, require_resource_action, require_scope
-from .error_handling import internal_error_response
+from .error_handling import internal_error_response, service_error_response
 
 router = APIRouter(tags=["Sessions"])
 
@@ -90,7 +90,7 @@ async def _group_umos_for_mutation(
 
 
 def _service_error(exc: SessionManagementServiceError) -> dict:
-    return error(str(exc))
+    return service_error_response(exc)
 
 
 def _unexpected_error(prefix: str, exc: Exception):

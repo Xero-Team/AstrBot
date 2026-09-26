@@ -594,3 +594,20 @@ async def test_file_token_resolution_hides_internal_failures(error_type) -> None
 
     assert str(exc_info.value) == "File not found"
     _assert_no_sensitive_values(str(exc_info.value))
+
+
+def test_service_error_response_redacts_internal_detail() -> None:
+    from astrbot.dashboard.api.error_handling import service_error_response
+    from astrbot.dashboard.responses import DashboardValidationError
+
+    payload = service_error_response(DashboardValidationError(_SENSITIVE_ERROR))
+
+    assert payload["status"] == "error"
+    _assert_no_sensitive_values(payload["message"])
+
+
+def test_safe_service_message_preserves_business_text() -> None:
+    from astrbot.dashboard.api.error_handling import safe_service_message
+
+    assert safe_service_message("分组 'abc' 不存在") == "分组 'abc' 不存在"
+    assert safe_service_message("Invalid skill name") == "Invalid skill name"

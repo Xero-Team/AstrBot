@@ -10,7 +10,7 @@ from starlette.formparsers import MultiPartException, MultiPartParser
 from astrbot import logger
 from astrbot.core.auth.models import Resource
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ok
 from astrbot.dashboard.schemas import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseImportRequest,
@@ -27,7 +27,7 @@ from astrbot.dashboard.services.knowledge_base_service import (
 )
 
 from .auth import AuthContext, object_resource, require_resource_action, require_scope
-from .error_handling import internal_error_response
+from .error_handling import internal_error_response, service_error_response
 
 KB_UPLOAD_MAX_FIELDS = 100
 
@@ -82,7 +82,7 @@ async def _run(operation, *, prefix: str):
             return ok(data, message)
         return ok(result)
     except KnowledgeBaseServiceError as exc:
-        payload = error(str(exc))
+        payload = service_error_response(exc)
         status_code = getattr(exc, "status_code", None)
         if status_code:
             return JSONResponse(payload, status_code=status_code)

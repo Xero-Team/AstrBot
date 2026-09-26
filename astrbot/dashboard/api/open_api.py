@@ -27,6 +27,7 @@ from .auth import (
     require_resource_action,
     require_scope,
 )
+from .error_handling import safe_service_message, service_error_response
 
 router = APIRouter(tags=["Open API"])
 _SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
@@ -75,7 +76,7 @@ def get_chat_service(request: Request) -> ChatService:
 
 
 def _open_api_error(message: str) -> JSONResponse:
-    return JSONResponse(error(message))
+    return JSONResponse(error(safe_service_message(message)))
 
 
 def _get_chat_config_list(service: OpenApiService) -> list[dict]:
@@ -278,7 +279,7 @@ async def chat_sessions(
                 )
             )
         except ChatServiceError as exc:
-            return error(str(exc))
+            return service_error_response(exc)
 
     try:
         resolved_username, username_err = service.resolve_open_username(
@@ -303,7 +304,7 @@ async def chat_sessions(
             )
         )
     except OpenApiServiceError as exc:
-        return error(str(exc))
+        return service_error_response(exc)
 
 
 @router.get("/configs", include_in_schema=False)
@@ -328,7 +329,7 @@ async def upload_open_api_file(
     try:
         return ok(await chat_service.save_uploaded_file(file))
     except ChatServiceError as exc:
-        return error(str(exc))
+        return service_error_response(exc)
 
 
 @router.get(
@@ -390,7 +391,7 @@ async def send_im_message(
     try:
         await service.send_message(body)
     except OpenApiServiceError as exc:
-        raise ApiError(str(exc), status_code=exc.status_code) from exc
+        raise ApiError(safe_service_message(exc), status_code=exc.status_code) from exc
 
     return ok()
 

@@ -210,6 +210,34 @@ describe('BtwPage', () => {
     wrapper.unmount();
   });
 
+  it('keeps edits made during a save marked as unsaved', async () => {
+    let releaseSave: ((value: unknown) => void) | undefined;
+    testState.updateProfileMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseSave = resolve;
+        }),
+    );
+
+    const wrapper = mountPage();
+    await flushPromises();
+    await markDirty(wrapper);
+
+    await wrapper.find('.btw-page__save').trigger('click');
+    await flushPromises();
+
+    wrapper
+      .findComponent({ name: 'VSwitch' })
+      .vm.$emit('update:modelValue', false);
+    await flushPromises();
+
+    releaseSave?.({ data: { status: 'ok', message: 'saved' } });
+    await flushPromises();
+
+    expect(wrapper.find('.btw-page__unsaved').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('offers the named profiles alongside the default one', async () => {
     testState.listMock.mockResolvedValue({
       data: {

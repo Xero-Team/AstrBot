@@ -374,6 +374,8 @@ async function save(twoFactorCode = '') {
 async function saveProfile(target: string, twoFactorCode = '') {
   if (saving.value) return false;
   saving.value = true;
+  const submittedSnapshot = snapshot(configData.value);
+  const submittedConfig = JSON.parse(submittedSnapshot) as OpenConfig;
   const headers: Record<string, string> = {};
   if (twoFactorCode) headers['X-2FA-Code'] = twoFactorCode;
 
@@ -386,7 +388,7 @@ async function saveProfile(target: string, twoFactorCode = '') {
           validateStatus: (status: number) =>
             (status >= 200 && status < 300) || status === 401,
         };
-        return configProfileApi.update(target, configData.value, requestConfig);
+        return configProfileApi.update(target, submittedConfig, requestConfig);
       },
       target,
       requestStepUp,
@@ -409,7 +411,7 @@ async function saveProfile(target: string, twoFactorCode = '') {
     if (response.data?.status === 'ok') {
       twoFactorOpen.value = false;
       twoFactorError.value = '';
-      savedSnapshot.value = snapshot(configData.value);
+      savedSnapshot.value = submittedSnapshot;
       showSnack(response.data?.message || tm('btwPage.saveSuccess'), 'success');
       return true;
     }

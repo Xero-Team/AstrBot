@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import base64
+import math
+import struct
+import wave
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -20,6 +23,17 @@ def _zero_split_send_interval(monkeypatch) -> None:
 
 def _napcat_types(call) -> list[str]:
     return [segment.to_dict()["type"] for segment in call.kwargs["message"]]
+
+
+def _write_sine_wav(path, *, rate: int = 16000, seconds: float = 0.2) -> None:
+    """Write a short mono sine-tone WAV that pysilk can encode."""
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        for index in range(int(rate * seconds)):
+            sample = int(0.2 * 32767 * math.sin(2 * math.pi * 440 * index / rate))
+            wav.writeframesraw(struct.pack("<h", sample))
 
 
 @pytest.mark.asyncio
@@ -199,16 +213,99 @@ async def test_napcat_outbound_passes_through_unreadable_file_uri_image():
 
 
 @pytest.mark.asyncio
-async def test_napcat_outbound_encodes_local_record_video_and_file_as_base64(
+async def test_napcat_outbound_encodes_local_record_as_tencent_silk(tmp_path):
+    record_path = tmp_path / "voice.wav"
+    _write_sine_wav(record_path)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(
+        MessageChain([Record.fromFileSystem(record_path)])
+    )
+
+    assert [segment.to_dict()["type"] for segment in payload] == ["record"]
+    data = payload[0].to_dict()["data"]
+    silk_bytes = base64.b64decode(data["file"].removeprefix("base64://"))
+    assert silk_bytes.startswith(b"\x02#!SILK_V3")
+    assert "path" not in data
+    assert "url" not in data
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_record_silk_uses_audio_media_type(monkeypatch, tmp_path):
+    record_path = tmp_path / "voice.wav"
+    record_path.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+    record = Record.fromFileSystem(record_path)
+    silk_bytes = b"\x02#!SILK_V3fake"
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class _FakeResolver:
+        def __init__(self, media_ref: str, **kwargs: object) -> None:
+            self.media_ref = media_ref
+            self.kwargs = kwargs
+
+        async def to_base64(self, **kwargs: object) -> str:
+            calls.append((self.media_ref, {**self.kwargs, **kwargs}))
+            return base64.b64encode(silk_bytes).decode()
+
+    monkeypatch.setattr(napcat_adapter, "MediaResolver", _FakeResolver)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    payload = await adapter._build_outbound_message(MessageChain([record]))
+
+    assert calls == [
+        (
+            record.file,
+            {
+                "media_type": "audio",
+                "default_suffix": ".wav",
+                "target_format": "tencent_silk",
+            },
+        )
+    ]
+    assert payload[0].to_dict()["data"]["file"] == (
+        "base64://" + base64.b64encode(silk_bytes).decode()
+    )
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_falls_back_to_raw_record_when_silk_fails(
+    monkeypatch, tmp_path, caplog
+):
+    record_bytes = b"raw-voice-bytes"
+    record_path = tmp_path / "voice.wav"
+    record_path.write_bytes(record_bytes)
+
+    class _FakeResolver:
+        def __init__(self, media_ref: str, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        async def to_base64(self, **kwargs: object) -> str:
+            if self.kwargs.get("media_type") == "audio":
+                raise RuntimeError("pysilk is not installed")
+            return base64.b64encode(record_bytes).decode()
+
+    monkeypatch.setattr(napcat_adapter, "MediaResolver", _FakeResolver)
+    queue: asyncio.Queue = asyncio.Queue()
+    adapter = _make_adapter(queue)
+    with caplog.at_level("WARNING"):
+        payload = await adapter._build_outbound_message(
+            MessageChain([Record.fromFileSystem(record_path)])
+        )
+
+    assert payload[0].to_dict()["data"]["file"] == (
+        "base64://" + base64.b64encode(record_bytes).decode()
+    )
+    assert any("Silk" in message for message in caplog.messages)
+
+
+@pytest.mark.asyncio
+async def test_napcat_outbound_encodes_local_video_and_file_as_base64(
     tmp_path,
 ):
-    record_bytes = b"#!AMR\nlocal-record"
     video_bytes = b"\x00\x00\x00\x18ftypmp42"
     file_bytes = b"attachment-bytes"
-    record_path = tmp_path / "voice.amr"
     video_path = tmp_path / "clip.mp4"
     file_path = tmp_path / "note.txt"
-    record_path.write_bytes(record_bytes)
     video_path.write_bytes(video_bytes)
     file_path.write_bytes(file_bytes)
     queue: asyncio.Queue = asyncio.Queue()
@@ -216,7 +313,6 @@ async def test_napcat_outbound_encodes_local_record_video_and_file_as_base64(
     payload = await adapter._build_outbound_message(
         MessageChain(
             [
-                Record.fromFileSystem(record_path),
                 Video.fromFileSystem(video_path),
                 File(name="note.txt", file=str(file_path)),
             ]
@@ -224,22 +320,17 @@ async def test_napcat_outbound_encodes_local_record_video_and_file_as_base64(
     )
 
     assert [segment.to_dict()["type"] for segment in payload] == [
-        "record",
         "video",
         "file",
     ]
     assert payload[0].to_dict()["data"]["file"] == (
-        "base64://" + base64.b64encode(record_bytes).decode()
-    )
-    assert payload[1].to_dict()["data"]["file"] == (
         "base64://" + base64.b64encode(video_bytes).decode()
     )
-    assert payload[2].to_dict()["data"]["file"] == (
+    assert payload[1].to_dict()["data"]["file"] == (
         "base64://" + base64.b64encode(file_bytes).decode()
     )
-    assert payload[2].to_dict()["data"]["name"] == "note.txt"
+    assert payload[1].to_dict()["data"]["name"] == "note.txt"
     assert "path" not in payload[0].to_dict()["data"]
-    assert "url" not in payload[1].to_dict()["data"]
 
 
 @pytest.mark.asyncio

@@ -161,7 +161,7 @@ docker compose up -d
 
 - Bay 默认监听在 `http://<your-host>:8114`
 - 在 AstrBot 控制台中选择 `Shipyard Neo` 驱动器
-- `Shipyard Neo API Endpoint` 填写对应地址，例如 `http://<your-host>:8114`
+- `Shipyard Neo API Endpoint` 填写对应地址，例如 `http://<your-host>:8114`；该地址仅支持 `http`/`https`，可以指向本机、局域网或远程 Bay，但不能指向云元数据地址（如 `169.254.169.254`），保存配置时的健康检查会拒绝这类目标
 - `Shipyard Neo Access Token` 填写 Bay API Key；如果 AstrBot 能访问 Bay 的 `credentials.json`，也可以留空让 AstrBot 自动发现
 
 ### 参考：`config.yaml` 完整示例（附说明）

@@ -161,7 +161,7 @@ After deployment:
 
 - Bay listens on `http://<your-host>:8114` by default
 - In the AstrBot console, choose the `Shipyard Neo` driver
-- Set `Shipyard Neo API Endpoint` to the corresponding address, for example `http://<your-host>:8114`
+- Set `Shipyard Neo API Endpoint` to the corresponding address, for example `http://<your-host>:8114`; only `http`/`https` is supported, and the target may be a local, LAN, or remote Bay but not a cloud metadata address (such as `169.254.169.254`), which the save-time health probe rejects
 - Set `Shipyard Neo Access Token` to the Bay API key; if AstrBot can access Bay's `credentials.json`, you may also leave it empty and let AstrBot auto-discover it
 
 ### Reference: Full `config.yaml` Example (with Notes)

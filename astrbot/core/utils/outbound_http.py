@@ -205,6 +205,17 @@ JSON_FETCH = OutboundRequestPolicy(
     timeout_seconds=30.0,
     allowed_content_types=None,
 )
+SHIPYARD_NEO_HEALTH = OutboundRequestPolicy(
+    allowed_schemes=frozenset({"http", "https"}),
+    allowed_hosts=None,
+    allowed_ports=None,
+    allow_private_network=True,
+    max_redirects=0,
+    max_url_length=_DEFAULT_MAX_URL_LENGTH,
+    max_response_bytes=_MIRROR_TEST_MAX_BYTES,
+    timeout_seconds=5.0,
+    allowed_content_types=None,
+)
 
 
 def redact_outbound_url(url: str) -> str:

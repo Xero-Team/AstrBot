@@ -1,0 +1,20 @@
+name: 'AstrBot CodeQL config'
+
+# Noise reduction for GitHub Code Scanning. This config only filters CodeQL
+# query output; it does not change product behavior or disable the workflow.
+# The workflow still runs `+security-extended,security-and-quality`; these
+# filters apply to that combined set, so security-severity findings stay
+# visible. See Issue #293.
+query-filters:
+  # Protocol method bodies are intentionally `...`. The query flags every
+  # `typing.Protocol` stub; there is no source-side fix that keeps the stubs.
+  - exclude:
+      id: py/ineffectual-statement
+  # `astrbot/api/**` exposes `from x import *` facades on purpose.
+  - exclude:
+      id: py/polluting-import
+
+# Test sources are not product surfaces. Covers `tests/**` and
+# `dashboard/tests/**`.
+paths-ignore:
+  - '**/tests/**'

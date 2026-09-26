@@ -17,7 +17,6 @@ from astrbot.core.log import (
     LogQueueHandler,
     _loguru,
     _LoguruInterceptHandler,
-    mask_secret,
     sanitize_log_payload,
     sanitize_log_record,
 )
@@ -452,13 +451,3 @@ def test_configure_logger_replacement_console_sink_disables_diagnose() -> None:
             LogManager._configured = previous_configured
         logger.setLevel(previous_level)
         logging.getLogger().setLevel(previous_root_level)
-
-
-def test_mask_secret_never_reveals_any_part_of_the_value() -> None:
-    secret = "sk-live-super-secret-value-1234567890"
-    masked = mask_secret(secret)
-    assert masked == "redacted"
-    assert secret[:4] not in masked
-    assert secret not in masked
-    assert mask_secret(None) == "redacted"
-    assert mask_secret("") == "redacted"

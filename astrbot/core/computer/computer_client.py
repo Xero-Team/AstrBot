@@ -10,7 +10,6 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from astrbot import logger
-from astrbot.core.log import mask_secret
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
@@ -146,9 +145,8 @@ def _discover_bay_credentials(endpoint: str) -> str:
                         endpoint,
                     )
                 logger.info(
-                    "[Computer] Auto-discovered Bay API key from %s (key=%s)",
+                    "[Computer] Auto-discovered Bay API key from %s",
                     cred_path,
-                    mask_secret(api_key),
                 )
                 return api_key
         except (json.JSONDecodeError, OSError) as exc:

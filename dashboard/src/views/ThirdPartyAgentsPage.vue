@@ -41,7 +41,11 @@
 
     <v-skeleton-loader v-else-if="!loaded" type="article" />
 
-    <CodingCliProviders v-else v-model="providers" />
+    <CodingCliProviders
+      v-else
+      v-model="providers"
+      :before-switch="ensureProvidersSaved"
+    />
 
     <FloatingActionStack :label="tm('thirdPartyAgentsPage.actions')">
       <v-btn
@@ -245,9 +249,30 @@ const hasUnsavedChanges = computed(
   () => loaded.value && snapshot(configData.value) !== savedSnapshot.value,
 );
 
-async function save(twoFactorCode = '') {
-  if (saving.value) return;
+/**
+ * Persist pending provider edits so a switch can resolve a provider by id.
+ *
+ * Returns false while a save is already in flight, when the save fails, or
+ * when edits arrived during it; the caller must not switch against a stale
+ * list in any of those cases.
+ */
+async function ensureProvidersSaved(): Promise<boolean> {
+  if (saving.value) return false;
+  if (hasUnsavedChanges.value && !(await save())) return false;
+  return !hasUnsavedChanges.value;
+}
+
+/**
+ * Save the page's configuration, returning whether it was persisted.
+ *
+ * The request body is an immutable snapshot, so edits made while the save is
+ * in flight stay unsaved and are never reported as persisted.
+ */
+async function save(twoFactorCode = ''): Promise<boolean> {
+  if (saving.value) return false;
   saving.value = true;
+  const submittedSnapshot = snapshot(configData.value);
+  const submittedConfig = JSON.parse(submittedSnapshot) as OpenConfig;
   const headers: Record<string, string> = {};
   if (twoFactorCode) headers['X-2FA-Code'] = twoFactorCode;
 
@@ -262,17 +287,14 @@ async function save(twoFactorCode = '') {
         };
         return configProfileApi.update(
           SYSTEM_SCOPE,
-          configData.value,
+          submittedConfig,
           requestConfig,
         );
       },
       SYSTEM_SCOPE,
       requestStepUp,
     );
-    if (!response) {
-      saving.value = false;
-      return;
-    }
+    if (!response) return false;
 
     const payload = asRecord(response.data?.data);
     if (response.status === 401 && payload?.totp_required === true) {
@@ -280,29 +302,29 @@ async function save(twoFactorCode = '') {
         ? tm('thirdPartyAgentsPage.twoFactorRejected')
         : '';
       twoFactorOpen.value = true;
-      saving.value = false;
-      return;
+      return false;
     }
 
     if (response.data?.status === 'ok') {
       twoFactorOpen.value = false;
       twoFactorError.value = '';
-      savedSnapshot.value = snapshot(configData.value);
+      savedSnapshot.value = submittedSnapshot;
       showSnack(
         response.data?.message || tm('thirdPartyAgentsPage.saveSuccess'),
         'success',
       );
-    } else {
-      showSnack(
-        response.data?.message || tm('thirdPartyAgentsPage.saveError'),
-        'error',
-      );
+      return true;
     }
+    showSnack(
+      response.data?.message || tm('thirdPartyAgentsPage.saveError'),
+      'error',
+    );
   } catch {
     showSnack(tm('thirdPartyAgentsPage.saveError'), 'error');
   } finally {
     saving.value = false;
   }
+  return false;
 }
 
 function confirmTwoFactor(code: string) {

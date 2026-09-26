@@ -395,6 +395,8 @@ const props = withDefaults(
   defineProps<{
     /** The stored provider list, edited in place through `update:modelValue`. */
     modelValue?: StoredCliProvider[];
+    /** Persist pending edits before the switch resolves a provider by id. */
+    beforeSwitch: () => Promise<boolean>;
   }>(),
   { modelValue: () => [] },
 );
@@ -636,6 +638,7 @@ async function remove(provider: CodingCliProvider) {
   commit(providers.value.filter((entry) => entry.id !== provider.id));
 }
 
+/** Confirm, persist any pending page edits, then switch the CLI by id. */
 async function switchTo(state: CodingCliState, provider: CodingCliProvider) {
   const confirmed = await askForConfirmation(
     `${tm('thirdPartyAgentsPage.switchTitle')}\n\n${tm('thirdPartyAgentsPage.switchMessage')}`,
@@ -645,6 +648,7 @@ async function switchTo(state: CodingCliState, provider: CodingCliProvider) {
 
   busy.value = switchKey(state.cli, provider.id);
   try {
+    if (!(await props.beforeSwitch())) return;
     const response = await runMutationWithStepUp(
       (stepUp) =>
         codingCliApi.switchProvider(

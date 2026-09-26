@@ -321,7 +321,7 @@
     "endpointOrKeyRequired": "provider 至少需要端点或 API Key 之一。",
     "idTaken": "已有其他 provider 使用该 ID。",
     "switchTitle": "要覆盖该 CLI 自己的配置吗？",
-    "switchMessage": "这会改写该 CLI 在本机读取的配置文件，包括所存的密钥。原文件会在首次切换前备份一次，「取回」可以还原。",
+    "switchMessage": "这会先保存本页尚未保存的 provider 变更，再改写该 CLI 在本机读取的配置文件，包括所存的密钥。原文件会在首次切换前备份一次，「取回」可以还原。",
     "deleteTitle": "要删除这个 provider 吗？",
     "deleteMessage": "它只会从列表中移除。如果该 CLI 正在使用它，已写入的文件会保持原样，直到你切换或取回。",
     "restoreTitle": "要取回 AstrBot 的配置吗？",

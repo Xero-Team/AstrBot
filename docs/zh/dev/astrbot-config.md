@@ -350,6 +350,8 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 
 `btw.cli_providers` 是 **更多功能 → CLI 全局配置**（`/cli-config`）编辑的 provider 列表。它是普通配置：条目随配置档保存，`api_key` 也存在配置档里，与其他 provider 凭据一样。每个条目包含 `id`、`name`、可选的 `cli`（`claude_code` 或 `codex`；留空表示两个 CLI 都可用，界面上新增的条目总会带上所在分区）、`base_url`、`model`、`note` 和 `api_key`；`id` 在整份列表内唯一。
 
+点击「启用」并确认后，页面会先将本页所有未保存的 provider 变更保存到运行中的配置档，再按所选条目的 `id` 切换 CLI。保存失败或取消验证时不会切换；如果保存需要 TOTP 验证码，完成验证并保存成功后，再点一次「启用」。CLI 文件写入仍需单独的 step-up 验证。
+
 委派任务不受这里的切换影响：一次运行加载自己那份配置层，不读这些文件。这里切换的是该 CLI 在本机的配置，也就是你手动开会话时用的配置。
 
 这是 AstrBot 唯一一处写进自己数据目录之外的地方。目标文件在第一次写入前备份一次（`.astrbot-backup`，由“收回”还原），写入是原子的（`mkstemp` + `fsync` + `os.replace` + 目录 fsync），持有凭据的文件权限为 `0o600`，响应只报告是否存有密钥、从不返回其值。Claude Code 走 `~/.claude/settings.json` 的 `env`（`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`、`ANTHROPIC_AUTH_TOKEN`），逐键合并、其余内容原样保留。Codex 的 TOML 标准库能读不能写，改写一个解析不了的文件会丢掉用户的注释，因此 AstrBot 的键写进文件顶部一段注释分隔的区块（TOML 要求顶层键排在所有表之前），其余部分逐字节保留，凭据写进 `auth.json`。

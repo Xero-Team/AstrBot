@@ -96,6 +96,13 @@ def test_redact_sensitive_text_redacts_colon_separated_secrets():
     assert "s3cr3t" not in redacted
 
 
+def test_sanitize_error_text_removes_controls_before_redacting():
+    cleaned = sanitize_error_text("pass\nword: hunter2 /srv/private/config.json")
+
+    assert "hunter2" not in cleaned
+    assert "\n" not in cleaned
+
+
 def test_sanitize_error_text_handles_unprintable_message():
     class Unprintable:
         def __str__(self) -> str:

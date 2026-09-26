@@ -132,5 +132,8 @@ def sanitize_error_text(message: object, *, redact_paths: bool = True) -> str:
             text = repr(message)
         except Exception:
             text = "<unprintable error>"
-    text = redact_sensitive_text(text, redact_paths=redact_paths)
-    return re.sub(r"[\x00-\x1f\x7f]", "", text)
+    # Strip control characters first: an embedded newline such as
+    # ``pass\nword: hunter2`` would otherwise reassemble into a secret the
+    # redactor already passed over.
+    text = re.sub(r"[\x00-\x1f\x7f]", "", text)
+    return redact_sensitive_text(text, redact_paths=redact_paths)

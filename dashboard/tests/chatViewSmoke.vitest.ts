@@ -26,6 +26,8 @@ const testState = vi.hoisted(() => ({
   activeMessages: [] as Array<Record<string, unknown>>,
   loadedSessions: new Map<string, boolean>(),
   sessionProjects: new Map<string, unknown>(),
+  paginationBySession: new Map<string, Record<string, unknown>>(),
+  loadEarlierMessagesMock: vi.fn(),
   currSessionId: '',
   getSessionsMock: vi.fn(),
   newSessionMock: vi.fn(),
@@ -131,7 +133,7 @@ vi.mock('@/composables/useMessages', () => ({
     loadingMessages: ref(false),
     sending: ref(false),
     loadedSessions: testState.loadedSessions,
-    paginationBySession: new Map(),
+    paginationBySession: testState.paginationBySession,
     sessionProjects: testState.sessionProjects,
     activeMessages: ref(testState.activeMessages),
     isSessionRunning: () => false,
@@ -140,7 +142,7 @@ vi.mock('@/composables/useMessages', () => ({
     messageParts: (message: { content?: { message?: unknown[] } }) =>
       message.content?.message || [],
     loadSessionMessages: vi.fn(),
-    loadEarlierMessages: vi.fn(),
+    loadEarlierMessages: testState.loadEarlierMessagesMock,
     createLocalExchange: vi.fn(),
     sendMessageStream: vi.fn(),
     editMessage: vi.fn(),
@@ -293,6 +295,7 @@ describe('Chat view smoke', () => {
     testState.activeMessages = [];
     testState.loadedSessions = new Map();
     testState.sessionProjects = new Map();
+    testState.paginationBySession = new Map();
     testState.currSessionId = '';
     testState.getSessionsMock.mockResolvedValue(undefined);
     testState.newSessionMock.mockResolvedValue('session-new');
@@ -520,6 +523,84 @@ describe('Chat view smoke', () => {
     await nextTick();
 
     expect(wrapper.find('.scroll-to-bottom-btn').exists()).toBe(false);
+  });
+
+  it('preserves user scrolling while earlier history loads', async () => {
+    testState.currSessionId = 'session-1';
+    testState.sessions = [
+      {
+        session_id: 'session-1',
+        display_name: 'Session 1',
+      },
+    ];
+    testState.activeMessages = [
+      {
+        id: 'msg-2',
+        content: {
+          type: 'bot',
+          message: [{ type: 'plain', text: 'hello' }],
+        },
+      },
+    ];
+    testState.paginationBySession.set('session-1', {
+      has_more: true,
+      loading: false,
+      error: undefined,
+    });
+
+    let resolveLoad: (() => void) | undefined;
+    testState.loadEarlierMessagesMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+
+    const wrapper = mountChat();
+    await flushPromises();
+
+    const panel = wrapper.get('.messages-panel').element as HTMLElement;
+    Object.defineProperty(panel, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(panel, 'clientHeight', {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(panel, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: 100,
+    });
+
+    const anchor = document.createElement('div');
+    anchor.setAttribute('data-message-id', 'msg-2');
+    let anchorTop = 200;
+    anchor.getBoundingClientRect = () =>
+      ({
+        top: anchorTop,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    panel.appendChild(anchor);
+
+    await wrapper.get('.messages-panel').trigger('scroll');
+    await nextTick();
+
+    panel.scrollTop = 130;
+    anchorTop = 300;
+    resolveLoad?.();
+    await flushPromises();
+    await nextTick();
+
+    expect(panel.scrollTop).toBe(260);
   });
 
   it('opens nested settings menus on click for coarse pointers', async () => {

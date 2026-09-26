@@ -33,6 +33,19 @@ _UNPRINTABLE_LOG_MESSAGE = "<unprintable log message>"
 _UNPRINTABLE_EXCEPTION = "<unprintable exception>"
 
 
+def mask_secret(_value: object | None = None) -> str:
+    """Return a constant placeholder that never reveals any part of a secret.
+
+    Args:
+        _value: The secret to mask. The value is intentionally ignored so that
+            no prefix, length, or derived identifier can leak into logs.
+
+    Returns:
+        The constant string ``"redacted"``.
+    """
+    return "redacted"
+
+
 def _new_event_id() -> str:
     value = uuid.uuid4()
     return str(getattr(value, "hex", value))

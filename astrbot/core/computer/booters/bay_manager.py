@@ -14,6 +14,7 @@ import aiodocker
 import aiohttp
 
 from astrbot import logger
+from astrbot.core.log import mask_secret
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -187,14 +188,9 @@ class BayContainerManager:
                         creds = json.loads(f.read().decode("utf-8"))
                         api_key = creds.get("api_key", "")
                         if api_key:
-                            masked = (
-                                f"{api_key[:8]}..."
-                                if len(api_key) >= 10
-                                else "redacted"
-                            )
                             logger.info(
                                 "[BayManager] Auto-discovered Bay API key: %s",
-                                masked,
+                                mask_secret(api_key),
                             )
                         return api_key
         except Exception as exc:

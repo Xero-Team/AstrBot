@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from astrbot import logger
+from astrbot.core.log import mask_secret
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
@@ -144,11 +145,10 @@ def _discover_bay_credentials(endpoint: str) -> str:
                         cred_endpoint,
                         endpoint,
                     )
-                masked_key = f"{api_key[:4]}..." if len(api_key) >= 6 else "redacted"
                 logger.info(
-                    "[Computer] Auto-discovered Bay API key from %s (prefix=%s)",
+                    "[Computer] Auto-discovered Bay API key from %s (key=%s)",
                     cred_path,
-                    masked_key,
+                    mask_secret(api_key),
                 )
                 return api_key
         except (json.JSONDecodeError, OSError) as exc:

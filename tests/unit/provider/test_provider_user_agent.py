@@ -88,9 +88,7 @@ def test_build_conversation_headers_only_when_id_present():
 
 def test_extra_headers_kwargs_layer_conversation_id():
     assert extra_headers_kwargs(None) == {}
-    assert extra_headers_kwargs({"X-Trace": "1"}) == {
-        "extra_headers": {"X-Trace": "1"}
-    }
+    assert extra_headers_kwargs({"X-Trace": "1"}) == {"extra_headers": {"X-Trace": "1"}}
     assert extra_headers_kwargs(None, "conversation-1") == {
         "extra_headers": {CONVERSATION_ID_HEADER: "conversation-1"}
     }

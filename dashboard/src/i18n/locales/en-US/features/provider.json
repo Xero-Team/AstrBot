@@ -174,8 +174,6 @@
     }
   },
   "jevClassifier": {
-    "title": "JEV System One classifier",
-    "description": "Use the HTTPS TypeSafe endpoint, an API key (or an environment-variable reference), the model alias, and a positive timeout. JEV makes typed decisions; it is not a chat model and does not expose a model list.",
     "validation": {
       "https": "JEV API Base must use HTTPS.",
       "key": "Enter a JEV API key or an environment-variable reference.",

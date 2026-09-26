@@ -25,7 +25,6 @@ const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
 const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
 let dialog = ref(false);
 let accountWarning = ref(false);
-let accountWarningMd5 = ref(false);
 let accountWarningUpgrade = ref(false);
 let aboutDialog = ref(false);
 const username = localStorage.getItem('user');
@@ -147,23 +146,15 @@ function getVersion() {
         data.dashboard_version || undefined,
       );
       const change_pwd_hint = data.change_pwd_hint;
-      const md5_pwd_hint = data.md5_pwd_hint;
       const password_upgrade_required = data.password_upgrade_required;
-      if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
+      if (change_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
         accountWarningUpgrade.value = Boolean(password_upgrade_required);
-        accountWarningMd5.value =
-          Boolean(md5_pwd_hint) && !password_upgrade_required;
-        if (change_pwd_hint || (md5_pwd_hint && !password_upgrade_required)) {
+        if (change_pwd_hint) {
           localStorage.setItem('change_pwd_hint', 'true');
         } else {
           localStorage.removeItem('change_pwd_hint');
-        }
-        if (md5_pwd_hint && !password_upgrade_required) {
-          localStorage.setItem('md5_pwd_hint', 'true');
-        } else {
-          localStorage.removeItem('md5_pwd_hint');
         }
         if (password_upgrade_required) {
           localStorage.setItem('password_upgrade_required', 'true');
@@ -171,10 +162,8 @@ function getVersion() {
           localStorage.removeItem('password_upgrade_required');
         }
       } else {
-        accountWarningMd5.value = false;
         accountWarningUpgrade.value = false;
         localStorage.removeItem('change_pwd_hint');
-        localStorage.removeItem('md5_pwd_hint');
         localStorage.removeItem('password_upgrade_required');
       }
     })
@@ -185,14 +174,12 @@ function getVersion() {
 
 function initPasswordWarningFromStorage() {
   const hasChangePwdHint = localStorage.getItem('change_pwd_hint') === 'true';
-  const hasMd5PwdHint = localStorage.getItem('md5_pwd_hint') === 'true';
   const hasPasswordUpgradeRequired =
     localStorage.getItem('password_upgrade_required') === 'true';
-  if (hasChangePwdHint || hasMd5PwdHint || hasPasswordUpgradeRequired) {
+  if (hasChangePwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningMd5.value = hasMd5PwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
@@ -643,9 +630,7 @@ const changeLanguage = async (langCode: string) => {
               t(
                 accountWarningUpgrade
                   ? 'core.header.accountDialog.securityWarningUpgrade'
-                  : accountWarningMd5
-                    ? 'core.header.accountDialog.securityWarningMd5'
-                    : 'core.header.accountDialog.securityWarning',
+                  : 'core.header.accountDialog.securityWarning',
               )
             }}</strong>
           </v-alert>

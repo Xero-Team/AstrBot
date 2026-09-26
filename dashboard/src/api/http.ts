@@ -97,15 +97,11 @@ function normalizeAxiosError(error: AxiosError) {
       );
 
     if (requestPath.startsWith('/api/') && !isAuthChallenge) {
-      [
-        'user',
-        'token',
-        'change_pwd_hint',
-        'md5_pwd_hint',
-        'password_upgrade_required',
-      ].forEach((key) => {
-        localStorage.removeItem(key);
-      });
+      ['user', 'token', 'change_pwd_hint', 'password_upgrade_required'].forEach(
+        (key) => {
+          localStorage.removeItem(key);
+        },
+      );
 
       if (!window.location.hash.startsWith('#/auth/login')) {
         window.location.hash = '/auth/login';

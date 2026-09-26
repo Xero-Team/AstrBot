@@ -78,7 +78,6 @@ vi.mock('@/api/v1', () => ({
           version: '4.26.2',
           dashboard_version: '4.26.2',
           change_pwd_hint: false,
-          md5_pwd_hint: false,
           password_upgrade_required: false,
         },
       },

@@ -242,7 +242,6 @@ describe('frontend modules', () => {
       username: 'astrbot',
       token: 'tok',
       change_pwd_hint: true,
-      md5_pwd_hint: true,
     });
     expect(auth.has_token()).toBe(true);
     auth.logout();

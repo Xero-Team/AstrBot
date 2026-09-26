@@ -4,7 +4,6 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 from typing import Literal, cast
 
 import httpx
@@ -82,7 +81,6 @@ class ProviderGoogleGenAI(Provider):
 
         self._http_client: httpx.AsyncClient | None = None
         self._stale_http_clients: list[httpx.AsyncClient] = []
-        self._request_lock = asyncio.Lock()
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
@@ -120,42 +118,6 @@ class ProviderGoogleGenAI(Provider):
             http_options=http_options,
         ).aio
         drop_sdk_user_agent(self.client)
-
-    @asynccontextmanager
-    async def _conversation_header(self, conversation_id: str | None):
-        """Temporarily attach a conversation ID to a Gemini HTTP request.
-
-        Args:
-            conversation_id: AstrBot conversation ID to associate with the
-                request. No header is added when it is empty.
-
-        Yields:
-            Control while the request is using the temporary header.
-        """
-        http_options = getattr(getattr(self, "client", None), "_api_client", None)
-        http_options = getattr(http_options, "_http_options", None)
-        headers = getattr(http_options, "headers", None)
-        conversation_headers = build_conversation_headers(conversation_id)
-        if not isinstance(headers, dict) or not conversation_headers:
-            yield
-            return
-
-        request_lock = getattr(self, "_request_lock", None)
-        if request_lock is None:
-            request_lock = asyncio.Lock()
-            self._request_lock = request_lock
-        header_name, header_value = next(iter(conversation_headers.items()))
-        missing = object()
-        async with request_lock:
-            previous_value = headers.get(header_name, missing)
-            headers[header_name] = header_value
-            try:
-                yield
-            finally:
-                if previous_value is missing:
-                    headers.pop(header_name, None)
-                else:
-                    headers[header_name] = previous_value
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""
@@ -207,6 +169,7 @@ class ProviderGoogleGenAI(Provider):
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
         temperature: float = 0.7,
+        conversation_id: str | None = None,
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
         if not modalities:
@@ -310,7 +273,15 @@ class ProviderGoogleGenAI(Provider):
                     thinking_level=types.ThinkingLevel(thinking_level)
                 )
 
+        conversation_headers = build_conversation_headers(conversation_id)
+        http_options = (
+            types.HttpOptions(headers=conversation_headers)
+            if conversation_headers
+            else None
+        )
+
         return types.GenerateContentConfig(
+            http_options=http_options,
             system_instruction=system_instruction,
             temperature=temperature,
             max_output_tokens=payloads.get("max_tokens")
@@ -671,18 +642,18 @@ class ProviderGoogleGenAI(Provider):
                     system_instruction,
                     modalities,
                     temperature,
+                    conversation_id,
                 )
                 client = self._require_client()
-                async with self._conversation_header(conversation_id):
-                    result = await retry_provider_request(
-                        "Gemini",
-                        lambda: client.models.generate_content(
-                            model=model,
-                            contents=cast(types.ContentListUnion, conversation),
-                            config=config,
-                        ),
-                        max_attempts=request_max_retries,
-                    )
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: client.models.generate_content(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    max_attempts=request_max_retries,
+                )
                 logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
@@ -766,18 +737,18 @@ class ProviderGoogleGenAI(Provider):
                     tools,
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
+                    conversation_id=conversation_id,
                 )
                 client = self._require_client()
-                async with self._conversation_header(conversation_id):
-                    result = await retry_provider_request(
-                        "Gemini",
-                        lambda: client.models.generate_content_stream(
-                            model=model,
-                            contents=cast(types.ContentListUnion, conversation),
-                            config=config,
-                        ),
-                        max_attempts=request_max_retries,
-                    )
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: client.models.generate_content_stream(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    max_attempts=request_max_retries,
+                )
                 break
             except APIError as e:
                 if e.message is None:
@@ -801,82 +772,77 @@ class ProviderGoogleGenAI(Provider):
         accumulated_reasoning = ""
         final_response = None
 
-        async with self._conversation_header(conversation_id):
-            async for chunk in result:
-                llm_response = LLMResponse("assistant", is_chunk=True)
+        async for chunk in result:
+            llm_response = LLMResponse("assistant", is_chunk=True)
 
-                if not chunk.candidates:
-                    logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
-                    continue
-                if not chunk.candidates[0].content:
-                    logger.warning(f"Gemini stream chunk has empty content: {chunk}")
-                    continue
+            if not chunk.candidates:
+                logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
+                continue
+            if not chunk.candidates[0].content:
+                logger.warning(f"Gemini stream chunk has empty content: {chunk}")
+                continue
 
-                if chunk.candidates[0].content.parts and any(
-                    part.function_call for part in chunk.candidates[0].content.parts
-                ):
-                    llm_response = LLMResponse("assistant", is_chunk=False)
-                    llm_response.raw_completion = chunk
-                    llm_response.result_chain = self._process_content_parts(
+            if chunk.candidates[0].content.parts and any(
+                part.function_call for part in chunk.candidates[0].content.parts
+            ):
+                llm_response = LLMResponse("assistant", is_chunk=False)
+                llm_response.raw_completion = chunk
+                llm_response.result_chain = self._process_content_parts(
+                    chunk.candidates[0],
+                    llm_response,
+                    validate_output=False,
+                )
+                # This response replaces the whole turn in conversation
+                # history, so keep the narration and reasoning that were
+                # already streamed before the tool call. Dropping them made
+                # the user-visible text missing from history.
+                if accumulated_text or accumulated_reasoning:
+                    parts = list(llm_response.result_chain.chain or [])
+                    if accumulated_text:
+                        parts.insert(0, Comp.Plain(accumulated_text))
+                        llm_response.result_chain = MessageChain(chain=parts)
+                    if accumulated_reasoning:
+                        # _process_content_parts already stored the reasoning
+                        # that came with the tool-call chunk itself, so append
+                        # to it instead of overwriting that part.
+                        llm_response.reasoning_content = accumulated_reasoning + (
+                            llm_response.reasoning_content or ""
+                        )
+                llm_response.id = chunk.response_id
+                if chunk.usage_metadata:
+                    llm_response.usage = self._extract_usage(chunk.usage_metadata)
+                yield llm_response
+                return
+
+            _f = False
+
+            # 提取 reasoning content
+            reasoning = self._extract_reasoning_content(chunk.candidates[0])
+            if reasoning:
+                _f = True
+                accumulated_reasoning += reasoning
+                llm_response.reasoning_content = reasoning
+            if chunk.text:
+                _f = True
+                accumulated_text += chunk.text
+                llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
+            if _f:
+                yield llm_response
+
+            if chunk.candidates[0].finish_reason:
+                # Process the final chunk for potential tool calls or other content
+                if chunk.candidates[0].content.parts:
+                    final_response = LLMResponse("assistant", is_chunk=False)
+                    final_response.raw_completion = chunk
+                    final_response.result_chain = self._process_content_parts(
                         chunk.candidates[0],
-                        llm_response,
+                        final_response,
                         validate_output=False,
                     )
-                    # This response replaces the whole turn in conversation
-                    # history, so keep the narration and reasoning that were
-                    # already streamed before the tool call. Dropping them made
-                    # the user-visible text missing from history.
-                    if accumulated_text or accumulated_reasoning:
-                        parts = list(llm_response.result_chain.chain or [])
-                        if accumulated_text:
-                            parts.insert(0, Comp.Plain(accumulated_text))
-                            llm_response.result_chain = MessageChain(chain=parts)
-                        if accumulated_reasoning:
-                            # _process_content_parts already stored the reasoning
-                            # that came with the tool-call chunk itself, so append
-                            # to it instead of overwriting that part.
-                            llm_response.reasoning_content = accumulated_reasoning + (
-                                llm_response.reasoning_content or ""
-                            )
-                    llm_response.id = chunk.response_id
+                    final_response.id = chunk.response_id
                     if chunk.usage_metadata:
-                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
-                    yield llm_response
-                    return
-
-                _f = False
-
-                # 提取 reasoning content
-                reasoning = self._extract_reasoning_content(chunk.candidates[0])
-                if reasoning:
-                    _f = True
-                    accumulated_reasoning += reasoning
-                    llm_response.reasoning_content = reasoning
-                if chunk.text:
-                    _f = True
-                    accumulated_text += chunk.text
-                    llm_response.result_chain = MessageChain(
-                        chain=[Comp.Plain(chunk.text)]
-                    )
-                if _f:
-                    yield llm_response
-
-                if chunk.candidates[0].finish_reason:
-                    # Process the final chunk for potential tool calls or other content
-                    if chunk.candidates[0].content.parts:
-                        final_response = LLMResponse("assistant", is_chunk=False)
-                        final_response.raw_completion = chunk
-                        final_response.result_chain = self._process_content_parts(
-                            chunk.candidates[0],
-                            final_response,
-                            validate_output=False,
-                        )
-                        final_response.id = chunk.response_id
-                        if chunk.usage_metadata:
-                            final_response.usage = self._extract_usage(
-                                chunk.usage_metadata
-                            )
-                    break
+                        final_response.usage = self._extract_usage(chunk.usage_metadata)
+                break
 
         # Yield final complete response with accumulated text
         if not final_response:

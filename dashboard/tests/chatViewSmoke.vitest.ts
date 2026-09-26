@@ -594,6 +594,8 @@ describe('Chat view smoke', () => {
     await wrapper.get('.messages-panel').trigger('scroll');
     await nextTick();
 
+    // The browser may auto-adjust scrollTop while earlier messages are
+    // inserted. overflow-anchor is disabled so this is a genuine user scroll.
     panel.scrollTop = 130;
     anchorTop = 300;
     resolveLoad?.();

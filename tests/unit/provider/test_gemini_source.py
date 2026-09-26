@@ -1226,6 +1226,27 @@ async def test_gemini_prepare_query_config_normalizes_invalid_thinking_level(cap
     )
 
 
+@pytest.mark.asyncio
+async def test_gemini_query_config_carries_conversation_header():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.provider_settings = {"streaming_response": False}
+    provider.safety_settings = []
+    provider.get_model = lambda: "gemini-3.7-flash"
+
+    config = await provider._prepare_query_config(
+        {"model": "gemini-3.7-flash"},
+        conversation_id="conversation-1",
+    )
+    plain_config = await provider._prepare_query_config({"model": "gemini-3.7-flash"})
+
+    assert config.http_options is not None
+    assert config.http_options.headers == {
+        "x-astrbot-conversation-id": "conversation-1"
+    }
+    assert plain_config.http_options is None
+
+
 def test_gemini_process_content_parts_rejects_empty_candidate_content():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     llm_response = LLMResponse(role="assistant")
@@ -2058,17 +2079,12 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gemini_stream_keeps_conversation_header_until_consumed(monkeypatch):
-    """The conversation header must be present while the stream is consumed."""
+async def test_gemini_stream_sends_conversation_header_per_request(monkeypatch):
+    """Each streaming request carries its own conversation header."""
     provider = _gemini_stream_provider()
-    headers: dict[str, str] = {}
-    provider.client._api_client = SimpleNamespace(
-        _http_options=SimpleNamespace(headers=headers),
-    )
-    observed_headers: list[str | None] = []
+    configs: list[object] = []
 
     async def fake_stream():
-        observed_headers.append(headers.get("x-astrbot-conversation-id"))
         yield _gemini_stream_chunk(text="ok")
 
     async def fake_retry(provider_name, request_factory, max_attempts=None):
@@ -2077,7 +2093,8 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(monkeypatc
     async def fake_prepare_conversation(_payloads):
         return []
 
-    async def fake_prepare_query_config(*_args, **_kwargs):
+    async def fake_prepare_query_config(*args, **kwargs):
+        configs.append((args, kwargs))
         return {}
 
     monkeypatch.setattr(gemini_source_module, "retry_provider_request", fake_retry)
@@ -2099,5 +2116,4 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(monkeypatc
     ]
 
     assert responses[-1].completion_text == "ok"
-    assert observed_headers == ["conversation-1"]
-    assert "x-astrbot-conversation-id" not in headers
+    assert configs[-1][1]["conversation_id"] == "conversation-1"

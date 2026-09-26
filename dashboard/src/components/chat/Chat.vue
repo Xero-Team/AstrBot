@@ -2145,6 +2145,7 @@ function toggleTheme() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 24px max(24px, calc((100% - 980px) / 2)) 18px;
 }
 

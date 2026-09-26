@@ -761,6 +761,7 @@ class ProviderManager:
             try:
                 await self._mcp_init_task
             except asyncio.CancelledError:
+                # Expected after cancelling and awaiting the task.
                 pass
 
         provider_groups = (

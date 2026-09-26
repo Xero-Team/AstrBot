@@ -1179,6 +1179,7 @@ class ProviderGoogleGenAI(Provider):
             try:
                 await self.client.aclose()
             except Exception:
+                # Best-effort teardown; ignore failures while closing.
                 pass
             self.client = None
 

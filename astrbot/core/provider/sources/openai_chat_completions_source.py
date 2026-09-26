@@ -977,6 +977,7 @@ class ProviderOpenAIChatCompletions(Provider):
                 try:
                     completion = ChatCompletion.model_validate(data)
                 except TypeError, ValueError:
+                    # Value is already absent or invalid; ignore.
                     pass
 
         if not completion.choices:

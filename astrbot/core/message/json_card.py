@@ -28,6 +28,7 @@ def format_json_card_prompt(comp: Json) -> str:
             if isinstance(nested_data, dict):
                 card_data = nested_data
         except json.JSONDecodeError:
+            # Optional metadata is not valid JSON; skip it.
             pass
 
     detail = _select_card_detail(card_data)

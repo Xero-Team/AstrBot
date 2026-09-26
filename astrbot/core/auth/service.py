@@ -281,6 +281,7 @@ class AuthorizationService:
             try:
                 await self._audit_task
             except asyncio.CancelledError:
+                # Expected after cancelling and awaiting the task.
                 pass
             self._audit_task = None
 

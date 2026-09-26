@@ -102,6 +102,7 @@ class EmbeddingStorage:
                 try:
                     os.remove(tmp)
                 except OSError:
+                    # Best-effort cleanup; ignore filesystem errors.
                     pass
 
     @staticmethod
@@ -126,6 +127,7 @@ class EmbeddingStorage:
                 try:
                     os.remove(tmp)
                 except OSError:
+                    # Best-effort cleanup; ignore filesystem errors.
                     pass
 
     async def insert(self, vector: np.ndarray, id: int) -> None:

@@ -283,6 +283,7 @@ async def _prepare_image_refs(
                         try:
                             Path(path).unlink(missing_ok=True)
                         except OSError:
+                            # Best-effort cleanup; ignore filesystem errors.
                             pass
         except Exception as exc:  # noqa: BLE001
             logger.warning(

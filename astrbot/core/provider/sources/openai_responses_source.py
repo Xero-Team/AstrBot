@@ -924,6 +924,7 @@ class ProviderOpenAIResponses(Provider):
                     try:
                         self._remember_stream_response_id(state, event_task.result())
                     except StopAsyncIteration:
+                        # The stream is already exhausted.
                         pass
                 if state.response_id:
                     await self._cancel_background_response(

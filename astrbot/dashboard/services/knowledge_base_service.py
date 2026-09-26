@@ -446,6 +446,7 @@ class KnowledgeBaseService:
         try:
             shutil.rmtree(staging_dir)
         except FileNotFoundError:
+            # Best-effort cleanup; the file is already gone.
             pass
         except OSError as exc:
             logger.warning(

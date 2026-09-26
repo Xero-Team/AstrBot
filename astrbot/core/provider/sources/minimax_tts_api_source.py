@@ -223,6 +223,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 try:
                     os.remove(path)
                 except FileNotFoundError:
+                    # Best-effort cleanup; the file is already gone.
                     pass
                 except OSError as exc:
                     logger.warning(

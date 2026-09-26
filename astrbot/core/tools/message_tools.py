@@ -142,6 +142,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if ws_candidate.is_file() and ws_candidate.is_relative_to(ws_path):
                         return str(ws_candidate), False
                 except Exception:
+                    # Best-effort operation; ignore this failure.
                     pass
         else:
             local_candidate = Path(path).expanduser().resolve(strict=False)

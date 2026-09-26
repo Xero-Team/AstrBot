@@ -596,6 +596,7 @@ async def _materialize_media_ref(
     try:
         path_exists = path.exists()
     except OSError:
+        # Best-effort filesystem access; ignore filesystem errors.
         pass
     if path_exists:
         mime_type = _guess_mime_type(path)
@@ -612,6 +613,7 @@ async def _materialize_media_ref(
                 validate=True,
             )
         except ValueError:
+            # Value is already absent or invalid; ignore.
             pass
         else:
             raise ValueError(

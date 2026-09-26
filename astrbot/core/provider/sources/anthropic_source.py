@@ -147,6 +147,7 @@ class ProviderAnthropic(Provider):
                 getattr(anthropic_base_client, "httpx2", httpx),
             )
         except ImportError:
+            # Optional dependency is unavailable; keep the fallback.
             pass
         return create_proxy_client(
             "Anthropic",

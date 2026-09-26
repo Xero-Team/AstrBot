@@ -115,6 +115,7 @@ class Main(star.Star):
                     timeout_seconds=60,
                 )
             except TimeoutError:
+                # Expected timeout; continue with the next step.
                 pass
             except Exception as e:
                 yield event.plain_result("发生错误，请联系管理员: " + str(e))

@@ -33,6 +33,7 @@ class ProcessRebooter:
                     logger.info(f"子进程 {child.pid} 没有被正常终止, 正在强行杀死。")
                     child.kill()
         except psutil.NoSuchProcess:
+            # The process already exited.
             pass
 
     @staticmethod

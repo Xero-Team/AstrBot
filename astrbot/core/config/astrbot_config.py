@@ -429,6 +429,7 @@ class AstrBotConfig(dict):
                 try:
                     os.unlink(temp_path)
                 except FileNotFoundError:
+                    # Best-effort cleanup; the file is already gone.
                     pass
         return committed
 

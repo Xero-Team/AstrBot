@@ -109,6 +109,7 @@ def _release_data_dir_lock(dir_fd: int) -> None:
         try:
             flock(dir_fd, lock_un)
         except OSError:
+            # Best-effort filesystem access; ignore filesystem errors.
             pass
     os.close(dir_fd)
 

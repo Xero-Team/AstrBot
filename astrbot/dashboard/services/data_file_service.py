@@ -613,6 +613,7 @@ class DataFileService:
             finally:
                 os.close(directory_fd)
         except OSError:
+            # Best-effort filesystem access; ignore filesystem errors.
             pass
 
     def _atomic_write(self, path: Path, data: bytes) -> None:
@@ -634,6 +635,7 @@ class DataFileService:
                 try:
                     temp_path.unlink()
                 except FileNotFoundError:
+                    # Best-effort cleanup; the file is already gone.
                     pass
 
     def write_text(
@@ -1106,6 +1108,7 @@ class DataFileService:
                 try:
                     temp_path.unlink()
                 except FileNotFoundError:
+                    # Best-effort cleanup; the file is already gone.
                     pass
         return self._entry(
             path,

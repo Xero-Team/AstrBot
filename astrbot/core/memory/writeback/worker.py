@@ -36,6 +36,7 @@ class MemoryWritebackWorker:
             try:
                 await self._task
             except asyncio.CancelledError:
+                # Expected after cancelling and awaiting the task.
                 pass
 
     async def enqueue(self, item: MemoryWritebackItem) -> bool:

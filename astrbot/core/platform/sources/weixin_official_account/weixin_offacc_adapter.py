@@ -586,5 +586,6 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         try:
             await self.server.server.shutdown()
         except Exception as _:
+            # Best-effort teardown; ignore failures while closing.
             pass
         logger.info("微信公众平台 适配器已被关闭")

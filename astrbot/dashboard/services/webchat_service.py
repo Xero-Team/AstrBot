@@ -260,6 +260,7 @@ class WebChatService:
             try:
                 completed.result()
             except asyncio.CancelledError:
+                # Cancellation of an awaited task is expected here.
                 pass
             except Exception as exc:
                 logger.error(
@@ -371,6 +372,7 @@ class WebChatService:
                                 "snippet": item.get("snippet"),
                             }
                 except json.JSONDecodeError, KeyError:
+                    # Optional metadata is not valid JSON; skip it.
                     pass
 
         if not web_search_results:
@@ -745,6 +747,7 @@ class WebChatService:
                             send_json,
                         )
                     except Exception:
+                        # Best-effort operation; ignore this failure.
                         pass
                     continue
 

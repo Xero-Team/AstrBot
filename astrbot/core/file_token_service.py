@@ -57,6 +57,7 @@ class FileTokenService:
             try:
                 os.remove(file_path)
             except FileNotFoundError:
+                # Best-effort cleanup; the file is already gone.
                 pass
             except OSError:
                 # Cleanup is best effort; the next lifecycle shutdown may retry.
@@ -215,4 +216,5 @@ class FileTokenService:
                 try:
                     os.remove(file_path)
                 except FileNotFoundError, OSError:
+                    # Best-effort cleanup; the file is already gone.
                     pass

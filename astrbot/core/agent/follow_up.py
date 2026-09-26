@@ -157,6 +157,7 @@ class FollowUpCoordinator:
             try:
                 await capture.monitor_task
             except asyncio.CancelledError:
+                # Expected after cancelling and awaiting the task.
                 pass
 
         if activated:

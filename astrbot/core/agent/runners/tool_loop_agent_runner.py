@@ -381,6 +381,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 completed.result()
             except asyncio.CancelledError:
+                # Cancellation of an awaited task is expected here.
                 pass
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
@@ -403,6 +404,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         except TimeoutError:
             self._detach_stop_cleanup(task)
         except asyncio.CancelledError, StopAsyncIteration:
+            # Cancellation of an awaited task is expected here.
             pass
         except Exception:  # The caller handles the original operation result.
             pass
@@ -416,6 +418,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         try:
             await asyncio.shield(operation)
         except asyncio.CancelledError, StopAsyncIteration, Exception:
+            # Expected after cancelling and awaiting the task.
             pass
         await close()
 
@@ -473,6 +476,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         except TimeoutError:
             self._detach_stop_cleanup(close_task)
         except RuntimeError, StopAsyncIteration:
+            # The stream is already exhausted.
             pass
 
     def _read_tool_hint(self) -> str:

@@ -416,6 +416,7 @@ class MisskeyPlatformAdapter(Platform):
             message.raw_message["poll"] = poll
             message.__setattr__("poll", poll)
         except Exception:
+            # Best-effort operation; ignore this failure.
             pass
 
         poll_text = format_poll(poll)

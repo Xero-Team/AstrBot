@@ -54,6 +54,7 @@ def _payload_field(payload: Any, name: str) -> Any:
         except asyncio.CancelledError:
             raise
         except Exception:
+            # Best-effort operation; ignore this failure.
             pass
     return getattr(payload, name, None)
 

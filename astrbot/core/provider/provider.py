@@ -350,6 +350,7 @@ class TTSProvider(AbstractProvider):
                             try:
                                 os.remove(audio_path)
                             except OSError:
+                                # Best-effort cleanup; ignore filesystem errors.
                                 pass
                 # 发送结束标记
                 await audio_queue.put(None)
@@ -375,6 +376,7 @@ class TTSProvider(AbstractProvider):
         try:
             os.remove(audio_path)
         except Exception:
+            # Best-effort operation; ignore this failure.
             pass
 
 

@@ -638,6 +638,7 @@ async function remove(provider: CodingCliProvider) {
   commit(providers.value.filter((entry) => entry.id !== provider.id));
 }
 
+/** Confirm, persist any pending page edits, then switch the CLI by id. */
 async function switchTo(state: CodingCliState, provider: CodingCliProvider) {
   const confirmed = await askForConfirmation(
     `${tm('thirdPartyAgentsPage.switchTitle')}\n\n${tm('thirdPartyAgentsPage.switchMessage')}`,

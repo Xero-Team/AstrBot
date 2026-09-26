@@ -249,12 +249,25 @@ const hasUnsavedChanges = computed(
   () => loaded.value && snapshot(configData.value) !== savedSnapshot.value,
 );
 
+/**
+ * Persist pending provider edits so a switch can resolve a provider by id.
+ *
+ * Returns false while a save is already in flight, when the save fails, or
+ * when edits arrived during it; the caller must not switch against a stale
+ * list in any of those cases.
+ */
 async function ensureProvidersSaved(): Promise<boolean> {
   if (saving.value) return false;
   if (hasUnsavedChanges.value && !(await save())) return false;
   return !hasUnsavedChanges.value;
 }
 
+/**
+ * Save the page's configuration, returning whether it was persisted.
+ *
+ * The request body is an immutable snapshot, so edits made while the save is
+ * in flight stay unsaved and are never reported as persisted.
+ */
 async function save(twoFactorCode = ''): Promise<boolean> {
   if (saving.value) return false;
   saving.value = true;

@@ -121,6 +121,44 @@ describe('BtwPage', () => {
     wrapper.unmount();
   });
 
+  it('groups the BTW settings into config-page categories', async () => {
+    testState.getProfileMock.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          config: { btw: { enabled: false, work_loop: { enabled: false } } },
+          metadata: {
+            ai_group: {
+              metadata: {
+                btw: {
+                  description: 'BTW',
+                  type: 'object',
+                  items: {
+                    'btw.enabled': { description: 'Enable', type: 'bool' },
+                    'btw.work_loop.enabled': {
+                      description: 'Work loop',
+                      type: 'bool',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const navLabels = wrapper
+      .findAll('.config-workspace__nav-item')
+      .map((item) => item.text());
+    expect(navLabels).toContain('General');
+    expect(navLabels).toContain('Work loop');
+    wrapper.unmount();
+  });
+
   it('reports a load failure instead of rendering an empty form', async () => {
     testState.getProfileMock.mockRejectedValue(new Error('nope'));
 
@@ -134,6 +172,7 @@ describe('BtwPage', () => {
   it('saves the edited value back to the system profile', async () => {
     const wrapper = mountPage();
     await flushPromises();
+    await markDirty(wrapper);
 
     await wrapper.find('.btw-page__save').trigger('click');
     await flushPromises();
@@ -199,7 +238,7 @@ describe('BtwPage', () => {
 
     const wrapper = mountPage();
     await flushPromises();
-    CONFIG.btw.enabled = true;
+    await markDirty(wrapper);
     await switchScope(wrapper, 'work');
 
     expect(dialogControl.asked).toBe(true);
@@ -224,7 +263,7 @@ describe('BtwPage', () => {
 
     const wrapper = mountPage();
     await flushPromises();
-    CONFIG.btw.enabled = true;
+    await markDirty(wrapper);
     await switchScope(wrapper, 'work');
 
     expect(testState.updateProfileMock).not.toHaveBeenCalled();
@@ -243,7 +282,7 @@ describe('BtwPage', () => {
 
     const wrapper = mountPage();
     await flushPromises();
-    CONFIG.btw.enabled = true;
+    await markDirty(wrapper);
     await switchScope(wrapper, 'work');
 
     expect(testState.updateProfileMock).toHaveBeenCalledWith(
@@ -269,7 +308,7 @@ describe('BtwPage', () => {
 
     const wrapper = mountPage();
     await flushPromises();
-    CONFIG.btw.enabled = true;
+    await markDirty(wrapper);
     await switchScope(wrapper, 'work');
 
     expect(scopeValue(wrapper)).toBe('default');
@@ -286,6 +325,20 @@ async function switchScope(
   await wrapper
     .findComponent('.btw-page__scope-select')
     .vm.$emit('update:model-value', value);
+  await flushPromises();
+}
+
+/**
+ * Edit a setting through the rendered control.
+ *
+ * The page now tracks dirty state reactively, so a test edit has to go
+ * through the reactive config object the way a real change does; writing to
+ * the raw fixture would leave the computed snapshot unaware.
+ */
+async function markDirty(wrapper: ReturnType<typeof mountPage>) {
+  wrapper
+    .findComponent({ name: 'VSwitch' })
+    .vm.$emit('update:modelValue', true);
   await flushPromises();
 }
 

@@ -264,6 +264,7 @@ class KookClient:
             try:
                 await self.ws.close()
             except Exception:
+                # Best-effort teardown; ignore failures while closing.
                 pass
             self.ws = None
         self._stop_event.clear()
@@ -296,6 +297,7 @@ class KookClient:
                 try:
                     await self.ws.close()
                 except Exception:
+                    # Best-effort teardown; ignore failures while closing.
                     pass
                 self.ws = None
             return False
@@ -587,6 +589,7 @@ class KookClient:
             try:
                 await self.heartbeat_task
             except asyncio.CancelledError:
+                # Expected after cancelling and awaiting the task.
                 pass
 
         event_tasks = list(self._event_tasks)

@@ -85,6 +85,7 @@ class ProviderEdgeTTS(TTSProvider):
             await asyncio.wait_for(process.wait(), timeout=_PROCESS_SHUTDOWN_TIMEOUT)
             return
         except TimeoutError:
+            # Expected timeout; continue with the next step.
             pass
         except OSError as exc:
             logger.warning(

@@ -29,6 +29,7 @@ def _resolve_core_dist_name(core_dist_name: str | None) -> str | None:
         importlib_metadata.distribution("AstrBot")
         return "AstrBot"
     except importlib_metadata.PackageNotFoundError:
+        # Best-effort operation; ignore this failure.
         pass
 
     if not __package__:

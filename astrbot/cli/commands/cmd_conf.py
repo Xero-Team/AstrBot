@@ -234,4 +234,5 @@ def get_config(key: str | None = None) -> None:
                 )
                 click.echo(f"  {key}: {value}")
             except KeyError, TypeError:
+                # Optional field is missing; skip it.
                 pass

@@ -258,6 +258,7 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
                 try:
                     return str(ipaddress.ip_address(first_ip))
                 except ValueError:
+                    # Value is already absent or invalid; ignore.
                     pass
 
         real_ip = str(real_ip or "").strip()
@@ -265,6 +266,7 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
             try:
                 return str(ipaddress.ip_address(real_ip))
             except ValueError:
+                # Value is already absent or invalid; ignore.
                 pass
 
         client = request_scope.get("client")
@@ -427,6 +429,7 @@ class AstrBotDashboard:
                     try:
                         return str(ipaddress.ip_address(first_ip))
                     except ValueError:
+                        # Value is already absent or invalid; ignore.
                         pass
 
             real_ip = str(current_request.headers.get("X-Real-IP", "")).strip()
@@ -434,6 +437,7 @@ class AstrBotDashboard:
                 try:
                     return str(ipaddress.ip_address(real_ip))
                 except ValueError:
+                    # Value is already absent or invalid; ignore.
                     pass
 
         remote_addr = (
@@ -445,6 +449,7 @@ class AstrBotDashboard:
             try:
                 return str(ipaddress.ip_address(remote_addr))
             except ValueError:
+                # Value is already absent or invalid; ignore.
                 pass
 
         return "unknown"
@@ -609,6 +614,7 @@ class AstrBotDashboard:
             try:
                 ip_addr = get_local_ip_addresses()
             except Exception as _:
+                # Best-effort operation; ignore this failure.
                 pass
         if isinstance(port, str):
             port = int(port)

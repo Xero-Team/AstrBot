@@ -65,6 +65,7 @@ class WebChatQueueManager:
             queue.put_nowait(data)
             return True
         except asyncio.QueueFull:
+            # Subscriber queue is full; drop this log entry rather than block.
             pass
 
         put_task = asyncio.create_task(queue.put(data))

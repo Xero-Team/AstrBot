@@ -343,6 +343,7 @@ class LineAPIClient:
                     if status == "failed":
                         return False
             except Exception:
+                # Best-effort operation; ignore this failure.
                 pass
             await asyncio.sleep(interval_seconds)
         return False

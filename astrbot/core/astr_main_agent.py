@@ -910,6 +910,7 @@ async def _ensure_prompt_and_skills(
             prompt_toolset=[],
         )
     except Exception:
+        # Best-effort operation; ignore this failure.
         pass
 
 
@@ -1667,6 +1668,7 @@ def _get_compress_provider(
         try:
             return plugin_context.get_using_provider(umo=event.unified_msg_origin)
         except ValueError:
+            # Value is already absent or invalid; ignore.
             pass
     return None
 

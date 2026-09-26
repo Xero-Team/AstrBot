@@ -424,6 +424,7 @@ class SkillsService:
                     try:
                         os.remove(temp_path)
                     except Exception:
+                        # Best-effort operation; ignore this failure.
                         pass
 
         if succeeded:

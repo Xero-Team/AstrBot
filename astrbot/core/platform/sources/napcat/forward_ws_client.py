@@ -137,6 +137,7 @@ class NapCatForwardWebSocketClient:
                 try:
                     await runner_task
                 except asyncio.CancelledError:
+                    # Expected after cancelling and awaiting the task.
                     pass
                 if self._runner_task is runner_task:
                     self._runner_task = None
@@ -204,6 +205,7 @@ class NapCatForwardWebSocketClient:
                 timeout=self.reconnect_interval_seconds,
             )
         except TimeoutError:
+            # Expected timeout; continue with the next step.
             pass
 
     async def _connect_and_listen(self) -> None:

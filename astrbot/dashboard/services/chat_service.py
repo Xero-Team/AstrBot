@@ -136,6 +136,7 @@ def extract_web_search_refs(
                             "snippet": item.get("snippet"),
                         }
             except json.JSONDecodeError, KeyError:
+                # Optional metadata is not valid JSON; skip it.
                 pass
 
     if not web_search_results:

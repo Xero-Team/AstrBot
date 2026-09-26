@@ -573,5 +573,6 @@ class WecomPlatformAdapter(Platform):
         try:
             await self.server.server.shutdown()
         except Exception as _:
+            # Best-effort teardown; ignore failures while closing.
             pass
         logger.info("企业微信 适配器已被关闭")

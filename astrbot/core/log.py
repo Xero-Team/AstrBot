@@ -344,6 +344,7 @@ class LogBroker:
             try:
                 q.put_nowait(sanitized)
             except asyncio.QueueFull:
+                # Subscriber queue is full; drop this log entry rather than block.
                 pass
 
 
@@ -517,6 +518,7 @@ class LogManager:
                         if str(level).upper() in PLUGIN_LOG_LEVELS
                     }
             except OSError, ValueError:
+                # Value is already absent or invalid; ignore.
                 pass
         return cls._plugin_level_overrides
 
@@ -616,6 +618,7 @@ class LogManager:
         try:
             _loguru.remove(sink_id)
         except ValueError:
+            # Value is already absent or invalid; ignore.
             pass
 
     @classmethod

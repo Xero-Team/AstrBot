@@ -675,6 +675,7 @@ class FunctionToolManager:
                 try:
                     await mcp_client.cleanup()
                 except Exception:
+                    # Best-effort teardown; ignore failures while closing.
                     pass
                 raise
             except Exception as e:
@@ -682,6 +683,7 @@ class FunctionToolManager:
                 try:
                     await mcp_client.cleanup()
                 except Exception:
+                    # Best-effort teardown; ignore failures while closing.
                     pass
                 return
             finally:

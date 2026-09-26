@@ -274,6 +274,7 @@ class Record(DeferredMediaSourceComponent):
             try:
                 file_exists = os.path.exists(self.file)
             except OSError:
+                # Best-effort filesystem access; ignore filesystem errors.
                 pass
             if (
                 is_file_uri(self.file)
@@ -291,11 +292,13 @@ class Record(DeferredMediaSourceComponent):
             try:
                 url_exists = os.path.exists(self.url)
             except OSError:
+                # Best-effort filesystem access; ignore filesystem errors.
                 pass
             if is_file_uri(self.url):
                 try:
                     decoded_url_exists = os.path.exists(self._decode_file_uri(self.url))
                 except OSError:
+                    # Best-effort filesystem access; ignore filesystem errors.
                     pass
             if (
                 is_file_uri(self.url)
@@ -312,6 +315,7 @@ class Record(DeferredMediaSourceComponent):
                 if os.path.exists(self.path):
                     return self.path
             except OSError:
+                # Best-effort filesystem access; ignore filesystem errors.
                 pass
 
         # 4) 最后裸返回 file（即使不行也要让调用方看到原始内容）
@@ -396,6 +400,7 @@ class Video(DeferredMediaSourceComponent):
             try:
                 candidate_exists = os.path.exists(candidate)
             except OSError:
+                # Best-effort filesystem access; ignore filesystem errors.
                 pass
             if (
                 is_file_uri(candidate)
@@ -411,6 +416,7 @@ class Video(DeferredMediaSourceComponent):
                 if os.path.exists(self.path):
                     return self.path
             except OSError:
+                # Best-effort filesystem access; ignore filesystem errors.
                 pass
 
         return self.file or self.url or ""
@@ -438,6 +444,7 @@ class Video(DeferredMediaSourceComponent):
             if os.path.exists(file_source):
                 return os.path.abspath(file_source)
         except OSError:
+            # Best-effort filesystem access; ignore filesystem errors.
             pass
         raise Exception(f"not a valid file: {file_source}")
 

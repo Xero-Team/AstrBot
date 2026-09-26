@@ -85,6 +85,7 @@ class WecomAIBotLongConnectionClient:
                     try:
                         await heartbeat_task
                     except asyncio.CancelledError:
+                        # Expected after cancelling and awaiting the task.
                         pass
                     message_tasks = list(self._message_tasks)
                     if message_tasks:

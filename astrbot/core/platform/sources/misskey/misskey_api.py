@@ -83,6 +83,7 @@ class StreamingClient:
                                 f"[Misskey WebSocket] 重新订阅 {channel_type} 失败: {e}",
                             )
                 except Exception:
+                    # Best-effort operation; ignore this failure.
                     pass
             return True
 
@@ -167,6 +168,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Best-effort teardown; ignore failures while closing.
                 pass
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(
@@ -176,6 +178,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Best-effort operation; ignore this failure.
                 pass
         except websockets.exceptions.InvalidHandshake as e:
             logger.error(f"[Misskey WebSocket] 握手失败: {e}")
@@ -183,6 +186,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Best-effort operation; ignore this failure.
                 pass
         except Exception as e:
             logger.error(f"[Misskey WebSocket] 监听消息失败: {e}")
@@ -190,6 +194,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Best-effort operation; ignore this failure.
                 pass
         finally:
             handler_tasks = list(self._handler_tasks)
@@ -780,6 +785,7 @@ class MisskeyAPI:
                     try:
                         os.unlink(tmp_path)
                     except Exception:
+                        # Best-effort operation; ignore this failure.
                         pass
         except Exception as e:
             logger.error(f"[Misskey API] 本地上传失败: {e}")

@@ -189,6 +189,7 @@ class SatoriPlatformAdapter(Platform):
                 try:
                     await self.heartbeat_task
                 except asyncio.CancelledError:
+                    # Expected after cancelling and awaiting the task.
                     pass
             if self.ws:
                 try:
@@ -245,6 +246,7 @@ class SatoriPlatformAdapter(Platform):
                 else:
                     break
         except asyncio.CancelledError:
+            # Cancellation of an awaited task is expected here.
             pass
         except Exception as e:
             logger.error(f"心跳任务异常: {e}")

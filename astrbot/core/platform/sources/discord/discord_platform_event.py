@@ -495,6 +495,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     cast(discord.Interaction, self.message_obj.raw_message).data,
                 ).get("custom_id", "")
             except Exception:
+                # Best-effort operation; ignore this failure.
                 pass
         return ""
 

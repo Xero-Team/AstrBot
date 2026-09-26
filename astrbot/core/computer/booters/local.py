@@ -256,10 +256,12 @@ class LocalShellComponent(ShellComponent):
                     try:
                         proc.kill()
                     except Exception:
+                        # Best-effort operation; ignore this failure.
                         pass
                 try:
                     proc.wait(timeout=5)
                 except Exception:
+                    # Best-effort operation; ignore this failure.
                     pass
                 raise
             return {
@@ -434,6 +436,7 @@ class LocalShellComponent(ShellComponent):
             try:
                 await asyncio.wait_for(asyncio.shield(wait_task), yield_time_ms / 1000)
             except TimeoutError:
+                # Expected timeout; continue with the next step.
                 pass
         return await self.poll_session(
             owner_id=owner_id,
@@ -505,6 +508,7 @@ class LocalShellComponent(ShellComponent):
                     try:
                         await waiter
                     except asyncio.CancelledError:
+                        # Expected after cancelling and awaiting the task.
                         pass
             if session.wait_task.done():
                 await session.reader_task
@@ -579,6 +583,7 @@ class LocalShellComponent(ShellComponent):
                     try:
                         native_process.send_signal(signal.SIGINT)
                     except ProcessLookupError:
+                        # The process already exited.
                         pass
         return await self.poll_session(
             owner_id=owner_id,
@@ -732,6 +737,7 @@ class LocalShellComponent(ShellComponent):
             try:
                 await session.timeout_task
             except asyncio.CancelledError:
+                # Expected after cancelling and awaiting the task.
                 pass
         with session.output_lock:
             session.output_file.close()

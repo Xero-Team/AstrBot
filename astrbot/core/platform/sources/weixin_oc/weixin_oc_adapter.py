@@ -289,6 +289,7 @@ class WeixinOCAdapter(Platform):
         try:
             await task
         except asyncio.CancelledError:
+            # Expected after cancelling and awaiting the task.
             pass
         except Exception:
             if log_message is not None:

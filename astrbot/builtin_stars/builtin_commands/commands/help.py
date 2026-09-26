@@ -189,6 +189,7 @@ class HelpCommand:
         try:
             notice = await self._query_astrbot_notice()
         except Exception:
+            # Best-effort operation; ignore this failure.
             pass
 
         dashboard_version = await self.context.runtime_info.dashboard_version()

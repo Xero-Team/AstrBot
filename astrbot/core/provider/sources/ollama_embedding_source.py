@@ -65,6 +65,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
                 if dimensions > 0:
                     payload["dimensions"] = dimensions
             except ValueError, TypeError:
+                # Value is already absent or invalid; ignore.
                 pass
         return payload
 

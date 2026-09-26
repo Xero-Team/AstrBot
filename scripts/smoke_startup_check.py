@@ -112,6 +112,7 @@ def main() -> int:
         try:
             log_path.unlink()
         except OSError:
+            # Best-effort cleanup; ignore filesystem errors.
             pass
         shutil.rmtree(smoke_root, ignore_errors=True)
 

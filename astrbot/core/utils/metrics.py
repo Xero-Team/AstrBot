@@ -209,6 +209,7 @@ class MetricsRuntime:
         except asyncio.CancelledError:
             raise
         except Exception:
+            # Best-effort operation; ignore this failure.
             pass
         finally:
             current_task = asyncio.current_task()
@@ -243,10 +244,12 @@ class MetricsRuntime:
         try:
             payload_metrics["hn"] = socket.gethostname()
         except OSError:
+            # Best-effort filesystem access; ignore filesystem errors.
             pass
         try:
             payload_metrics["iid"] = self.get_installation_id()
         except OSError:
+            # Best-effort filesystem access; ignore filesystem errors.
             pass
         payload = {"metrics_data": payload_metrics}
 
@@ -268,6 +271,7 @@ class MetricsRuntime:
         except asyncio.CancelledError:
             raise
         except Exception:
+            # Best-effort operation; ignore this failure.
             pass
 
     async def upload(self, **kwargs: Any) -> None:

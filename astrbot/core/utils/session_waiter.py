@@ -126,6 +126,7 @@ class _SessionWaiter:
         try:
             self.registry._filters.remove(self.session_filter)
         except ValueError:
+            # Value is already absent or invalid; ignore.
             pass
         self.session_controller.stop(error)
 

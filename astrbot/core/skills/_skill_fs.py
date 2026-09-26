@@ -52,6 +52,7 @@ def open_nofollow_under(root: Path, parts: tuple[str, ...]) -> int:
         try:
             return _open_nofollow_dirfd(root, parts)
         except NotImplementedError:
+            # Best-effort operation; ignore this failure.
             pass
     return _open_nofollow_portable(root, parts)
 

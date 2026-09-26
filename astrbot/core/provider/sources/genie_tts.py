@@ -125,6 +125,7 @@ class GenieTTSProvider(TTSProvider):
                 try:
                     _worker.exception()
                 except asyncio.CancelledError, Exception:
+                    # Expected after cancelling and awaiting the task.
                     pass
                 self._remove_audio(path)
 

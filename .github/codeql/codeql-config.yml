@@ -6,12 +6,12 @@ name: 'AstrBot CodeQL config'
 # filters apply to that combined set, so security-severity findings stay
 # visible. See Issue #293.
 query-filters:
-  # Every open `py/ineffectual-statement` finding in product code is the `...`
-  # body of a `typing.Protocol` method (e.g. `astrbot/core/agent/chat_model.py`,
-  # `astrbot/core/db/protocols.py`); there is no source-side fix that keeps the
-  # stubs. It is a note-severity code-quality query with no security severity,
-  # and CodeQL `query-filters` cannot be scoped to a path, so the whole query is
-  # excluded. Test-tree findings are already dropped by `paths-ignore` below.
+  # Every open product-code `py/ineffectual-statement` finding is an intentional
+  # `...` stub body: `typing.Protocol` members, base/mixin default methods, and
+  # `@overload` signatures. CodeQL cannot scope a query filter to a path, and no
+  # source-side change keeps those stubs, so the whole query is excluded. It is a
+  # note-severity code-quality query with no security severity; test-tree
+  # findings are already dropped by `paths-ignore` below.
   - exclude:
       id: py/ineffectual-statement
 

@@ -316,8 +316,6 @@ class DocumentStorage:
         assert self.engine is not None, "Database connection is not initialized."
 
         async with self.get_session() as session, session.begin():
-            import json
-
             documents = []
             for doc_id, text, metadata in zip(doc_ids, texts, metadatas):
                 document = Document(

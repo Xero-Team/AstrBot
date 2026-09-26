@@ -331,8 +331,6 @@ class WecomAIBotAdapter(Platform):
                                 "image": {"base64": img_b64, "md5": img_md5},
                             },
                         )
-                    image_base64 = []
-
                 plain_message = WecomAIBotStreamMessageBuilder.make_mixed_stream(
                     stream_id,
                     latest_plain_content,

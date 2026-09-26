@@ -307,7 +307,6 @@ class CozeAPIClient:
 
 
 if __name__ == "__main__":
-    import asyncio
     import os
 
     async def test_coze_api_client() -> None:

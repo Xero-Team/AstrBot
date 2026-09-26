@@ -523,8 +523,6 @@ class KookClient:
                         raise RuntimeError(
                             f'发送kook消息类型 "{kook_message_type.name}" 失败: {result}'
                         )
-                    # else:
-                    #     logger.info("[KOOK] 发送消息成功")
                 else:
                     raise RuntimeError(
                         f'发送kook消息类型 "{kook_message_type.name}" HTTP错误: {resp.status} , 响应内容 : {await resp.text()}'

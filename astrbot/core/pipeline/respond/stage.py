@@ -5,7 +5,6 @@ import random
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.assistant_history import make_projection
-from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import (
@@ -23,9 +22,9 @@ from ..stage import Stage
 
 class RespondStage(Stage):
     _HEADER_COMPONENT_TYPES = {
-        ComponentType.Reply,
-        ComponentType.Mention,
-        ComponentType.MentionAll,
+        Comp.ComponentType.Reply,
+        Comp.ComponentType.Mention,
+        Comp.ComponentType.MentionAll,
     }
     # 组件类型到其非空判断函数的映射
     _component_validators = {
@@ -115,7 +114,7 @@ class RespondStage(Stage):
             word_count = len([c for c in text if c.isalnum()])
         return word_count
 
-    async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
+    async def _calc_comp_interval(self, comp: Comp.BaseMessageComponent) -> float:
         """分段回复 计算间隔时间"""
         if self.interval_method == "log":
             if isinstance(comp, Comp.Plain):
@@ -126,11 +125,13 @@ class RespondStage(Stage):
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
-    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
+    async def _is_empty_message_chain(
+        self, chain: list[Comp.BaseMessageComponent]
+    ) -> bool:
         """检查消息链是否为空
 
         Args:
-            chain (list[BaseMessageComponent]): 包含消息对象的列表
+            chain (list[Comp.BaseMessageComponent]): 包含消息对象的列表
 
         """
         if not chain:
@@ -190,8 +191,8 @@ class RespondStage(Stage):
 
     def _extract_comp(
         self,
-        raw_chain: list[BaseMessageComponent],
-        extract_types: set[ComponentType],
+        raw_chain: list[Comp.BaseMessageComponent],
+        extract_types: set[Comp.ComponentType],
         modify_raw_chain: bool = True,
     ):
         extracted = []
@@ -407,7 +408,7 @@ class RespondStage(Stage):
         attempts: list[DeliveryAttempt] = []
         for comp in result.chain:
             await asyncio.sleep(await self._calc_comp_interval(comp))
-            if comp.type == ComponentType.Record:
+            if comp.type == Comp.ComponentType.Record:
                 chain = result.derive([comp])
             else:
                 chain = result.derive([*header_comps, comp])
@@ -428,7 +429,7 @@ class RespondStage(Stage):
         attempts: list[DeliveryAttempt] = []
         separate_components = self._extract_comp(
             result.chain,
-            {ComponentType.Record},
+            {Comp.ComponentType.Record},
             modify_raw_chain=True,
         )
         for comp in separate_components:
@@ -484,10 +485,10 @@ class RespondStage(Stage):
             and all(
                 comp.type
                 in {
-                    ComponentType.Plain,
-                    ComponentType.Reply,
-                    ComponentType.Mention,
-                    ComponentType.MentionAll,
+                    Comp.ComponentType.Plain,
+                    Comp.ComponentType.Reply,
+                    Comp.ComponentType.Mention,
+                    Comp.ComponentType.MentionAll,
                 }
                 for comp in result.chain
             )

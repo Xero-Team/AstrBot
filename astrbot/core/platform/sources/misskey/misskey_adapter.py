@@ -18,16 +18,9 @@ from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_protocol import MessageDeliveryCapabilities
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.platform.send_result import PlatformSendResult
-
-from .misskey_api import MisskeyAPI
-
-try:
-    import magic  # type: ignore
-except Exception:
-    magic = None
-
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
+from .misskey_api import MisskeyAPI
 from .misskey_event import MisskeyPlatformEvent
 from .misskey_utils import (
     add_at_mention_if_needed,

@@ -3,7 +3,6 @@
 import re
 import warnings
 from pathlib import Path
-from re import Pattern
 
 with warnings.catch_warnings():
     # Python 3.14 raises SyntaxWarning for jieba's legacy non-raw regex strings.
@@ -15,7 +14,7 @@ with warnings.catch_warnings():
     )
     import jieba
 
-_TERM_PATTERN: Pattern[str] = re.compile(r"\w", re.UNICODE)
+_TERM_PATTERN: re.Pattern[str] = re.compile(r"\w", re.UNICODE)
 
 
 def load_stopwords(path: Path | str) -> set[str]:

@@ -1345,7 +1345,6 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(file_component)
             self._apply_telegram_caption(message, telegram_message, context)
         elif telegram_message.video:
-            file_name = telegram_message.video.file_name or uuid.uuid4().hex
             video = Comp.Video(
                 file="", metadata=self._telegram_media_metadata(telegram_message.video)
             )

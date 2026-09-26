@@ -2,7 +2,6 @@ import abc
 import asyncio
 import logging
 import uuid
-from asyncio import Queue, QueueFull
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -96,7 +95,7 @@ class Platform(abc.ABC):
                 supported.append(action_name)
         return supported
 
-    def __init__(self, config: dict, event_queue: Queue) -> None:
+    def __init__(self, config: dict, event_queue: asyncio.Queue) -> None:
         super().__init__()
         # 平台配置
         self.config = config
@@ -341,7 +340,7 @@ class Platform(abc.ABC):
             event.bind_metrics(self._metrics)
         try:
             self._event_queue.put_nowait(event)
-        except QueueFull:
+        except asyncio.QueueFull:
             self._event_queue_full_drops += 1
             logger.warning(
                 "Event queue full; dropping event from %s (total dropped: %d)",

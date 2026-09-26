@@ -124,7 +124,6 @@ def _download_plugin_archive(
     Returns:
         Downloaded archive bytes wrapped in ``BytesIO``.
     """
-    import asyncio
     import tempfile
 
     from astrbot.core.utils.outbound_http import (

@@ -853,6 +853,65 @@ async def test_legacy_md5_account_recovers_via_configured_password(
 
 
 @pytest.mark.asyncio
+async def test_legacy_md5_account_keeps_hash_when_totp_fails(
+    app: FastAPI,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """A failed TOTP challenge must not rehash a recovered legacy account."""
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = DashboardTestClient(app)
+    legacy_md5 = "77b90590a8945a7d36c963981a307dc9"
+    new_password = "AstrbotRecover123"
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = legacy_md5
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(new_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.astrbot_config,
+            True,
+        )
+        await _set_dashboard_account_password(
+            core_lifecycle_td,
+            "astrbot",
+            legacy_md5,
+        )
+        await _set_dashboard_account_totp(core_lifecycle_td, secret, recovery_code_hash)
+
+        valid_code = pyotp.TOTP(secret).now()
+        invalid_code = str((int(valid_code) + 1) % 1_000_000).zfill(6)
+        response = await test_client.post(
+            "/api/v1/auth/login",
+            json={
+                "username": "astrbot",
+                "password": new_password,
+                "code": invalid_code,
+            },
+        )
+
+        assert response.status_code == 401
+        account_hash = await _get_dashboard_account_password_hash(core_lifecycle_td)
+        assert account_hash == legacy_md5
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
 async def test_legacy_md5_account_rejects_wrong_password(
     app: FastAPI,
     core_lifecycle_td: AstrBotCoreLifecycle,

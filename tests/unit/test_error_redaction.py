@@ -1,4 +1,7 @@
-from astrbot.core.utils.error_redaction import redact_sensitive_text
+from astrbot.core.utils.error_redaction import (
+    redact_sensitive_text,
+    sanitize_error_text,
+)
 
 
 def test_redact_sensitive_text_removes_credentials_urls_and_absolute_paths():
@@ -70,3 +73,17 @@ def test_redact_sensitive_text_does_not_corrupt_ascii_art():
 
     assert redact_sensitive_text(logo_fragment) == logo_fragment
     assert redact_sensitive_text("/__user/config.json") == "[REDACTED_PATH]"
+
+
+def test_sanitize_error_text_strips_controls_and_redacts_detail():
+    message = "boom\napi_key=secret-token /srv/private/config.json\x1b[31m"
+    cleaned = sanitize_error_text(message)
+    assert "\n" not in cleaned
+    assert "\x1b" not in cleaned
+    assert "secret-token" not in cleaned
+    assert "/srv/private/config.json" not in cleaned
+    assert "boom" in cleaned
+
+
+def test_sanitize_error_text_keeps_business_text():
+    assert sanitize_error_text("分组 'abc' 不存在") == "分组 'abc' 不存在"

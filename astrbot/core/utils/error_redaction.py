@@ -113,3 +113,17 @@ def safe_error(
     if redact:
         text = redact_sensitive_text(text)
     return prefix + text
+
+
+def sanitize_error_text(message: object, *, redact_paths: bool = True) -> str:
+    """Render an error message without secrets, paths, or control characters.
+
+    Args:
+        message: Value whose text should be rendered safely.
+        redact_paths: Forwarded to :func:`redact_sensitive_text`.
+
+    Returns:
+        A single-line, redacted rendering of ``message``.
+    """
+    text = redact_sensitive_text(str(message), redact_paths=redact_paths)
+    return re.sub(r"[\x00-\x1f\x7f]", "", text)

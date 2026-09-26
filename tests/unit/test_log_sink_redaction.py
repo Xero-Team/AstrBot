@@ -19,6 +19,7 @@ from astrbot.core.log import (
     _LoguruInterceptHandler,
     sanitize_log_payload,
     sanitize_log_record,
+    sanitize_log_value,
 )
 
 MARKER = "sink-redaction-marker-32"
@@ -451,3 +452,63 @@ def test_configure_logger_replacement_console_sink_disables_diagnose() -> None:
             LogManager._configured = previous_configured
         logger.setLevel(previous_level)
         logging.getLogger().setLevel(previous_root_level)
+
+
+def test_sanitize_log_value_escapes_newlines_and_controls() -> None:
+    forged = "good\n2026-01-01 ERROR forged\rline\x00\x1b[31m"
+    cleaned = sanitize_log_value(forged)
+    assert "\n" not in cleaned
+    assert "\r" not in cleaned
+    assert "\\n" in cleaned
+    assert "\x00" not in cleaned
+    assert "\x1b" not in cleaned
+
+
+def test_sanitize_log_record_neutralizes_formatted_message() -> None:
+    # f-string call sites interpolate untrusted values into ``msg`` directly,
+    # leaving ``record.args`` empty.
+    record = logging.LogRecord(
+        "astrbot",
+        logging.INFO,
+        __file__,
+        1,
+        "plugin evil\n2026-01-01 ERROR forged line",
+        (),
+        None,
+    )
+    sanitize_log_record(record)
+    assert "\n" not in record.msg
+    assert "\\n" in record.msg
+    assert "evil" in record.msg
+
+
+def test_sanitize_log_record_neutralizes_arguments() -> None:
+    record = logging.LogRecord(
+        "astrbot",
+        logging.INFO,
+        __file__,
+        1,
+        "user=%s",
+        ("evil\nforged line",),
+        None,
+    )
+    sanitize_log_record(record)
+    assert "\n" not in record.msg
+    assert "evil" in record.msg
+
+
+def test_sanitize_log_record_escapes_exception_newlines() -> None:
+    record = logging.LogRecord(
+        "astrbot",
+        logging.ERROR,
+        __file__,
+        1,
+        "failed",
+        (),
+        None,
+    )
+    record.exc_text = "boom\nforged ERROR line"
+    sanitize_log_record(record)
+    assert record.exc_text is not None
+    assert "\n" not in record.exc_text
+    assert "boom" in record.exc_text

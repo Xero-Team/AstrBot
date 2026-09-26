@@ -5,12 +5,14 @@ import errno
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import time
 import uuid
 from asyncio import Queue
 from collections import deque
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +33,37 @@ LOG_PRIVACY = frozenset({"public", "internal", "private"})
 _SANITIZED_ATTR = "astrbot_sanitized"
 _UNPRINTABLE_LOG_MESSAGE = "<unprintable log message>"
 _UNPRINTABLE_EXCEPTION = "<unprintable exception>"
+
+
+_LOG_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_LOG_NEWLINE_ESCAPES = str.maketrans({"\r": "\\r", "\n": "\\n"})
+
+
+def sanitize_log_value(value: str) -> str:
+    """Neutralize log-forging characters in untrusted log text.
+
+    Newlines and carriage returns are escaped and non-printable control
+    characters are removed so a value cannot inject or corrupt log lines.
+
+    Args:
+        value: Untrusted text, either a log argument or a formatted message.
+
+    Returns:
+        The value with control characters neutralized.
+    """
+    return _LOG_CONTROL_CHARS.sub("", value).translate(_LOG_NEWLINE_ESCAPES)
+
+
+def _sanitize_log_arg(value: object) -> object:
+    return sanitize_log_value(value) if isinstance(value, str) else value
+
+
+def _sanitize_log_args(
+    args: tuple[object, ...] | Mapping[str, object],
+) -> tuple[object, ...] | Mapping[str, object]:
+    if isinstance(args, Mapping):
+        return {key: _sanitize_log_arg(value) for key, value in args.items()}
+    return tuple(_sanitize_log_arg(value) for value in args)
 
 
 def _new_event_id() -> str:
@@ -68,15 +101,22 @@ def sanitize_log_record(record: logging.LogRecord) -> logging.LogRecord:
     if getattr(record, _SANITIZED_ATTR, False):
         return record
 
+    if record.args:
+        record.args = _sanitize_log_args(record.args)
     formatted = _formatted_log_message(record)
-    record.msg = redact_sensitive_text(formatted)
+    # The message body itself may already embed untrusted values (f-string call
+    # sites have no ``record.args``), so CR/LF are escaped here rather than only
+    # in arguments. Nothing downstream may treat a log message as multi-line.
+    record.msg = redact_sensitive_text(sanitize_log_value(formatted))
     record.args = ()
     if record.exc_info:
-        record.exc_text = redact_sensitive_text(_format_exception_text(record.exc_info))
+        record.exc_text = sanitize_log_value(
+            redact_sensitive_text(_format_exception_text(record.exc_info))
+        )
     elif record.exc_text:
-        record.exc_text = redact_sensitive_text(record.exc_text)
+        record.exc_text = sanitize_log_value(redact_sensitive_text(record.exc_text))
     if record.stack_info:
-        record.stack_info = redact_sensitive_text(record.stack_info)
+        record.stack_info = sanitize_log_value(redact_sensitive_text(record.stack_info))
     record.exc_info = None
     setattr(record, _SANITIZED_ATTR, True)
     return record
@@ -146,11 +186,15 @@ class _RecordEnricherFilter(logging.Filter):
         record.privacy = privacy if privacy in LOG_PRIVACY else "internal"
         record.event_id = str(getattr(record, "event_id", "") or _new_event_id())
         record.timestamp = float(getattr(record, "timestamp", record.created))
-        record.platform = getattr(record, "platform", None)
-        record.conversation_id = getattr(record, "conversation_id", None)
-        record.sender_id = getattr(record, "sender_id", None)
+        record.platform = _sanitize_log_arg(getattr(record, "platform", None))
+        record.conversation_id = _sanitize_log_arg(
+            getattr(record, "conversation_id", None)
+        )
+        record.sender_id = _sanitize_log_arg(getattr(record, "sender_id", None))
         record.summary = redact_sensitive_text(
-            str(getattr(record, "summary", record.getMessage()))[:512]
+            sanitize_log_value(
+                str(getattr(record, "summary", record.getMessage()))[:512]
+            )
         )
         return True
 
@@ -202,11 +246,15 @@ def _build_source_file(pathname: str | None) -> str:
 def _sanitize_loguru_record(record: Record) -> None:
     message = record["message"]
     if isinstance(message, str):
-        record["message"] = redact_sensitive_text(message)
+        record["message"] = redact_sensitive_text(sanitize_log_value(message))
     extra = record["extra"]
     summary = extra.get("summary")
     if isinstance(summary, str):
-        extra["summary"] = redact_sensitive_text(summary)
+        extra["summary"] = redact_sensitive_text(sanitize_log_value(summary))
+    for field in ("platform", "conversation_id", "sender_id"):
+        value = extra.get(field)
+        if isinstance(value, str):
+            extra[field] = sanitize_log_value(value)
 
 
 def _non_trace_sink_filter(record: Record) -> bool:
@@ -236,7 +284,10 @@ def _patch_record(record: Record) -> None:
     extra.setdefault("conversation_id", None)
     extra.setdefault("sender_id", None)
     _sanitize_loguru_record(record)
-    extra.setdefault("summary", redact_sensitive_text(str(record["message"])[:512]))
+    extra.setdefault(
+        "summary",
+        redact_sensitive_text(sanitize_log_value(str(record["message"])[:512])),
+    )
 
 
 _loguru = _raw_loguru_logger.patch(_patch_record)
@@ -361,7 +412,9 @@ class LogQueueHandler(logging.Handler):
         category = str(getattr(record, "category", "system") or "system")
         privacy = str(getattr(record, "privacy", "internal") or "internal")
         summary = redact_sensitive_text(
-            str(getattr(record, "summary", record.getMessage()))[:512]
+            sanitize_log_value(
+                str(getattr(record, "summary", record.getMessage()))[:512]
+            )
         )
         log_entry = redact_sensitive_text(self.format(record))
         self.log_broker.publish(

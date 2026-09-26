@@ -156,16 +156,12 @@ class ProviderGoogleGenAI(Provider):
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.warning(
-                    "Retrying with a different API key due to detected key issue: %s. Current key: %s...",
+                    "Retrying with a different API key due to detected key issue: %s.",
                     e.message,
-                    self.chosen_api_key[:12],
                 )
                 await asyncio.sleep(1)
                 return True
-            logger.error(
-                "No valid API keys remaining. Current key: %s...",
-                self.chosen_api_key[:12],
-            )
+            logger.error("No valid API keys remaining.")
             raise Exception("Gemini API rate limit reached or API key issue detected.")
 
         # 连接错误处理

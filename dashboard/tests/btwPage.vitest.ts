@@ -185,6 +185,31 @@ describe('BtwPage', () => {
     wrapper.unmount();
   });
 
+  it('disables save while a save is in flight', async () => {
+    let releaseSave: ((value: unknown) => void) | undefined;
+    testState.updateProfileMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseSave = resolve;
+        }),
+    );
+
+    const wrapper = mountPage();
+    await flushPromises();
+    await markDirty(wrapper);
+
+    const saveButton = wrapper.findComponent('.btw-page__save');
+    await saveButton.trigger('click');
+    await flushPromises();
+
+    expect(saveButton.props('disabled')).toBe(true);
+    expect(testState.updateProfileMock).toHaveBeenCalledTimes(1);
+
+    releaseSave?.({ data: { status: 'ok', message: 'saved' } });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
   it('offers the named profiles alongside the default one', async () => {
     testState.listMock.mockResolvedValue({
       data: {

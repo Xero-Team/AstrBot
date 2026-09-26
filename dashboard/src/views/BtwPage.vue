@@ -25,7 +25,7 @@
             color="primary"
             prepend-icon="mdi-content-save"
             :loading="saving"
-            :disabled="!loaded || !hasUnsavedChanges"
+            :disabled="!loaded || saving || !hasUnsavedChanges"
             @click="save()"
           >
             {{ saving ? tm('btwPage.saving') : tm('btwPage.save') }}
@@ -358,6 +358,7 @@ function discardChanges() {
 }
 
 async function save(twoFactorCode = '') {
+  if (saving.value) return;
   await saveProfile(scope.value, twoFactorCode);
 }
 

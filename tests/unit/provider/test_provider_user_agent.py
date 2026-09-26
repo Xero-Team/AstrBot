@@ -8,7 +8,9 @@ from aiohttp import web
 
 from astrbot import __version__
 from astrbot.core.provider.headers import (
+    CONVERSATION_ID_HEADER,
     DEFAULT_USER_AGENT,
+    build_conversation_headers,
     build_provider_headers,
     drop_sdk_user_agent,
 )
@@ -37,6 +39,7 @@ from astrbot.core.provider.sources.openai_responses_source import (
     ProviderOpenAIResponses,
 )
 from astrbot.core.provider.sources.openai_tts_api_source import ProviderOpenAITTSAPI
+from astrbot.core.provider.sources.request_extra_headers import extra_headers_kwargs
 from astrbot.core.provider.sources.vllm_rerank_source import VLLMRerankProvider
 from astrbot.core.provider.sources.whisper_api_source import ProviderOpenAIWhisperAPI
 
@@ -73,6 +76,46 @@ def test_drop_sdk_user_agent_ignores_incomplete_clients_and_pops_lowercase_heade
     )
     drop_sdk_user_agent(client)
     assert headers == {"User-Agent": DEFAULT_USER_AGENT}
+
+
+def test_build_conversation_headers_only_when_id_present():
+    assert build_conversation_headers(None) == {}
+    assert build_conversation_headers("") == {}
+    assert build_conversation_headers("conversation-1") == {
+        CONVERSATION_ID_HEADER: "conversation-1"
+    }
+
+
+def test_extra_headers_kwargs_layer_conversation_id():
+    assert extra_headers_kwargs(None) == {}
+    assert extra_headers_kwargs({"X-Trace": "1"}) == {
+        "extra_headers": {"X-Trace": "1"}
+    }
+    assert extra_headers_kwargs(None, "conversation-1") == {
+        "extra_headers": {CONVERSATION_ID_HEADER: "conversation-1"}
+    }
+    assert extra_headers_kwargs({"X-Trace": "1"}, "conversation-1") == {
+        "extra_headers": {
+            "X-Trace": "1",
+            CONVERSATION_ID_HEADER: "conversation-1",
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "provider_cls",
+    [
+        ProviderOpenAIChatCompletions,
+        ProviderOpenAIResponses,
+        ProviderAnthropic,
+    ],
+)
+def test_provider_request_extra_headers_include_conversation_id(provider_cls):
+    provider = provider_cls.__new__(provider_cls)
+    assert provider._request_extra_headers_kwargs("conversation-1") == {
+        "extra_headers": {CONVERSATION_ID_HEADER: "conversation-1"}
+    }
+    assert provider._request_extra_headers_kwargs() == {}
 
 
 @pytest.fixture

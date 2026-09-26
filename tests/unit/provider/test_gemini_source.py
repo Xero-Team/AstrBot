@@ -908,7 +908,9 @@ async def test_gemini_text_chat_retries_after_api_error_and_strips_no_save_flag(
     expected = LLMResponse(role="assistant")
     query_calls: list[tuple[dict, object]] = []
 
-    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         query_calls.append((payloads, func_tool))
         if len(query_calls) == 1:
             raise APIError(429, {"message": "retry"})
@@ -945,7 +947,9 @@ async def test_gemini_text_chat_raises_when_error_handler_declines_retry():
     provider._ensure_message_to_dicts = lambda contexts: list(contexts)
     provider._handle_api_error = AsyncMock(return_value=False)
 
-    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         raise APIError(500, {"message": "fatal"})
 
     provider._query = fake_query
@@ -980,7 +984,9 @@ async def test_gemini_text_chat_expands_tool_call_result_lists():
         def to_messages(self):
             return [{"role": "tool", "content": f"result-{self.name}"}]
 
-    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         payloads_seen.append(payloads)
         return expected
 
@@ -1022,7 +1028,9 @@ async def test_gemini_text_chat_stream_retries_after_api_error():
     ]
     stream_calls: list[dict] = []
 
-    async def fake_query_stream(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query_stream(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         stream_calls.append(payloads)
         if len(stream_calls) == 1:
             raise APIError(429, {"message": "retry"})
@@ -1071,7 +1079,9 @@ async def test_gemini_text_chat_stream_retries_with_tool_results_and_strips_no_s
         def to_messages(self):
             return [{"role": "tool", "content": f"result-{self.name}"}]
 
-    async def fake_query_stream(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query_stream(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         stream_calls.append(payloads)
         if len(stream_calls) == 1:
             raise APIError(429, {"message": "retry"})
@@ -1827,7 +1837,9 @@ async def test_gemini_text_chat_stream_stops_when_error_handler_declines_retry()
     provider._handle_api_error = AsyncMock(return_value=False)
     stream_calls: list[dict] = []
 
-    async def fake_query_stream(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query_stream(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         stream_calls.append(payloads)
         raise APIError(500, {"message": "fatal"})
         yield
@@ -2043,3 +2055,49 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_keeps_conversation_header_until_consumed(monkeypatch):
+    """The conversation header must be present while the stream is consumed."""
+    provider = _gemini_stream_provider()
+    headers: dict[str, str] = {}
+    provider.client._api_client = SimpleNamespace(
+        _http_options=SimpleNamespace(headers=headers),
+    )
+    observed_headers: list[str | None] = []
+
+    async def fake_stream():
+        observed_headers.append(headers.get("x-astrbot-conversation-id"))
+        yield _gemini_stream_chunk(text="ok")
+
+    async def fake_retry(provider_name, request_factory, max_attempts=None):
+        return fake_stream()
+
+    async def fake_prepare_conversation(_payloads):
+        return []
+
+    async def fake_prepare_query_config(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(gemini_source_module, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+    monkeypatch.setattr(provider, "_require_client", lambda: provider.client)
+    monkeypatch.setattr(provider, "get_model", lambda: "gemini-3.7-flash")
+
+    responses = [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "messages": [{"role": "user", "content": "hello"}],
+                "model": "gemini-3.7-flash",
+            },
+            tools=None,
+            conversation_id="conversation-1",
+        )
+    ]
+
+    assert responses[-1].completion_text == "ok"
+    assert observed_headers == ["conversation-1"]
+    assert "x-astrbot-conversation-id" not in headers

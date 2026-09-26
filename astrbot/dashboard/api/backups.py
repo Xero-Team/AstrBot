@@ -79,9 +79,7 @@ def _download_backup(*, filename: str | None, service: BackupService):
         filename = _safe_backup_filename(filename)
         return _download_response(service.prepare_download(filename=filename))
     except BackupServiceError as exc:
-        return JSONResponse(
-            service_error_response(exc), status_code=exc.status_code
-        )
+        return JSONResponse(service_error_response(exc), status_code=exc.status_code)
     except Exception as exc:
         return internal_error_response(logger, "下载备份失败", exc)
 

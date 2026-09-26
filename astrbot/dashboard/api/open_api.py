@@ -391,9 +391,7 @@ async def send_im_message(
     try:
         await service.send_message(body)
     except OpenApiServiceError as exc:
-        raise ApiError(
-            safe_service_message(exc), status_code=exc.status_code
-        ) from exc
+        raise ApiError(safe_service_message(exc), status_code=exc.status_code) from exc
 
     return ok()
 

@@ -87,3 +87,30 @@ def test_sanitize_error_text_strips_controls_and_redacts_detail():
 
 def test_sanitize_error_text_keeps_business_text():
     assert sanitize_error_text("分组 'abc' 不存在") == "分组 'abc' 不存在"
+
+
+def test_redact_sensitive_text_redacts_colon_separated_secrets():
+    redacted = redact_sensitive_text("password: hunter2 secret: s3cr3t")
+
+    assert "hunter2" not in redacted
+    assert "s3cr3t" not in redacted
+
+
+def test_sanitize_error_text_handles_unprintable_message():
+    class Unprintable:
+        def __str__(self) -> str:
+            raise RuntimeError("no str")
+
+        def __repr__(self) -> str:
+            raise RuntimeError("no repr")
+
+    assert sanitize_error_text(Unprintable()) == "<unprintable error>"
+
+    class Reprable:
+        def __str__(self) -> str:
+            raise RuntimeError("no str")
+
+        def __repr__(self) -> str:
+            return "Reprable()"
+
+    assert sanitize_error_text(Reprable()) == "Reprable()"

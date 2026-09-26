@@ -11,7 +11,7 @@ _AUTH_JSON_FIELD_PATTERN = re.compile(
     r"(?i)(?P<prefix>(?P<kq>['\"])authorization(?P=kq)\s*:\s*)(?P<vq>['\"])bearer\s+[^'\"]+(?P=vq)"
 )
 _QUERY_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>{_SECRET_KEYS}\s*=\s*)(?P<value>[^&'\" ]+)"
+    rf"(?i)(?P<prefix>{_SECRET_KEYS}\s*[:=]\s*)(?P<value>[^&'\" ]+)"
 )
 _QUERY_PARAM_PATTERN = re.compile(
     r"(?i)(?P<prefix>[?&](?:api_?key|key|access_?token|auth_?token)=)(?P<value>[^&'\" ]+)"
@@ -125,5 +125,12 @@ def sanitize_error_text(message: object, *, redact_paths: bool = True) -> str:
     Returns:
         A single-line, redacted rendering of ``message``.
     """
-    text = redact_sensitive_text(str(message), redact_paths=redact_paths)
+    try:
+        text = str(message)
+    except Exception:
+        try:
+            text = repr(message)
+        except Exception:
+            text = "<unprintable error>"
+    text = redact_sensitive_text(text, redact_paths=redact_paths)
     return re.sub(r"[\x00-\x1f\x7f]", "", text)

@@ -89,9 +89,10 @@ const PROVIDERS: StoredCliProvider[] = [
 function mountProviders(
   providers: StoredCliProvider[] = PROVIDERS,
   confirm = true,
+  beforeSwitch = vi.fn(async () => true),
 ) {
   return mountWithVuetify(CodingCliProviders, {
-    props: { modelValue: providers },
+    props: { modelValue: providers, beforeSwitch },
     global: {
       provide: {
         // The app supplies this through a plugin; a mount supplies it here so
@@ -227,6 +228,81 @@ describe('CodingCliProviders', () => {
     );
     expect(buttons[1].classes().some((name) => name.includes('disabled'))).toBe(
       false,
+    );
+    wrapper.unmount();
+  });
+
+  it('does not save or switch when confirmation is cancelled', async () => {
+    const beforeSwitch = vi.fn(async () => true);
+    const wrapper = mountProviders(PROVIDERS, false, beforeSwitch);
+    await flushPromises();
+    await cardFor(wrapper, 'claude_code', 'Local')
+      .find('.coding-cli-providers__switch')
+      .trigger('click');
+    await flushPromises();
+
+    expect(beforeSwitch).not.toHaveBeenCalled();
+    expect(testState.switchMock).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('waits for the profile save before requesting a switch', async () => {
+    let finishSave!: (saved: boolean) => void;
+    const beforeSwitch = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const wrapper = mountProviders(PROVIDERS, true, beforeSwitch);
+    await flushPromises();
+    await cardFor(wrapper, 'claude_code', 'Local')
+      .find('.coding-cli-providers__switch')
+      .trigger('click');
+    await flushPromises();
+
+    expect(beforeSwitch).toHaveBeenCalledTimes(1);
+    expect(testState.switchMock).not.toHaveBeenCalled();
+    finishSave(true);
+    await flushPromises();
+    expect(testState.switchMock).toHaveBeenCalledWith(
+      { cli: 'claude_code', provider_id: 'local' },
+      { headers: {} },
+    );
+    wrapper.unmount();
+  });
+
+  it('still requests the CLI write step-up after saving', async () => {
+    testState.switchMock.mockRejectedValueOnce({
+      response: { data: { data: { requires_step_up: true } } },
+    });
+    testState.stepUpMock.mockResolvedValue({
+      data: { status: 'ok', data: { token: 'cli-token' } },
+    });
+    const beforeSwitch = vi.fn(async () => true);
+    const wrapper = mountProviders(PROVIDERS, true, beforeSwitch);
+    await flushPromises();
+    await cardFor(wrapper, 'claude_code', 'Local')
+      .find('.coding-cli-providers__switch')
+      .trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.findComponent(DashboardStepUpDialog);
+    expect(dialog.props('modelValue')).toBe(true);
+    dialog.vm.$emit('confirm', { password: 'pw' });
+    await flushPromises();
+
+    expect(beforeSwitch).toHaveBeenCalledTimes(1);
+    expect(testState.stepUpMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'coding_cli.config.write',
+        resource_type: 'instance',
+        resource_id: 'default',
+      }),
+    );
+    expect(testState.switchMock).toHaveBeenLastCalledWith(
+      { cli: 'claude_code', provider_id: 'local' },
+      { headers: { 'X-AstrBot-Step-Up': 'cli-token' } },
     );
     wrapper.unmount();
   });
@@ -414,7 +490,7 @@ describe('CodingCliProviders', () => {
 
     const wrapper = mountWithVuetify(CodingCliProviders, {
       attrs: { class: 'coding-cli-providers-test' },
-      props: { modelValue: PROVIDERS },
+      props: { modelValue: PROVIDERS, beforeSwitch: async () => true },
     });
     await flushPromises();
 

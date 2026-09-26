@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
 import ThirdPartyAgentsPage from '@/views/ThirdPartyAgentsPage.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
@@ -10,6 +11,7 @@ const testState = vi.hoisted(() => ({
   cliStateMock: vi.fn(),
   switchMock: vi.fn(),
   removeMock: vi.fn(),
+  stepUpMock: vi.fn(),
 }));
 
 vi.mock('@/api/v1', () => ({
@@ -27,7 +29,7 @@ vi.mock('@/api/v1', () => ({
 vi.mock('@/api/v1/authorization', () => ({
   STEP_UP_TTL_SECONDS: 300,
   authorizationApi: {
-    stepUp: vi.fn(),
+    stepUp: testState.stepUpMock,
     webChatStepUp: vi.fn(),
   },
 }));
@@ -74,6 +76,16 @@ const CLI_STATE = {
       model: '',
       has_credential: false,
     },
+    {
+      cli: 'codex',
+      path: 'C:/Users/x/.codex/config.toml',
+      exists: false,
+      managed: false,
+      backed_up: false,
+      base_url: '',
+      model: '',
+      has_credential: false,
+    },
   ],
 };
 
@@ -90,6 +102,10 @@ function mountPage() {
           props: ['modelValue'],
           template: '<div v-if="modelValue"><slot /></div>',
         },
+        VSnackbar: {
+          props: ['modelValue'],
+          template: '<div v-if="modelValue"><slot /></div>',
+        },
       },
     },
   });
@@ -98,8 +114,15 @@ function mountPage() {
 type Wrapper = ReturnType<typeof mountPage>;
 
 /** Add a provider through the provider editor and close its form. */
-async function addProvider(wrapper: Wrapper, id: string, baseUrl: string) {
-  await wrapper.findAll('.coding-cli-providers__add')[0].trigger('click');
+async function addProvider(
+  wrapper: Wrapper,
+  id: string,
+  baseUrl: string,
+  cliIndex = 0,
+) {
+  await wrapper
+    .findAll('.coding-cli-providers__add')
+    [cliIndex].trigger('click');
   await wrapper.vm.$nextTick();
   await wrapper.find('.coding-cli-providers__form-id input').setValue(id);
   await wrapper
@@ -190,6 +213,223 @@ describe('ThirdPartyAgentsPage', () => {
     expect(
       wrapper.findComponent(DashboardTwoFactorDialog).props('modelValue'),
     ).toBe(true);
+    wrapper.unmount();
+  });
+
+  it.each(['claude_code', 'codex'])(
+    'saves a new %s provider before switching by id',
+    async (cli) => {
+      const wrapper = mountPage();
+      await flushPromises();
+      const cliIndex = CLI_STATE.clis.findIndex((state) => state.cli === cli);
+      await addProvider(wrapper, 'mine', 'https://mine.example', cliIndex);
+      const button = wrapper
+        .findAll('.coding-cli-providers__cli')
+        [cliIndex].findAll('.coding-cli-providers__switch')[1];
+
+      await button.trigger('click');
+      await flushPromises();
+
+      expect(savedConfig().btw.cli_providers[1]).toMatchObject({
+        id: 'mine',
+        cli,
+        base_url: 'https://mine.example',
+      });
+      expect(testState.updateProfileMock).toHaveBeenCalledWith(
+        'default',
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(testState.switchMock).toHaveBeenCalledWith(
+        { cli, provider_id: 'mine' },
+        { headers: {} },
+      );
+      expect(
+        testState.updateProfileMock.mock.invocationCallOrder[0],
+      ).toBeLessThan(testState.switchMock.mock.invocationCallOrder[0]);
+      expect(
+        wrapper.find('.third-party-agents-page__save').attributes('disabled'),
+      ).toBeDefined();
+      wrapper.unmount();
+    },
+  );
+
+  it('switches a saved provider without saving the profile again', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+    await wrapper.find('.coding-cli-providers__switch').trigger('click');
+    await flushPromises();
+
+    expect(testState.updateProfileMock).not.toHaveBeenCalled();
+    expect(testState.switchMock).toHaveBeenCalledWith(
+      { cli: 'claude_code', provider_id: 'gw' },
+      { headers: {} },
+    );
+    wrapper.unmount();
+  });
+
+  it('saves edits to an existing provider before switching', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+    await wrapper.find('.coding-cli-providers__edit').trigger('click');
+    await wrapper
+      .find('.coding-cli-providers__form-base-url input')
+      .setValue('https://updated.example');
+    await wrapper.find('.coding-cli-providers__form-confirm').trigger('click');
+    await wrapper.find('.coding-cli-providers__switch').trigger('click');
+    await flushPromises();
+
+    expect(savedConfig().btw.cli_providers[0]).toMatchObject({
+      base_url: 'https://updated.example',
+      api_key: REDACTED_SECRET_PLACEHOLDER,
+    });
+    expect(
+      testState.updateProfileMock.mock.invocationCallOrder[0],
+    ).toBeLessThan(testState.switchMock.mock.invocationCallOrder[0]);
+    wrapper.unmount();
+  });
+
+  it.each(['response', 'network'])(
+    'aborts switching on a save %s error',
+    async (failure) => {
+      if (failure === 'response') {
+        testState.updateProfileMock.mockResolvedValue({
+          data: { status: 'error' },
+        });
+      } else {
+        testState.updateProfileMock.mockRejectedValue(new Error('offline'));
+      }
+      const wrapper = mountPage();
+      await flushPromises();
+      await addProvider(wrapper, 'mine', 'https://mine.example');
+      await wrapper
+        .findAll('.coding-cli-providers__switch')[1]
+        .trigger('click');
+      await flushPromises();
+
+      expect(testState.switchMock).not.toHaveBeenCalled();
+      expect(wrapper.text()).toContain(
+        'Could not save the third-party agent configuration',
+      );
+      expect(
+        wrapper.find('.third-party-agents-page__save').attributes('disabled'),
+      ).toBeUndefined();
+      wrapper.unmount();
+    },
+  );
+
+  it('stops for TOTP and allows switching after the challenged save succeeds', async () => {
+    testState.updateProfileMock.mockResolvedValueOnce({
+      status: 401,
+      data: { status: 'error', data: { totp_required: true } },
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+    await addProvider(wrapper, 'mine', 'https://mine.example');
+    const button = wrapper.findAll('.coding-cli-providers__switch')[1];
+    await button.trigger('click');
+    await flushPromises();
+
+    expect(testState.switchMock).not.toHaveBeenCalled();
+    const dialog = wrapper.findComponent(DashboardTwoFactorDialog);
+    expect(dialog.props('modelValue')).toBe(true);
+    dialog.vm.$emit('confirm', '123456');
+    await flushPromises();
+    expect(testState.updateProfileMock).toHaveBeenLastCalledWith(
+      'default',
+      expect.anything(),
+      expect.objectContaining({ headers: { 'X-2FA-Code': '123456' } }),
+    );
+    expect(testState.switchMock).not.toHaveBeenCalled();
+
+    await button.trigger('click');
+    await flushPromises();
+    expect(testState.updateProfileMock).toHaveBeenCalledTimes(2);
+    expect(testState.switchMock).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it.each([true, false])(
+    'waits for profile step-up before switching (confirmed: %s)',
+    async (confirmed) => {
+      testState.updateProfileMock.mockRejectedValueOnce({
+        response: { data: { data: { requires_step_up: true } } },
+      });
+      testState.stepUpMock.mockResolvedValue({
+        data: { status: 'ok', data: { token: 'profile-token' } },
+      });
+      const wrapper = mountPage();
+      await flushPromises();
+      await addProvider(wrapper, 'mine', 'https://mine.example');
+      await wrapper
+        .findAll('.coding-cli-providers__switch')[1]
+        .trigger('click');
+      await flushPromises();
+
+      expect(testState.switchMock).not.toHaveBeenCalled();
+      const dialog = wrapper
+        .findAllComponents(DashboardStepUpDialog)
+        .find((candidate) => candidate.props('modelValue'))!;
+      expect(dialog).toBeDefined();
+      if (confirmed) {
+        dialog.vm.$emit('confirm', { password: 'pw' });
+      } else {
+        dialog.vm.$emit('cancel');
+      }
+      await flushPromises();
+
+      expect(testState.switchMock).toHaveBeenCalledTimes(confirmed ? 1 : 0);
+      expect(testState.updateProfileMock).toHaveBeenCalledTimes(
+        confirmed ? 2 : 1,
+      );
+      if (confirmed) {
+        expect(testState.updateProfileMock).toHaveBeenLastCalledWith(
+          'default',
+          expect.anything(),
+          expect.objectContaining({
+            headers: { 'X-AstrBot-Step-Up': 'profile-token' },
+          }),
+        );
+        expect(testState.switchMock).toHaveBeenCalledWith(
+          { cli: 'claude_code', provider_id: 'mine' },
+          { headers: {} },
+        );
+      }
+      wrapper.unmount();
+    },
+  );
+
+  it('keeps later edits unsaved and aborts switching while a save is pending', async () => {
+    let finishSave!: (response: unknown) => void;
+    testState.updateProfileMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const wrapper = mountPage();
+    await flushPromises();
+    await addProvider(wrapper, 'mine', 'https://mine.example');
+    await wrapper.findAll('.coding-cli-providers__switch')[1].trigger('click');
+    await flushPromises();
+    expect(testState.switchMock).not.toHaveBeenCalled();
+
+    await addProvider(wrapper, 'later', 'https://later.example');
+    await wrapper.findAll('.coding-cli-providers__switch')[2].trigger('click');
+    await flushPromises();
+    expect(testState.updateProfileMock).toHaveBeenCalledTimes(1);
+    expect(testState.switchMock).not.toHaveBeenCalled();
+
+    finishSave({ data: { status: 'ok' } });
+    await flushPromises();
+    expect(savedConfig().btw.cli_providers.map((entry) => entry.id)).toEqual([
+      'gw',
+      'mine',
+    ]);
+    expect(testState.switchMock).not.toHaveBeenCalled();
+    expect(
+      wrapper.find('.third-party-agents-page__save').attributes('disabled'),
+    ).toBeUndefined();
     wrapper.unmount();
   });
 

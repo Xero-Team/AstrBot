@@ -395,6 +395,8 @@ const props = withDefaults(
   defineProps<{
     /** The stored provider list, edited in place through `update:modelValue`. */
     modelValue?: StoredCliProvider[];
+    /** Persist pending edits before the switch resolves a provider by id. */
+    beforeSwitch: () => Promise<boolean>;
   }>(),
   { modelValue: () => [] },
 );
@@ -645,6 +647,7 @@ async function switchTo(state: CodingCliState, provider: CodingCliProvider) {
 
   busy.value = switchKey(state.cli, provider.id);
   try {
+    if (!(await props.beforeSwitch())) return;
     const response = await runMutationWithStepUp(
       (stepUp) =>
         codingCliApi.switchProvider(

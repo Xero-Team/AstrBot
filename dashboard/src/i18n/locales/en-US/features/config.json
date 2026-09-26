@@ -321,7 +321,7 @@
     "endpointOrKeyRequired": "A provider needs an endpoint or an API key.",
     "idTaken": "Another provider already uses this ID.",
     "switchTitle": "Replace the CLI's own configuration?",
-    "switchMessage": "This rewrites the file the CLI reads on this host, including the stored key. Your previous file is kept once as a backup, and “Take back” restores it.",
+    "switchMessage": "This saves any pending provider changes on this page, then rewrites the file the CLI reads on this host, including the stored key. Your previous file is kept once as a backup, and “Take back” restores it.",
     "deleteTitle": "Remove this provider?",
     "deleteMessage": "It is removed from the list. If the CLI is currently using it, the file it wrote is left as it is until you switch or take it back.",
     "restoreTitle": "Take AstrBot's configuration back out?",

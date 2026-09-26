@@ -1277,6 +1277,43 @@ class NapCatPlatformAdapter(Platform):
         return False
 
     @staticmethod
+    async def _portable_record_file(component: Record) -> str | None:
+        """Return a QQ-friendly OneBot file value for an outbound voice.
+
+        QQ voice is Tencent SILK. A readable local ``Record`` is re-encoded to
+        SILK before base64 transport; portable references pass through, and a
+        source that cannot be converted keeps the existing raw ``base64://``
+        behavior instead of degrading to a text placeholder.
+        """
+        candidates = _outbound_media_candidates(component)
+        portable = _first_prefixed_media_ref(candidates, _PORTABLE_MEDIA_PREFIXES)
+        if portable:
+            return portable
+        readable = _first_readable_media_ref(candidates)
+        if readable is None:
+            return await NapCatPlatformAdapter._portable_media_file(component)
+        try:
+            encoded = await MediaResolver(
+                readable,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_base64(target_format="tencent_silk")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "[NapCat] Tencent Silk conversion failed; sending raw audio: %s",
+                safe_error("", exc),
+            )
+            return await NapCatPlatformAdapter._portable_media_file(component)
+        if not encoded:
+            logger.warning(
+                "[NapCat] Tencent Silk encoding produced an empty payload",
+            )
+            return await NapCatPlatformAdapter._portable_media_file(component)
+        return f"base64://{encoded}"
+
+    @staticmethod
     async def _portable_media_file(component: _OutboundMedia) -> str | None:
         """Return a OneBot file value NapCat can consume without AstrBot paths."""
         candidates = _outbound_media_candidates(component)
@@ -1313,7 +1350,10 @@ class NapCatPlatformAdapter(Platform):
     ) -> bool:
         """Convert image, audio, video, and file components."""
         if isinstance(component, Image | Record | Video):
-            file_value = await self._portable_media_file(component)
+            if isinstance(component, Record):
+                file_value = await self._portable_record_file(component)
+            else:
+                file_value = await self._portable_media_file(component)
             if isinstance(component, Image):
                 label = "[Image]"
             elif isinstance(component, Record):

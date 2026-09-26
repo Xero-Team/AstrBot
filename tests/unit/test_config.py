@@ -561,6 +561,10 @@ class TestAstrBotConfigLoad:
             "pbkdf2_sha256$-1$00112233445566778899aabbccddeeff$"
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         )
+        assert not is_pbkdf2_dashboard_password(
+            "pbkdf2_sha256$600001$00112233445566778899aabbccddeeff$"
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
         assert not verify_dashboard_password("pbkdf2_sha256$0$$", "anything")
         assert is_pbkdf2_dashboard_password(
             "pbkdf2_sha256$600000$00112233445566778899aabbccddeeff$"

@@ -64,7 +64,12 @@ def validate_dashboard_password(raw_password: str) -> None:
 
 
 def is_pbkdf2_dashboard_password(stored_hash: str) -> bool:
-    """Return whether a stored value is a well-formed PBKDF2 password hash."""
+    """Return whether a stored value is a well-formed PBKDF2 password hash.
+
+    Only the exact work factor this build generates is accepted. A stored hash
+    with zero, negative, or unbounded iterations is treated as unusable rather
+    than verified, so a corrupt configuration cannot stall login.
+    """
     if not isinstance(stored_hash, str) or not stored_hash.startswith(_PBKDF2_FORMAT):
         return False
     parts = stored_hash.split("$")
@@ -78,7 +83,7 @@ def is_pbkdf2_dashboard_password(stored_hash: str) -> bool:
     except ValueError:
         return False
     return (
-        iterations > 0
+        iterations == _PBKDF2_ITERATIONS
         and len(salt_bytes) == _PBKDF2_SALT_BYTES
         and len(digest_bytes) == hashlib.sha256().digest_size
     )

@@ -154,9 +154,6 @@ class OpenApiService:
                 return None, f"config_id not found: {config_id}"
             return config_id, None
 
-        if not config_name:
-            return None, "config_name is empty"
-
         matched = [item for item in conf_list if item["name"] == config_name]
         if not matched:
             return None, f"config_name not found: {config_name}"

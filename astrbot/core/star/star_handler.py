@@ -2,6 +2,7 @@ import copy
 import enum
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import total_ordering
 from typing import Any, TypeVar
 
 from .filter import HandlerFilter
@@ -126,6 +127,7 @@ class EventType(enum.Enum):
 H = TypeVar("H", bound=Callable[..., Any])
 
 
+@total_ordering
 @dataclass
 class StarHandlerMetadata[H: Callable[..., Any]]:
     """描述一个 Star 所注册的某一个 Handler。"""

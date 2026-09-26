@@ -654,16 +654,6 @@ class InternalAgentSubStage:
         ):
             return None
 
-        if llm_response and llm_response.role != "assistant":
-            if not user_aborted:
-                return
-            llm_response = LLMResponse(
-                role="assistant",
-                completion_text=llm_response.completion_text or "",
-            )
-        elif llm_response is None:
-            llm_response = LLMResponse(role="assistant", completion_text="")
-
         if user_aborted:
             llm_response = LLMResponse(
                 role="assistant",

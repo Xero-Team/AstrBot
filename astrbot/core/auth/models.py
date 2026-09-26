@@ -18,7 +18,7 @@ from astrbot.core.platform.message_session import MessageSession
 # particular, ``secrets.token_urlsafe`` can emit ``_`` in Dashboard session
 # IDs, so rejecting it would turn otherwise valid authenticated requests into
 # uncaught 500 responses during authorization context construction.
-_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/_-]{0,255}$")
+_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$")
 _CONFIG_ID_RE = re.compile(r"^(?:default|[A-Za-z0-9][A-Za-z0-9._-]{0,127})$")
 
 

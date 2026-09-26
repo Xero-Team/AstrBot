@@ -236,7 +236,6 @@ class KookPlatformAdapter(Platform):
         # 如果没有查询到角色id或者bot不属于某类角色, 则不处理此`(rol)xxx(rol)`
         # 暂时想不到能在不修改原有消息内容的情况下处理这个角色mention的方案
 
-        message_str = raw_content
         bot_id = self.client.bot_id
         bot_nickname = self.client.bot_nickname
         bot_username = self.client.bot_username

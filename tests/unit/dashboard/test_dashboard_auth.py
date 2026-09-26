@@ -896,6 +896,65 @@ async def test_legacy_md5_account_rejects_wrong_password(
 
 
 @pytest.mark.asyncio
+async def test_non_bootstrap_legacy_account_cannot_recover(
+    app: FastAPI,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    """A non-bootstrap legacy account must not accept the configured credential."""
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = DashboardTestClient(app)
+    legacy_md5 = "77b90590a8945a7d36c963981a307dc9"
+    configured_password = "AstrbotRecover123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = legacy_md5
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(configured_password)
+        )
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.astrbot_config,
+            True,
+        )
+        async with core_lifecycle_td.db.get_db() as session:
+            async with session.begin():
+                session.add(
+                    DashboardAccount(
+                        username="secondary",
+                        password_hash=legacy_md5,
+                    )
+                )
+
+        response = await test_client.post(
+            "/api/v1/auth/login",
+            json={"username": "secondary", "password": configured_password},
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "error"
+        assert data["message"] == "用户名或密码错误"
+    finally:
+        async with core_lifecycle_td.db.get_db() as session:
+            async with session.begin():
+                secondary = (
+                    await session.execute(
+                        select(DashboardAccount).where(
+                            col(DashboardAccount.username) == "secondary"
+                        )
+                    )
+                ).scalar_one_or_none()
+                if secondary is not None:
+                    await session.delete(secondary)
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
 async def test_version_endpoint_drops_md5_password_hint(
     app: FastAPI,
     authenticated_header: dict,

@@ -72,12 +72,16 @@ def is_pbkdf2_dashboard_password(stored_hash: str) -> bool:
         return False
     _, iterations_s, salt, digest = parts
     try:
-        int(iterations_s)
-        bytes.fromhex(salt)
-        bytes.fromhex(digest)
+        iterations = int(iterations_s)
+        salt_bytes = bytes.fromhex(salt)
+        digest_bytes = bytes.fromhex(digest)
     except ValueError:
         return False
-    return True
+    return (
+        iterations > 0
+        and len(salt_bytes) == _PBKDF2_SALT_BYTES
+        and len(digest_bytes) == hashlib.sha256().digest_size
+    )
 
 
 def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool:

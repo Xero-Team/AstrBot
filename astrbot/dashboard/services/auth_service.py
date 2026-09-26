@@ -861,10 +861,13 @@ class AuthService:
             and not await self.has_dashboard_accounts()
         )
         # A legacy non-PBKDF2 account hash (for example an MD5 value persisted
-        # by an older release) can no longer be verified directly. Recover it
-        # from the configured bootstrap credential and rehash the account below.
-        legacy_account_hash = account is not None and not is_pbkdf2_dashboard_password(
-            account.password_hash
+        # by an older release) can no longer be verified directly. Only the
+        # configured bootstrap principal may recover it from the configured
+        # credential, so a non-bootstrap account cannot be taken over.
+        legacy_account_hash = (
+            account is not None
+            and account.username == configured_username
+            and not is_pbkdf2_dashboard_password(account.password_hash)
         )
         if bootstrap_account or legacy_account_hash:
             # A fresh deployment verifies the configured bootstrap credential
@@ -884,10 +887,6 @@ class AuthService:
         if account is None:
             account = await self._ensure_dashboard_account(
                 configured_username, password
-            )
-        elif legacy_account_hash:
-            account = await self._ensure_dashboard_account(
-                account.username, password, sync_password=True
             )
 
         totp_verified = False
@@ -951,6 +950,13 @@ class AuthService:
                     return self.error("TOTP 验证码无效", status_code=401)
                 else:
                     return self.error("恢复码无效", status_code=401)
+
+        if legacy_account_hash:
+            # Rehash only after every authentication factor succeeded, so a
+            # failed TOTP challenge cannot mutate the stored credential.
+            account = await self._ensure_dashboard_account(
+                account.username, password, sync_password=True
+            )
 
         change_pwd_hint = False
         password_change_required = await is_password_change_required(

@@ -1,0 +1,21 @@
+name: 'AstrBot CodeQL config'
+
+# Noise reduction for GitHub Code Scanning. This config only filters CodeQL
+# query output; it does not change product behavior or disable the workflow.
+# The workflow still runs `+security-extended,security-and-quality`; these
+# filters apply to that combined set, so security-severity findings stay
+# visible. See Issue #293.
+query-filters:
+  # Every open product-code `py/ineffectual-statement` finding is an intentional
+  # `...` stub body: `typing.Protocol` members, base/mixin default methods, and
+  # `@overload` signatures. CodeQL cannot scope a query filter to a path, and no
+  # source-side change keeps those stubs, so the whole query is excluded. It is a
+  # note-severity code-quality query with no security severity; test-tree
+  # findings are already dropped by `paths-ignore` below.
+  - exclude:
+      id: py/ineffectual-statement
+
+# Test sources are not product surfaces. Covers `tests/**` and
+# `dashboard/tests/**`.
+paths-ignore:
+  - '**/tests/**'

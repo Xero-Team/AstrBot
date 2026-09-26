@@ -244,6 +244,54 @@ describe('BtwPage', () => {
     wrapper.unmount();
   });
 
+  it('keeps the newly loaded profile clean when a save finishes after a switch', async () => {
+    testState.listMock.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: { info_list: [{ id: 'work', name: 'Work' }] },
+      },
+    });
+    testState.getProfileMock.mockImplementation((scope: string) =>
+      Promise.resolve({
+        data: {
+          status: 'ok',
+          data: {
+            config:
+              scope === 'work'
+                ? { btw: { enabled: false, work_loop: { enabled: false } } }
+                : { btw: { enabled: false } },
+            metadata: METADATA,
+          },
+        },
+      }),
+    );
+    let releaseSave: ((value: unknown) => void) | undefined;
+    testState.updateProfileMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseSave = resolve;
+        }),
+    );
+    dialogControl.answer = false;
+
+    const wrapper = mountPage();
+    await flushPromises();
+    await markDirty(wrapper);
+    await wrapper.find('.btw-page__save').trigger('click');
+    await flushPromises();
+
+    // A save is in flight for "default"; discard and move to "work".
+    await switchScope(wrapper, 'work');
+    expect(scopeValue(wrapper)).toBe('work');
+
+    releaseSave?.({ data: { status: 'ok', message: 'saved' } });
+    await flushPromises();
+
+    // The finished save must not mark the loaded profile as dirty.
+    expect(wrapper.find('.btw-page__unsaved').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('offers the named profiles alongside the default one', async () => {
     testState.listMock.mockResolvedValue({
       data: {

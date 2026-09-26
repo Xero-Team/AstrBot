@@ -411,7 +411,12 @@ async function saveProfile(target: string, twoFactorCode = '') {
     if (response.data?.status === 'ok') {
       twoFactorOpen.value = false;
       twoFactorError.value = '';
-      savedSnapshot.value = submittedSnapshot;
+      // Only adopt the submitted snapshot while the page still edits that
+      // profile: the operator may have discarded the edit and switched away
+      // mid-save, and the loaded profile's snapshot must not be overwritten.
+      if (target === scope.value) {
+        savedSnapshot.value = submittedSnapshot;
+      }
       showSnack(response.data?.message || tm('btwPage.saveSuccess'), 'success');
       return true;
     }

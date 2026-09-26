@@ -19,6 +19,8 @@ from astrbot.core.log import (
     _LoguruInterceptHandler,
     sanitize_log_payload,
     sanitize_log_record,
+    sanitize_log_text,
+    sanitize_log_value,
 )
 
 MARKER = "sink-redaction-marker-32"
@@ -451,3 +453,36 @@ def test_configure_logger_replacement_console_sink_disables_diagnose() -> None:
             LogManager._configured = previous_configured
         logger.setLevel(previous_level)
         logging.getLogger().setLevel(previous_root_level)
+
+
+def test_sanitize_log_value_escapes_newlines_and_controls() -> None:
+    forged = "good\n2026-01-01 ERROR forged\rline\x00\x1b[31m"
+    cleaned = sanitize_log_value(forged)
+    assert "\n" not in cleaned
+    assert "\r" not in cleaned
+    assert "\\n" in cleaned
+    assert "\x00" not in cleaned
+    assert "\x1b" not in cleaned
+
+
+def test_sanitize_log_text_preserves_intentional_newlines() -> None:
+    text = "line1\nline2\rrewritten\x07"
+    cleaned = sanitize_log_text(text)
+    assert "line1\nline2" in cleaned
+    assert "\r" not in cleaned
+    assert "\x07" not in cleaned
+
+
+def test_sanitize_log_record_neutralizes_arguments() -> None:
+    record = logging.LogRecord(
+        "astrbot",
+        logging.INFO,
+        __file__,
+        1,
+        "user=%s",
+        ("evil\nforged line",),
+        None,
+    )
+    sanitize_log_record(record)
+    assert "\n" not in record.msg
+    assert "evil" in record.msg

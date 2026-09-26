@@ -174,8 +174,6 @@
     }
   },
   "jevClassifier": {
-    "title": "JEV System One 分类器",
-    "description": "请使用 HTTPS TypeSafe 地址，填写 API Key（也可填写环境变量引用）、模型别名和正数超时。JEV 返回结构化判定，不是对话模型，也不提供模型列表。",
     "validation": {
       "https": "JEV API Base 必须使用 HTTPS。",
       "key": "请输入 JEV API Key 或环境变量引用。",

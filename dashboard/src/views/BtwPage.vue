@@ -8,70 +8,94 @@
   gets a page of its own under More Features.
 -->
 <template>
-  <div class="btw-page">
-    <header class="btw-page__header">
-      <div>
-        <h1 class="btw-page__title">{{ tm('btwPage.title') }}</h1>
-        <p class="btw-page__subtitle">{{ tm('btwPage.subtitle') }}</p>
-      </div>
-      <ConfigDocsLink docs="dev/astrbot-config.html" />
-    </header>
-
-    <v-alert
-      v-if="loadFailed"
-      class="mb-4"
-      density="compact"
-      variant="tonal"
-      type="error"
-    >
-      {{ tm('btwPage.loadError') }}
-      <template #append>
-        <v-btn size="small" variant="text" @click="loadAll">
-          {{ tm('btwPage.retry') }}
-        </v-btn>
-      </template>
-    </v-alert>
-
-    <v-skeleton-loader v-else-if="!loaded" type="article" />
-
-    <template v-else>
-      <div class="btw-page__scope">
-        <v-select
-          :model-value="scope"
-          class="btw-page__scope-select"
-          :items="scopeOptions"
-          :label="tm('btwPage.appliesTo')"
-          :hint="tm('btwPage.appliesToHint')"
-          persistent-hint
-          density="compact"
-          variant="outlined"
-          @update:model-value="onScopeChange"
-        />
+  <div class="dashboard-page btw-page">
+    <v-container fluid class="dashboard-shell pa-4 pa-md-6">
+      <div class="dashboard-header">
+        <div class="dashboard-header-main">
+          <h1 class="dashboard-title">
+            {{ tm('btwPage.title') }}
+            <ConfigDocsLink docs="dev/astrbot-config.html" />
+          </h1>
+          <p class="dashboard-subtitle">{{ tm('btwPage.subtitle') }}</p>
+        </div>
+        <div class="dashboard-header-actions">
+          <v-btn
+            class="btw-page__save"
+            variant="tonal"
+            color="primary"
+            prepend-icon="mdi-content-save"
+            :loading="saving"
+            :disabled="!loaded || saving || !hasUnsavedChanges"
+            @click="save()"
+          >
+            {{ saving ? tm('btwPage.saving') : tm('btwPage.save') }}
+          </v-btn>
+        </div>
       </div>
 
-      <AstrBotConfigV4
-        v-if="btwMetadata"
-        :key="configKey"
-        :metadata="{ btw: btwMetadata }"
-        :iterable="configData"
-        metadata-key="btw"
-      />
-      <v-alert v-else density="compact" variant="tonal" type="warning">
-        {{ tm('btwPage.metadataMissing') }}
-      </v-alert>
-    </template>
-
-    <FloatingActionStack :label="tm('btwPage.actions')">
-      <v-btn
-        class="btw-page__save"
-        color="primary"
-        :loading="saving"
-        :disabled="!loaded"
-        @click="save()"
+      <v-alert
+        v-if="loadFailed"
+        class="mb-4"
+        density="compact"
+        variant="tonal"
+        type="error"
       >
-        {{ tm('btwPage.save') }}
-      </v-btn>
-    </FloatingActionStack>
+        {{ tm('btwPage.loadError') }}
+        <template #append>
+          <v-btn size="small" variant="text" @click="loadAll">
+            {{ tm('btwPage.retry') }}
+          </v-btn>
+        </template>
+      </v-alert>
+
+      <v-skeleton-loader v-else-if="!loaded" type="article" />
+
+      <template v-else>
+        <div
+          v-if="hasUnsavedChanges"
+          class="btw-page__unsaved"
+          role="status"
+          aria-live="polite"
+        >
+          <v-icon size="18" color="warning">mdi-alert-circle-outline</v-icon>
+          <span class="btw-page__unsaved-text">
+            {{ tm('btwPage.unsavedNotice') }}
+          </span>
+          <v-btn
+            variant="text"
+            size="small"
+            :disabled="saving"
+            @click="discardChanges"
+          >
+            {{ tm('btwPage.discard') }}
+          </v-btn>
+        </div>
+
+        <v-card class="btw-page__scope" rounded="md" variant="outlined">
+          <v-select
+            :model-value="scope"
+            class="btw-page__scope-select"
+            :items="scopeOptions"
+            :label="tm('btwPage.appliesTo')"
+            :hint="tm('btwPage.appliesToHint')"
+            persistent-hint
+            density="compact"
+            variant="outlined"
+            @update:model-value="onScopeChange"
+          />
+        </v-card>
+
+        <AstrBotCoreConfigWrapper
+          v-if="hasBtwSections"
+          :key="configKey"
+          :metadata="btwSections"
+          :config-data="configData"
+        />
+        <v-alert v-else density="compact" variant="tonal" type="warning">
+          {{ tm('btwPage.metadataMissing') }}
+        </v-alert>
+      </template>
+    </v-container>
 
     <v-snackbar v-model="snackbar" :color="snackColor" :timeout="3000">
       {{ snackMessage }}
@@ -101,11 +125,10 @@
 import { computed, onMounted, ref } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { configProfileApi, type OpenConfig } from '@/api/v1';
-import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
+import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
-import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useModuleI18n } from '@/i18n/composables';
@@ -128,6 +151,7 @@ interface UnsavedChangesDialogExposed {
 }
 
 const { tm } = useModuleI18n('features/config');
+const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
 const confirmDialog = useConfirmDialog();
 const unsavedChangesDialog = ref<UnsavedChangesDialogExposed | null>(null);
 
@@ -169,6 +193,101 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     ? (value as Record<string, unknown>)
     : null;
 }
+
+interface BtwCategory {
+  key: string;
+  icon: string;
+  labelKey: string;
+  hintKey: string;
+  matches: (selector: string) => boolean;
+}
+
+/**
+ * The page reads one flat `btw` group; these categories fold it into the same
+ * section/card layout the config page uses. Item selectors stay authoritative,
+ * so a new `btw.*` key still renders under the fallback category.
+ */
+const BTW_CATEGORIES: BtwCategory[] = [
+  {
+    key: 'general',
+    icon: 'mdi-tune-variant',
+    labelKey: 'btw_page.general',
+    hintKey: 'btw_page.generalHint',
+    matches: (selector) => selector === 'btw.enabled',
+  },
+  {
+    key: 'conversation_loop',
+    icon: 'mdi-message-text-outline',
+    labelKey: 'btw_page.conversationLoop',
+    hintKey: 'btw_page.conversationLoopHint',
+    matches: (selector) => selector.startsWith('btw.conversation_loop.'),
+  },
+  {
+    key: 'work_loop',
+    icon: 'mdi-briefcase-outline',
+    labelKey: 'btw_page.workLoop',
+    hintKey: 'btw_page.workLoopHint',
+    matches: (selector) =>
+      selector.startsWith('btw.work_loop.') ||
+      selector.startsWith('btw.work_session.'),
+  },
+  {
+    key: 'classifier',
+    icon: 'mdi-call-split',
+    labelKey: 'btw_page.classifier',
+    hintKey: 'btw_page.classifierHint',
+    matches: (selector) => selector.startsWith('btw.classifier.'),
+  },
+  {
+    key: 'routes',
+    icon: 'mdi-source-branch',
+    labelKey: 'btw_page.routes',
+    hintKey: 'btw_page.routesHint',
+    matches: (selector) => selector.endsWith('_routes'),
+  },
+  {
+    key: 'other',
+    icon: 'mdi-dots-horizontal',
+    labelKey: 'btw_page.other',
+    hintKey: 'btw_page.otherHint',
+    matches: () => true,
+  },
+];
+
+const btwSections = computed<Record<string, Record<string, unknown>>>(() => {
+  const items = asRecord(asRecord(btwMetadata.value)?.items);
+  if (!items) return {};
+
+  const buckets = new Map<string, Record<string, unknown>>(
+    BTW_CATEGORIES.map((category) => [category.key, {}]),
+  );
+  for (const [selector, itemMeta] of Object.entries(items)) {
+    const category = BTW_CATEGORIES.find((entry) => entry.matches(selector));
+    buckets.get(category?.key ?? 'other')![selector] = itemMeta;
+  }
+
+  const sections: Record<string, Record<string, unknown>> = {};
+  for (const category of BTW_CATEGORIES) {
+    const categoryItems = buckets.get(category.key)!;
+    if (Object.keys(categoryItems).length === 0) continue;
+    sections[category.key] = {
+      label: tmMetadata(category.labelKey),
+      icon: category.icon,
+      metadata: {
+        [category.key]: {
+          type: 'object',
+          description: category.hintKey,
+          items: categoryItems,
+        },
+      },
+    };
+  }
+  return sections;
+});
+
+const hasBtwSections = computed(
+  () => Object.keys(btwSections.value).length > 0,
+);
 
 function showSnack(message: string, color: 'success' | 'error') {
   snackMessage.value = message;
@@ -231,7 +350,15 @@ const hasUnsavedChanges = computed(
   () => loaded.value && snapshot(configData.value) !== savedSnapshot.value,
 );
 
+/** Restore the last saved profile, dropping edits made since. */
+function discardChanges() {
+  if (!hasUnsavedChanges.value) return;
+  configData.value = JSON.parse(savedSnapshot.value) as OpenConfig;
+  configKey.value += 1;
+}
+
 async function save(twoFactorCode = '') {
+  if (saving.value) return;
   await saveProfile(scope.value, twoFactorCode);
 }
 
@@ -247,6 +374,8 @@ async function save(twoFactorCode = '') {
 async function saveProfile(target: string, twoFactorCode = '') {
   if (saving.value) return false;
   saving.value = true;
+  const submittedSnapshot = snapshot(configData.value);
+  const submittedConfig = JSON.parse(submittedSnapshot) as OpenConfig;
   const headers: Record<string, string> = {};
   if (twoFactorCode) headers['X-2FA-Code'] = twoFactorCode;
 
@@ -259,7 +388,7 @@ async function saveProfile(target: string, twoFactorCode = '') {
           validateStatus: (status: number) =>
             (status >= 200 && status < 300) || status === 401,
         };
-        return configProfileApi.update(target, configData.value, requestConfig);
+        return configProfileApi.update(target, submittedConfig, requestConfig);
       },
       target,
       requestStepUp,
@@ -282,7 +411,12 @@ async function saveProfile(target: string, twoFactorCode = '') {
     if (response.data?.status === 'ok') {
       twoFactorOpen.value = false;
       twoFactorError.value = '';
-      savedSnapshot.value = snapshot(configData.value);
+      // Only adopt the submitted snapshot while the page still edits that
+      // profile: the operator may have discarded the edit and switched away
+      // mid-save, and the loaded profile's snapshot must not be overwritten.
+      if (target === scope.value) {
+        savedSnapshot.value = submittedSnapshot;
+      }
       showSnack(response.data?.message || tm('btwPage.saveSuccess'), 'success');
       return true;
     }
@@ -359,31 +493,29 @@ onMounted(loadAll);
 </script>
 
 <style scoped>
-.btw-page {
-  padding: 16px;
-}
+@import '@/styles/dashboard-shell.css';
 
-.btw-page__header {
+.btw-page__unsaved {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  align-items: center;
+  gap: var(--astrbot-space-2);
+  padding: var(--astrbot-space-3);
+  margin-bottom: var(--astrbot-space-4);
+  border: 1px solid rgb(var(--v-theme-warning));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface-variant));
+  color: var(--dashboard-text);
+  font-size: 13px;
+  line-height: 18px;
 }
 
-.btw-page__title {
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.btw-page__subtitle {
-  margin-top: 4px;
-  opacity: 0.7;
-  max-width: 70ch;
+.btw-page__unsaved-text {
+  flex: 1;
 }
 
 .btw-page__scope {
-  max-width: 360px;
-  margin-bottom: 16px;
+  max-width: 420px;
+  padding: var(--astrbot-space-4);
+  margin-bottom: var(--astrbot-space-4);
 }
 </style>

@@ -2273,5 +2273,19 @@
     "documentation": "内置文档",
     "helpPrefix": "不了解配置？请见",
     "helpSuffix": "。"
+  },
+  "btw_page": {
+    "general": "常规",
+    "generalHint": "总开关与实验状态。",
+    "conversationLoop": "对话循环",
+    "conversationLoopHint": "对话循环使用的模型。",
+    "workLoop": "工作循环",
+    "workLoopHint": "工作任务的模型、只读边界、并发与保留策略。",
+    "classifier": "自动路由",
+    "classifierHint": "把请求转交工作循环的判定模型与阈值。",
+    "routes": "循环能力分配",
+    "routesHint": "插件、MCP 与 Skills 在对话/工作循环间的分配。",
+    "other": "其他",
+    "otherHint": "未归类的设置。"
   }
 }

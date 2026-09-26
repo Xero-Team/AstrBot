@@ -12,6 +12,7 @@ import time
 import uuid
 from asyncio import Queue
 from collections import deque
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -72,12 +73,12 @@ def _sanitize_log_arg(value: object) -> object:
     return sanitize_log_value(value) if isinstance(value, str) else value
 
 
-def _sanitize_log_args(args: object) -> object:
-    if isinstance(args, dict):
+def _sanitize_log_args(
+    args: tuple[object, ...] | Mapping[str, object],
+) -> tuple[object, ...] | Mapping[str, object]:
+    if isinstance(args, Mapping):
         return {key: _sanitize_log_arg(value) for key, value in args.items()}
-    if isinstance(args, tuple):
-        return tuple(_sanitize_log_arg(value) for value in args)
-    return _sanitize_log_arg(args)
+    return tuple(_sanitize_log_arg(value) for value in args)
 
 
 def _new_event_id() -> str:
@@ -121,15 +122,15 @@ def sanitize_log_record(record: logging.LogRecord) -> logging.LogRecord:
     record.msg = redact_sensitive_text(sanitize_log_text(formatted))
     record.args = ()
     if record.exc_info:
-        record.exc_text = sanitize_log_text(
+        # Exception and stack text can embed user-controlled newlines, so they
+        # are newline-escaped rather than treated as intentional multi-line text.
+        record.exc_text = sanitize_log_value(
             redact_sensitive_text(_format_exception_text(record.exc_info))
         )
     elif record.exc_text:
-        record.exc_text = sanitize_log_text(redact_sensitive_text(record.exc_text))
+        record.exc_text = sanitize_log_value(redact_sensitive_text(record.exc_text))
     if record.stack_info:
-        record.stack_info = sanitize_log_text(
-            redact_sensitive_text(record.stack_info)
-        )
+        record.stack_info = sanitize_log_value(redact_sensitive_text(record.stack_info))
     record.exc_info = None
     setattr(record, _SANITIZED_ATTR, True)
     return record

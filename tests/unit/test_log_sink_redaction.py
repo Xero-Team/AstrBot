@@ -486,3 +486,20 @@ def test_sanitize_log_record_neutralizes_arguments() -> None:
     sanitize_log_record(record)
     assert "\n" not in record.msg
     assert "evil" in record.msg
+
+
+def test_sanitize_log_record_escapes_exception_newlines() -> None:
+    record = logging.LogRecord(
+        "astrbot",
+        logging.ERROR,
+        __file__,
+        1,
+        "failed",
+        (),
+        None,
+    )
+    record.exc_text = "boom\nforged ERROR line"
+    sanitize_log_record(record)
+    assert record.exc_text is not None
+    assert "\n" not in record.exc_text
+    assert "boom" in record.exc_text

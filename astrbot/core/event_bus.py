@@ -12,7 +12,6 @@ class:
 
 import asyncio
 import time
-from asyncio import Queue
 
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -29,7 +28,7 @@ class EventBus:
 
     def __init__(
         self,
-        event_queue: Queue,
+        event_queue: asyncio.Queue,
         pipeline_scheduler_mapping: dict[str, PipelineScheduler],
         astrbot_config_mgr: AstrBotConfigManager,
         max_concurrency: int = 128,

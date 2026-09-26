@@ -793,21 +793,10 @@ class DingtalkPlatformAdapter(Platform):
     ) -> None:
         robot_code = self.client_id
 
-        # at_list: list[str] = []
         sender_id = cast(str, incoming_message.sender_id or "")
         sender_staff_id = cast(str, incoming_message.sender_staff_id or "")
         normalized_sender_id = self._id_to_sid(sender_id)
         # 现在用的发消息接口不支持 at
-        # for segment in message_chain.chain:
-        #     if isinstance(segment, Mention):
-        #         if (
-        #             str(segment.target) in {sender_id, normalized_sender_id}
-        #             and sender_staff_id
-        #         ):
-        #             at_list.append(f"@{sender_staff_id}")
-        #         else:
-        #             at_list.append(f"@{segment.target}")
-        # at_str = " ".join(at_list)
 
         if incoming_message.conversation_type == "2":
             await self.send_message_chain_to_group(

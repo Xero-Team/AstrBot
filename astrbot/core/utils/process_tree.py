@@ -24,12 +24,11 @@ one way to stop it, whichever platform it is on.
 
 import asyncio
 import contextlib
-import ctypes
+import ctypes.wintypes
 import subprocess
 import sys
 import threading
 import time
-from ctypes import wintypes
 from typing import Any
 
 from astrbot import logger
@@ -63,13 +62,13 @@ _JOB_TERMINATE_EXIT_CODE = 1
 
 class _ThreadEntry32(ctypes.Structure):
     _fields_ = (
-        ("dwSize", wintypes.DWORD),
-        ("cntUsage", wintypes.DWORD),
-        ("th32ThreadID", wintypes.DWORD),
-        ("th32OwnerProcessID", wintypes.DWORD),
-        ("tpBasePri", wintypes.LONG),
-        ("tpDeltaPri", wintypes.LONG),
-        ("dwFlags", wintypes.DWORD),
+        ("dwSize", ctypes.wintypes.DWORD),
+        ("cntUsage", ctypes.wintypes.DWORD),
+        ("th32ThreadID", ctypes.wintypes.DWORD),
+        ("th32OwnerProcessID", ctypes.wintypes.DWORD),
+        ("tpBasePri", ctypes.wintypes.LONG),
+        ("tpDeltaPri", ctypes.wintypes.LONG),
+        ("dwFlags", ctypes.wintypes.DWORD),
     )
 
 
@@ -77,13 +76,13 @@ class _BasicLimitInformation(ctypes.Structure):
     _fields_ = (
         ("PerProcessUserTimeLimit", ctypes.c_longlong),
         ("PerJobUserTimeLimit", ctypes.c_longlong),
-        ("LimitFlags", wintypes.DWORD),
+        ("LimitFlags", ctypes.wintypes.DWORD),
         ("MinimumWorkingSetSize", ctypes.c_size_t),
         ("MaximumWorkingSetSize", ctypes.c_size_t),
-        ("ActiveProcessLimit", wintypes.DWORD),
+        ("ActiveProcessLimit", ctypes.wintypes.DWORD),
         ("Affinity", ctypes.c_size_t),
-        ("PriorityClass", wintypes.DWORD),
-        ("SchedulingClass", wintypes.DWORD),
+        ("PriorityClass", ctypes.wintypes.DWORD),
+        ("SchedulingClass", ctypes.wintypes.DWORD),
     )
 
 
@@ -134,39 +133,56 @@ _KERNEL32 = _kernel32()
 # The call and argument types ctypes cannot infer, declared once at import so a
 # wrong one fails here rather than as a misread handle at kill time.
 if _KERNEL32 is not None:  # pragma: no cover - Windows only
-    _KERNEL32.CreateJobObjectW.restype = wintypes.HANDLE
-    _KERNEL32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
-    _KERNEL32.SetInformationJobObject.restype = wintypes.BOOL
+    _KERNEL32.CreateJobObjectW.restype = ctypes.wintypes.HANDLE
+    _KERNEL32.CreateJobObjectW.argtypes = (ctypes.c_void_p, ctypes.wintypes.LPCWSTR)
+    _KERNEL32.SetInformationJobObject.restype = ctypes.wintypes.BOOL
     _KERNEL32.SetInformationJobObject.argtypes = (
-        wintypes.HANDLE,
+        ctypes.wintypes.HANDLE,
         ctypes.c_int,
         ctypes.c_void_p,
-        wintypes.DWORD,
+        ctypes.wintypes.DWORD,
     )
-    _KERNEL32.OpenProcess.restype = wintypes.HANDLE
-    _KERNEL32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    _KERNEL32.AssignProcessToJobObject.restype = wintypes.BOOL
-    _KERNEL32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
-    _KERNEL32.TerminateJobObject.restype = wintypes.BOOL
-    _KERNEL32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
-    _KERNEL32.IsProcessInJob.restype = wintypes.BOOL
+    _KERNEL32.OpenProcess.restype = ctypes.wintypes.HANDLE
+    _KERNEL32.OpenProcess.argtypes = (
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.BOOL,
+        ctypes.wintypes.DWORD,
+    )
+    _KERNEL32.AssignProcessToJobObject.restype = ctypes.wintypes.BOOL
+    _KERNEL32.AssignProcessToJobObject.argtypes = (
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.HANDLE,
+    )
+    _KERNEL32.TerminateJobObject.restype = ctypes.wintypes.BOOL
+    _KERNEL32.TerminateJobObject.argtypes = (
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.UINT,
+    )
+    _KERNEL32.IsProcessInJob.restype = ctypes.wintypes.BOOL
     _KERNEL32.IsProcessInJob.argtypes = (
-        wintypes.HANDLE,
-        wintypes.HANDLE,
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.HANDLE,
         ctypes.POINTER(ctypes.c_int),
     )
-    _KERNEL32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-    _KERNEL32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
-    _KERNEL32.Thread32First.restype = wintypes.BOOL
-    _KERNEL32.Thread32First.argtypes = (wintypes.HANDLE, ctypes.c_void_p)
-    _KERNEL32.Thread32Next.restype = wintypes.BOOL
-    _KERNEL32.Thread32Next.argtypes = (wintypes.HANDLE, ctypes.c_void_p)
-    _KERNEL32.OpenThread.restype = wintypes.HANDLE
-    _KERNEL32.OpenThread.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    _KERNEL32.ResumeThread.restype = wintypes.DWORD
-    _KERNEL32.ResumeThread.argtypes = (wintypes.HANDLE,)
-    _KERNEL32.CloseHandle.restype = wintypes.BOOL
-    _KERNEL32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    _KERNEL32.CreateToolhelp32Snapshot.restype = ctypes.wintypes.HANDLE
+    _KERNEL32.CreateToolhelp32Snapshot.argtypes = (
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.DWORD,
+    )
+    _KERNEL32.Thread32First.restype = ctypes.wintypes.BOOL
+    _KERNEL32.Thread32First.argtypes = (ctypes.wintypes.HANDLE, ctypes.c_void_p)
+    _KERNEL32.Thread32Next.restype = ctypes.wintypes.BOOL
+    _KERNEL32.Thread32Next.argtypes = (ctypes.wintypes.HANDLE, ctypes.c_void_p)
+    _KERNEL32.OpenThread.restype = ctypes.wintypes.HANDLE
+    _KERNEL32.OpenThread.argtypes = (
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.BOOL,
+        ctypes.wintypes.DWORD,
+    )
+    _KERNEL32.ResumeThread.restype = ctypes.wintypes.DWORD
+    _KERNEL32.ResumeThread.argtypes = (ctypes.wintypes.HANDLE,)
+    _KERNEL32.CloseHandle.restype = ctypes.wintypes.BOOL
+    _KERNEL32.CloseHandle.argtypes = (ctypes.wintypes.HANDLE,)
 
 
 class ProcessTree:

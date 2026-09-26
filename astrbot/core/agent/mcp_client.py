@@ -120,7 +120,6 @@ _DENIED_STDIO_COMMANDS = frozenset(
         "halt",
     }
 )
-_PYTHON_INLINE_CODE_FLAGS = frozenset({"-c"})
 _JS_INLINE_CODE_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
 _MCP_CONFIG_FIELDS = frozenset(
@@ -984,9 +983,7 @@ class MCPClient:
                 auth_coordinator.redirect_handler(identity, authorization_url)
             ),
             callback_handler=lambda: auth_coordinator.callback_handler(identity),
-            validate_resource_url=lambda requested, configured: (
-                self._validate_oauth_resource(requested, configured)
-            ),
+            validate_resource_url=self._validate_oauth_resource,
         )
 
     @staticmethod

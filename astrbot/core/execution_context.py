@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from asyncio import Queue, QueueFull
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -191,7 +190,7 @@ class CoreExecutionContext:
 
     def __init__(
         self,
-        event_queue: Queue,
+        event_queue: asyncio.Queue,
         config: AstrBotConfig,
         db: SQLiteDatabase,
         provider_manager: ProviderManager,
@@ -960,7 +959,7 @@ class CoreExecutionContext:
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
     """
 
-    def get_event_queue(self) -> Queue:
+    def get_event_queue(self) -> asyncio.Queue:
         """获取事件队列。"""
         return self._event_queue
 
@@ -968,7 +967,7 @@ class CoreExecutionContext:
         """提交一个事件到事件队列。"""
         try:
             self._event_queue.put_nowait(event)
-        except QueueFull:
+        except asyncio.QueueFull:
             logger.warning(
                 "Event queue full; dropping event from %s",
                 event.unified_msg_origin,

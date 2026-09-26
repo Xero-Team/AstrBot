@@ -6,7 +6,6 @@ import astrbot.api.message_components as Comp
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Json, Plain
 from astrbot.api.provider import ProviderRequest
 
 from .group_chat_context import GroupChatContext
@@ -136,7 +135,7 @@ class Main(star.Star):
         message_components = _iter_message_components(event)
         has_context_content = False
         for comp in message_components:
-            if isinstance(comp, Plain | Image | Json):
+            if isinstance(comp, Comp.Plain | Comp.Image | Comp.Json):
                 has_context_content = True
                 break
 

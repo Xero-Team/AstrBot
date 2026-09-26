@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import gzip
-import io
 import ipaddress
 import socket
 import ssl
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -643,7 +643,7 @@ def _decompress_gzip_limited(data: bytes, max_bytes: int) -> bytes:
     chunks: list[bytes] = []
     total = 0
     try:
-        with gzip.GzipFile(fileobj=io.BytesIO(data), mode="rb") as handle:
+        with gzip.GzipFile(fileobj=BytesIO(data), mode="rb") as handle:
             while True:
                 remaining = max_bytes - total
                 chunk = handle.read(min(65536, remaining + 1))

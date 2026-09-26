@@ -1,6 +1,5 @@
 import asyncio
 import traceback
-from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypeVar, cast
@@ -53,7 +52,7 @@ class PlatformManager:
     def __init__(
         self,
         config: AstrBotConfig,
-        event_queue: Queue,
+        event_queue: asyncio.Queue,
         webchat_queue_manager: WebChatQueueManager,
         catalog: PlatformCatalog,
         handler_registry: HandlerRegistry,
@@ -105,7 +104,7 @@ class PlatformManager:
         """Instantiate an adapter with the runtime capabilities it declares."""
         if getattr(adapter_cls, "requires_webchat_queue_manager", False):
             webchat_adapter_factory = cast(
-                Callable[[dict, dict, Queue, WebChatQueueManager], Platform],
+                Callable[[dict, dict, asyncio.Queue, WebChatQueueManager], Platform],
                 adapter_cls,
             )
             adapter = webchat_adapter_factory(
@@ -115,7 +114,9 @@ class PlatformManager:
                 self.webchat_queue_manager,
             )
         else:
-            adapter_factory = cast(Callable[[dict, dict, Queue], Platform], adapter_cls)
+            adapter_factory = cast(
+                Callable[[dict, dict, asyncio.Queue], Platform], adapter_cls
+            )
             adapter = adapter_factory(platform_config, self.settings, self.event_queue)
         for observer in self._envelope_observers:
             adapter.add_envelope_observer(observer)

@@ -12,7 +12,6 @@
 import asyncio
 import os
 import time
-from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -391,7 +390,7 @@ class AstrBotCoreLifecycle:
         )
 
         # 初始化事件队列
-        self.event_queue = Queue(maxsize=EVENT_QUEUE_MAXSIZE)
+        self.event_queue = asyncio.Queue(maxsize=EVENT_QUEUE_MAXSIZE)
         self.turn_window_manager = TurnWindowManager(self._enqueue_turn_event)
 
         # 初始化提示词管理器

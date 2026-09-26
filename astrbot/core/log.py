@@ -9,7 +9,6 @@ import sys
 import tempfile
 import time
 import uuid
-from asyncio import Queue
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -327,14 +326,14 @@ class LogBroker:
 
     def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)
-        self.subscribers: list[Queue] = []
+        self.subscribers: list[asyncio.Queue] = []
 
-    def register(self) -> Queue:
-        q = Queue(maxsize=CACHED_SIZE + 10)
+    def register(self) -> asyncio.Queue:
+        q = asyncio.Queue(maxsize=CACHED_SIZE + 10)
         self.subscribers.append(q)
         return q
 
-    def unregister(self, q: Queue) -> None:
+    def unregister(self, q: asyncio.Queue) -> None:
         if q in self.subscribers:
             self.subscribers.remove(q)
 

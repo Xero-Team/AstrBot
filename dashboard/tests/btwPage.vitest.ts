@@ -231,6 +231,12 @@ describe('BtwPage', () => {
       .vm.$emit('update:modelValue', false);
     await flushPromises();
 
+    // The submitted payload must be the snapshot taken at click time, not the
+    // live config object mutated afterwards.
+    expect(testState.updateProfileMock.mock.calls[0][1]).toMatchObject({
+      btw: { enabled: true },
+    });
+
     releaseSave?.({ data: { status: 'ok', message: 'saved' } });
     await flushPromises();
 

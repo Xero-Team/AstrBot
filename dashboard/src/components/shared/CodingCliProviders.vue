@@ -523,6 +523,7 @@ async function load() {
         action: READ_ACTION,
         resourceType: 'instance',
         resourceId: RUNNING_SCOPE,
+        configId: RUNNING_SCOPE,
       },
       requestStepUp,
     );
@@ -659,6 +660,7 @@ async function switchTo(state: CodingCliState, provider: CodingCliProvider) {
         action: WRITE_ACTION,
         resourceType: 'instance',
         resourceId: RUNNING_SCOPE,
+        configId: RUNNING_SCOPE,
       },
       requestStepUp,
     );
@@ -694,6 +696,7 @@ async function restore(state: CodingCliState) {
         action: WRITE_ACTION,
         resourceType: 'instance',
         resourceId: RUNNING_SCOPE,
+        configId: RUNNING_SCOPE,
       },
       requestStepUp,
     );

@@ -272,7 +272,7 @@ describe('CodingCliProviders', () => {
     wrapper.unmount();
   });
 
-  it('still requests the CLI write step-up after saving', async () => {
+  it('answers a switch step-up challenge after saving for the running profile', async () => {
     testState.switchMock.mockRejectedValueOnce({
       response: { data: { data: { requires_step_up: true } } },
     });
@@ -289,21 +289,26 @@ describe('CodingCliProviders', () => {
 
     const dialog = wrapper.findComponent(DashboardStepUpDialog);
     expect(dialog.props('modelValue')).toBe(true);
+    expect(beforeSwitch).toHaveBeenCalledTimes(1);
+    expect(testState.switchMock).toHaveBeenCalledTimes(1);
     dialog.vm.$emit('confirm', { password: 'pw' });
     await flushPromises();
 
-    expect(beforeSwitch).toHaveBeenCalledTimes(1);
     expect(testState.stepUpMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'coding_cli.config.write',
         resource_type: 'instance',
         resource_id: 'default',
+        config_id: 'default',
       }),
     );
+    expect(testState.switchMock).toHaveBeenCalledTimes(2);
     expect(testState.switchMock).toHaveBeenLastCalledWith(
       { cli: 'claude_code', provider_id: 'local' },
       { headers: { 'X-AstrBot-Step-Up': 'cli-token' } },
     );
+    expect(dialog.props('modelValue')).toBe(false);
+    expect(testState.stateMock).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 
@@ -452,6 +457,7 @@ describe('CodingCliProviders', () => {
         action: 'platform.read',
         resource_type: 'instance',
         resource_id: 'default',
+        config_id: 'default',
       }),
     );
     expect(testState.stateMock).toHaveBeenLastCalledWith({
@@ -481,6 +487,42 @@ describe('CodingCliProviders', () => {
     expect(testState.removeMock).toHaveBeenCalledWith('claude_code', {
       headers: {},
     });
+    wrapper.unmount();
+  });
+
+  it('answers a restore step-up challenge for the running profile', async () => {
+    testState.removeMock.mockRejectedValueOnce({
+      response: { data: { data: { requires_step_up: true } } },
+    });
+    testState.stepUpMock.mockResolvedValue({
+      data: { status: 'ok', data: { token: 'restore-token' } },
+    });
+    const wrapper = mountProviders();
+    await flushPromises();
+
+    await wrapper.find('.coding-cli-providers__restore').trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.findComponent(DashboardStepUpDialog);
+    expect(dialog.props('modelValue')).toBe(true);
+    expect(testState.removeMock).toHaveBeenCalledTimes(1);
+    dialog.vm.$emit('confirm', { password: 'pw' });
+    await flushPromises();
+
+    expect(testState.stepUpMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'coding_cli.config.write',
+        resource_type: 'instance',
+        resource_id: 'default',
+        config_id: 'default',
+      }),
+    );
+    expect(testState.removeMock).toHaveBeenCalledTimes(2);
+    expect(testState.removeMock).toHaveBeenLastCalledWith('claude_code', {
+      headers: { 'X-AstrBot-Step-Up': 'restore-token' },
+    });
+    expect(dialog.props('modelValue')).toBe(false);
+    expect(testState.stateMock).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 

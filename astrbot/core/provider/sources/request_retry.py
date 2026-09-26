@@ -1,5 +1,9 @@
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import (
+    AbstractAsyncContextManager,
+    AsyncExitStack,
+    asynccontextmanager,
+)
 from typing import TypeVar
 
 from tenacity import (
@@ -145,28 +149,15 @@ async def retry_provider_request_context[T](
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
 ) -> AsyncIterator[T]:
-    manager: AbstractAsyncContextManager[T] | None = None
+    async with AsyncExitStack() as stack:
 
-    async def _enter_context() -> T:
-        nonlocal manager
-        manager = context_manager_factory()
-        return await manager.__aenter__()
+        async def _enter_context() -> T:
+            return await stack.enter_async_context(context_manager_factory())
 
-    value = await retry_provider_request(
-        provider_label,
-        _enter_context,
-        retry_rate_limits=retry_rate_limits,
-        max_attempts=max_attempts,
-    )
-
-    if manager is None:
-        raise RuntimeError("Provider request context was not created.")
-
-    try:
+        value = await retry_provider_request(
+            provider_label,
+            _enter_context,
+            retry_rate_limits=retry_rate_limits,
+            max_attempts=max_attempts,
+        )
         yield value
-    except BaseException as error:
-        if await manager.__aexit__(type(error), error, error.__traceback__):
-            return
-        raise
-    else:
-        await manager.__aexit__(None, None, None)

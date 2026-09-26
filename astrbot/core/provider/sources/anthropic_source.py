@@ -110,8 +110,10 @@ class ProviderAnthropic(Provider):
     def _request_extra_headers(self) -> dict[str, str] | None:
         return None
 
-    def _request_extra_headers_kwargs(self) -> dict[str, Any]:
-        return extra_headers_kwargs(self._request_extra_headers())
+    def _request_extra_headers_kwargs(
+        self, conversation_id: str | None = None
+    ) -> dict[str, Any]:
+        return extra_headers_kwargs(self._request_extra_headers(), conversation_id)
 
     def _init_api_key(self, provider_config: dict) -> None:
         self.chosen_api_key: str = ""
@@ -514,6 +516,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
             if tool_list := tools.anthropic_schema():
@@ -537,7 +540,7 @@ class ProviderAnthropic(Provider):
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
-                    **self._request_extra_headers_kwargs(),
+                    **self._request_extra_headers_kwargs(conversation_id),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -610,6 +613,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse]:
         if tools:
             if tool_list := tools.anthropic_schema():
@@ -640,7 +644,7 @@ class ProviderAnthropic(Provider):
             lambda: self.client.messages.stream(
                 **payloads,
                 extra_body=extra_body,
-                **self._request_extra_headers_kwargs(),
+                **self._request_extra_headers_kwargs(conversation_id),
             ),
             max_attempts=request_max_retries,
         ) as stream:
@@ -785,6 +789,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -832,10 +837,14 @@ class ProviderAnthropic(Provider):
 
         llm_response = None
         try:
+            query_kwargs = {}
+            if conversation_id:
+                query_kwargs["conversation_id"] = conversation_id
             llm_response = await self._query(
                 payloads,
                 func_tool,
                 request_max_retries=request_max_retries,
+                **query_kwargs,
             )
         except Exception as e:
             raise e
@@ -860,6 +869,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ):
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -904,10 +914,14 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
         async for llm_response in self._query_stream(
             payloads,
             func_tool,
             request_max_retries=request_max_retries,
+            **query_kwargs,
         ):
             yield llm_response
 

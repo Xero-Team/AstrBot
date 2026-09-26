@@ -778,7 +778,13 @@ def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
         provider._stale_http_clients == [provider._http_client]
         or len(created_http_clients) == 1
     )
-    assert created_http_clients[0].kwargs == {
+    created_kwargs = created_http_clients[0].kwargs
+    assert created_kwargs["event_hooks"] == {
+        "request": [provider._enforce_astrbot_user_agent]
+    }
+    assert {
+        key: value for key, value in created_kwargs.items() if key != "event_hooks"
+    } == {
         "base_url": "https://gemini.example",
         "timeout": 30,
         "trust_env": False,
@@ -908,7 +914,9 @@ async def test_gemini_text_chat_retries_after_api_error_and_strips_no_save_flag(
     expected = LLMResponse(role="assistant")
     query_calls: list[tuple[dict, object]] = []
 
-    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         query_calls.append((payloads, func_tool))
         if len(query_calls) == 1:
             raise APIError(429, {"message": "retry"})
@@ -945,7 +953,9 @@ async def test_gemini_text_chat_raises_when_error_handler_declines_retry():
     provider._ensure_message_to_dicts = lambda contexts: list(contexts)
     provider._handle_api_error = AsyncMock(return_value=False)
 
-    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         raise APIError(500, {"message": "fatal"})
 
     provider._query = fake_query
@@ -980,7 +990,9 @@ async def test_gemini_text_chat_expands_tool_call_result_lists():
         def to_messages(self):
             return [{"role": "tool", "content": f"result-{self.name}"}]
 
-    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         payloads_seen.append(payloads)
         return expected
 
@@ -1022,7 +1034,9 @@ async def test_gemini_text_chat_stream_retries_after_api_error():
     ]
     stream_calls: list[dict] = []
 
-    async def fake_query_stream(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query_stream(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         stream_calls.append(payloads)
         if len(stream_calls) == 1:
             raise APIError(429, {"message": "retry"})
@@ -1071,7 +1085,9 @@ async def test_gemini_text_chat_stream_retries_with_tool_results_and_strips_no_s
         def to_messages(self):
             return [{"role": "tool", "content": f"result-{self.name}"}]
 
-    async def fake_query_stream(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query_stream(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         stream_calls.append(payloads)
         if len(stream_calls) == 1:
             raise APIError(429, {"message": "retry"})
@@ -1214,6 +1230,27 @@ async def test_gemini_prepare_query_config_normalizes_invalid_thinking_level(cap
     assert (
         "Invalid thinking level INVALID for gemini-3.1-pro, using HIGH" in caplog.text
     )
+
+
+@pytest.mark.asyncio
+async def test_gemini_query_config_carries_conversation_header():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.provider_settings = {"streaming_response": False}
+    provider.safety_settings = []
+    provider.get_model = lambda: "gemini-3.7-flash"
+
+    config = await provider._prepare_query_config(
+        {"model": "gemini-3.7-flash"},
+        conversation_id="conversation-1",
+    )
+    plain_config = await provider._prepare_query_config({"model": "gemini-3.7-flash"})
+
+    assert config.http_options is not None
+    assert config.http_options.headers == {
+        "x-astrbot-conversation-id": "conversation-1"
+    }
+    assert plain_config.http_options is None
 
 
 def test_gemini_process_content_parts_rejects_empty_candidate_content():
@@ -1827,7 +1864,9 @@ async def test_gemini_text_chat_stream_stops_when_error_handler_declines_retry()
     provider._handle_api_error = AsyncMock(return_value=False)
     stream_calls: list[dict] = []
 
-    async def fake_query_stream(payloads, func_tool, *, request_max_retries=None):
+    async def fake_query_stream(
+        payloads, func_tool, *, request_max_retries=None, conversation_id=None
+    ):
         stream_calls.append(payloads)
         raise APIError(500, {"message": "fatal"})
         yield
@@ -2043,3 +2082,44 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_sends_conversation_header_per_request(monkeypatch):
+    """Each streaming request carries its own conversation header."""
+    provider = _gemini_stream_provider()
+    configs: list[object] = []
+
+    async def fake_stream():
+        yield _gemini_stream_chunk(text="ok")
+
+    async def fake_retry(provider_name, request_factory, max_attempts=None):
+        return fake_stream()
+
+    async def fake_prepare_conversation(_payloads):
+        return []
+
+    async def fake_prepare_query_config(*args, **kwargs):
+        configs.append((args, kwargs))
+        return {}
+
+    monkeypatch.setattr(gemini_source_module, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(provider, "_prepare_conversation", fake_prepare_conversation)
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+    monkeypatch.setattr(provider, "_require_client", lambda: provider.client)
+    monkeypatch.setattr(provider, "get_model", lambda: "gemini-3.7-flash")
+
+    responses = [
+        response
+        async for response in provider._query_stream(
+            payloads={
+                "messages": [{"role": "user", "content": "hello"}],
+                "model": "gemini-3.7-flash",
+            },
+            tools=None,
+            conversation_id="conversation-1",
+        )
+    ]
+
+    assert responses[-1].completion_text == "ok"
+    assert configs[-1][1]["conversation_id"] == "conversation-1"

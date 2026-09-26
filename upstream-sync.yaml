@@ -5,18 +5,31 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 67c74b7ed8d5b8df170f849faaa431fc329c4ddc
-  synced_at_utc: 2026-09-24T23:01:35Z
+  commit: 69ae35a359e8c9a44375004e6b8252ee366102bb
+  synced_at_utc: 2026-09-26T05:01:51Z
   sync_method: adapt
-  source_pr: '10211, 10187'
+  source_pr: '10219, 10221, 10218, 10222'
   note: >-
-    Reviewed 95e98b8aed75d56713666eff39e31bafffd95426..67c74b7ed8d5b8df170f849faaa431fc329c4ddc
-    (2 commits): adapted #10211 (pin legacy naive SQLite datetime storage with
-    sa_type=DateTime, remapped from upstream astrbot/core/db/po.py
-    onto the fork's astrbot.core.db.po package plus the relocated
-    astrbot.core.db.vec_db.document_storage and astrbot.core.knowledge_base.models)
-    and #10187 (gzip dashboard JS/CSS/HTML static responses, wired into the fork's
-    static_files router with a fork-only 4 MiB in-memory cap that keeps oversized
-    assets on the streaming FileResponse path, plus router-level regression tests).
-    No upstream version change in this interval, so no version or changelog
-    update. Focused pytest and Ruff checks passed.
+    Reviewed 67c74b7ed8d5b8df170f849faaa431fc329c4ddc..69ae35a359e8c9a44375004e6b8252ee366102bb
+    (4 commits). Adapted three: #10219 (preserve the user scroll offset while
+    earlier WebChat history loads, mapped onto the fork Chat.vue
+    shouldStickToBottom anchor logic and covered in chatViewSmoke.vitest.ts),
+    #10221 (auto-scroll the reasoning activity panel, added to the fork
+    ReasoningSidebar.vue with a chatPanels.vitest.ts regression), and #10218
+    (send x-astrbot-conversation-id through the fork extra_headers_kwargs helper
+    so custom provider headers survive; mapped the removed openai_source.py onto
+    openai_chat_completions_source.py, threaded the ID through the standalone
+    OpenAI Responses state/background/cancel helpers, and kept conditional
+    query_kwargs in the Anthropic/OpenAI text paths; for Gemini, replaced the
+    upstream provider-wide temporary-header mutation and its request lock with a
+    per-request HttpOptions header on the GenerateContentConfig, so concurrent
+    conversations are isolated without serializing streams; an httpx request hook
+    reasserts the AstrBot user agent, which the per-request options would
+    otherwise turn into a duplicate SDK User-Agent header). Skipped #10222 (desktop
+    workspace directory picker) because its client-controlled custom project
+    workspace path conflicts with the fork's server-derived
+    astrbot/core/project_workspace.py roots and the fork project API has no
+    workspace_type/workspace_path fields; revisit if the fork adopts backend
+    project workspace types. No upstream version change in this interval, so no
+    version or changelog update. Focused pytest and dashboard vitest checks
+    passed.

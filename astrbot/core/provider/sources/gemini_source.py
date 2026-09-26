@@ -18,7 +18,11 @@ from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, 
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.headers import drop_sdk_user_agent
+from astrbot.core.provider.headers import (
+    DEFAULT_USER_AGENT,
+    build_conversation_headers,
+    drop_sdk_user_agent,
+)
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
@@ -107,7 +111,10 @@ class ProviderGoogleGenAI(Provider):
         if self._http_client is not None:
             self._stale_http_clients = [self._http_client]
 
-        self._http_client = httpx.AsyncClient(**async_client_kwargs)
+        self._http_client = httpx.AsyncClient(
+            event_hooks={"request": [self._enforce_astrbot_user_agent]},
+            **async_client_kwargs,
+        )
         http_options.httpx_async_client = self._http_client
 
         self.client = genai.Client(
@@ -115,6 +122,16 @@ class ProviderGoogleGenAI(Provider):
             http_options=http_options,
         ).aio
         drop_sdk_user_agent(self.client)
+
+    async def _enforce_astrbot_user_agent(self, request: httpx.Request) -> None:
+        """Restore the AstrBot user agent after the SDK patches request options.
+
+        A per-request ``HttpOptions`` makes the SDK re-append its library user
+        agent, so reassert the configured header on every outgoing request.
+        """
+        request.headers["user-agent"] = self.request_headers.get(
+            "User-Agent", DEFAULT_USER_AGENT
+        )
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""
@@ -166,6 +183,7 @@ class ProviderGoogleGenAI(Provider):
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
         temperature: float = 0.7,
+        conversation_id: str | None = None,
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
         if not modalities:
@@ -269,7 +287,15 @@ class ProviderGoogleGenAI(Provider):
                     thinking_level=types.ThinkingLevel(thinking_level)
                 )
 
+        conversation_headers = build_conversation_headers(conversation_id)
+        http_options = (
+            types.HttpOptions(headers=conversation_headers)
+            if conversation_headers
+            else None
+        )
+
         return types.GenerateContentConfig(
+            http_options=http_options,
             system_instruction=system_instruction,
             temperature=temperature,
             max_output_tokens=payloads.get("max_tokens")
@@ -603,6 +629,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
@@ -629,6 +656,7 @@ class ProviderGoogleGenAI(Provider):
                     system_instruction,
                     modalities,
                     temperature,
+                    conversation_id,
                 )
                 client = self._require_client()
                 result = await retry_provider_request(
@@ -705,6 +733,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -722,6 +751,7 @@ class ProviderGoogleGenAI(Provider):
                     tools,
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
+                    conversation_id=conversation_id,
                 )
                 client = self._require_client()
                 result = await retry_provider_request(
@@ -866,6 +896,7 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -909,6 +940,7 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    conversation_id=conversation_id,
                 )
             except APIError as e:
                 if await self._handle_api_error(e, keys):
@@ -933,6 +965,7 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse]:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -976,6 +1009,7 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    conversation_id=conversation_id,
                 ):
                     yield response
                 break

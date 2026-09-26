@@ -209,8 +209,10 @@ class ProviderOpenAIResponses(Provider):
     def _request_extra_headers(self) -> dict[str, str] | None:
         return None
 
-    def _request_extra_headers_kwargs(self) -> dict[str, Any]:
-        return extra_headers_kwargs(self._request_extra_headers())
+    def _request_extra_headers_kwargs(
+        self, conversation_id: str | None = None
+    ) -> dict[str, Any]:
+        return extra_headers_kwargs(self._request_extra_headers(), conversation_id)
 
     def _validate_config(self) -> None:
         mode = self.provider_config.get("responses_state_mode", "stateless")
@@ -799,13 +801,14 @@ class ProviderOpenAIResponses(Provider):
         options: dict,
         retries: int | None,
         abort_signal: asyncio.Event | None,
+        conversation_id: str | None = None,
     ) -> Response:
         task = asyncio.create_task(
             retry_provider_request(
                 "OpenAI Responses",
                 lambda: client.responses.create(
                     **options,
-                    **self._request_extra_headers_kwargs(),
+                    **self._request_extra_headers_kwargs(conversation_id),
                 ),
                 max_attempts=retries,
             )
@@ -903,6 +906,7 @@ class ProviderOpenAIResponses(Provider):
         state: _ResponsesStreamState,
         client: Any,
         abort_signal: asyncio.Event | None,
+        conversation_id: str | None = None,
     ) -> Any:
         """Read one event while allowing an abort signal to stop pending I/O."""
         if abort_signal is None:
@@ -922,7 +926,9 @@ class ProviderOpenAIResponses(Provider):
                     except StopAsyncIteration:
                         pass
                 if state.response_id:
-                    await self._cancel_background_response(client, state.response_id)
+                    await self._cancel_background_response(
+                        client, state.response_id, conversation_id
+                    )
                 await self._close_stream(stream)
                 raise asyncio.CancelledError("OpenAI Responses stream aborted")
             return await event_task
@@ -949,6 +955,7 @@ class ProviderOpenAIResponses(Provider):
         **kwargs,
     ) -> LLMResponse:
         _ = session_id
+        conversation_id = kwargs.pop("conversation_id", None)
         if audio_urls:
             raise ProviderResponseError(
                 "OpenAI Responses audio input is not supported by this provider"
@@ -981,6 +988,7 @@ class ProviderOpenAIResponses(Provider):
             options,
             request_max_retries,
             kwargs.get("abort_signal"),
+            conversation_id,
         )
         if self.provider_config.get("responses_background"):
             response = await self._poll_background(
@@ -988,6 +996,7 @@ class ProviderOpenAIResponses(Provider):
                 response,
                 kwargs.get("abort_signal"),
                 request_max_retries,
+                conversation_id,
             )
         result = self._parse(response, requested_model=model)
         if result.provider_state:
@@ -1000,13 +1009,15 @@ class ProviderOpenAIResponses(Provider):
                 )
         return result
 
-    async def _cancel_background_response(self, client: Any, response_id: str) -> None:
+    async def _cancel_background_response(
+        self, client: Any, response_id: str, conversation_id: str | None = None
+    ) -> None:
         try:
             await retry_provider_request(
                 "OpenAI Responses",
                 lambda: client.responses.cancel(
                     response_id,
-                    **self._request_extra_headers_kwargs(),
+                    **self._request_extra_headers_kwargs(conversation_id),
                 ),
             )
         except asyncio.CancelledError:
@@ -1024,6 +1035,7 @@ class ProviderOpenAIResponses(Provider):
         response: Response,
         abort_signal: asyncio.Event | None,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> Response:
         timeout = float(self.provider_config.get("responses_background_timeout", 600))
         interval = float(
@@ -1038,12 +1050,16 @@ class ProviderOpenAIResponses(Provider):
         deadline = loop.time() + timeout
         while _value(response, "status") in {"queued", "in_progress"}:
             if abort_signal and abort_signal.is_set():
-                await self._cancel_background_response(client, response_id)
+                await self._cancel_background_response(
+                    client, response_id, conversation_id
+                )
                 raise asyncio.CancelledError(
                     "OpenAI Responses background request aborted"
                 )
             if loop.time() >= deadline:
-                await self._cancel_background_response(client, response_id)
+                await self._cancel_background_response(
+                    client, response_id, conversation_id
+                )
                 raise ProviderResponseError(
                     "OpenAI Responses background request timed out"
                 )
@@ -1057,7 +1073,9 @@ class ProviderOpenAIResponses(Provider):
                         {abort}, timeout=wait_seconds, return_when=asyncio.ALL_COMPLETED
                     )
                     if abort in done:
-                        await self._cancel_background_response(client, response_id)
+                        await self._cancel_background_response(
+                            client, response_id, conversation_id
+                        )
                         raise asyncio.CancelledError(
                             "OpenAI Responses background request aborted"
                         )
@@ -1074,7 +1092,7 @@ class ProviderOpenAIResponses(Provider):
                 "OpenAI Responses",
                 lambda: client.responses.retrieve(
                     response_id,
-                    **self._request_extra_headers_kwargs(),
+                    **self._request_extra_headers_kwargs(conversation_id),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -1084,6 +1102,7 @@ class ProviderOpenAIResponses(Provider):
         self, *args: Any, **kwargs: Any
     ) -> AsyncGenerator[LLMResponse]:
         kwargs["stream"] = True
+        conversation_id = kwargs.pop("conversation_id", None)
         # Build the request independently; a streamed response is not replayed after visible output.
         prompt = (
             kwargs.get("prompt") if "prompt" in kwargs else (args[0] if args else None)
@@ -1125,6 +1144,7 @@ class ProviderOpenAIResponses(Provider):
                 options,
                 kwargs.get("request_max_retries"),
                 kwargs.get("abort_signal"),
+                conversation_id,
             ),
         )
         state = _ResponsesStreamState()
@@ -1138,6 +1158,7 @@ class ProviderOpenAIResponses(Provider):
                         state,
                         client,
                         kwargs.get("abort_signal"),
+                        conversation_id,
                     )
                     for delta in _merge_responses_stream_event(state, event):
                         yield delta
@@ -1171,7 +1192,7 @@ class ProviderOpenAIResponses(Provider):
                                 if state.last_sequence_number is not None
                                 else 0
                             ),
-                            **self._request_extra_headers_kwargs(),
+                            **self._request_extra_headers_kwargs(conversation_id),
                         ),
                         max_attempts=kwargs.get("request_max_retries"),
                     ),

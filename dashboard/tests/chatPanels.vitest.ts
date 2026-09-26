@@ -75,6 +75,26 @@ describe('chat side panels', () => {
     expect(hasNonElementRootWarning(warnSpy.mock.calls)).toBe(false);
   });
 
+  it('auto-scrolls the reasoning activity panel to the latest activity', async () => {
+    const wrapper = mountWithVuetify(ReasoningSidebar, {
+      props: { modelValue: true, parts: [], reasoning: 'step 1' },
+    });
+    await flushPromises();
+
+    const body = wrapper.get('.reasoning-sidebar-body').element as HTMLElement;
+    Object.defineProperty(body, 'scrollHeight', {
+      configurable: true,
+      value: 640,
+    });
+    body.scrollTop = 0;
+
+    await wrapper.setProps({ reasoning: 'step 2' });
+    await nextTick();
+    await nextTick();
+
+    expect(body.scrollTop).toBe(640);
+  });
+
   it('renders RefsSidebar inside a parent Transition without root warnings', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const Host = defineComponent({

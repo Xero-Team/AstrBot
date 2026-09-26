@@ -505,8 +505,10 @@ class ProviderOpenAIChatCompletions(Provider):
     def _request_extra_headers(self) -> dict[str, str] | None:
         return None
 
-    def _request_extra_headers_kwargs(self) -> dict[str, Any]:
-        return extra_headers_kwargs(self._request_extra_headers())
+    def _request_extra_headers_kwargs(
+        self, conversation_id: str | None = None
+    ) -> dict[str, Any]:
+        return extra_headers_kwargs(self._request_extra_headers(), conversation_id)
 
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
@@ -685,6 +687,7 @@ class ProviderOpenAIChatCompletions(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
             model = str(payloads.get("model", "")).lower()
@@ -709,7 +712,7 @@ class ProviderOpenAIChatCompletions(Provider):
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
-                    **self._request_extra_headers_kwargs(),
+                    **self._request_extra_headers_kwargs(conversation_id),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -732,6 +735,7 @@ class ProviderOpenAIChatCompletions(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse]:
         """流式查询API，逐步返回结果"""
         if tools:
@@ -758,7 +762,7 @@ class ProviderOpenAIChatCompletions(Provider):
                     stream=True,
                     extra_body=extra_body,
                     stream_options={"include_usage": True},
-                    **self._request_extra_headers_kwargs(),
+                    **self._request_extra_headers_kwargs(conversation_id),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -1343,6 +1347,7 @@ class ProviderOpenAIChatCompletions(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -1365,6 +1370,9 @@ class ProviderOpenAIChatCompletions(Provider):
 
         last_exception = None
         retry_cnt = 0
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
         for retry_cnt in range(max_retries):
             try:
                 key_token = _request_api_key.set(chosen_key)
@@ -1374,6 +1382,7 @@ class ProviderOpenAIChatCompletions(Provider):
                         payloads,
                         func_tool,
                         request_max_retries=request_max_retries,
+                        **query_kwargs,
                     )
                     return llm_response
                 finally:
@@ -1429,6 +1438,7 @@ class ProviderOpenAIChatCompletions(Provider):
         **kwargs,
     ) -> AsyncGenerator[LLMResponse]:
         """流式对话，与服务商交互并逐步返回结果"""
+        conversation_id = kwargs.pop("conversation_id", None)
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -1451,6 +1461,9 @@ class ProviderOpenAIChatCompletions(Provider):
         last_exception = None
         retry_cnt = 0
         yielded_visible_output = False
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
         for retry_cnt in range(max_retries):
             try:
                 key_token = _request_api_key.set(chosen_key)
@@ -1460,6 +1473,7 @@ class ProviderOpenAIChatCompletions(Provider):
                         payloads,
                         func_tool,
                         request_max_retries=request_max_retries,
+                        **query_kwargs,
                     ):
                         if (
                             response.completion_text

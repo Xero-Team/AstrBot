@@ -28,6 +28,8 @@ The BTW dual-loop settings moved out of the AI panel on the configuration page t
 
 **More Features → CLI Global Config** (`/cli-config`) is a new entry: it keeps the provider list for Claude Code and Codex and switches one of them to be that CLI's own default on this host. A switch rewrites the CLI's own configuration file (backed up once, and "take back" restores it), so it asks for a step-up; a delegated task loads a layer of its own and is not affected.
 
+If enabling a provider, restoring the configuration, or reading its status opens a reauthentication dialog, verify your current Dashboard account as prompted. After verification, the page automatically retries that operation. The credential is bound to this operation on the running default profile and can be used only once.
+
 ## Accessing the Admin Panel
 
 After starting AstrBot, the local machine can open the admin panel at `http://localhost:6185`.

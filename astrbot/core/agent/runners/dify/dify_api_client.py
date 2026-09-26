@@ -68,6 +68,7 @@ class DifyAPIClient:
             files = []
         url = f"{self.api_base}/chat-messages"
         payload = {
+            "inputs": inputs,
             "query": query,
             "user": user,
             "response_mode": response_mode,

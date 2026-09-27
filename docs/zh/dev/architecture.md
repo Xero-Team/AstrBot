@@ -61,9 +61,9 @@ outline: deep
 
 ## 主 SQLite 库
 
-主库文件是 runtime root 下的 `data/data_v4.db`。SQLModel 表是 schema 的唯一真源：表、列、普通唯一约束和普通索引都写在模型上。访问口是 `astrbot/core/db/protocols.py` 中的域存储协议；`SQLiteDatabase` 用 mixin 组合这些协议，调用方仍导入该类。本 fork 不引入 Alembic、sqlc 或主库 `.sql` schema。任何 SQLite 存储或配置文件都不做就地迁移：各自按当前 SQLModel 表或默认值创建，破坏性变更通过删除该存储或配置后重建处理。
+主库文件是 runtime root 下的 `data/astrbot.db`。SQLModel 表是 schema 的唯一真源：表、列、普通唯一约束和普通索引都写在模型上。访问口是 `astrbot/core/db/protocols.py` 中的域存储协议；`SQLiteDatabase` 用 mixin 组合这些协议，调用方仍导入该类。本 fork 不引入 Alembic、sqlc 或主库 `.sql` schema。`initialize()` 在对外服务前按序执行该存储的迁移；改动已有存储的受支持方式是在 `astrbot/core/db/migrations/` 里追加一个 revision。见[持久化升级与迁移](./persistence-upgrades)。
 
-`create_runtime_services()` 构造 `SQLiteDatabase(DB_PATH)`。若工厂在构造数据库之后、交出 `RuntimeServices` 之前失败，会先 `await db.close()` 释放异步引擎，再抛出原异常。生命周期会显式调用 `db.initialize()`；`get_db()` 保留懒初始化兜底。显式初始化、第一次 `get_db()` 和并发初始化共用同一把锁，schema 工作只执行一次。
+`create_runtime_services()` 构造 `SQLiteDatabase(DB_PATH, LEGACY_DB_PATH)`。若工厂在构造数据库之后、交出 `RuntimeServices` 之前失败，会先 `await db.close()` 释放异步引擎，再抛出原异常。生命周期会显式调用 `db.initialize()`；`get_db()` 保留懒初始化兜底。显式初始化、第一次 `get_db()` 和并发初始化共用同一把锁，schema 工作只执行一次。当新库为空且存在改名前的 `data/data_v4.db` 时，`initialize()` 会导入一次它的行，并保留旧文件作为备份。
 
 ### 布局
 
@@ -71,12 +71,17 @@ outline: deep
 astrbot/core/db/
   __init__.py              # SQLite 引擎辅助函数
   protocols.py             # 域存储协议
-  schema.py                # registry + create_all + PRAGMA
+  schema.py                # registry + 迁移 + PRAGMA
   sqlite.py                # SQLiteDatabase 门面与会话生命周期
+  migrations/
+    runner.py              # 每存储迁移执行器与 ledger
+    main.py                # 主库序列
+    kb.py                  # 知识库元数据序列
+    doc.py                 # 文档存储序列
+    bootstrap.py           # 旧 data_v4.db 的一次性导入
   po/
     __init__.py            # 再导出 table=True 的模型
     registry.py            # 显式导入全部表模型
-    mixins.py              # TimestampMixin
     ...                    # 按域拆分的表模块
   stores/
     mixin.py               # store mixins 共用的带类型会话助手
@@ -84,15 +89,15 @@ astrbot/core/db/
     ...                    # 每个域协议一个 mixin
 ```
 
-`po/__init__.py` 再导出表模型，只是包入口。新代码可以写 `from astrbot.core.db.po.memory import MemoryFact`；`from astrbot.core.db.po import MemoryFact` 仍有效。模型注册由 `po.registry.import_all_models()` 显式完成，不能依赖业务模块碰巧导入。`schema.py` 必须先调用它，再执行 `SQLModel.metadata.create_all`。`tests/unit/db/test_schema.py` 用源码内固定的 `EXPECTED_TABLE_NAMES`（当前 35 张表）对照初始化后的数据库表名；registry 漏登时测试必须失败。
+`po/__init__.py` 再导出表模型，只是包入口。新代码可以写 `from astrbot.core.db.po.memory import MemoryFact`；`from astrbot.core.db.po import MemoryFact` 仍有效。模型注册由 `po.registry.import_all_models()` 显式完成，不能依赖业务模块碰巧导入。`schema.py` 必须先调用它，再跑迁移基线。`tests/unit/db/test_schema.py` 用源码内固定的 `EXPECTED_TABLE_NAMES` 对照初始化后的数据库表名；registry 漏登时测试必须失败。
 
 `initialize()` 按以下顺序执行：
 
 1. `import_all_models()`
-2. `SQLModel.metadata.create_all`
+2. `run_migrations(engine, "main", MAIN_MIGRATIONS)` —— 基线步骤调用 `SQLModel.metadata.create_all`，之后的 revision 把旧存储往前带
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-启动时不检查 `PRAGMA table_info`，也不对已有文件执行 `ALTER TABLE`。`create_all` 只创建缺失表；旧 `data_v4.db` 上的残留列会留在原地。遇到破坏性 schema 变更时，删除对应存储（`data/data_v4.db*`、`data/knowledge_base/` 或 `data/cmd_config.json`）后从空文件启动并重新配置。当前兜底与计划中的迁移设计见[持久化升级与迁移](./persistence-upgrades)。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
+启动不再检查 `PRAGMA table_info`，也不做临时 `ALTER TABLE`。`create_all` 只创建缺失表；已有存储的 schema 变更走迁移 revision。改名前的 `data/data_v4.db` 导入一次到 `data/astrbot.db`，不再原地补列。见[持久化升级与迁移](./persistence-upgrades)。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
 
 Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
 
@@ -367,7 +372,7 @@ Dashboard 在 `/data` 提供原生运行时 `data/` 文件管理器，不是 ifr
 常见可变数据位于 `<runtime-root>/data/`：
 
 - `cmd_config.json` 与 `config/`
-- `data_v4.db`
+- `astrbot.db`（改名前的 `data_v4.db` 首次启动导入一次，并保留为备份）
 - `astrbot.lock`（运行时实例咨询锁；文件残留不表示进程仍在运行。POSIX 上还会锁 `data/` 目录，删除该文件不能绕过单实例）
 - `plugins/` 与 `plugin_data/`
 - `skills/` 与 `workspaces/`

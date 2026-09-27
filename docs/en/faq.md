@@ -93,11 +93,11 @@ uv run python scripts/sync_dashboard_dist.py
 
 Read the intervening files under `changelogs/` and current unreleased commits first. Do not use `uv tool upgrade astrbot` for this fork; the `astrbot` package on PyPI is upstream. This fork does not provide a Dashboard one-click Core updater.
 
-### The main database fails to start after upgrading to 4.27.5
+### The main database fails to start after an upgrade
 
-4.27.5 rebuilds the main SQLite schema from the current SQLModel tables. It does not run `ALTER TABLE` on an old file or migrate data. `create_all` creates missing tables only; leftover columns and indexes on an existing `data_v4.db` stay in place.
+Startup migrates each store forward. When `data/astrbot.db` is empty and the pre-rename `data/data_v4.db` exists, AstrBot creates the current schema, imports the old rows once, and keeps `data_v4.db` as a backup. The knowledge-base and config stores migrate the same way.
 
-Stop the process, back up `data/`, then delete `data/data_v4.db`, `data/data_v4.db-wal`, and `data/data_v4.db-shm` under the runtime root before starting again. Conversations, long-term memory, authorization bindings, and API keys in the old main database are not migrated. Because no store runs in-place migration, also delete `data/knowledge_base/` and `data/cmd_config.json` when they carry an incompatible shape or the removed `config_version` / whitelist keys, then reconfigure. See [Project Architecture](/en/dev/architecture#main-sqlite-database).
+A migration error refuses to start and names the store and revision instead of drifting or deleting data. Back up `data/`, then read the log: restore a backup you took before upgrading or fix the reported step. Deleting a store is a last resort that loses its data. See [Persistence Upgrade and Migration](/en/dev/persistence-upgrades).
 
 ## Agent behavior, permissions, and output
 

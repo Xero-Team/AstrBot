@@ -7,7 +7,7 @@ Runtime data defaults to `data/` under the process working directory. With `ASTR
 ## Do not
 
 - `cp` the live SQLite main database while the process is writing (WAL mode).
-- Copy only `data/data_v4.db` and drop knowledge bases, plugins, and config.
+- Copy only `data/astrbot.db` and drop knowledge bases, plugins, and config.
 - Commit a backup that contains secrets, or post it in a public channel.
 - Drill against a developer's real `data/`; use a copy or a temporary root.
 - Treat [Prompt JSON export](../../use/prompt) as a full backup.
@@ -16,7 +16,7 @@ Runtime data defaults to `data/` under the process working directory. With `ASTR
 
 Open **Settings → Maintenance** in the Dashboard, then **Backup & Restore** / **Backup Manager**. The exporter writes main-database tables as JSON and packs:
 
-- main-database tables (export of `data/data_v4.db`, not a copy of an open file)
+- main-database tables (export of `data/astrbot.db`, not a copy of an open file)
 - knowledge-base metadata, vector documents, and media files
 - `cmd_config.json`, `config/`, plugins and plugin data, Skills, WebChat, attachments
 - `t2i_templates/` and `temp/`
@@ -33,7 +33,7 @@ When the WebUI is unavailable:
 
 1. Stop AstrBot (stop the process for a source deploy; `docker compose stop` for Compose).
 2. Copy the entire `data/` tree outside the checkout.
-3. Confirm the copy includes `data_v4.db`, any `data_v4.db-wal` / `-shm`, `knowledge_base/`, `plugins/`, `plugin_data/`, `skills/`, `config/`, and `cmd_config.json`.
+3. Confirm the copy includes `astrbot.db`, any `astrbot.db-wal` / `-shm`, `knowledge_base/`, `plugins/`, `plugin_data/`, `skills/`, `config/`, and `cmd_config.json`. If the runtime still carries a pre-rename `data_v4.db`, include it too; it is imported on first startup when `astrbot.db` is empty.
 
 ## Restore drill before an upgrade
 
@@ -45,7 +45,7 @@ Do this at least once and record the date and result:
 4. Start.
 5. Log in as the original admin and confirm conversations, prompts, plugins, knowledge-base search, and Provider config. After restore, check that plugin, MCP, Skill, and Provider names still resolve.
 
-Breaking main-database rebuilds on current `master` do not migrate rows from an old `data_v4.db`. Read `changelogs/` across the versions you are jumping before you restore a snapshot or cut over to an empty database as documented.
+Startup migrates and imports stores forward instead of rebuilding them, so a snapshot restored onto a compatible runtime keeps its rows. Read `changelogs/` across the versions you are jumping, and prefer restoring a backup over deleting a store. A migration error refuses to start rather than deleting data; see [Persistence Upgrade and Migration](/en/dev/persistence-upgrades).
 
 ## Log red lines
 

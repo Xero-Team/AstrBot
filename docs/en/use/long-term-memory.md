@@ -14,7 +14,7 @@ Long-term memory uses several separate record types:
 - **Episodes**: a compact title and summary for completed turns that meet a minimum length. The summary contains truncated user text, assistant text, and extracted facts.
 - **Operation logs**: audit records for create, merge, update, soft-delete, restore, and profile-refresh operations, including the operator, reason, and parts of the payload.
 
-These records live in AstrBot's main SQLite database, normally `data/data_v4.db` under the runtime root. `ASTRBOT_ROOT` can relocate that root. Backing up the database also backs up long-term memory. From 4.27.5, schema changes no longer patch an old file; upgrading requires deleting `data/data_v4.db*` and recreating an empty database, so long-term memory is not migrated from the previous file.
+These records live in AstrBot's main SQLite database, normally `data/astrbot.db` under the runtime root. `ASTRBOT_ROOT` can relocate that root. Backing up the database also backs up long-term memory. On first startup the pre-rename `data/data_v4.db` is imported once into `data/astrbot.db`, and later schema changes are forward migrations, so long-term memory survives an upgrade.
 
 ## How memory enters model context
 

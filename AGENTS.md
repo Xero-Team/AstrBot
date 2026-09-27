@@ -288,8 +288,10 @@ switch again. Command identity is `command_id`
 short-name lookup for `alter_cmd` or `command_configs`. Built-in names and
 aliases stay as declared unless the row has `resolution_strategy=manual_rename`.
 Unmatched command_config rows are deleted. Startup does not patch leftover
-columns onto an existing main database; upgrading deletes `data/data_v4.db*`
-and recreates an empty file from the current models.
+columns onto an existing main database. The pre-rename `data/data_v4.db` is
+imported once into `data/astrbot.db`, and later schema changes are forward
+migration revisions; never edit an applied step, because its checksum fails
+startup.
 
 ### Agents, providers, and runners
 

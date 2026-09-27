@@ -12,6 +12,7 @@ from astrbot.core.utils.outbound_http import (
     PLUGIN_DOWNLOAD_URL,
     PLUGIN_REGISTRY,
     PLUGIN_REPOSITORY,
+    SHIPYARD_NEO_HEALTH,
     OutboundRedirectError,
     OutboundRequestError,
     OutboundSizeLimitError,
@@ -409,6 +410,41 @@ def outbound_policy_with_private():
     from dataclasses import replace
 
     return replace(MCP_REMOTE, allow_private_network=True)
+
+
+def test_shipyard_neo_health_allows_private_but_rejects_metadata() -> None:
+    def resolver(hostname: str, port: int):
+        del port
+        try:
+            return [ipaddress.ip_address(hostname)]
+        except ValueError:
+            return _public("93.184.216.34")
+
+    for url in (
+        "http://127.0.0.1:8114/health",
+        "http://192.168.1.5:8114/health",
+        "https://bay.example.com/health",
+    ):
+        validate_outbound_url(
+            url,
+            SHIPYARD_NEO_HEALTH,
+            resolve_addresses=resolver,
+        )
+    for url in (
+        "http://169.254.169.254/latest/meta-data/health",
+        "http://[fd00:ec2::254]/health",
+        "http://100.100.100.200/health",
+        "file:///etc/passwd/health",
+        "ftp://bay.example.com/health",
+        "http://user:pass@bay.example.com/health",
+    ):
+        with pytest.raises(OutboundRequestError):
+            validate_outbound_url(
+                url,
+                SHIPYARD_NEO_HEALTH,
+                resolve_addresses=resolver,
+            )
+    assert SHIPYARD_NEO_HEALTH.max_redirects == 0
 
 
 def test_github_mirror_test_uses_same_origin_rules() -> None:

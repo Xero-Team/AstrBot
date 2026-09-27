@@ -4083,7 +4083,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.shipyard_neo_endpoint": {
                         "description": "Shipyard Neo API Endpoint",
                         "type": "string",
-                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。",
+                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。仅支持 http/https，且不能指向云元数据地址。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",

@@ -842,28 +842,19 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
             "或确保 Bay 的 credentials.json 可被自动发现。"
         )
 
-    import aiohttp
-
-    from astrbot.core.utils.proxy_route import (
-        create_aiohttp_session,
-        current_aiohttp_proxy,
+    from astrbot.core.utils.outbound_http import (
+        SHIPYARD_NEO_HEALTH,
+        fetch_text,
     )
 
     health_url = f"{endpoint}/health"
     try:
-        async with create_aiohttp_session() as session:
-            async with session.get(
-                health_url,
-                timeout=aiohttp.ClientTimeout(total=5),
-                proxy=current_aiohttp_proxy(),
-            ) as resp:
-                if resp.status != 200:
-                    return (
-                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
-                        f"请确认 Bay 正在运行: {endpoint}"
-                    )
+        status, _body, _headers = await fetch_text(health_url, SHIPYARD_NEO_HEALTH)
     except Exception:
         return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
+
+    if status != 200:
+        return f"⚠️ Bay 健康检查失败 (HTTP {status})，请确认 Bay 正在运行: {endpoint}"
 
     return None
 

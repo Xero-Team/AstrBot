@@ -146,7 +146,7 @@ async def test_empty_database_creates_expected_tables(temp_db: SQLiteDatabase):
         return {
             name
             for name in inspector.get_table_names()
-            if not name.startswith("sqlite_")
+            if not name.startswith("sqlite_") and name != "_schema_migrations"
         }
 
     async with temp_db.engine.connect() as conn:

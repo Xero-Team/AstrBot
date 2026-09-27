@@ -5,6 +5,7 @@ import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
+from astrbot.core.config.migrations import CONFIG_SCHEMA_REVISION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent_runner import get_agent_runner_config_default
@@ -52,7 +53,8 @@ def get_local_permission_defaults(system: str | None = None) -> dict:
 
 VERSION = __version__
 
-DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+DB_PATH = os.path.join(get_astrbot_data_path(), "astrbot.db")
+LEGACY_DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
         "description": "Base URL",
@@ -105,6 +107,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
+    "schema_revision": CONFIG_SCHEMA_REVISION,
     "platform_settings": {
         "unique_session": False,
         "group_sender_concurrency": False,

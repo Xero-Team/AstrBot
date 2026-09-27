@@ -1,8 +1,10 @@
-"""Create the main SQLite schema from registered SQLModel tables."""
+"""Create and migrate the main SQLite schema from registered SQLModel tables."""
 
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlmodel import SQLModel, text
+from sqlmodel import text
 
+from astrbot.core.db.migrations.main import MIGRATIONS as MAIN_MIGRATIONS
+from astrbot.core.db.migrations.runner import run_migrations
 from astrbot.core.db.po.registry import import_all_models
 
 _SQLITE_RUNTIME_PRAGMAS = (
@@ -16,20 +18,28 @@ _SQLITE_RUNTIME_PRAGMAS = (
 )
 
 
-async def initialize_sqlite_schema(engine: AsyncEngine) -> None:
-    """Register table models, create missing tables, and apply SQLite PRAGMAs.
+async def apply_runtime_pragmas(engine: AsyncEngine) -> None:
+    """Apply the SQLite runtime PRAGMAs to one connection.
 
-    Startup does not inspect or patch an existing file. Upgrading to this
-    schema means deleting ``data/data_v4.db*`` and starting with an empty
-    database.
+    Args:
+        engine: Engine bound to the main database file.
+    """
+    async with engine.connect() as conn:
+        for pragma in _SQLITE_RUNTIME_PRAGMAS:
+            await conn.execute(text(pragma))
+        await conn.commit()
+
+
+async def initialize_sqlite_schema(engine: AsyncEngine) -> None:
+    """Register models, run pending migrations, and apply PRAGMAs.
+
+    A fresh file runs the baseline step, which creates the current schema. An
+    existing file replays only the steps it has not seen. Upgrading from the
+    legacy ``data_v4.db`` is handled by the one-time import before this call.
 
     Args:
         engine: Async SQLAlchemy engine bound to the main database file.
     """
     import_all_models()
-    async with engine.connect() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-        await conn.commit()
-        for pragma in _SQLITE_RUNTIME_PRAGMAS:
-            await conn.execute(text(pragma))
-        await conn.commit()
+    await run_migrations(engine, "main", MAIN_MIGRATIONS)
+    await apply_runtime_pragmas(engine)

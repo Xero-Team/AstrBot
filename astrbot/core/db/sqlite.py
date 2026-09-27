@@ -1,6 +1,7 @@
 import asyncio
 import typing as T
 from contextlib import asynccontextmanager
+from pathlib import Path
 from weakref import WeakSet
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -11,7 +12,9 @@ from astrbot.core.db import (
     sqlite_async_url,
     track_aiosqlite_workers,
 )
-from astrbot.core.db.schema import initialize_sqlite_schema
+from astrbot.core.db.migrations.bootstrap import import_legacy_main_database
+from astrbot.core.db.migrations.main import MIGRATIONS as MAIN_MIGRATIONS
+from astrbot.core.db.schema import apply_runtime_pragmas, initialize_sqlite_schema
 from astrbot.core.db.stores.aliases import UmoAliasStoreMixin
 from astrbot.core.db.stores.api_keys import ApiKeyStoreMixin
 from astrbot.core.db.stores.attachments import AttachmentStoreMixin
@@ -48,8 +51,18 @@ class SQLiteDatabase(
     UmoAliasStoreMixin,
     ChatProjectStoreMixin,
 ):
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, legacy_db_path: str | None = None) -> None:
+        """Create the main store.
+
+        Args:
+            db_path: Path to the current ``astrbot.db`` file.
+            legacy_db_path: Optional path to a pre-rename ``data_v4.db``. When it
+                exists and the current store is empty, its rows are imported
+                once at startup. Callers that pass ``None`` (tests and secondary
+                stores) never touch another database.
+        """
         self.db_path = db_path
+        self.legacy_db_path = Path(legacy_db_path) if legacy_db_path else None
         self.DATABASE_URL = sqlite_async_url(db_path)
         self.engine = create_sqlite_async_engine(db_path)
         self._aiosqlite_workers = track_aiosqlite_workers(self.engine)
@@ -62,12 +75,29 @@ class SQLiteDatabase(
         self._init_lock = asyncio.Lock()
         self.inited = False
 
+    async def _is_fresh(self) -> bool:
+        async with self.engine.connect() as conn:
+            result = await conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'",
+            )
+            return not [row for row in result.fetchall() if row[0] != "sqlite_sequence"]
+
     async def initialize(self) -> None:
-        """Initialize the database by creating tables if they do not exist."""
+        """Initialize the database, importing a legacy file when present."""
         async with self._init_lock:
             if self.inited:
                 return
-            await initialize_sqlite_schema(self.engine)
+            if (
+                self.legacy_db_path is not None
+                and self.legacy_db_path.exists()
+                and await self._is_fresh()
+            ):
+                await import_legacy_main_database(
+                    self.engine, self.legacy_db_path, MAIN_MIGRATIONS
+                )
+                await apply_runtime_pragmas(self.engine)
+            else:
+                await initialize_sqlite_schema(self.engine)
             self.inited = True
 
     @asynccontextmanager

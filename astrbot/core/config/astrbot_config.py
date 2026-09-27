@@ -8,6 +8,7 @@ import tempfile
 import threading
 
 from astrbot.core.config.agent_runner import normalize_agent_runner_for_load
+from astrbot.core.config.migrations import migrate_config_dict
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
@@ -79,6 +80,7 @@ class AstrBotConfig(dict):
         # 检查配置完整性，并插入
         has_new = False
         if default_config is DEFAULT_CONFIG:
+            has_new |= migrate_config_dict(conf)
             normalized_runner = normalize_agent_runner_for_load(
                 conf.get("agent_runner")
             )

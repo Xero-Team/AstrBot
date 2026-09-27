@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.migrations import (
     CONFIG_SCHEMA_REVISION,
+    ConfigMigrationError,
     migrate_config_dict,
 )
 
@@ -48,6 +51,36 @@ def test_grouped_values_win_over_flat_legacy_keys():
     assert migrate_config_dict(conf) is True
     assert conf["log"]["level"] == "WARNING"
     assert "log_level" not in conf
+
+
+def test_null_grouped_value_keeps_flat_legacy_value():
+    conf = {
+        "log_level": "DEBUG",
+        "log": {"level": None},
+    }
+
+    assert migrate_config_dict(conf) is True
+    assert conf["log"]["level"] == "DEBUG"
+    assert "log_level" not in conf
+
+
+def test_boolean_schema_revision_is_treated_as_unset():
+    conf = {
+        "schema_revision": True,
+        "log_level": "DEBUG",
+    }
+
+    assert migrate_config_dict(conf) is True
+    assert conf["schema_revision"] == CONFIG_SCHEMA_REVISION
+    assert conf["log"]["level"] == "DEBUG"
+    assert "log_level" not in conf
+
+
+def test_revision_ahead_of_code_is_refused():
+    conf = {"schema_revision": CONFIG_SCHEMA_REVISION + 1}
+
+    with pytest.raises(ConfigMigrationError):
+        migrate_config_dict(conf)
 
 
 def test_migration_is_idempotent():

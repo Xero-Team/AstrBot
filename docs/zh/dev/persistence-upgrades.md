@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 );
 ```
 
-- `config` 是文件，所以它的 ledger 是 `cmd_config.json` 里的整数 `schema_revision`，语义相同。
+- `config` 是文件，所以它的 ledger 是 `cmd_config.json` 里的整数 `schema_revision`，语义相同。文件无法共用 SQLite 事务，因此迁移后的值和 `schema_revision` 必须通过 `AstrBotConfig.save_config`（临时文件、`fsync`、`os.replace`）一次性原子写入，绝不能把 revision 和值分成两次写。非法、布尔或负数的 revision 视为未设置并执行迁移；比代码更新的 revision 会拒绝启动。
 
 ### 步骤模块
 
@@ -154,7 +154,9 @@ MIGRATIONS = (
 5. 目标表里不存在的旧列被丢弃；旧库里缺的、带 Python 默认值的 NOT NULL 列（例如后加到 `session_project_relations` 的时间戳）在导入时补齐。
 6. 整个拷贝在**一个事务**里完成，并临时 `PRAGMA foreign_keys=OFF`，因为旧数据可能引用已经不存在的父行。
 7. 行通过驱动级参数插入，保持 SQLite 的磁盘表示：旧 `DATETIME` 列是 ISO 文本，旧 `JSON` 列是 JSON 文本，正好是当前列期望的格式；走 SQLAlchemy 绑定处理器反而会拒绝这些已序列化的文本。
-8. 旧文件保留在磁盘上作为备份，不删除。
+8. 拷贝的行与一条导入完成 ledger 行（`main_legacy_import`）在**同一个事务**里提交，崩溃不会留下"拷贝了一半却已记录完成"的导入。
+9. `SQLiteDatabase.initialize()` 在完成标记缺失且没有任何用户行时重试导入，因此基线 schema 与拷贝之间崩溃不会留下静默为空的存储。
+10. 旧文件保留在磁盘上作为备份，不删除。
 
 `SQLiteDatabase` 只有在调用方显式传入 legacy 路径时才导入。运行时由 `runtime_services` 传入 `LEGACY_DB_PATH`；测试和二级存储传 `None`，因此永远不会读取仓库里的 `data/`。
 

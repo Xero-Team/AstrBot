@@ -11,17 +11,29 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column
+from sqlalchemy import Column, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import SQLModel
 
-from astrbot.core.db.migrations.runner import Migration, run_migrations
+from astrbot.core.db.migrations.runner import LEDGER_TABLE, Migration, run_migrations
 from astrbot.core.db.po.registry import import_all_models
 
 logger = logging.getLogger("astrbot")
+
+# Extra ledger store marking a completed legacy import. Its row commits in the
+# same transaction as the copied rows, so a crash mid-copy is retried instead of
+# silently leaving an empty store behind.
+LEGACY_IMPORT_MARKER_STORE = "main_legacy_import"
+
+_MARK_IMPORT_DONE = text(
+    f"INSERT INTO {LEDGER_TABLE}"
+    "(store, revision, description, checksum, applied_at) "
+    "VALUES (:store, :revision, :description, :checksum, :applied_at)",
+)
 
 # Legacy column names that changed during the reshape, per table.
 LEGACY_COLUMN_RENAMES: dict[str, dict[str, str]] = {
@@ -112,7 +124,8 @@ async def import_legacy_main_database(
                 continue
             target_columns = {column.name: column for column in table.columns}
             mapped_rows = []
-            for row in source.execute(f"SELECT * FROM {_quote(table.name)}"):
+            select_all = "SELECT * FROM " + _quote(table.name)
+            for row in source.execute(select_all):
                 mapped = _map_row(table.name, row, target_columns)
                 if mapped is not None:
                     mapped_rows.append(mapped)
@@ -134,6 +147,16 @@ async def import_legacy_main_database(
                         len(mapped_rows),
                         table_name,
                     )
+                await conn.execute(
+                    _MARK_IMPORT_DONE,
+                    {
+                        "store": LEGACY_IMPORT_MARKER_STORE,
+                        "revision": 1,
+                        "description": "legacy data_v4.db import",
+                        "checksum": "",
+                        "applied_at": datetime.now(UTC).isoformat(),
+                    },
+                )
             except BaseException:
                 await conn.exec_driver_sql("ROLLBACK")
                 raise
@@ -144,4 +167,8 @@ async def import_legacy_main_database(
     return copied
 
 
-__all__ = ["LEGACY_COLUMN_RENAMES", "import_legacy_main_database"]
+__all__ = [
+    "LEGACY_COLUMN_RENAMES",
+    "LEGACY_IMPORT_MARKER_STORE",
+    "import_legacy_main_database",
+]

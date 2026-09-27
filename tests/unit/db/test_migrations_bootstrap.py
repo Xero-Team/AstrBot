@@ -21,6 +21,7 @@ from astrbot.core.db.po import (
     SessionProjectRelation,
 )
 from astrbot.core.db.po.registry import import_all_models
+from astrbot.core.db.schema import initialize_sqlite_schema
 from astrbot.core.db.sqlite import SQLiteDatabase
 
 pytestmark = pytest.mark.asyncio
@@ -210,5 +211,26 @@ async def test_database_without_legacy_path_never_imports_sibling(tmp_path):
                 (await session.execute(select(ConversationV2))).scalars().all()
             )
         assert conversations == []
+    finally:
+        await db.close()
+
+
+async def test_initialize_retries_import_when_marker_is_missing(tmp_path):
+    legacy = tmp_path / "data_v4.db"
+    _write_legacy(legacy)
+    db = SQLiteDatabase(str(tmp_path / "astrbot.db"), str(legacy))
+    try:
+        # Simulate a crash after the baseline schema committed but before the
+        # legacy copy: tables and the ``main`` ledger exist, but no rows and no
+        # import marker.
+        await initialize_sqlite_schema(db.engine)
+
+        await db.initialize()
+
+        async with db.get_db() as session:
+            conversations = (
+                (await session.execute(select(ConversationV2))).scalars().all()
+            )
+        assert [conversation.id for conversation in conversations] == [3]
     finally:
         await db.close()

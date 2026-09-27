@@ -35,7 +35,7 @@ class DashboardAccount(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
 
@@ -70,7 +70,7 @@ class AuthRoleBinding(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
     __table_args__ = (
@@ -128,7 +128,7 @@ class AuthPlatformMembershipFact(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
     __table_args__ = (
@@ -250,7 +250,7 @@ class AuthPolicyOverride(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
 
@@ -282,7 +282,7 @@ class AuthCapability(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
     __table_args__ = (
@@ -332,5 +332,5 @@ class DashboardTrustedDevice(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )

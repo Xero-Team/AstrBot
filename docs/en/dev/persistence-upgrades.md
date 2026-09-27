@@ -100,7 +100,13 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 ```
 
 - The `config` store is a file, so its ledger is an integer
-  `schema_revision` inside `cmd_config.json`, with the same semantics.
+  `schema_revision` inside `cmd_config.json`, with the same semantics. Because a
+  file cannot share the SQLite transaction, the migrated values and
+  `schema_revision` are written in one atomic snapshot through
+  `AstrBotConfig.save_config` (temporary file, `fsync`, `os.replace`); never
+  write the revision and the values as two separate files. A non-integer,
+  boolean, or negative revision is treated as unset and migrated; a revision
+  newer than the code refuses startup.
 
 ### Step modules
 
@@ -216,7 +222,13 @@ rather than several SQLite steps:
    columns hold JSON text, which is exactly what the current columns expect.
    Routing through SQLAlchemy bind processors would instead reject that
    already-serialized text.
-8. The legacy file is kept on disk as a backup; it is not deleted.
+8. The copied rows and an import-completion ledger row
+   (`main_legacy_import`) commit in the **same transaction**, so a crash cannot
+   record a completed import that only half-copied.
+9. `SQLiteDatabase.initialize()` retries the import when the completion marker
+   is absent and no user rows exist, so a crash between the baseline schema and
+   the copy does not leave a silently empty store.
+10. The legacy file is kept on disk as a backup; it is not deleted.
 
 `SQLiteDatabase` imports only when the caller passes a legacy path explicitly.
 `runtime_services` passes `LEGACY_DB_PATH`; tests and secondary stores pass

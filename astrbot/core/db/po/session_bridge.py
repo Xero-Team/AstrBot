@@ -44,7 +44,7 @@ class SessionBridgeRule(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
     __table_args__ = (
@@ -84,7 +84,7 @@ class SessionBridgeDelivery(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
     __table_args__ = (

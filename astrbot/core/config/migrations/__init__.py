@@ -11,6 +11,11 @@ from __future__ import annotations
 
 CONFIG_SCHEMA_REVISION = 1
 
+
+class ConfigMigrationError(RuntimeError):
+    """Raised when the configuration cannot be migrated safely."""
+
+
 # Flat key -> (group, grouped key)
 _FLAT_KEY_MOVES: dict[str, tuple[str, str]] = {
     "log_level": ("log", "level"),
@@ -44,13 +49,20 @@ def _migrate_flat_to_grouped(conf: dict) -> bool:
 
     # The pre-grouping t2i flag was a top-level bool.
     if isinstance(conf.get("t2i"), bool):
-        grouped["t2i"].setdefault("enable", conf.pop("t2i"))
+        if grouped["t2i"].get("enable") is None:
+            grouped["t2i"]["enable"] = conf.pop("t2i")
+        else:
+            conf.pop("t2i")
         changed = True
 
     for old_key, (group, new_key) in _FLAT_KEY_MOVES.items():
         if old_key not in conf:
             continue
-        grouped[group].setdefault(new_key, conf.pop(old_key))
+        # A grouped key that is null counts as unset: keep the legacy value.
+        if grouped[group].get(new_key) is None:
+            grouped[group][new_key] = conf.pop(old_key)
+        else:
+            conf.pop(old_key)
         changed = True
 
     if not changed:
@@ -70,17 +82,34 @@ def migrate_config_dict(conf: dict) -> bool:
 
     Returns:
         Whether the configuration changed.
+
+    Raises:
+        ConfigMigrationError: When ``schema_revision`` is newer than this build,
+            because continuing would let integrity checking drop keys the writer
+            did not understand.
     """
     revision = conf.get("schema_revision")
-    if not isinstance(revision, int) or revision < 0:
+    # ``isinstance(True, int)`` is true, and a string or negative value is not a
+    # revision; treat all of those as "no recorded revision" and migrate.
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
         revision = 0
 
-    changed = False
-    if revision < 1:
-        changed |= _migrate_flat_to_grouped(conf)
-        conf["schema_revision"] = 1
-        changed = True
-    return changed
+    if revision > CONFIG_SCHEMA_REVISION:
+        raise ConfigMigrationError(
+            f"configuration schema_revision {revision} is newer than this build's "
+            f"{CONFIG_SCHEMA_REVISION}; upgrade the application or restore a backup",
+        )
+
+    if revision >= CONFIG_SCHEMA_REVISION:
+        return False
+
+    _migrate_flat_to_grouped(conf)
+    conf["schema_revision"] = CONFIG_SCHEMA_REVISION
+    return True
 
 
-__all__ = ["CONFIG_SCHEMA_REVISION", "migrate_config_dict"]
+__all__ = [
+    "CONFIG_SCHEMA_REVISION",
+    "ConfigMigrationError",
+    "migrate_config_dict",
+]

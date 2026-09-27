@@ -2283,5 +2283,19 @@
     "documentation": "in-app documentation",
     "helpPrefix": "Don't understand the configuration? See the",
     "helpSuffix": "."
+  },
+  "btw_page": {
+    "general": "General",
+    "generalHint": "Master switch and experiment state.",
+    "conversationLoop": "Conversation loop",
+    "conversationLoopHint": "The model the conversation loop uses.",
+    "workLoop": "Work loop",
+    "workLoopHint": "Work task model, read-only boundary, concurrency, and retention.",
+    "classifier": "Auto routing",
+    "classifierHint": "The decision model and threshold for handing work over.",
+    "routes": "Capability allocation",
+    "routesHint": "How plugins, MCP, and Skills are split across the loops.",
+    "other": "Other",
+    "otherHint": "Settings that are not categorized yet."
   }
 }

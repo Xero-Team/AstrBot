@@ -11,7 +11,9 @@
         @click="tab = section.key"
       >
         <v-icon :icon="getSectionIcon(section.key)" size="16" />
-        <span>{{ tm(section.value.name || section.key) }}</span>
+        <span>{{
+          section.value.label || tm(section.value.name || section.key)
+        }}</span>
       </button>
     </nav>
 
@@ -54,7 +56,7 @@
         >
           <header class="config-standard-section__heading">
             <h2 class="config-standard-section__title">
-              {{ tm(section.value.name || section.key) }}
+              {{ section.value.label || tm(section.value.name || section.key) }}
             </h2>
           </header>
 
@@ -109,6 +111,8 @@ interface ConfigMetadataItem {
 
 interface ConfigSectionValue {
   name?: string;
+  label?: string;
+  icon?: string;
   docs?: string;
   metadata?: Record<string, ConfigMetadataItem>;
 }
@@ -272,6 +276,10 @@ const currentTabDocsHref = computed(() => {
 });
 
 function getSectionIcon(sectionKey: string) {
+  const configured = normalizedMetadata.value[sectionKey]?.icon;
+  if (typeof configured === 'string' && configured) {
+    return configured;
+  }
   return SECTION_ICONS[sectionKey] || 'mdi-cog-outline';
 }
 </script>

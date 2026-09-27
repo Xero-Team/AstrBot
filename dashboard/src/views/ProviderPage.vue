@@ -233,21 +233,6 @@
                 <v-divider></v-divider>
 
                 <div class="provider-config-body">
-                  <v-alert
-                    v-if="isJevClassifierProvider"
-                    class="provider-section mb-4"
-                    type="info"
-                    variant="tonal"
-                    density="comfortable"
-                  >
-                    <div class="text-subtitle-2 mb-1">
-                      {{ tm('jevClassifier.title') }}
-                    </div>
-                    <div class="text-body-2">
-                      {{ tm('jevClassifier.description') }}
-                    </div>
-                  </v-alert>
-
                   <section class="provider-section">
                     <div class="provider-section-head">
                       <div class="provider-section-title">
@@ -373,10 +358,7 @@ import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { useProviderSources } from '@/composables/useProviderSources';
 import { runProviderMutationWithStepUp } from '@/utils/stepUp';
 import { resolveErrorMessage } from '@/utils/errorUtils';
-import {
-  isJevClassifierConfig,
-  validateJevClassifierConfig,
-} from '@/utils/jevClassifierConfig';
+import { validateJevClassifierConfig } from '@/utils/jevClassifierConfig';
 
 const props = defineProps({
   defaultTab: {
@@ -464,12 +446,6 @@ const loading = ref(false);
 const isLegacyProviderModified = ref(false);
 const showManualModelDialog = ref(false);
 let suppressLegacyProviderWatch = false;
-
-const isJevClassifierProvider = computed(
-  () =>
-    selectedProviderType.value === 'classifier' &&
-    isJevClassifierConfig(newSelectedProviderConfig.value),
-);
 
 const displayedLegacyProviders = computed(() => [
   ...unref(filteredProviders),

@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 );
 ```
 
-- `config` 是文件，所以它的 ledger 是 `cmd_config.json` 里的整数 `schema_revision`，语义相同。
+- `config` 是文件，所以它的 ledger 是 `cmd_config.json` 里的整数 `schema_revision`，语义相同。文件无法共用执行器的 SQLite 事务，因此一个步骤必须通过 `AstrBotConfig.save_config`（临时文件、`fsync`、`os.replace`）把迁移后的值和 `schema_revision` 一次性原子写入；分成两次写会在崩溃后让两者不一致。
 
 ### 步骤模块
 
@@ -94,8 +94,8 @@ astrbot/core/config/migrations/
 revision = 2
 description = "add provider_stats.duration_ms"
 
-def upgrade(conn) -> None:
-    ...
+
+def upgrade(conn) -> None: ...
 ```
 
 - 排序只认 `revision`。文件名里的 `NNNN` 前缀只是给人看的。
@@ -133,6 +133,19 @@ run_migrations(engine, store, steps):
 
 `create_all` 继续负责建缺失表，迁移只处理"旧存储到当前存储"的差额。另一种做法——去掉 `create_all`、让迁移 `0001` 负责建表——会让 35 张表的 schema 定义出现两份，真源分裂，因此否决。保留 `create_all` 的代价是"新建的库"和"迁移后的库"必须被证明等价，见[验证](#验证)。
 
+### 首次上线：执行器出现前就存在的存储
+
+第一个带执行器的版本不能对已有表、且有数据的存储直接重放 `0001_initial`。因此首次上线按 schema 认领每个旧存储，绝不把它的 revision 假定为 0：
+
+- **空存储：** 通过 `0001_initial` 跑 `create_all`，然后把基线写进 ledger。
+- **执行器出现前的有数据存储：** 识别已知的旧形状，要么记录基线，要么跑把它往前带的步骤：
+  - `main`：唯一受支持的有数据旧文件是 `data/data_v4.db`。它的形状与当前不同（没有代理 `id`、没有外键），因此用一次性导入认领，而不是重放 `0001`；导入会自己记录 `main` 基线。
+  - `kb`：旧 `kb.db` 的 `kb_media` 没有 `updated_at`；`0002` 会按需补列，所以有数据的存储可以安全地从 `0001` 开始跑链。
+  - `doc` 和 `config`：基线是幂等的（`create_all` 与扁平转分组），已有存储原地认领。
+- **未知形状：** 不匹配任何已知旧形状的有数据存储，视为比代码更新，直接拒绝启动，而不是猜测。
+
+执行器发布前，要为每一种受支持的旧存储形状各加一份 fixture（在历史 revision fixture 之外），并断言它们都能在不丢行的情况下迁到 head。
+
 ## 贡献者规则
 
 1. **改 schema 或改配置形状就是要加步骤的破坏性变更。** 新增一个 revision 及其 `upgrade` 函数。不要修改已应用的步骤；checksum 会让启动失败。
@@ -157,6 +170,7 @@ run_migrations(engine, store, steps):
 - 失败的步骤会回滚，且 ledger 不被改动。
 - **Schema 等价：** `create_all` 建的库与从 `0001` 迁移到 head 的库，表、列、索引完全一致。
 - **升级路径：** 每个历史 revision 各有一份 fixture 库，跑完整链到 head。
+- **上线认领：** 每种受支持的旧存储形状各有一份有数据 fixture，都能不丢行迁到 head；未知形状拒绝启动。
 
 ## 相关页面
 

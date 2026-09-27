@@ -96,7 +96,12 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 ```
 
 - The `config` store is a file, so its ledger is an integer
-  `schema_revision` inside `cmd_config.json`, with the same semantics.
+  `schema_revision` inside `cmd_config.json`, with the same semantics. A file
+  cannot share the runner's SQLite transaction, so a step must write the
+  migrated values and `schema_revision` in one atomic snapshot through
+  `AstrBotConfig.save_config` (temporary file, `fsync`, `os.replace`); writing
+  the revision and the values separately can leave them out of sync after a
+  crash.
 
 ### Step modules
 
@@ -118,8 +123,8 @@ A step exports its identity and one forward function:
 revision = 2
 description = "add provider_stats.duration_ms"
 
-def upgrade(conn) -> None:
-    ...
+
+def upgrade(conn) -> None: ...
 ```
 
 - Ordering uses `revision` only. The `NNNN` filename prefix is for humans.
@@ -172,6 +177,33 @@ duplicate the 35-table schema definition and split the source of truth, so it
 is rejected. The cost of keeping `create_all` is that "a fresh store" and "a
 migrated store" must be proven equivalent; see [Verification](#verification).
 
+### First rollout on stores that predate the runner
+
+The first release with the runner must not replay `0001_initial` onto a
+populated store that already has those tables. Rollout therefore adopts each
+pre-runner store by inspecting its schema, never by assuming its revision is
+zero:
+
+- **Empty store:** run `create_all` via `0001_initial`, then record the
+  baseline in the ledger.
+- **Populated pre-runner store:** recognize the known pre-runner shape and
+  either record the baseline or run the steps that bridge it forward:
+  - `main`: the only supported populated pre-runner file is
+    `data/data_v4.db`. Its shape differs from the current one (no surrogate
+    `id`, no foreign keys), so it is adopted by the one-time import rather than
+    by replaying `0001`; the import records the `main` baseline itself.
+  - `kb`: a pre-runner `kb.db` carries the old `kb_media` without
+    `updated_at`; `0002` adds it conditionally, so a populated store can start
+    the chain at `0001` safely.
+  - `doc` and `config`: the baseline is idempotent (`create_all` and the
+    flat-to-grouped step), so an existing store is adopted in place.
+- **Unknown shape:** a populated store that matches no known pre-runner shape
+  is treated as newer than the code and refuses startup, instead of guessing.
+
+Before the runner ships, add a fixture for every supported pre-runner store
+shape, in addition to the historical-revision fixtures, and assert each migrates
+to head without losing rows.
+
 ## Contributor rules
 
 1. **A schema or config-shape change is a breaking change that needs a step.**
@@ -210,6 +242,9 @@ The migration system is only correct if each of these is tested:
   `0001` to head have identical tables, columns, and indexes.
 - **Upgrade paths:** a fixture store per historical revision migrates the full
   chain to head.
+- **Rollout adoption:** a populated fixture per supported pre-runner store
+  shape migrates to head without losing rows, and an unknown shape refuses
+  startup.
 
 ## Related pages
 

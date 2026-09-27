@@ -9,6 +9,8 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 
 @pytest.mark.asyncio
 async def test_webchat_thread_queries_and_bulk_delete_paths(temp_db: SQLiteDatabase):
+    await temp_db.create_platform_session(creator="alice", session_id="session-1")
+    await temp_db.create_platform_session(creator="alice", session_id="session-2")
     first = await temp_db.create_webchat_thread(
         creator="alice",
         parent_session_id="session-1",
@@ -78,6 +80,7 @@ async def test_webchat_thread_queries_and_bulk_delete_paths(temp_db: SQLiteDatab
 async def test_get_webchat_threads_by_parent_session_without_creator_orders_by_created_at(
     temp_db: SQLiteDatabase,
 ):
+    await temp_db.create_platform_session(creator="alice", session_id="session-1")
     now = datetime.now(UTC)
     first = await temp_db.create_webchat_thread(
         creator="alice",

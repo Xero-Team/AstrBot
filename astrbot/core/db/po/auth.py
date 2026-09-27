@@ -316,7 +316,13 @@ class DashboardTrustedDevice(SQLModel, table=True):
         sa_column_kwargs={"autoincrement": True},
     )
     token_hash: str = Field(max_length=64, nullable=False, unique=True, index=True)
-    account_id: str = Field(nullable=False, index=True, max_length=64)
+    account_id: str = Field(
+        nullable=False,
+        index=True,
+        max_length=64,
+        foreign_key="dashboard_accounts.account_id",
+        ondelete="CASCADE",
+    )
     totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
     expires_at: datetime = Field(nullable=False, index=True, sa_type=DateTime)
     created_at: datetime = Field(

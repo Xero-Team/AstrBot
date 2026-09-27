@@ -22,7 +22,12 @@ class WebChatThread(SQLModel, table=True):
         default_factory=lambda: str(uuid.uuid4()),
     )
     creator: str = Field(nullable=False, index=True)
-    parent_session_id: str = Field(nullable=False, index=True)
+    parent_session_id: str = Field(
+        nullable=False,
+        index=True,
+        foreign_key="platform_sessions.session_id",
+        ondelete="CASCADE",
+    )
     parent_message_id: int = Field(nullable=False, index=True)
     base_checkpoint_id: str = Field(nullable=False, index=True)
     selected_text: str = Field(sa_type=Text, nullable=False)

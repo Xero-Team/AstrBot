@@ -63,7 +63,12 @@ class Prompt(SQLModel, table=True):
     """None means use ALL skills for default, empty list means no skills, otherwise a list of skill names."""
     custom_error_message: str | None = Field(default=None, sa_type=Text)
     """Optional custom error message sent to end users when the agent request fails."""
-    folder_id: str | None = Field(default=None, max_length=36)
+    folder_id: str | None = Field(
+        default=None,
+        max_length=36,
+        foreign_key="prompt_folders.folder_id",
+        ondelete="SET NULL",
+    )
     """所属文件夹ID，NULL 表示在根目录"""
     sort_order: int = Field(default=0)
     """排序顺序"""

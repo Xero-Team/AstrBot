@@ -53,9 +53,19 @@ class SessionProjectRelation(SQLModel, table=True):
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
     )
-    session_id: str = Field(nullable=False, max_length=100)
+    session_id: str = Field(
+        nullable=False,
+        max_length=100,
+        foreign_key="platform_sessions.session_id",
+        ondelete="CASCADE",
+    )
     """Session ID from PlatformSession"""
-    project_id: str = Field(nullable=False, max_length=36)
+    project_id: str = Field(
+        nullable=False,
+        max_length=36,
+        foreign_key="chatui_projects.project_id",
+        ondelete="CASCADE",
+    )
     """Project ID from ChatUIProject"""
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),

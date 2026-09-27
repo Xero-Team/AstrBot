@@ -25,6 +25,7 @@ class ConversationV2(SQLModel, table=True):
     """content is a list of OpenAI-formated messages in list[dict] format."""
     title: str | None = Field(default=None, max_length=255)
     prompt_id: str | None = Field(default=None)
+    """Persona or prompt id resolved at run time; not a ``prompts`` row key."""
     token_usage: int = Field(default=0, nullable=False)
     """token_usage is the total token value of the messages.
 

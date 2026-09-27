@@ -72,6 +72,7 @@ def test_boolean_schema_revision_is_treated_as_unset():
 
     assert migrate_config_dict(conf) is True
     assert conf["schema_revision"] == CONFIG_SCHEMA_REVISION
+    assert type(conf["schema_revision"]) is int
     assert conf["log"]["level"] == "DEBUG"
     assert "log_level" not in conf
 

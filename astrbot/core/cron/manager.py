@@ -293,7 +293,7 @@ class CronJobManager:
                 trigger=trigger,
                 args=[job.job_id],
                 replace_existing=True,
-                misfire_grace_time=30,
+                misfire_grace_time=300,
             )
             create_tracked_task(
                 self._background_tasks,

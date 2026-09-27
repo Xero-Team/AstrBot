@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 278 icons */
+/* Auto-generated MDI subset – 280 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -124,6 +124,10 @@
   content: "\F09D1";
 }
 
+.mdi-briefcase-outline::before {
+  content: "\F0814";
+}
+
 .mdi-brightness-6::before {
   content: "\F00DF";
 }
@@ -158,6 +162,10 @@
 
 .mdi-calendar-plus::before {
   content: "\F00F3";
+}
+
+.mdi-call-split::before {
+  content: "\F00FB";
 }
 
 .mdi-chart-line::before {

@@ -17,6 +17,8 @@ from astrbot.core.db import (
     sqlite_async_url,
     track_aiosqlite_workers,
 )
+from astrbot.core.db.migrations.doc import MIGRATIONS as DOC_MIGRATIONS
+from astrbot.core.db.migrations.runner import run_migrations
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
     build_fts5_or_query,
     load_stopwords,
@@ -80,18 +82,12 @@ class DocumentStorage:
         self._stopwords: set[str] | None = None
 
     async def initialize(self) -> None:
-        """Initialize the SQLite database and create the documents table if it doesn't exist."""
+        """Initialize the document store: migrate, then set up FTS5."""
         await self.connect()
-        async with self.engine.begin() as conn:  # type: ignore
-            # Create tables using SQLModel
-            await conn.run_sync(BaseDocModel.metadata.create_all)
-
-            await conn.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_doc_id_unique ON documents(doc_id)",
-                ),
-            )
-
+        engine = self.engine
+        assert engine is not None
+        await run_migrations(engine, "doc", DOC_MIGRATIONS)
+        async with engine.begin() as conn:
             await self._initialize_fts5(conn)
             await conn.commit()
 

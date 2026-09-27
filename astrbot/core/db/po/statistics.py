@@ -1,9 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime
 from sqlmodel import Field, SQLModel, UniqueConstraint
-
-from astrbot.core.db.po.mixins import TimestampMixin
 
 
 class PlatformStat(SQLModel, table=True):
@@ -14,7 +12,11 @@ class PlatformStat(SQLModel, table=True):
 
     __tablename__ = "platform_stats"  # type: ignore
 
-    id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
     timestamp: datetime = Field(nullable=False, sa_type=DateTime)
     platform_id: str = Field(nullable=False)
     platform_type: str = Field(nullable=False)  # such as "aiocqhttp", "slack", etc.
@@ -30,8 +32,12 @@ class PlatformStat(SQLModel, table=True):
     )
 
 
-class ProviderStat(TimestampMixin, SQLModel, table=True):
-    """Per-response provider stats for internal agent runs."""
+class ProviderStat(SQLModel, table=True):
+    """Per-response provider stats for internal agent runs.
+
+    ``start_time`` / ``end_time`` / ``time_to_first_token`` are epoch seconds
+    used for latency arithmetic, not calendar timestamps.
+    """
 
     __tablename__ = "provider_stats"  # type: ignore
 
@@ -52,3 +58,12 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
     start_time: float = Field(default=0.0, nullable=False)
     end_time: float = Field(default=0.0, nullable=False)
     time_to_first_token: float = Field(default=0.0, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )

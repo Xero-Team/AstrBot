@@ -1,17 +1,24 @@
+from datetime import UTC, datetime
+
 from pydantic import model_validator
+from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class CommandConfig(TimestampMixin, SQLModel, table=True):
+class CommandConfig(SQLModel, table=True):
     """Per-command configuration overrides for dashboard management."""
 
     __tablename__ = "command_configs"  # type: ignore
 
-    handler_full_name: str = Field(
+    id: int | None = Field(
+        default=None,
         primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    handler_full_name: str = Field(
         max_length=512,
+        nullable=False,
+        unique=True,
     )
     command_id: str = Field(default="", nullable=False, max_length=512, unique=True)
     plugin_name: str = Field(nullable=False, max_length=255)
@@ -24,6 +31,15 @@ class CommandConfig(TimestampMixin, SQLModel, table=True):
     note: str | None = Field(default=None, sa_type=Text)
     extra_data: dict | None = Field(default=None, sa_type=JSON)
     auto_managed: bool = Field(default=False, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
     @model_validator(mode="after")
     def _fill_command_id(self) -> CommandConfig:
@@ -33,7 +49,7 @@ class CommandConfig(TimestampMixin, SQLModel, table=True):
         return self
 
 
-class CommandConflict(TimestampMixin, SQLModel, table=True):
+class CommandConflict(SQLModel, table=True):
     """Conflict tracking for duplicated command names."""
 
     __tablename__ = "command_conflicts"  # type: ignore
@@ -52,6 +68,15 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
     note: str | None = Field(default=None, sa_type=Text)
     extra_data: dict | None = Field(default=None, sa_type=JSON)
     auto_generated: bool = Field(default=False, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(

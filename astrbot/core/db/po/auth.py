@@ -4,15 +4,20 @@ from datetime import UTC, datetime
 from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, Index, SQLModel, Text, UniqueConstraint
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class DashboardAccount(TimestampMixin, SQLModel, table=True):
+class DashboardAccount(SQLModel, table=True):
     """Stable Dashboard identity independent from a mutable username."""
 
     __tablename__ = "dashboard_accounts"  # type: ignore
 
-    account_id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    account_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()), nullable=False, unique=True
+    )
     username: str = Field(nullable=False, unique=True, index=True, max_length=255)
     password_hash: str = Field(nullable=False, sa_type=Text)
     is_active: bool = Field(default=True, nullable=False, index=True)
@@ -23,14 +28,30 @@ class DashboardAccount(TimestampMixin, SQLModel, table=True):
     totp_enabled: bool = Field(default=False, nullable=False)
     totp_secret: str = Field(default="", nullable=False, sa_type=Text)
     totp_recovery_code_hash: str = Field(default="", nullable=False, sa_type=Text)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
 
-class AuthRoleBinding(TimestampMixin, SQLModel, table=True):
+class AuthRoleBinding(SQLModel, table=True):
     """An explicit role binding. The authorization service enforces scope."""
 
     __tablename__ = "auth_role_bindings"  # type: ignore
 
-    binding_id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    binding_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()), nullable=False, unique=True
+    )
     subject_id: str = Field(nullable=False, index=True, max_length=512)
     role: str = Field(nullable=False, index=True, max_length=64)
     scope_type: str = Field(nullable=False, index=True, max_length=32)
@@ -42,6 +63,15 @@ class AuthRoleBinding(TimestampMixin, SQLModel, table=True):
     revoked_at: datetime | None = Field(default=None, index=True)
     revoked_by: str | None = Field(default=None, max_length=512)
     metadata_json: dict = Field(default_factory=dict, sa_type=JSON)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -69,21 +99,37 @@ class AuthRoleBinding(TimestampMixin, SQLModel, table=True):
     )
 
 
-class AuthPlatformMembershipFact(TimestampMixin, SQLModel, table=True):
+class AuthPlatformMembershipFact(SQLModel, table=True):
     """Short-lived adapter role observation, never an explicit role binding."""
 
     __tablename__ = "auth_platform_membership_facts"  # type: ignore
 
-    fact_id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    fact_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()), nullable=False, unique=True
+    )
     subject_id: str = Field(nullable=False, index=True, max_length=512)
     config_id: str = Field(nullable=False, index=True, max_length=128)
     platform_instance: str = Field(nullable=False, index=True, max_length=255)
     umo: str = Field(nullable=False, max_length=2048)
     platform_role: str = Field(nullable=False, max_length=32)
     source: str = Field(nullable=False, max_length=32)
-    observed_at: datetime = Field(nullable=False, index=True)
-    expires_at: datetime = Field(nullable=False, index=True)
+    observed_at: datetime = Field(nullable=False, index=True, sa_type=DateTime)
+    expires_at: datetime = Field(nullable=False, index=True, sa_type=DateTime)
     metadata_json: dict = Field(default_factory=dict, sa_type=JSON)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -108,7 +154,12 @@ class AuthStepUpCredential(SQLModel, table=True):
 
     __tablename__ = "auth_step_up_credentials"  # type: ignore
 
-    credential_id: str = Field(primary_key=True, max_length=64)
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    credential_id: str = Field(max_length=64, nullable=False, unique=True)
     subject_id: str = Field(nullable=False, index=True, max_length=512)
     dashboard_session_id: str = Field(nullable=False, index=True, max_length=512)
     action: str = Field(nullable=False, max_length=128)
@@ -116,9 +167,11 @@ class AuthStepUpCredential(SQLModel, table=True):
     context_digest: str = Field(nullable=False, max_length=128)
     token_hash: str = Field(nullable=False, max_length=128)
     verified_method: str = Field(nullable=False, max_length=32)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
-    expires_at: datetime = Field(nullable=False, index=True)
-    consumed_at: datetime | None = Field(default=None, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True, sa_type=DateTime
+    )
+    expires_at: datetime = Field(nullable=False, index=True, sa_type=DateTime)
+    consumed_at: datetime | None = Field(default=None, index=True, sa_type=DateTime)
 
     __table_args__ = (
         Index(
@@ -137,8 +190,15 @@ class AuthAuditLog(SQLModel, table=True):
 
     __tablename__ = "auth_audit_log"  # type: ignore
 
-    audit_id: str = Field(primary_key=True, max_length=64)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    audit_id: str = Field(max_length=64, nullable=False, unique=True)
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True, sa_type=DateTime
+    )
     request_id: str | None = Field(default=None, index=True, max_length=128)
     subject_id: str = Field(nullable=False, index=True, max_length=512)
     effective_role: str | None = Field(default=None, max_length=64)
@@ -161,13 +221,18 @@ class AuthAuditLog(SQLModel, table=True):
     )
 
 
-class AuthPolicyOverride(TimestampMixin, SQLModel, table=True):
+class AuthPolicyOverride(SQLModel, table=True):
     """A structured allow-list override for a fixed action and narrow scope."""
 
     __tablename__ = "auth_policy_overrides"  # type: ignore
 
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
     override_id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()), primary_key=True
+        default_factory=lambda: str(uuid.uuid4()), nullable=False, unique=True
     )
     action: str = Field(nullable=False, index=True, max_length=128)
     resource_type: str = Field(nullable=False, max_length=64)
@@ -178,15 +243,29 @@ class AuthPolicyOverride(TimestampMixin, SQLModel, table=True):
     expires_at: datetime | None = Field(default=None, index=True)
     created_by: str | None = Field(default=None, max_length=512)
     metadata_json: dict = Field(default_factory=dict, sa_type=JSON)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
 
-class AuthCapability(TimestampMixin, SQLModel, table=True):
+class AuthCapability(SQLModel, table=True):
     """Explicit API-key capability. Never a wildcard or implicit operator."""
 
     __tablename__ = "auth_capabilities"  # type: ignore
 
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
     capability_id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()), primary_key=True
+        default_factory=lambda: str(uuid.uuid4()), nullable=False, unique=True
     )
     subject_id: str = Field(nullable=False, index=True, max_length=512)
     action: str = Field(nullable=False, index=True, max_length=128)
@@ -196,6 +275,15 @@ class AuthCapability(TimestampMixin, SQLModel, table=True):
     expires_at: datetime | None = Field(default=None, index=True)
     created_by: str | None = Field(default=None, max_length=512)
     revoked_at: datetime | None = Field(default=None, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -217,7 +305,7 @@ class AuthCapability(TimestampMixin, SQLModel, table=True):
     )
 
 
-class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
+class DashboardTrustedDevice(SQLModel, table=True):
     """Trusted dashboard device token used to skip TOTP for a limited time."""
 
     __tablename__ = "dashboard_trusted_devices"  # type: ignore
@@ -231,3 +319,12 @@ class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
     account_id: str = Field(nullable=False, index=True, max_length=64)
     totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
     expires_at: datetime = Field(nullable=False, index=True, sa_type=DateTime)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )

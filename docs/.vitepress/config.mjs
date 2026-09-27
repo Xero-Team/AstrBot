@@ -183,6 +183,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: '项目架构', link: '/architecture' },
+              { text: '持久化升级与迁移', link: '/persistence-upgrades' },
               { text: '源码开发', link: '/development' },
               { text: 'Linux 开发环境', link: '/linux' },
               {
@@ -445,6 +446,10 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: 'Architecture', link: '/architecture' },
+              {
+                text: 'Persistence Upgrade and Migration',
+                link: '/persistence-upgrades',
+              },
               { text: 'Source Development', link: '/development' },
               { text: 'Linux Development', link: '/linux' },
               {

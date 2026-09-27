@@ -49,7 +49,7 @@ At startup, AstrBot recursively inserts missing current defaults, fixes key orde
 
 Object layouts inside `provider_sources`, `provider`, and `platform` come from the currently registered type templates. Do not copy old objects from documentation. Create them in the WebUI and inspect the saved result if necessary. A model references its source through `provider_source_id`; use the WebUI when renaming or deleting a source so references are updated together.
 
-Unknown keys, including any legacy `config_version`, are removed at load time. The configuration applies no in-place migration: a config is built from the current `DEFAULT_CONFIG` and profile schema, and a breaking change means deleting `data/cmd_config.json` (and any `data/config/abconf_*.json`) and reconfiguring.
+Unknown keys, including any legacy `config_version`, are removed at load time. The configuration applies no in-place migration: a config is built from the current `DEFAULT_CONFIG` and profile schema, and a breaking change means deleting `data/cmd_config.json` (and any `data/config/abconf_*.json`) and reconfiguring. See [Persistence Upgrade and Migration](./persistence-upgrades) for the planned data-preserving path.
 
 ## Inbound routing
 

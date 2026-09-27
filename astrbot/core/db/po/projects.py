@@ -1,11 +1,11 @@
 import uuid
+from datetime import UTC, datetime
 
+from sqlalchemy import DateTime
 from sqlmodel import Field, SQLModel, UniqueConstraint
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class ChatUIProject(TimestampMixin, SQLModel, table=True):
+class ChatUIProject(SQLModel, table=True):
     """This class represents projects for organizing ChatUI conversations.
 
     Projects allow users to group related conversations together.
@@ -13,10 +13,10 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
 
     __tablename__ = "chatui_projects"  # type: ignore
 
-    inner_id: int | None = Field(
+    id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     project_id: str = Field(
         max_length=36,
@@ -32,12 +32,14 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """Title of the project"""
     description: str | None = Field(default=None, max_length=1000)
     """Description of the project"""
-
-    __table_args__ = (
-        UniqueConstraint(
-            "project_id",
-            name="uix_chatui_project_id",
-        ),
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
     )
 
 
@@ -47,14 +49,23 @@ class SessionProjectRelation(SQLModel, table=True):
     __tablename__ = "session_project_relations"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     session_id: str = Field(nullable=False, max_length=100)
     """Session ID from PlatformSession"""
     project_id: str = Field(nullable=False, max_length=36)
     """Project ID from ChatUIProject"""
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(

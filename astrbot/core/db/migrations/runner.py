@@ -128,6 +128,13 @@ async def run_migrations(
             f"{head}; restore a backup or upgrade the application",
         )
 
+    if applied and set(applied) != set(range(1, current + 1)):
+        # A contiguous ledger is the invariant of forward-only revisions. A gap
+        # would otherwise let ``current`` skip an unapplied step silently.
+        raise MigrationError(
+            f"store {store!r} has a gap in its applied revisions; restore a backup",
+        )
+
     by_revision = {step.revision: step for step in ordered}
     for revision in sorted(applied):
         step = by_revision.get(revision)

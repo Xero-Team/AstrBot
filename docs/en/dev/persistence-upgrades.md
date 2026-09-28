@@ -154,7 +154,7 @@ MIGRATIONS = (
 4. If `current` is higher than the code's maximum revision, fail immediately
    with a restore-or-upgrade hint.
 5. Verify every applied step's checksum against the code; a missing or changed
-   step fails startup.
+   step, or a gap in the applied revisions, fails startup.
 6. For each `revision > current`, ascending:
    - emit a driver-level `BEGIN`;
    - run `upgrade(conn)`, then write the ledger row;
@@ -259,7 +259,7 @@ rather than several SQLite steps:
 These tests lock the migration system:
 
 - `tests/unit/db/test_migrations_runner.py`: fresh run, no-op re-run, checksum
-  drift, store ahead of code, missing step, failed-step rollback.
+  drift, store ahead of code, missing step, ledger gap, failed-step rollback.
 - `tests/unit/db/test_migrations_equivalence.py`: a `create_all` store and a
   store migrated to head have identical tables, columns, indexes, unique
   constraints, and foreign keys.

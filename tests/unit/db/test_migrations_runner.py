@@ -195,3 +195,28 @@ async def test_duplicate_revisions_are_rejected(tmp_path):
             )
     finally:
         await dispose_async_engine(engine, None)
+
+
+async def test_gap_in_applied_revisions_refuses_to_start(tmp_path):
+    engine = await _make_engine(tmp_path)
+    try:
+        await run_migrations(
+            engine,
+            "main",
+            [Migration(1, "one", _noop()), Migration(2, "two", _noop())],
+        )
+        # Simulate a store whose middle ledger row was lost or removed.
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    f"DELETE FROM {LEDGER_TABLE} WHERE store = 'main' AND revision = 1"
+                ),
+            )
+        with pytest.raises(MigrationError, match="gap in its applied revisions"):
+            await run_migrations(
+                engine,
+                "main",
+                [Migration(1, "one", _noop()), Migration(2, "two", _noop())],
+            )
+    finally:
+        await dispose_async_engine(engine, None)

@@ -113,7 +113,9 @@ async def import_legacy_main_database(
     import_all_models()
     await run_migrations(dest_engine, "main", migrations)
 
-    source = sqlite3.connect(f"file:{legacy_path}?mode=ro", uri=True)
+    # ``as_uri`` percent-encodes the path, so a data root containing ``#``, ``?``
+    # or a space is not misread as a URI fragment or query.
+    source = sqlite3.connect(f"{legacy_path.resolve().as_uri()}?mode=ro", uri=True)
     source.row_factory = sqlite3.Row
     copied = 0
     try:

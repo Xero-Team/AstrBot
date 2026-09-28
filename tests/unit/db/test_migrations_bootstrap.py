@@ -200,6 +200,23 @@ async def test_database_initialize_imports_explicit_legacy_path(tmp_path):
         await db.close()
 
 
+async def test_import_handles_legacy_path_with_uri_characters(tmp_path):
+    root = tmp_path / "data #1 dir"
+    root.mkdir()
+    legacy = root / "data_v4.db"
+    _write_legacy(legacy)
+    db = SQLiteDatabase(str(root / "astrbot.db"), str(legacy))
+    try:
+        await db.initialize()
+        async with db.get_db() as session:
+            conversations = (
+                (await session.execute(select(ConversationV2))).scalars().all()
+            )
+        assert [conversation.id for conversation in conversations] == [3]
+    finally:
+        await db.close()
+
+
 async def test_database_without_legacy_path_never_imports_sibling(tmp_path):
     legacy = tmp_path / "data_v4.db"
     _write_legacy(legacy)

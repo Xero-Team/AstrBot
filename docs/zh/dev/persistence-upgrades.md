@@ -118,7 +118,7 @@ MIGRATIONS = (
 2. 确保 `_schema_migrations` 存在。
 3. 读取该 store 已应用的 revision；`current = max(applied)`，没有则为 0。
 4. 若 `current` 高于代码里的最大 revision：立即失败，提示恢复备份或升级应用。
-5. 逐个校验已应用步骤的 checksum 与代码一致；任一缺失或变化、或已应用 revision 出现空档，即失败。
+5. 逐个校验已应用步骤的 checksum 与代码一致；任一缺失或变化、或已应用 revision 出现空档，即失败。待执行步骤还必须从 `current + 1` 到 head 连续无空档，声明里出现空档会在执行任何步骤前被拒绝，而不是先跑后面的步骤、让下一次启动才发现 ledger 空档。
 6. 对每个 `revision > current` 的步骤，升序执行：
    - 在驱动层显式 `BEGIN`；
    - `upgrade(conn)`，然后写 ledger 行；
@@ -174,7 +174,7 @@ MIGRATIONS = (
 
 迁移系统由以下测试锁定：
 
-- `tests/unit/db/test_migrations_runner.py`：空库跑完、重复 no-op、checksum 漂移、store 超前、缺失步骤、ledger 空档、失败回滚。
+- `tests/unit/db/test_migrations_runner.py`：空库跑完、重复 no-op、checksum 漂移、store 超前、缺失步骤、ledger 空档、声明序列空档、失败回滚。
 - `tests/unit/db/test_migrations_equivalence.py`：`create_all` 建的库与迁移到 head 的库，表、列、索引、唯一约束和外键一致。
 - `tests/unit/db/test_migrations_bootstrap.py`：旧形状 `data_v4.db` 导入到 `astrbot.db`，含列改名、丢弃旧列、补齐新 NOT NULL 默认列、JSON/时间戳保持类型；未显式传入旧路径时不导入。
 - `tests/unit/db/test_foreign_keys.py`：`PRAGMA foreign_keys=ON` 生效，父行删除时级联清理子行。

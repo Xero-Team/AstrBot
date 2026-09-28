@@ -197,6 +197,26 @@ async def test_duplicate_revisions_are_rejected(tmp_path):
         await dispose_async_engine(engine, None)
 
 
+async def test_non_contiguous_sequence_refuses_before_applying_any_step(tmp_path):
+    engine = await _make_engine(tmp_path)
+    try:
+        # Revision 2 is missing. Applying 1 and 3 would record a gapped ledger,
+        # so the first startup must refuse instead of bricking the next one.
+        with pytest.raises(MigrationError, match="has a gap between revision"):
+            await run_migrations(
+                engine,
+                "main",
+                [
+                    Migration(1, "one", _create_widgets()),
+                    Migration(3, "three", _noop()),
+                ],
+            )
+        assert await _ledger_rows(engine, "main") == []
+        assert "widgets" not in await _table_names(engine)
+    finally:
+        await dispose_async_engine(engine, None)
+
+
 async def test_gap_in_applied_revisions_refuses_to_start(tmp_path):
     engine = await _make_engine(tmp_path)
     try:

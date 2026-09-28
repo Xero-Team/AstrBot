@@ -135,6 +135,16 @@ async def run_migrations(
             f"store {store!r} has a gap in its applied revisions; restore a backup",
         )
 
+    pending = [step.revision for step in ordered if step.revision > current]
+    if pending != list(range(current + 1, head + 1)):
+        # The steps about to run must bridge ``current`` to ``head`` without a
+        # hole. Otherwise a first startup applies the later steps and writes a
+        # gapped ledger, and every following startup fails the check above.
+        raise MigrationError(
+            f"store {store!r} migration sequence has a gap between revision "
+            f"{current + 1} and {head}; restore a backup or fix the build",
+        )
+
     by_revision = {step.revision: step for step in ordered}
     for revision in sorted(applied):
         step = by_revision.get(revision)

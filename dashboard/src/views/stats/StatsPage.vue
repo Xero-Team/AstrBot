@@ -440,6 +440,7 @@ const themePalette = computed(() => {
 
 let refreshTimer: number | null = null;
 let copyFeedbackTimer: number | null = null;
+let isUnmounted = false;
 
 async function copyUmo(umo: string): Promise<void> {
   const copied = await copyToClipboard(umo);
@@ -904,12 +905,15 @@ watch(selectedRange, async () => {
 
 onMounted(async () => {
   await refreshStats();
+  // The initial request may settle after this component has unmounted.
+  if (isUnmounted) return;
   refreshTimer = window.setInterval(() => {
     void refreshStats();
   }, 60_000);
 });
 
 onBeforeUnmount(() => {
+  isUnmounted = true;
   if (refreshTimer !== null) {
     window.clearInterval(refreshTimer);
   }

@@ -4,6 +4,9 @@ import { flushPromises } from '@vue/test-utils';
 import Chat from '@/components/chat/Chat.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
+const nextAnimationFrame = () =>
+  new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
 const testState = vi.hoisted(() => ({
   route: {
     path: '/chat',
@@ -519,7 +522,7 @@ describe('Chat view smoke', () => {
 
     await button.trigger('click');
     await flushPromises();
-    await nextTick();
+    await nextAnimationFrame();
     await nextTick();
 
     expect(wrapper.find('.scroll-to-bottom-btn').exists()).toBe(false);

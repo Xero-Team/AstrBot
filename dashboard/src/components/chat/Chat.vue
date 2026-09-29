@@ -743,6 +743,7 @@ const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const suppressAutoScroll = ref(false);
+let autoScrollFrame: number | null = null;
 const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
@@ -1097,6 +1098,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   flushDraft();
   window.removeEventListener('beforeunload', flushDraft);
+  if (autoScrollFrame !== null) {
+    window.cancelAnimationFrame(autoScrollFrame);
+    autoScrollFrame = null;
+  }
   pointerMediaQuery.removeEventListener('change', handlePointerChange);
   cleanupMediaCache();
 });
@@ -1853,7 +1858,10 @@ function maybeLoadEarlierOnScroll(container: HTMLElement) {
 }
 
 function scrollToBottom() {
-  void nextTick(() => {
+  // Coalesce stream, mutation, and resize notifications into one scroll per frame.
+  if (autoScrollFrame !== null) return;
+  autoScrollFrame = window.requestAnimationFrame(() => {
+    autoScrollFrame = null;
     const container = messagesContainer.value;
     if (!container || suppressAutoScroll.value) return;
     container.scrollTop = container.scrollHeight;

@@ -14,8 +14,8 @@ from sqlmodel import SQLModel, col, select
 from astrbot.core.db import create_sqlite_async_engine, dispose_async_engine
 from astrbot.core.db.migrations import bootstrap
 from astrbot.core.db.migrations.bootstrap import import_legacy_main_database
-from astrbot.core.db.migrations.runner import MigrationError
 from astrbot.core.db.migrations.main import MIGRATIONS
+from astrbot.core.db.migrations.runner import MigrationError
 from astrbot.core.db.po import (
     ApiKey,
     AuthAuditLog,

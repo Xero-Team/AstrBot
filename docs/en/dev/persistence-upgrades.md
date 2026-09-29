@@ -185,8 +185,9 @@ Implementation notes:
 - Migrations run serially and asynchronously before any read or write: inside
   each store's `initialize()`, and for config before `AstrBotConfig` first reads
   a value.
-- Each store's `initialize()` guards with a lock so it runs once per process;
-  process-level serialization comes from the startup order.
+- The application holds `runtime_instance_lock` around startup, so migrations
+  run on one process only; each store's `initialize()` guards with a lock so its
+  chain runs once per process.
 - `config` migration runs before logging is configured, because log settings
   come from config.
 

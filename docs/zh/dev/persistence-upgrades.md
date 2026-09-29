@@ -136,7 +136,7 @@ MIGRATIONS = (
 ### 并发与时机
 
 - 迁移在任何读写之前串行、异步执行：各自 `initialize()` 内，config 则在 `AstrBotConfig` 首次读值前。
-- 每个 store 的 `initialize()` 用锁保证同进程内只跑一次；进程级串行由启动顺序保证。
+- 应用在启动期间持有 `runtime_instance_lock`，所以迁移只在单个进程上运行；每个 store 的 `initialize()` 用锁保证本进程内只跑一次。
 - config 迁移要在日志配置之前，因为日志设置来自 config。
 
 ### 与 `create_all` 的关系

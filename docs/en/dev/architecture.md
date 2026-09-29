@@ -92,7 +92,7 @@ astrbot/core/db/
 2. `SQLModel.metadata.create_all`
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-Startup does not inspect `PRAGMA table_info` or run `ALTER TABLE` on an existing file. `create_all` creates missing tables only; leftover columns on an old `data_v4.db` stay in place. Upgrading to a breaking schema means deleting the affected store (`data/data_v4.db*`, `data/knowledge_base/`, or `data/cmd_config.json`) and starting from an empty file, then reconfiguring. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
+Startup does not inspect `PRAGMA table_info` or run `ALTER TABLE` on an existing file. `create_all` creates missing tables only; leftover columns on an old `data_v4.db` stay in place. Upgrading to a breaking schema means deleting the affected store (`data/data_v4.db*`, `data/knowledge_base/`, or `data/cmd_config.json`) and starting from an empty file, then reconfiguring. See [Persistence Upgrade and Migration](./persistence-upgrades) for the current fallback and the planned migration design. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
 
 Mixins obtain sessions through the typed `store_session(self)` helper and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
 

@@ -92,7 +92,7 @@ astrbot/core/db/
 2. `SQLModel.metadata.create_all`
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-启动时不检查 `PRAGMA table_info`，也不对已有文件执行 `ALTER TABLE`。`create_all` 只创建缺失表；旧 `data_v4.db` 上的残留列会留在原地。遇到破坏性 schema 变更时，删除对应存储（`data/data_v4.db*`、`data/knowledge_base/` 或 `data/cmd_config.json`）后从空文件启动并重新配置。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
+启动时不检查 `PRAGMA table_info`，也不对已有文件执行 `ALTER TABLE`。`create_all` 只创建缺失表；旧 `data_v4.db` 上的残留列会留在原地。遇到破坏性 schema 变更时，删除对应存储（`data/data_v4.db*`、`data/knowledge_base/` 或 `data/cmd_config.json`）后从空文件启动并重新配置。当前兜底与计划中的迁移设计见[持久化升级与迁移](./persistence-upgrades)。测试继续使用临时库。将来若确实需要 SQLite 的 `WHERE` 索引，必须把 `Index(..., sqlite_where=...)` 声明在模型上，让 `create_all` 在空库上创建。
 
 Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持有 engine，也不互相导入对方的查询函数。跨域写入由 composite store 或 application/domain service 持有一个事务边界。
 

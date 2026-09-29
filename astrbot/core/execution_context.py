@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 from astrbot.core.agent.follow_up import FollowUpCoordinator
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.llm_types import LLMResponse, ProviderRequest
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import ToolImageCache
@@ -387,6 +387,7 @@ class CoreExecutionContext:
         prompt: str | None = None,
         image_urls: list[str] | None = None,
         audio_urls: list[str] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
@@ -404,6 +405,7 @@ class CoreExecutionContext:
             prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
             image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
             audio_urls: List of audio URLs or local paths to include in the prompt, if `contexts` and `prompt` are both provided, `audio_urls` will be appended to the last user message
+            extra_user_content_parts: Extra content parts appended to the user message. Use this for per-turn context that must not be persisted into the conversation history (e.g. `TextPart(text=...).mark_as_temp()`)
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
@@ -462,6 +464,7 @@ class CoreExecutionContext:
             prompt=prompt,
             image_urls=image_urls or [],
             audio_urls=audio_urls or [],
+            extra_user_content_parts=extra_user_content_parts or [],
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",

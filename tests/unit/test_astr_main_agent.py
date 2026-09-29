@@ -3352,6 +3352,91 @@ class TestBuildMainAgent:
         assert result.provider_request is not existing_req
         assert result.provider_request.prompt == "Existing prompt"
 
+    @pytest.mark.asyncio
+    async def test_build_main_agent_refreshes_queued_conversation_history(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Queued handler requests reload current history before the LLM call."""
+        module = ama
+        stale_conv = MagicMock(spec=Conversation)
+        stale_conv.cid = "conv-id"
+        stale_conv.prompt_id = None
+        stale_conv.history = json.dumps([{"role": "user", "content": "old"}])
+        refreshed_conv = MagicMock(spec=Conversation)
+        refreshed_conv.cid = "conv-id"
+        refreshed_conv.prompt_id = None
+        refreshed_conv.history = json.dumps(
+            [
+                {"role": "user", "content": "old"},
+                {"role": "assistant", "content": "reply while queued"},
+            ]
+        )
+        queued_req = ProviderRequest(prompt="Hello")
+        queued_req.conversation = stale_conv
+        mock_event.set_extra("provider_request", queued_req)
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        conv_mgr = mock_context.conversation_manager
+        conv_mgr.get_conversation = AsyncMock(return_value=refreshed_conv)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                provider=mock_provider,
+            )
+
+        assert result is not None
+        conv_mgr.get_conversation.assert_awaited_once_with(
+            mock_event.unified_msg_origin, "conv-id"
+        )
+        stored_contexts = [
+            json.dumps(item, ensure_ascii=False)
+            for item in result.provider_request.contexts
+        ]
+        assert any("reply while queued" in item for item in stored_contexts)
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_queued_missing_conversation_sets_error(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """A queued request for a deleted conversation fails with a user error."""
+        module = ama
+        stale_conv = MagicMock(spec=Conversation)
+        stale_conv.cid = "conv-id"
+        stale_conv.prompt_id = None
+        stale_conv.history = "[]"
+        queued_req = ProviderRequest(prompt="Hello")
+        queued_req.conversation = stale_conv
+        mock_event.set_extra("provider_request", queued_req)
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        mock_context.conversation_manager.get_conversation = AsyncMock(
+            return_value=None
+        )
+
+        result = await module.build_main_agent(
+            event=mock_event,
+            plugin_context=mock_context,
+            config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            provider=mock_provider,
+        )
+
+        assert result is None
+        assert mock_event.get_extra(ama.LLM_ERROR_MESSAGE_EXTRA_KEY)
+
 
 class TestHandleWebchat:
     """Tests for _handle_webchat function."""

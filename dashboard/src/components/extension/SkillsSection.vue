@@ -54,6 +54,20 @@
             <h3 class="skills-list-title text-h3">
               {{ tm('status.installed') }}
             </h3>
+            <div class="skills-search-wrap">
+              <v-text-field
+                v-model="skillSearch"
+                :label="tm('skills.searchPlaceholder')"
+                prepend-inner-icon="mdi-magnify"
+                density="compact"
+                variant="solo-filled"
+                flat
+                clearable
+                hide-details
+                single-line
+                class="skills-search-field"
+              />
+            </div>
             <div class="skills-list-actions">
               <template v-if="batchSelectionEnabled">
                 <v-btn
@@ -96,7 +110,7 @@
                 variant="tonal"
                 size="small"
                 prepend-icon="mdi-select-multiple"
-                :disabled="deletableSkills.length === 0"
+                :disabled="visibleDeletableSkills.length === 0"
                 @click="startBatchSelection"
               >
                 {{ tm('skills.select') }}
@@ -104,9 +118,16 @@
             </div>
           </div>
 
-          <div class="skills-list">
+          <div v-if="filteredSkills.length === 0" class="text-center pa-8">
+            <v-icon size="64" color="on-surface-variant">mdi-magnify</v-icon>
+            <p class="text-medium-emphasis mt-4">
+              {{ tm('skills.noSearchResult') }}
+            </p>
+          </div>
+
+          <div v-else class="skills-list">
             <OutlinedActionListItem
-              v-for="skill in skills"
+              v-for="skill in filteredSkills"
               :key="skill.name"
               :title="skill.name"
               :class="{
@@ -919,6 +940,7 @@ import { skillApi, systemConfigApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import { useCustomizerStore } from '@/stores/customizer';
+import { buildSearchQuery, matchesText } from '@/utils/pluginSearch';
 
 const STATUS_WAITING = 'waiting' as const;
 const STATUS_UPLOADING = 'uploading' as const;
@@ -1030,6 +1052,7 @@ const customizer = useCustomizerStore();
 
 const mode = ref<SkillMode>('local');
 const skills = ref<SkillItem[]>([]);
+const skillSearch = ref('');
 const loading = ref(false);
 const runtime = ref('local');
 const sandboxCache = reactive<SandboxCacheState>({
@@ -1403,14 +1426,25 @@ function isReadOnlySourceSkill(skill: SkillItem) {
   );
 }
 
-const deletableSkills = computed(() =>
-  skills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
+const filteredSkills = computed(() => {
+  const query = buildSearchQuery(skillSearch.value);
+  if (!query) return skills.value;
+  return skills.value.filter((skill) =>
+    [skill.name, skill.description, skill.path].some((field) =>
+      matchesText(field, query),
+    ),
+  );
+});
+
+// Select-all only applies to the currently visible (filtered) deletable skills.
+const visibleDeletableSkills = computed(() =>
+  filteredSkills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
 );
 
 const allDeletableSelected = computed(
   () =>
-    deletableSkills.value.length > 0 &&
-    deletableSkills.value.every((skill) =>
+    visibleDeletableSkills.value.length > 0 &&
+    visibleDeletableSkills.value.every((skill) =>
       selectedSkillNames.value.includes(skill.name),
     ),
 );
@@ -1801,14 +1835,16 @@ function toggleSelectAll() {
     selectedSkillNames.value = [];
     return;
   }
-  selectedSkillNames.value = deletableSkills.value.map((skill) => skill.name);
+  selectedSkillNames.value = visibleDeletableSkills.value.map(
+    (skill) => skill.name,
+  );
 }
 
 function confirmBatchDelete() {
   const selectedNames = new Set(selectedSkillNames.value);
   batchDeleteTargets.value = [
     ...new Set(
-      deletableSkills.value
+      visibleDeletableSkills.value
         .filter((skill) => selectedNames.has(skill.name))
         .map((skill) => skill.name),
     ),
@@ -2315,6 +2351,16 @@ watch(mode, async (nextMode) => {
   }
 });
 
+// Keep the batch selection in sync with the active filter so skills hidden
+// by the search can never be included in a batch delete.
+watch(visibleDeletableSkills, (visibleSkills) => {
+  if (!batchSelectionEnabled.value) return;
+  const visibleNames = new Set(visibleSkills.map((skill) => skill.name));
+  selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
+    visibleNames.has(name),
+  );
+});
+
 watch(uploadDialog, (isOpen) => {
   if (!isOpen && !uploading.value) {
     resetUploadState();
@@ -2340,12 +2386,11 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  justify-content: space-between;
   margin-bottom: 16px;
 }
 
 .skills-list-title {
-  margin: 0;
+  margin: 0 auto 0 0;
 }
 
 .skills-list-actions {
@@ -2353,7 +2398,15 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: auto;
+}
+
+.skills-search-wrap {
+  flex: 0 1 300px;
+  min-width: 200px;
+}
+
+.skills-search-field {
+  width: 100%;
 }
 
 .skills-list {
@@ -2922,6 +2975,10 @@ onMounted(async () => {
 @media (max-width: 640px) {
   .skills-list-header {
     align-items: stretch;
+  }
+
+  .skills-search-wrap {
+    flex: 1 1 100%;
   }
 
   .skills-list-actions {

@@ -1,3 +1,6 @@
+// ?no-inline keeps the asset URL matchable by the dark mode CSS rules.
+import matrixIcon from '@/assets/images/platform_logos/matrix.svg?no-inline';
+import mattermostIcon from '@/assets/images/platform_logos/mattermost.svg?no-inline';
 import { docsHref } from '@/utils/docsHref';
 
 const PLATFORM_ICON_URLS: Record<string, string> = {
@@ -55,12 +58,8 @@ const PLATFORM_ICON_URLS: Record<string, string> = {
   ).href,
   line: new URL('@/assets/images/platform_logos/line.png', import.meta.url)
     .href,
-  matrix: new URL('@/assets/images/platform_logos/matrix.svg', import.meta.url)
-    .href,
-  mattermost: new URL(
-    '@/assets/images/platform_logos/mattermost.svg',
-    import.meta.url,
-  ).href,
+  matrix: matrixIcon,
+  mattermost: mattermostIcon,
 };
 
 const TUTORIAL_PATHS: Record<string, string> = {

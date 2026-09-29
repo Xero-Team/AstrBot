@@ -992,9 +992,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             elif isinstance(i, MentionAll):
                 logger.debug("qq_official 忽略 MentionAll")
             elif isinstance(i, Mention):
-                target_id = str(i.target)
+                target_id = str(i.target) if i.target else ""
                 if target_id and target_id != "all":
-                    plain_text += f"<@{target_id}>"
+                    plain_text += f'<qqbot-at-user id="{target_id}" />'
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (

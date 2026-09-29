@@ -61,6 +61,7 @@ from astrbot.core.platform.send_result import DeliveryReceipt
 from astrbot.core.prompt_error_reply import (
     get_agent_error_message,
 )
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
@@ -71,6 +72,28 @@ from ....context import PipelineContext, call_event_hook
 _FALLBACK_HISTORY_COMMITTER = AssistantHistoryCommitter()
 _STOP_HISTORY_USER_TEXT = "Stop output."
 _STOP_HISTORY_ASSISTANT_TEXT = "Output stopped."
+
+
+async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
+    """Download file attachments before acquiring the session lock.
+
+    ``File.get_file`` caches the fetched bytes on the component, so the later
+    in-lock attachment pass becomes a no-op instead of serializing the session
+    behind a network download.
+
+    Args:
+        event: Incoming event whose direct and quoted files should be prepared.
+
+    Returns:
+        None.
+    """
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for reply_component in component.chain:
+                if isinstance(reply_component, File):
+                    await reply_component.get_file()
 
 
 def _history_merge_fields(
@@ -97,6 +120,9 @@ def _history_merge_fields(
 class InternalAgentSubStage:
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        if ctx.preferences is None:
+            raise RuntimeError("InternalAgentSubStage requires shared preferences")
+        self.session_services = SessionServiceManager(ctx.preferences)
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
@@ -443,11 +469,29 @@ class InternalAgentSubStage:
             if is_detached_work and isinstance(work_lock, str) and work_lock:
                 lock_key = work_lock
 
+            await _prepare_file_attachments(event)
+
             async with (
                 turn_cm,
                 self.ctx.execution_context.session_lock_manager.acquire_lock(lock_key),
             ):
                 logger.debug("acquired session lock for llm request")
+                current_config = self._profile_config(event)
+                llm_disabled = not current_config.get("provider_settings", {}).get(
+                    "enable", True
+                )
+                session_services = getattr(self, "session_services", None)
+                if not llm_disabled and session_services is not None:
+                    llm_disabled = (
+                        not await session_services.should_process_llm_request(event)
+                    )
+                if llm_disabled:
+                    logger.debug(
+                        "LLM was disabled while waiting for the session lock; "
+                        "skipping request for %s.",
+                        event.unified_msg_origin,
+                    )
+                    return
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 runner_stop_callback = None

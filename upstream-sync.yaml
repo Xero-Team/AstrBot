@@ -5,31 +5,44 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 69ae35a359e8c9a44375004e6b8252ee366102bb
-  synced_at_utc: 2026-09-26T05:01:51Z
+  commit: b53999e959cfc3b71d7b74713ddee837be843fcb
+  synced_at_utc: 2026-09-29T13:17:14Z
   sync_method: adapt
-  source_pr: '10219, 10221, 10218, 10222'
+  source_pr: >-
+    9705, 10061, 10183, 10184, 10193, 10209, 10216, 10217, 10227, 10229, 10231,
+    10234, 10237, 10238, 10243, 10245, 10246, 10247, 10248, 10253, 10256, 10257,
+    10270, 10271, 10272, 10273, 10274
   note: >-
-    Reviewed 67c74b7ed8d5b8df170f849faaa431fc329c4ddc..69ae35a359e8c9a44375004e6b8252ee366102bb
-    (4 commits). Adapted three: #10219 (preserve the user scroll offset while
-    earlier WebChat history loads, mapped onto the fork Chat.vue
-    shouldStickToBottom anchor logic and covered in chatViewSmoke.vitest.ts),
-    #10221 (auto-scroll the reasoning activity panel, added to the fork
-    ReasoningSidebar.vue with a chatPanels.vitest.ts regression), and #10218
-    (send x-astrbot-conversation-id through the fork extra_headers_kwargs helper
-    so custom provider headers survive; mapped the removed openai_source.py onto
-    openai_chat_completions_source.py, threaded the ID through the standalone
-    OpenAI Responses state/background/cancel helpers, and kept conditional
-    query_kwargs in the Anthropic/OpenAI text paths; for Gemini, replaced the
-    upstream provider-wide temporary-header mutation and its request lock with a
-    per-request HttpOptions header on the GenerateContentConfig, so concurrent
-    conversations are isolated without serializing streams; an httpx request hook
-    reasserts the AstrBot user agent, which the per-request options would
-    otherwise turn into a duplicate SDK User-Agent header). Skipped #10222 (desktop
-    workspace directory picker) because its client-controlled custom project
-    workspace path conflicts with the fork's server-derived
-    astrbot/core/project_workspace.py roots and the fork project API has no
-    workspace_type/workspace_path fields; revisit if the fork adopts backend
-    project workspace types. No upstream version change in this interval, so no
-    version or changelog update. Focused pytest and dashboard vitest checks
-    passed.
+    Reviewed 69ae35a359e8c9a44375004e6b8252ee366102bb..b53999e959cfc3b71d7b74713ddee837be843fcb
+    (30 commits). upstream/master has since advanced two further commits
+    (5a4745f151c9f64a9e81bd19b26dd07f5ff3b804 docs, fe29538e6b0581ab49e75b4dde86bfdd7c81fb57 icons)
+    that are out of scope for this window and remain pending. Adapted 15: #10243
+    (reasoning panel scroll intent on the fork ReasoningSidebar), #10238 (reload
+    queued conversation history under the session lock in build_main_agent), #10237
+    (forward extra_user_content_parts through CoreExecutionContext.tool_loop_agent),
+    #10229 (weixin_oc positive timeout floors with the fork's 5000ms long-poll
+    floor kept), #10209 (prepare File attachments before the session lock; the
+    provider-wake-prefix parts were dropped), #10234 (recheck provider enable and
+    the session/sender overlay after acquiring the lock), #10184 (github-actions
+    bumps onto the fork's peeled pinned SHAs; no setup-qemu-action), #10247 (chat
+    draft persistence ported to a typed .ts module), #10217 (Skills/MCP search only;
+    the MCP batch-selection feature and ja/ru locales were omitted), #10246 (UTC
+    history cutoff in the message_history store), #10061 (dark-mode icons rule in
+    vuetify-overrides.scss, provider monochrome set, and platform template order),
+    #9705 (qqofficial Mention serialization to qqbot-at-user markup plus
+    mention-stripping at both incoming sites), #10271 (requestAnimationFrame-coalesced
+    chat scroll), #10274 (sort only touched trace spans), #10193 (shorten the
+    <name>-<40hex> plugin archive root before extract_zip_safely). Cherry-picked 7:
+    #10231, #10216, #10183, #10248, #10270, #10272, #10273. Skipped 8: #10245
+    (provider_wake_prefix was removed from the fork), #10253 and #10257 (built on the
+    upstream ChatUI scroll state machine the fork never adopted; #10257 is recorded as
+    revisit-when if streamed auto-scroll regresses), #10227, #10256 and f0ab10a3 (the
+    macOS desktop shell/mobileDrawer layout the fork does not ship), bd9df8bf and
+    bcf43547 (the 4.28.2 bump and its revert; the fork is already 4.28.2 with its own
+    changelog). Three corrective follow-ups are included in the same branch:
+    3cd1aa3da (use the fork's semantic design-system tokens for the new search empty
+    states), 55284f384 (pyright arg-type suppression for the #10231 log-base signature)
+    and 6aaf6b6ca (shared-preferences guard for the #10234 session service). No
+    upstream version change in this window, so no version or changelog update. Focused
+    pytest, uv run pytest tests/unit --test-profile blocking, make check, make quality,
+    and the Dashboard build all passed.

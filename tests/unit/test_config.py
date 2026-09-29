@@ -109,12 +109,12 @@ def test_platform_templates_prioritize_current_adapters_without_public_defaults(
         "QQ 官方机器人(Websocket, 推荐)",
         "QQ 官方机器人(Webhook)",
         "OneBot v11",
-        "个人微信",
         "飞书(Lark)",
+        "个人微信",
         "企业微信智能机器人",
         "企业微信(含微信客服)",
-        "钉钉(DingTalk)",
         "微信公众平台",
+        "钉钉(DingTalk)",
     ]
     assert templates["OneBot v11"]["ws_reverse_host"] == "127.0.0.1"
     assert templates["企业微信智能机器人"]["callback_server_host"] == "127.0.0.1"

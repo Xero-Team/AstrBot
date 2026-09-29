@@ -45,3 +45,11 @@
 .v-theme--AstrBotDark .provider-icon--monochrome {
   filter: brightness(0) invert(1);
 }
+
+// Invert the black Mattermost and Matrix logos on dark surfaces.
+// The leading slash keeps these selectors from matching inline SVG data URIs,
+// where words like "matrix" also appear in transform functions.
+.v-theme--AstrBotDark img[src*='/mattermost'],
+.v-theme--AstrBotDark img[src*='/matrix'] {
+  filter: brightness(0) invert(1);
+}

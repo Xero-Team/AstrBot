@@ -183,6 +183,12 @@ const MONOCHROME_PROVIDER_ICONS = new Set([
   'openrouter',
   'opencode-go',
   'typesafe',
+  'microsoft',
+  'fishaudio',
+  'vllm',
+  'huggingface',
+  'coze',
+  'deerflow',
 ]);
 
 export function isMonochromeProviderIcon(type: string): boolean {

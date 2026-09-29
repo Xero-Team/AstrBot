@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, select, update
@@ -106,7 +106,8 @@ class MessageHistoryStoreMixin(DatabaseStoreMixin):
         async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
-                now = datetime.now()
+                # created_at stores UTC wall-clock values, so compare in UTC.
+                now = datetime.now(UTC)
                 cutoff_time = now - timedelta(seconds=offset_sec)
                 await session.execute(
                     delete(PlatformMessageHistory).where(

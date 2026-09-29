@@ -73,6 +73,28 @@ _STOP_HISTORY_USER_TEXT = "Stop output."
 _STOP_HISTORY_ASSISTANT_TEXT = "Output stopped."
 
 
+async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
+    """Download file attachments before acquiring the session lock.
+
+    ``File.get_file`` caches the fetched bytes on the component, so the later
+    in-lock attachment pass becomes a no-op instead of serializing the session
+    behind a network download.
+
+    Args:
+        event: Incoming event whose direct and quoted files should be prepared.
+
+    Returns:
+        None.
+    """
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for reply_component in component.chain:
+                if isinstance(reply_component, File):
+                    await reply_component.get_file()
+
+
 def _history_merge_fields(
     base_history: object,
     message_to_save: list[dict],
@@ -442,6 +464,8 @@ class InternalAgentSubStage:
             work_lock = event.get_extra("btw_agent_lock_key")
             if is_detached_work and isinstance(work_lock, str) and work_lock:
                 lock_key = work_lock
+
+            await _prepare_file_attachments(event)
 
             async with (
                 turn_cm,

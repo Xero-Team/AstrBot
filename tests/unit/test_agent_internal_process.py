@@ -4,7 +4,7 @@ import pytest
 
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astr_main_agent import MainAgentBuildConfig
-from astrbot.core.message.components import Json
+from astrbot.core.message.components import File, Json, Reply
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
 
 
@@ -1305,3 +1305,19 @@ async def test_refresh_prepared_request_keeps_hook_extra_parts(tmp_path, monkeyp
     assert texts.count("plugin note") == 1
     assert all(url.startswith("data:image/jpeg") for url in req.image_urls)
     assert not any("image omitted" in text for text in texts)
+
+
+@pytest.mark.asyncio
+async def test_prepare_file_attachments_fetches_direct_and_quoted_files(monkeypatch):
+    get_file = AsyncMock(return_value="/tmp/astrbot-file")
+    monkeypatch.setattr(File, "get_file", get_file)
+    direct_file = File(name="direct.txt")
+    quoted_file = File(name="quoted.txt")
+    quoted = Reply(id="1", chain=[quoted_file])
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[direct_file, quoted]),
+    )
+
+    await internal._prepare_file_attachments(event)
+
+    assert get_file.await_count == 2

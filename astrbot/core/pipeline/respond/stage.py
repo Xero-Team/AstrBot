@@ -25,7 +25,7 @@ DEFAULT_LOG_BASE = 2.6
 def _resolve_log_base(value: float | str | None) -> float:
     """Return a log base that math.log accepts, or the documented default."""
     try:
-        log_base = float(value)
+        log_base = float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError) as e:
         logger.error(f"Failed to parse the segmented-reply log base: {e}")
         return DEFAULT_LOG_BASE

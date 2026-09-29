@@ -229,8 +229,8 @@ function processNewTraces(newTraces: unknown[]): void {
     return;
   }
 
-  for (const event of events.value) {
-    event.records.sort((a, b) => b.time - a.time);
+  for (const spanId of touched) {
+    eventIndex.value[spanId]?.records.sort((a, b) => b.time - a.time);
   }
   events.value.sort((a, b) => b.first_time - a.first_time);
 

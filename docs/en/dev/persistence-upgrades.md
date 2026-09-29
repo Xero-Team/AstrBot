@@ -4,17 +4,17 @@ This page is the contract for how AstrBot handles persistent state across
 versions. Read it before changing a database model, a configuration key, or a
 data directory layout.
 
-> **Status: design. Not implemented yet.** The migration runner described here
-> does not exist in the tree today. Until it lands, the current behavior is the
-> rebuild-not-migrate fallback in
-> [Before the migration system exists](#before-the-migration-system-exists).
+> **Status: implemented.** The per-store runner, ledger, main-database reshape,
+> and legacy import have landed. The main database is now `data/astrbot.db`; on
+> first startup the old `data/data_v4.db` is imported once and left on disk as a
+> backup.
 
 ## Goal
 
-AstrBot is moving to **data-preserving upgrades**: on startup, each persistent
-store is brought to the current schema by replaying ordered, recorded
-migrations, with no manual deletion. The point is not to ship a script per
-release. The point is a deterministic, recoverable startup step where:
+AstrBot uses **data-preserving upgrades**: on startup, each persistent store is
+brought to the current schema by replaying ordered, recorded migrations, with no
+manual deletion. The point is not to ship a script per release. The point is a
+deterministic, recoverable startup step where:
 
 - the current state of a store comes from the store itself, never inferred from
   filenames or release numbers;
@@ -72,10 +72,14 @@ exactly the flaw in the old `config_version` and `data_v4` scheme.
 
 | Store id | Location                    | Current entry point                                    |
 | -------- | --------------------------- | ------------------------------------------------------ |
-| `main`   | `data/data_v4.db`           | `astrbot/core/db/schema.py` `initialize_sqlite_schema` |
+| `main`   | `data/astrbot.db`           | `astrbot/core/db/schema.py` `initialize_sqlite_schema` |
 | `kb`     | `data/knowledge_base/kb.db` | `KBSQLiteDatabase.initialize`                          |
 | `doc`    | `<kb>/doc.db`               | `DocumentStorage.initialize`                           |
 | `config` | `data/cmd_config.json`      | `AstrBotConfig.__init__`                               |
+
+`data/astrbot.db` is this fork's new main-database name. The old
+`data/data_v4.db` is no longer opened directly; it is imported once on first
+startup (see [Legacy import](#legacy-import)).
 
 ### Revision and ledger
 
@@ -97,61 +101,79 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 
 - The `config` store is a file, so its ledger is an integer
   `schema_revision` inside `cmd_config.json`, with the same semantics. A file
-  cannot share the runner's SQLite transaction, so a step must write the
-  migrated values and `schema_revision` in one atomic snapshot through
+  cannot share the runner's SQLite transaction, so a step writes the migrated
+  values and `schema_revision` in one atomic snapshot through
   `AstrBotConfig.save_config` (temporary file, `fsync`, `os.replace`); writing
   the revision and the values separately can leave them out of sync after a
-  crash.
+  crash. A non-integer, boolean, or negative revision is treated as unset and
+  migrated; a revision newer than the code refuses startup.
 
 ### Step modules
 
 ```text
 astrbot/core/db/migrations/
   __init__.py
-  runner.py          # shared executor
-  main/0001_initial.py
-  main/0002_....py
-  kb/0001_initial.py
-  doc/0001_initial.py
+  runner.py     # shared executor: run_migrations / Migration
+  main.py       # main store sequence MIGRATIONS
+  kb.py         # knowledge-base metadata sequence MIGRATIONS
+  doc.py        # document store sequence MIGRATIONS
+  bootstrap.py  # one-time data_v4.db import
 astrbot/core/config/migrations/
-  0001_....py
+  __init__.py   # migrate_config_dict / CONFIG_SCHEMA_REVISION
 ```
 
-A step exports its identity and one forward function:
+Each store module exports a `MIGRATIONS` tuple ordered by revision. A step
+carries its identity and one forward function:
 
 ```python
-revision = 2
-description = "add provider_stats.duration_ms"
+async def _add_duration_ms(conn: AsyncConnection) -> None:
+    await conn.exec_driver_sql(
+        "ALTER TABLE provider_stats ADD COLUMN duration_ms INTEGER",
+    )
 
 
-def upgrade(conn) -> None: ...
+MIGRATIONS = (
+    Migration(1, "create current schema", _initial_schema),
+    Migration(2, "add provider_stats.duration_ms", _add_duration_ms),
+)
 ```
 
-- Ordering uses `revision` only. The `NNNN` filename prefix is for humans.
+- Ordering uses `revision` only; filenames and tuple position are for humans.
 - One step does one thing. A destructive change is split into expand and
   contract steps.
 - No `downgrade`.
+- `upgrade` receives one open `AsyncConnection` and runs SQL inside it.
 
 ### Runner behavior
 
-```text
-run_migrations(engine, store, steps):
-  1. take the process lock
-  2. ensure the ledger table
-  3. current = max(revision), or 0
-  4. verify every applied step's checksum matches the code; mismatch -> fail fast
-  5. if current > max(code revision): fail fast, tell the user to restore a backup
-  6. for each revision > current, ascending:
-       - snapshot the store to data/backups/ before a destructive step
-       - BEGIN -> upgrade(conn) -> write the ledger row -> COMMIT
-       - on error -> ROLLBACK, raise, do not start
-  7. no pending steps -> no-op
-```
+`run_migrations(engine, store, steps)` does:
 
-- The ledger row is committed in the same transaction as the step, so a crash
-  cannot record a step that only half-applied.
-- Checksum is the sha256 of the step source, detecting silent edits to an
-  applied step.
+1. Validate the sequence (unique revisions, all `>= 1`).
+2. Ensure `_schema_migrations` exists.
+3. Read the store's applied revisions; `current = max(applied)`, or 0.
+4. If `current` is higher than the code's maximum revision, fail immediately
+   with a restore-or-upgrade hint.
+5. Verify every applied step's checksum against the code; a missing or changed
+   step, or a gap in the applied revisions, fails startup. The pending steps
+   must also bridge `current + 1` to the head without a hole, so a declared gap
+   is rejected before any step runs instead of applying the later steps and then
+   failing the next startup's ledger check.
+6. For each `revision > current`, ascending:
+   - emit a driver-level `BEGIN`;
+   - run `upgrade(conn)`, then write the ledger row;
+   - `COMMIT` on success; on failure `ROLLBACK`, raise, and stop startup.
+7. No pending steps means a no-op.
+
+Implementation notes:
+
+- The ledger row commits in the same transaction as the step, so a crash cannot
+  record a step that only half-applied.
+- SQLite does **not** roll back DDL under `engine.begin()` (pysqlite only opens a
+  transaction before DML). The runner therefore uses an explicit driver-level
+  `BEGIN` to put DDL and the ledger row in one transaction instead. Do not change
+  it back to `engine.begin()`.
+- The checksum is the `sha256` of the `upgrade` source, detecting edits to an
+  applied step. **Editing an applied step fails startup**; that is intentional.
 - A failure refuses startup instead of continuing in a drifting state. This is
   the Home Assistant `MIGRATION_ERROR` idea, made strict because there is no
   running UI to surface it.
@@ -160,11 +182,12 @@ run_migrations(engine, store, steps):
 
 ### Concurrency and timing
 
-- Reuse the existing `runtime_instance_lock`, so migration runs on one process
-  only.
 - Migrations run serially and asynchronously before any read or write: inside
-  each store's `initialize()`, and for config before `AstrBotConfig` first
-  reads a value.
+  each store's `initialize()`, and for config before `AstrBotConfig` first reads
+  a value.
+- The application holds `runtime_instance_lock` around startup, so migrations
+  run on one process only; each store's `initialize()` guards with a lock so its
+  chain runs once per process.
 - `config` migration runs before logging is configured, because log settings
   come from config.
 
@@ -174,17 +197,55 @@ run_migrations(engine, store, steps):
 between an old store and the current one. The alternative — dropping
 `create_all` and letting migration step `0001` own table creation — would
 duplicate the 35-table schema definition and split the source of truth, so it
-is rejected. The cost of keeping `create_all` is that "a fresh store" and "a
-migrated store" must be proven equivalent; see [Verification](#verification).
+is rejected. Today `main/0001` is itself the `create_all` baseline step. The
+cost of keeping `create_all` is that "a fresh store" and "a migrated store" must
+be proven equivalent; see [Verification](#verification).
+
+### Legacy import
+
+The old main database `data/data_v4.db` has the pre-reshape shape (no surrogate
+`id`, no foreign keys, different timestamp ordering). Because there are no
+historical users to replay version-by-version, the reshape is a one-time import
+rather than several SQLite steps:
+
+1. It runs when the target `data/astrbot.db` is empty and `data/data_v4.db`
+   exists.
+2. `run_migrations` first creates the current schema and records `main`
+   revision 1.
+3. Legacy rows are read table by table in `SQLModel.metadata.sorted_tables`
+   dependency order.
+4. `LEGACY_COLUMN_RENAMES` maps renamed columns (five tables' `inner_*` to
+   `id`).
+5. Legacy columns absent from the target are dropped; NOT NULL target columns
+   that carry a Python default and are missing from the legacy row (for example
+   the timestamps later added to `session_project_relations`) are filled in.
+6. The whole copy runs in **one transaction** with `PRAGMA foreign_keys=OFF`
+   temporarily, because legacy rows may reference parents that no longer exist.
+7. Rows are inserted with driver-level parameters to keep SQLite's on-disk
+   representation: legacy `DATETIME` columns hold ISO text and legacy `JSON`
+   columns hold JSON text, which is exactly what the current columns expect.
+   Routing through SQLAlchemy bind processors would instead reject that
+   already-serialized text. Rows are read and written in batches inside the
+   single transaction, so a large table is never fully materialized in memory.
+8. The copied rows and an import-completion ledger row
+   (`main_legacy_import`) commit in the **same transaction**, so a crash cannot
+   record a completed import that only half-copied.
+9. `SQLiteDatabase.initialize()` retries the import when the completion marker
+   is absent and no user rows exist, so a crash between the baseline schema and
+   the copy does not leave a silently empty store.
+10. The legacy file is kept on disk as a backup; it is not deleted.
+
+`SQLiteDatabase` imports only when the caller passes a legacy path explicitly.
+`runtime_services` passes `LEGACY_DB_PATH`; tests and secondary stores pass
+`None`, so they never read the checkout's `data/`.
 
 ### First rollout on stores that predate the runner
 
 The first release with the runner must not replay `0001_initial` onto a
 populated store that already has those tables. Rollout therefore adopts each
-pre-runner store by inspecting its schema, never by assuming its revision is
-zero:
+known pre-runner store by shape, never by assuming its revision is zero:
 
-- **Empty store:** run `create_all` via `0001_initial`, then record the
+- **Empty store:** the baseline step runs `create_all`, then records the
   baseline in the ledger.
 - **Populated pre-runner store:** recognize the known pre-runner shape and
   either record the baseline or run the steps that bridge it forward:
@@ -193,22 +254,23 @@ zero:
     `id`, no foreign keys), so it is adopted by the one-time import rather than
     by replaying `0001`; the import records the `main` baseline itself.
   - `kb`: a pre-runner `kb.db` carries the old `kb_media` without
-    `updated_at`; `0002` adds it conditionally, so a populated store can start
-    the chain at `0001` safely.
+    `updated_at`; revision 2 adds it conditionally, so a populated store can
+    start the chain at revision 1 safely.
   - `doc` and `config`: the baseline is idempotent (`create_all` and the
     flat-to-grouped step), so an existing store is adopted in place.
-- **Unknown shape:** a populated store that matches no known pre-runner shape
-  is treated as newer than the code and refuses startup, instead of guessing.
+- **Unknown shape:** a populated `data/astrbot.db` with no `main` ledger row is
+  treated as newer than the code and refuses startup, instead of guessing. The
+  only supported pre-runner main file is `data_v4.db`.
 
-Before the runner ships, add a fixture for every supported pre-runner store
-shape, in addition to the historical-revision fixtures, and assert each migrates
-to head without losing rows.
+Each supported pre-runner store shape has a fixture that migrates to head
+without losing rows, and a populated store with no `main` ledger refuses
+startup.
 
 ## Contributor rules
 
 1. **A schema or config-shape change is a breaking change that needs a step.**
-   Add a new revision with its `upgrade` function. Do not mutate an applied
-   step; its checksum would fail startup.
+   Append a new revision with its `upgrade` function to the right store's
+   `MIGRATIONS`. Do not mutate an applied step; its checksum would fail startup.
 2. **Declare the current schema on the model.** Columns, generated columns,
    unique constraints, and ordinary indexes live on the SQLModel definition so
    a fresh store is correct. Migration steps only bridge old stores forward.
@@ -220,31 +282,29 @@ to head without losing rows.
    `astrbot/core/backup/` when a table or column changes.
 6. **Delete obsolete conversion code.** Once a step covers all reachable old
    versions, remove the loading-time shim it replaced.
-
-## Before the migration system exists
-
-Until the runner lands, the current policy applies: stores are created from
-their current definition, and a breaking change meant deleting the affected
-store. That was acceptable only because there were no users. As soon as
-user data must survive, this section stops applying and the design above takes
-over.
+7. **Add tests.** A new step needs: fresh store to head, re-run no-op, edited
+   applied step fails, and rollback leaves the ledger unchanged. A schema change
+   also updates the schema-equivalence test.
 
 ## Verification
 
-The migration system is only correct if each of these is tested:
+These tests lock the migration system:
 
-- Fresh store runs every step once and ends at the head revision.
-- Re-running is a no-op.
-- Editing an applied step fails startup.
-- A store revision newer than the code fails startup with a restore hint.
-- A failing step rolls back and leaves the ledger unchanged.
-- **Schema equivalence:** a `create_all` store and a store migrated from
-  `0001` to head have identical tables, columns, and indexes.
-- **Upgrade paths:** a fixture store per historical revision migrates the full
-  chain to head.
-- **Rollout adoption:** a populated fixture per supported pre-runner store
-  shape migrates to head without losing rows, and an unknown shape refuses
-  startup.
+- `tests/unit/db/test_migrations_runner.py`: fresh run, no-op re-run, checksum
+  drift, store ahead of code, missing step, ledger gap, declared-sequence gap,
+  failed-step rollback.
+- `tests/unit/db/test_migrations_equivalence.py`: a `create_all` store and a
+  store migrated to head have identical tables, columns, indexes, unique
+  constraints, and foreign keys.
+- `tests/unit/db/test_migrations_bootstrap.py`: an old-shape `data_v4.db`
+  imports into `astrbot.db`, covering column renames, dropped legacy columns,
+  filled new NOT NULL defaults, preserved JSON/timestamp types, and batched
+  copies; no import happens without an explicit legacy path; a populated
+  `astrbot.db` with no `main` ledger refuses startup.
+- `tests/unit/db/test_foreign_keys.py`: `PRAGMA foreign_keys=ON` is enforced and
+  deleting a parent cascades to children.
+- `tests/unit/test_config_migrations.py`: flat legacy config moves to groups,
+  keeps user values, is idempotent, and writes back `schema_revision` on load.
 
 ## Related pages
 

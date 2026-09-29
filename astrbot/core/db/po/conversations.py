@@ -1,14 +1,14 @@
 import uuid
+from datetime import UTC, datetime
 
-from sqlmodel import JSON, Field, SQLModel, UniqueConstraint
+from sqlalchemy import DateTime
+from sqlmodel import JSON, Field, SQLModel
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class ConversationV2(TimestampMixin, SQLModel, table=True):
+class ConversationV2(SQLModel, table=True):
     __tablename__ = "conversations"  # type: ignore
 
-    inner_conversation_id: int | None = Field(
+    id: int | None = Field(
         default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
@@ -22,18 +22,21 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)
     content: list | None = Field(default=None, sa_type=JSON)
-
+    """content is a list of OpenAI-formated messages in list[dict] format."""
     title: str | None = Field(default=None, max_length=255)
     prompt_id: str | None = Field(default=None)
+    """Persona or prompt id resolved at run time; not a ``prompts`` row key."""
     token_usage: int = Field(default=0, nullable=False)
-    """content is a list of OpenAI-formated messages in list[dict] format.
-    token_usage is the total token value of the messages.
+    """token_usage is the total token value of the messages.
+
     when 0, will use estimated token counter.
     """
-
-    __table_args__ = (
-        UniqueConstraint(
-            "conversation_id",
-            name="uix_conversation_id",
-        ),
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )

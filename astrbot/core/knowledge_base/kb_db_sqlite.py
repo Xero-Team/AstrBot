@@ -15,8 +15,9 @@ from astrbot.core.db import (
     sqlite_async_url,
     track_aiosqlite_workers,
 )
+from astrbot.core.db.migrations.kb import MIGRATIONS as KB_MIGRATIONS
+from astrbot.core.db.migrations.runner import run_migrations
 from astrbot.core.knowledge_base.models import (
-    BaseKBModel,
     KBDocument,
     KBMedia,
     KnowledgeBase,
@@ -119,10 +120,9 @@ class KBSQLiteDatabase:
             yield session
 
     async def initialize(self) -> None:
-        """初始化数据库,创建表并配置 SQLite 参数"""
+        """初始化数据库,运行迁移并配置 SQLite 参数"""
+        await run_migrations(self.engine, "kb", KB_MIGRATIONS)
         async with self.engine.connect() as conn:
-            await conn.run_sync(BaseKBModel.metadata.create_all)
-            await conn.commit()
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
             await conn.execute(text("PRAGMA cache_size=20000"))

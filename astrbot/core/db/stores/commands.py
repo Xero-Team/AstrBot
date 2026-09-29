@@ -8,6 +8,18 @@ from astrbot.core.db.stores.session import run_in_tx
 
 class CommandStoreMixin(DatabaseStoreMixin):
     @staticmethod
+    async def _get_command_config(
+        session: AsyncSession,
+        handler_full_name: str,
+    ) -> CommandConfig | None:
+        result = await session.execute(
+            select(CommandConfig).where(
+                CommandConfig.handler_full_name == handler_full_name
+            ),
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     def _apply_updates(model, **updates) -> None:
         for field, value in updates.items():
             if value is not None:
@@ -88,7 +100,7 @@ class CommandStoreMixin(DatabaseStoreMixin):
     ) -> CommandConfig | None:
         async with store_session(self) as session:
             session: AsyncSession
-            return await session.get(CommandConfig, handler_full_name)
+            return await self._get_command_config(session, handler_full_name)
 
     async def get_command_config_by_command_id(
         self,
@@ -119,13 +131,15 @@ class CommandStoreMixin(DatabaseStoreMixin):
         auto_managed: bool | None = None,
     ) -> CommandConfig:
         async def _op(session: AsyncSession) -> CommandConfig:
-            config = await session.get(CommandConfig, handler_full_name)
+            config = await self._get_command_config(session, handler_full_name)
             if (
                 config is None
                 and previous_handler_full_name
                 and previous_handler_full_name != handler_full_name
             ):
-                old = await session.get(CommandConfig, previous_handler_full_name)
+                old = await self._get_command_config(
+                    session, previous_handler_full_name
+                )
                 if old is not None:
                     await session.execute(
                         text(
@@ -139,7 +153,7 @@ class CommandStoreMixin(DatabaseStoreMixin):
                     )
                     await session.flush()
                     session.expire_all()
-                    config = await session.get(CommandConfig, handler_full_name)
+                    config = await self._get_command_config(session, handler_full_name)
             if not config:
                 config = self._new_command_config(
                     handler_full_name,

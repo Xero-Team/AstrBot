@@ -1,21 +1,19 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime
-from sqlmodel import JSON, Field, SQLModel, UniqueConstraint
-
-from astrbot.core.db.po.mixins import TimestampMixin
+from sqlmodel import JSON, Field, SQLModel
 
 
-class ApiKey(TimestampMixin, SQLModel, table=True):
+class ApiKey(SQLModel, table=True):
     """API keys used by external developers to access Open APIs."""
 
     __tablename__ = "api_keys"  # type: ignore
 
-    inner_id: int | None = Field(
+    id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     key_id: str = Field(
         max_length=36,
@@ -31,14 +29,12 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     last_used_at: datetime | None = Field(default=None, sa_type=DateTime)
     expires_at: datetime | None = Field(default=None, sa_type=DateTime)
     revoked_at: datetime | None = Field(default=None, sa_type=DateTime)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "key_id",
-            name="uix_api_key_id",
-        ),
-        UniqueConstraint(
-            "key_hash",
-            name="uix_api_key_hash",
-        ),
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )

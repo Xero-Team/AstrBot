@@ -42,7 +42,7 @@ class AstrBotExporter:
     """AstrBot 数据导出器
 
     导出内容：
-    - 主数据库所有表（data/data_v4.db）
+    - 主数据库所有表（data/astrbot.db）
     - 知识库元数据（data/knowledge_base/kb.db）
     - 每个知识库的向量文档数据
     - 配置文件（data/cmd_config.json）

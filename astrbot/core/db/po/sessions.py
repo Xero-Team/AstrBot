@@ -1,11 +1,11 @@
 import uuid
+from datetime import UTC, datetime
 
-from sqlmodel import Field, SQLModel, UniqueConstraint
+from sqlalchemy import DateTime
+from sqlmodel import Field, SQLModel
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class PlatformSession(TimestampMixin, SQLModel, table=True):
+class PlatformSession(SQLModel, table=True):
     """Platform session table for managing user sessions across different platforms.
 
     A session represents a chat window for a specific user on a specific platform.
@@ -14,10 +14,10 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
 
     __tablename__ = "platform_sessions"  # type: ignore
 
-    inner_id: int | None = Field(
+    id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     session_id: str = Field(
         max_length=100,
@@ -31,33 +31,37 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
     """Username of the session creator"""
     display_name: str | None = Field(default=None, max_length=255)
     """Display name for the session"""
-
-    __table_args__ = (
-        UniqueConstraint(
-            "session_id",
-            name="uix_platform_session_id",
-        ),
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
 
-class UmoAlias(TimestampMixin, SQLModel, table=True):
+class UmoAlias(SQLModel, table=True):
     """User-facing names for unified message origins."""
 
     __tablename__ = "umo_aliases"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     umo: str = Field(nullable=False, max_length=512, unique=True, index=True)
     creator_sender_id: str = Field(nullable=False, max_length=255)
     auto_name: str | None = Field(default=None, max_length=255)
     user_alias: str | None = Field(default=None, max_length=255)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "umo",
-            name="uix_umo_alias_umo",
-        ),
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )

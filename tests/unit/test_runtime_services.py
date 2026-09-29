@@ -104,8 +104,8 @@ async def test_factory_does_not_start_preferences_before_other_resources(
 class _CapturingSQLiteDatabase(SQLiteDatabase):
     """Real SQLiteDatabase that records close() and pool replacement after dispose."""
 
-    def __init__(self, db_path: str) -> None:
-        super().__init__(db_path)
+    def __init__(self, db_path: str, legacy_db_path: str | None = None) -> None:
+        super().__init__(db_path, legacy_db_path)
         self.close_called = False
         self.pool_at_init = self.engine.sync_engine.pool
 
@@ -125,8 +125,8 @@ async def test_factory_disposes_sqlite_engine_when_tool_image_cache_fails(
     preferences_factory = MagicMock()
 
     class CapturingSQLiteDatabase(_CapturingSQLiteDatabase):
-        def __init__(self, db_path: str) -> None:
-            super().__init__(db_path)
+        def __init__(self, db_path: str, legacy_db_path: str | None = None) -> None:
+            super().__init__(db_path, legacy_db_path)
             captured["db"] = self
 
     class BrokenToolImageCache:
@@ -138,6 +138,7 @@ async def test_factory_disposes_sqlite_engine_when_tool_image_cache_fails(
     monkeypatch.setattr(runtime_services, "AstrBotConfig", lambda: config)
     monkeypatch.setattr(runtime_services, "SQLiteDatabase", CapturingSQLiteDatabase)
     monkeypatch.setattr(runtime_services, "DB_PATH", str(tmp_path / "data_v4.db"))
+    monkeypatch.setattr(runtime_services, "LEGACY_DB_PATH", str(tmp_path / "legacy.db"))
     monkeypatch.setattr(runtime_services.LogManager, "GetLogger", MagicMock())
     monkeypatch.setattr(runtime_services.LogManager, "configure_logger", MagicMock())
     monkeypatch.setattr(
@@ -168,8 +169,8 @@ async def test_factory_disposes_sqlite_engine_on_cancelled_error(monkeypatch, tm
     config.get.return_value = ""
 
     class CapturingSQLiteDatabase(_CapturingSQLiteDatabase):
-        def __init__(self, db_path: str) -> None:
-            super().__init__(db_path)
+        def __init__(self, db_path: str, legacy_db_path: str | None = None) -> None:
+            super().__init__(db_path, legacy_db_path)
             captured["db"] = self
 
     class CancelledToolImageCache:
@@ -181,6 +182,7 @@ async def test_factory_disposes_sqlite_engine_on_cancelled_error(monkeypatch, tm
     monkeypatch.setattr(runtime_services, "AstrBotConfig", lambda: config)
     monkeypatch.setattr(runtime_services, "SQLiteDatabase", CapturingSQLiteDatabase)
     monkeypatch.setattr(runtime_services, "DB_PATH", str(tmp_path / "data_v4.db"))
+    monkeypatch.setattr(runtime_services, "LEGACY_DB_PATH", str(tmp_path / "legacy.db"))
     monkeypatch.setattr(runtime_services.LogManager, "GetLogger", MagicMock())
     monkeypatch.setattr(runtime_services.LogManager, "configure_logger", MagicMock())
     monkeypatch.setattr(
@@ -226,7 +228,7 @@ runtime_services.AstrBotConfig = lambda: {
     "log": {"level": "INFO", "file_enable": False},
     "trace": {"log_enable": False},
 }
-runtime_services.SQLiteDatabase = lambda _path: object()
+runtime_services.SQLiteDatabase = lambda _path, _legacy=None: object()
 runtime_services.WebChatQueueManager = lambda: object()
 runtime_services.ComputerRuntime = lambda: object()
 runtime_services.ToolImageCache = StopAfterLoggerSetup

@@ -175,7 +175,7 @@ class ConversationStoreMixin(DatabaseStoreMixin):
             count_query = select(
                 func.count(func.distinct(col(ConversationV2.user_id)))
                 if group_by_session
-                else func.count(col(ConversationV2.inner_conversation_id))
+                else func.count(col(ConversationV2.id))
             )
             if conditions:
                 count_query = count_query.where(*conditions)
@@ -191,14 +191,14 @@ class ConversationStoreMixin(DatabaseStoreMixin):
             )
             order = sort_column.asc if sort_order == "asc" else sort_column.desc
             tie_breaker = (
-                col(ConversationV2.inner_conversation_id).asc
+                col(ConversationV2.id).asc
                 if sort_order == "asc"
-                else col(ConversationV2.inner_conversation_id).desc
+                else col(ConversationV2.id).desc
             )
             if group_by_session:
                 session_sort = func.max(sort_column).label("session_sort")
                 session_tie_breaker = func.max(
-                    ConversationV2.inner_conversation_id,
+                    ConversationV2.id,
                 ).label("session_tie_breaker")
                 session_query = select(
                     ConversationV2.user_id,

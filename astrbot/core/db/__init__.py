@@ -38,13 +38,33 @@ def create_sqlite_async_engine(db_path: str) -> AsyncEngine:
     Returns:
         Async engine bound to ``db_path``.
     """
-    return create_async_engine(
+    engine = create_async_engine(
         sqlite_async_url(db_path),
         echo=False,
         future=True,
         poolclass=NullPool,
         connect_args={"timeout": _SQLITE_BUSY_TIMEOUT_SEC},
     )
+    event.listen(engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
+    return engine
+
+
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+    """Enforce the declared foreign keys on every new SQLite connection.
+
+    Foreign-key enforcement is per connection and off by default, and the
+    engine uses ``NullPool`` so a one-time PRAGMA does not stick. Registering it
+    on ``connect`` keeps every connection consistent.
+
+    Args:
+        dbapi_connection: The new DBAPI connection.
+        _connection_record: Unused SQLAlchemy connection record.
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
 
 
 def is_aiosqlite_worker_thread(thread: threading.Thread) -> bool:

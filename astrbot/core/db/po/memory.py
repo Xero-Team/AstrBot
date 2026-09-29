@@ -1,20 +1,19 @@
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class MemoryFact(TimestampMixin, SQLModel, table=True):
+class MemoryFact(SQLModel, table=True):
     """A remembered person fact scoped to its source chat stream."""
 
     __tablename__ = "memory_facts"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     person_id: str = Field(max_length=255, nullable=False, index=True)
     chat_id: str = Field(max_length=512, nullable=False, index=True)
@@ -25,7 +24,16 @@ class MemoryFact(TimestampMixin, SQLModel, table=True):
     evidence_message_ids: list = Field(default_factory=list, sa_type=JSON)
     confidence: float = Field(default=0.6, nullable=False)
     status: str = Field(default="active", max_length=32, nullable=False, index=True)
-    ttl_at: datetime | None = Field(default=None)
+    ttl_at: datetime | None = Field(default=None, sa_type=DateTime)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -42,21 +50,30 @@ class MemoryFact(TimestampMixin, SQLModel, table=True):
     )
 
 
-class MemoryProfile(TimestampMixin, SQLModel, table=True):
+class MemoryProfile(SQLModel, table=True):
     """Aggregated person profile for one memory scope."""
 
     __tablename__ = "memory_profiles"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     person_id: str = Field(max_length=255, nullable=False, index=True)
     chat_scope: str = Field(max_length=512, nullable=False, index=True)
     profile_text: str = Field(sa_type=Text, nullable=False)
     source_version: int = Field(default=1, nullable=False)
     is_override: bool = Field(default=False, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -68,15 +85,15 @@ class MemoryProfile(TimestampMixin, SQLModel, table=True):
     )
 
 
-class MemoryEpisode(TimestampMixin, SQLModel, table=True):
+class MemoryEpisode(SQLModel, table=True):
     """A compact event memory built from one or more chat turns."""
 
     __tablename__ = "memory_episodes"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     episode_id: str = Field(
         max_length=64,
@@ -88,26 +105,48 @@ class MemoryEpisode(TimestampMixin, SQLModel, table=True):
     title: str = Field(max_length=255, nullable=False)
     summary: str = Field(sa_type=Text, nullable=False)
     participant_ids: list = Field(default_factory=list, sa_type=JSON)
-    start_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
-    end_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    start_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True, sa_type=DateTime
+    )
+    end_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), index=True, sa_type=DateTime
+    )
     source_message_ids: list = Field(default_factory=list, sa_type=JSON)
     status: str = Field(default="active", max_length=32, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
 
 
-class MemoryScopePolicyRecord(TimestampMixin, SQLModel, table=True):
+class MemoryScopePolicyRecord(SQLModel, table=True):
     """Explicit memory sharing rule between isolated chat scopes."""
 
     __tablename__ = "memory_scope_policies"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     owner_scope_id: str = Field(max_length=512, nullable=False, index=True)
     target_scope_id: str = Field(max_length=512, nullable=False, index=True)
     sharing_mode: str = Field(default="group-shared", max_length=32, nullable=False)
     enabled: bool = Field(default=True, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -119,15 +158,15 @@ class MemoryScopePolicyRecord(TimestampMixin, SQLModel, table=True):
     )
 
 
-class MemoryTuningTask(TimestampMixin, SQLModel, table=True):
+class MemoryTuningTask(SQLModel, table=True):
     """Recorded retrieval tuning probe for one memory scope."""
 
     __tablename__ = "memory_tuning_tasks"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     task_id: str = Field(max_length=64, nullable=False, unique=True)
     task_type: str = Field(default="retrieval_probe", max_length=64, nullable=False)
@@ -135,17 +174,26 @@ class MemoryTuningTask(TimestampMixin, SQLModel, table=True):
     candidate_config: dict = Field(default_factory=dict, sa_type=JSON)
     evaluation_result: dict = Field(default_factory=dict, sa_type=JSON)
     status: str = Field(default="pending", max_length=32, nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
 
 
-class MemoryOperationLog(TimestampMixin, SQLModel, table=True):
+class MemoryOperationLog(SQLModel, table=True):
     """Audit log for memory writes and maintenance operations."""
 
     __tablename__ = "memory_operation_logs"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     operation_id: str = Field(
         max_length=36,
@@ -159,3 +207,12 @@ class MemoryOperationLog(TimestampMixin, SQLModel, table=True):
     action: str = Field(max_length=64, nullable=False, index=True)
     reason: str | None = Field(default=None, sa_type=Text)
     payload: dict = Field(default_factory=dict, sa_type=JSON)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )

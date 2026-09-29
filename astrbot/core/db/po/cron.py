@@ -1,13 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, SQLModel, Text
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class CronJob(TimestampMixin, SQLModel, table=True):
+class CronJob(SQLModel, table=True):
     """Cron job definition for scheduler and WebUI management."""
 
     __tablename__ = "cron_jobs"  # type: ignore
@@ -36,3 +34,12 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     last_run_at: datetime | None = Field(default=None, sa_type=DateTime)
     next_run_time: datetime | None = Field(default=None, sa_type=DateTime)
     last_error: str | None = Field(default=None, sa_type=Text)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )

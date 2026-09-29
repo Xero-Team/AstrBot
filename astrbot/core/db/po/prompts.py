@@ -1,11 +1,11 @@
 import uuid
+from datetime import UTC, datetime
 
-from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
+from sqlalchemy import DateTime
+from sqlmodel import JSON, Field, SQLModel, Text
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class PromptFolder(TimestampMixin, SQLModel, table=True):
+class PromptFolder(SQLModel, table=True):
     """Prompt 文件夹，支持递归层级结构。
 
     用于组织和管理多个 Prompt，类似于文件系统的目录结构。
@@ -14,9 +14,9 @@ class PromptFolder(TimestampMixin, SQLModel, table=True):
     __tablename__ = "prompt_folders"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     folder_id: str = Field(
         max_length=36,
@@ -29,16 +29,18 @@ class PromptFolder(TimestampMixin, SQLModel, table=True):
     """父文件夹ID，NULL表示根目录"""
     description: str | None = Field(default=None, sa_type=Text)
     sort_order: int = Field(default=0)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "folder_id",
-            name="uix_prompt_folder_id",
-        ),
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
 
-class Prompt(TimestampMixin, SQLModel, table=True):
+class Prompt(SQLModel, table=True):
     """Prompt is a set of instructions for LLMs to follow.
 
     It can be used to customize the behavior of LLMs.
@@ -47,11 +49,11 @@ class Prompt(TimestampMixin, SQLModel, table=True):
     __tablename__ = "prompts"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
-    prompt_id: str = Field(max_length=255, nullable=False)
+    prompt_id: str = Field(max_length=255, nullable=False, unique=True)
     system_prompt: str = Field(sa_type=Text, nullable=False)
     begin_dialogs: list | None = Field(default=None, sa_type=JSON)
     """a list of strings, each representing a dialog to start with"""
@@ -61,14 +63,21 @@ class Prompt(TimestampMixin, SQLModel, table=True):
     """None means use ALL skills for default, empty list means no skills, otherwise a list of skill names."""
     custom_error_message: str | None = Field(default=None, sa_type=Text)
     """Optional custom error message sent to end users when the agent request fails."""
-    folder_id: str | None = Field(default=None, max_length=36)
+    folder_id: str | None = Field(
+        default=None,
+        max_length=36,
+        foreign_key="prompt_folders.folder_id",
+        ondelete="SET NULL",
+    )
     """所属文件夹ID，NULL 表示在根目录"""
     sort_order: int = Field(default=0)
     """排序顺序"""
-
-    __table_args__ = (
-        UniqueConstraint(
-            "prompt_id",
-            name="uix_prompt_id",
-        ),
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )

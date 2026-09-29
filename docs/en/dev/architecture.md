@@ -61,9 +61,9 @@ The main SQLite database uses SQLModel tables as the schema source of truth. Acc
 
 ## Main SQLite database
 
-The main database file is `data/data_v4.db` under the runtime root. SQLModel tables are the only schema source of truth: tables, columns, ordinary unique constraints, and ordinary indexes live on the models. Access ports are the domain store protocols in `astrbot/core/db/protocols.py`. `SQLiteDatabase` composes those protocols with mixins; callers still import that class. This fork does not add Alembic, sqlc, or a main-database `.sql` schema. No SQLite store or configuration file runs an in-place migration: each is created from its current SQLModel tables or defaults, and a breaking change is handled by deleting that store or config and rebuilding.
+The main database file is `data/astrbot.db` under the runtime root. SQLModel tables are the only schema source of truth: tables, columns, ordinary unique constraints, and ordinary indexes live on the models. Access ports are the domain store protocols in `astrbot/core/db/protocols.py`. `SQLiteDatabase` composes those protocols with mixins; callers still import that class. This fork does not add Alembic, sqlc, or a main-database `.sql` schema. `initialize()` runs the store's ordered migrations before serving traffic; adding a revision in `astrbot/core/db/migrations/` is the supported way to change an existing store. See [Persistence Upgrade and Migration](./persistence-upgrades).
 
-`create_runtime_services()` constructs `SQLiteDatabase(DB_PATH)`. If the factory fails after constructing the database and before returning `RuntimeServices`, it `await`s `db.close()` to dispose the async engine, then re-raises the original exception. The lifecycle explicitly calls `db.initialize()`; `get_db()` keeps lazy initialization as a fallback. Explicit initialization, the first `get_db()`, and concurrent initialization share one lock, so schema work runs once.
+`create_runtime_services()` constructs `SQLiteDatabase(DB_PATH, LEGACY_DB_PATH)`. If the factory fails after constructing the database and before returning `RuntimeServices`, it `await`s `db.close()` to dispose the async engine, then re-raises the original exception. The lifecycle explicitly calls `db.initialize()`; `get_db()` keeps lazy initialization as a fallback. Explicit initialization, the first `get_db()`, and concurrent initialization share one lock, so schema work runs once. When the new file is empty and the pre-rename `data/data_v4.db` exists, `initialize()` imports its rows once and keeps the legacy file as a backup.
 
 ### Layout
 
@@ -71,12 +71,17 @@ The main database file is `data/data_v4.db` under the runtime root. SQLModel tab
 astrbot/core/db/
   __init__.py              # SQLite engine helpers
   protocols.py             # Domain store protocols
-  schema.py                # registry + create_all + PRAGMA
+  schema.py                # registry + migrations + PRAGMA
   sqlite.py                # SQLiteDatabase facade and session lifecycle
+  migrations/
+    runner.py              # Per-store migration executor and ledger
+    main.py                # Main store sequence
+    kb.py                  # Knowledge-base metadata sequence
+    doc.py                 # Document store sequence
+    bootstrap.py           # One-time legacy data_v4.db import
   po/
     __init__.py            # Re-export table=True models
     registry.py            # Explicitly import every table model
-    mixins.py              # TimestampMixin
     ...                    # Table modules split by domain
   stores/
     mixin.py               # Typed session helper shared by store mixins
@@ -84,15 +89,15 @@ astrbot/core/db/
     ...                    # One mixin per domain protocol
 ```
 
-`po/__init__.py` re-exporting table models is a package entry point. New code may import `from astrbot.core.db.po.memory import MemoryFact`; `from astrbot.core.db.po import MemoryFact` stays valid. Model registration is owned by `po.registry.import_all_models()` and must not rely on a business module happening to import models. `schema.py` must call it before `SQLModel.metadata.create_all`. `tests/unit/db/test_schema.py` compares initialized table names with a source-level `EXPECTED_TABLE_NAMES` constant (currently 35 tables); a registry omission must fail the test.
+`po/__init__.py` re-exporting table models is a package entry point. New code may import `from astrbot.core.db.po.memory import MemoryFact`; `from astrbot.core.db.po import MemoryFact` stays valid. Model registration is owned by `po.registry.import_all_models()` and must not rely on a business module happening to import models. `schema.py` must call it before the migration baseline. `tests/unit/db/test_schema.py` compares initialized table names with a source-level `EXPECTED_TABLE_NAMES` constant; a registry omission must fail the test.
 
 `initialize()` performs the following in order:
 
 1. `import_all_models()`
-2. `SQLModel.metadata.create_all`
+2. `run_migrations(engine, "main", MAIN_MIGRATIONS)` — the baseline step calls `SQLModel.metadata.create_all`, and later revisions bridge old stores forward
 3. WAL / `busy_timeout` / `synchronous` / `cache_size` / `temp_store` / `mmap_size` / `optimize`
 
-Startup does not inspect `PRAGMA table_info` or run `ALTER TABLE` on an existing file. `create_all` creates missing tables only; leftover columns on an old `data_v4.db` stay in place. Upgrading to a breaking schema means deleting the affected store (`data/data_v4.db*`, `data/knowledge_base/`, or `data/cmd_config.json`) and starting from an empty file, then reconfiguring. See [Persistence Upgrade and Migration](./persistence-upgrades) for the current fallback and the planned migration design. Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
+Startup no longer inspects `PRAGMA table_info` or runs ad-hoc `ALTER TABLE`. `create_all` creates missing tables only; schema changes on an existing store go through a migration revision. The pre-rename `data/data_v4.db` is imported once into `data/astrbot.db` rather than patched in place. See [Persistence Upgrade and Migration](./persistence-upgrades). Tests keep using temporary databases. If a SQLite `WHERE` index is genuinely needed later, declare `Index(..., sqlite_where=...)` on the model so `create_all` builds it on an empty database.
 
 Mixins obtain sessions through the typed `store_session(self)` helper and must not hold the engine or import each other's query helpers. A composite store or application/domain service owns one transaction boundary for cross-domain writes.
 
@@ -367,7 +372,7 @@ The source checkout and runtime root are separate concepts. The runtime root def
 Mutable state normally lives under `<runtime-root>/data/`:
 
 - `cmd_config.json` and `config/`
-- `data_v4.db`
+- `astrbot.db` (the pre-rename `data_v4.db` is imported once on first startup and kept as a backup)
 - `astrbot.lock` (advisory instance lock; a leftover file does not mean a process still holds it. On POSIX the `data/` directory is also flocked, so deleting this file cannot bypass the singleton)
 - `plugins/` and `plugin_data/`
 - `skills/` and `workspaces/`

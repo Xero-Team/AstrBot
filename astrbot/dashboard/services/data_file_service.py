@@ -81,7 +81,7 @@ _LANGUAGES = {
     ".ps1": "powershell",
 }
 _SPECIAL_LANGUAGES = {"dockerfile": "dockerfile", "makefile": "plaintext"}
-_DATABASE_NAMES = {"data.db", "data_v4.db"}
+_DATABASE_NAMES = {"data.db", "data_v4.db", "astrbot.db"}
 _DATABASE_SUFFIXES = (
     ".db",
     ".db-wal",

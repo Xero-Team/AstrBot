@@ -1,9 +1,10 @@
+from datetime import UTC, datetime
+
+from sqlalchemy import DateTime
 from sqlmodel import JSON, Field, Index, SQLModel
 
-from astrbot.core.db.po.mixins import TimestampMixin
 
-
-class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
+class PlatformMessageHistory(SQLModel, table=True):
     """This class represents the message history for a specific platform.
 
     It is used to store messages that are not LLM-generated, such as user messages
@@ -13,9 +14,9 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     __tablename__ = "platform_message_history"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)  # An id of group, user in platform
@@ -29,6 +30,15 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     is_group: bool = Field(default=False, nullable=False, index=True)
     """Whether this row belongs to an isolated group-message history."""
     llm_checkpoint_id: str | None = Field(default=None, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
 
     __table_args__ = (
         Index(

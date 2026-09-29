@@ -1,9 +1,12 @@
 import asyncio
 import typing as T
 from contextlib import asynccontextmanager
+from pathlib import Path
 from weakref import WeakSet
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlmodel import SQLModel
 
 from astrbot.core.db import (
     create_sqlite_async_engine,
@@ -11,7 +14,14 @@ from astrbot.core.db import (
     sqlite_async_url,
     track_aiosqlite_workers,
 )
-from astrbot.core.db.schema import initialize_sqlite_schema
+from astrbot.core.db.migrations.bootstrap import (
+    LEGACY_IMPORT_MARKER_STORE,
+    import_legacy_main_database,
+)
+from astrbot.core.db.migrations.main import MIGRATIONS as MAIN_MIGRATIONS
+from astrbot.core.db.migrations.runner import LEDGER_TABLE, MigrationError
+from astrbot.core.db.po.registry import import_all_models
+from astrbot.core.db.schema import apply_runtime_pragmas, initialize_sqlite_schema
 from astrbot.core.db.stores.aliases import UmoAliasStoreMixin
 from astrbot.core.db.stores.api_keys import ApiKeyStoreMixin
 from astrbot.core.db.stores.attachments import AttachmentStoreMixin
@@ -48,8 +58,18 @@ class SQLiteDatabase(
     UmoAliasStoreMixin,
     ChatProjectStoreMixin,
 ):
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, legacy_db_path: str | None = None) -> None:
+        """Create the main store.
+
+        Args:
+            db_path: Path to the current ``astrbot.db`` file.
+            legacy_db_path: Optional path to a pre-rename ``data_v4.db``. When it
+                exists and the current store is empty, its rows are imported
+                once at startup. Callers that pass ``None`` (tests and secondary
+                stores) never touch another database.
+        """
         self.db_path = db_path
+        self.legacy_db_path = Path(legacy_db_path) if legacy_db_path else None
         self.DATABASE_URL = sqlite_async_url(db_path)
         self.engine = create_sqlite_async_engine(db_path)
         self._aiosqlite_workers = track_aiosqlite_workers(self.engine)
@@ -62,12 +82,79 @@ class SQLiteDatabase(
         self._init_lock = asyncio.Lock()
         self.inited = False
 
+    async def _table_names(self) -> set[str]:
+        async with self.engine.connect() as conn:
+            result = await conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'",
+            )
+            return {row[0] for row in result.fetchall()}
+
+    async def _ledger_has(self, store: str) -> bool:
+        if LEDGER_TABLE not in await self._table_names():
+            return False
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.exec_driver_sql(
+                    "SELECT 1 FROM _schema_migrations WHERE store = ? LIMIT 1",
+                    (store,),
+                )
+            ).first()
+        return row is not None
+
+    async def _legacy_import_done(self) -> bool:
+        return await self._ledger_has(LEGACY_IMPORT_MARKER_STORE)
+
+    async def _has_user_rows(self) -> bool:
+        import_all_models()
+        existing = await self._table_names()
+        async with self.engine.connect() as conn:
+            for name, table in SQLModel.metadata.tables.items():
+                if name not in existing:
+                    continue
+                found = await conn.execute(select(1).select_from(table).limit(1))
+                if found.first() is not None:
+                    return True
+        return False
+
+    async def _needs_legacy_import(self) -> bool:
+        if self.legacy_db_path is None or not self.legacy_db_path.exists():
+            return False
+        if not (await self._table_names()) - {"sqlite_sequence"}:
+            return True
+        if await self._legacy_import_done():
+            return False
+        # No completion marker: either the database was created normally (and is
+        # empty) or an earlier import crashed after the baseline step. Retry only
+        # while no user rows exist, so a populated store is never overwritten.
+        return not await self._has_user_rows()
+
     async def initialize(self) -> None:
-        """Initialize the database by creating tables if they do not exist."""
+        """Initialize the database, importing a legacy file when present.
+
+        Raises:
+            MigrationError: When the store is populated but carries no ``main``
+                ledger row, so it is not a recognized pre-runner store and
+                guessing its shape could lose or corrupt rows.
+        """
         async with self._init_lock:
             if self.inited:
                 return
-            await initialize_sqlite_schema(self.engine)
+            legacy_path = self.legacy_db_path
+            if legacy_path is not None and await self._needs_legacy_import():
+                await import_legacy_main_database(
+                    self.engine, legacy_path, MAIN_MIGRATIONS
+                )
+                await apply_runtime_pragmas(self.engine)
+            else:
+                if await self._has_user_rows() and not await self._ledger_has("main"):
+                    raise MigrationError(
+                        f"{self.db_path} contains user rows but no 'main' "
+                        "migration ledger; it is not a recognized pre-runner "
+                        "main database. The supported pre-runner file is "
+                        "data_v4.db; restore a backup or start from an empty "
+                        "file instead",
+                    )
+                await initialize_sqlite_schema(self.engine)
             self.inited = True
 
     @asynccontextmanager

@@ -14,7 +14,7 @@ from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.auth.service import AuthorizationService
 from astrbot.core.computer.computer_client import ComputerRuntime
 from astrbot.core.config import AstrBotConfig
-from astrbot.core.config.default import DB_PATH
+from astrbot.core.config.default import DB_PATH, LEGACY_DB_PATH
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.log import LogManager
@@ -62,7 +62,7 @@ async def create_runtime_services() -> RuntimeServices:
         runtime_logger = LogManager.GetLogger("astrbot")
         LogManager.configure_logger(runtime_logger, config)
         LogManager.configure_trace_logger(config)
-        db = SQLiteDatabase(DB_PATH)
+        db = SQLiteDatabase(DB_PATH, LEGACY_DB_PATH)
         authorization = AuthorizationService(db)
         webchat_queue_manager = WebChatQueueManager()
         computer_runtime = ComputerRuntime()

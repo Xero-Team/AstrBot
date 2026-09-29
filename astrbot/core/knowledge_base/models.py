@@ -18,9 +18,9 @@ class KnowledgeBase(BaseKBModel, table=True):
     __tablename__ = "knowledge_bases"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     kb_id: str = Field(
         max_length=36,
@@ -41,7 +41,8 @@ class KnowledgeBase(BaseKBModel, table=True):
     top_k_dense: int | None = Field(default=50, nullable=True)
     top_k_sparse: int | None = Field(default=50, nullable=True)
     top_m_final: int | None = Field(default=5, nullable=True)
-    # Keep existing database timestamps unchanged across SQLModel upgrades.
+    doc_count: int = Field(default=0, nullable=False)
+    chunk_count: int = Field(default=0, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
@@ -49,10 +50,8 @@ class KnowledgeBase(BaseKBModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
-    doc_count: int = Field(default=0, nullable=False)
-    chunk_count: int = Field(default=0, nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -71,9 +70,9 @@ class KBDocument(BaseKBModel, table=True):
     __tablename__ = "kb_documents"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     doc_id: str = Field(
         max_length=36,
@@ -82,7 +81,13 @@ class KBDocument(BaseKBModel, table=True):
         default_factory=lambda: str(uuid.uuid4()),
         index=True,
     )
-    kb_id: str = Field(max_length=36, nullable=False, index=True)
+    kb_id: str = Field(
+        max_length=36,
+        nullable=False,
+        index=True,
+        foreign_key="knowledge_bases.kb_id",
+        ondelete="CASCADE",
+    )
     doc_name: str = Field(max_length=255, nullable=False)
     file_type: str = Field(max_length=20, nullable=False)
     file_size: int = Field(nullable=False)
@@ -100,7 +105,7 @@ class KBDocument(BaseKBModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
-        sa_column_kwargs={"onupdate": datetime.now(UTC)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )
 
     __table_args__ = (
@@ -121,9 +126,9 @@ class KBMedia(BaseKBModel, table=True):
     __tablename__ = "kb_media"  # type: ignore
 
     id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
-        default=None,
     )
     media_id: str = Field(
         max_length=36,
@@ -132,8 +137,20 @@ class KBMedia(BaseKBModel, table=True):
         default_factory=lambda: str(uuid.uuid4()),
         index=True,
     )
-    doc_id: str = Field(max_length=36, nullable=False, index=True)
-    kb_id: str = Field(max_length=36, nullable=False, index=True)
+    doc_id: str = Field(
+        max_length=36,
+        nullable=False,
+        index=True,
+        foreign_key="kb_documents.doc_id",
+        ondelete="CASCADE",
+    )
+    kb_id: str = Field(
+        max_length=36,
+        nullable=False,
+        index=True,
+        foreign_key="knowledge_bases.kb_id",
+        ondelete="CASCADE",
+    )
     media_type: str = Field(max_length=20, nullable=False)
     file_name: str = Field(max_length=255, nullable=False)
     file_path: str = Field(max_length=512, nullable=False)
@@ -142,4 +159,9 @@ class KBMedia(BaseKBModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
     )

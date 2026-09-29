@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.computer.computer_client import ComputerRuntime
@@ -526,3 +527,49 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
         agent_config.get_config.assert_called_with(umo="agent-test")
     else:
         agent_config.get_config.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_agent_forwards_extra_user_content_parts(monkeypatch):
+    async def finished_steps(_max_steps):
+        for response in ():
+            yield response
+
+    async def passthrough_provider_request(request, **_kwargs):
+        return request
+
+    runner = MagicMock()
+    runner.reset = AsyncMock()
+    runner.step_until_done = finished_steps
+    runner.get_final_llm_resp = MagicMock(return_value=object())
+    monkeypatch.setattr(
+        "astrbot.core.execution_context.ToolLoopAgentRunner", lambda *_a, **_k: runner
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.prepare_event_attachments", AsyncMock()
+    )
+    monkeypatch.setattr(
+        "astrbot.core.agent.request_preparation.prepare_provider_request",
+        passthrough_provider_request,
+    )
+
+    context = SimpleNamespace(
+        provider_manager=SimpleNamespace(
+            get_provider_by_id=AsyncMock(return_value=MagicMock(spec=Provider))
+        ),
+        get_config=MagicMock(return_value={"provider_settings": {}}),
+        tool_image_cache=MagicMock(),
+    )
+    event = SimpleNamespace(role="admin", unified_msg_origin="caller-test")
+    parts = [TextPart(text="ephemeral")]
+
+    await CoreExecutionContext.tool_loop_agent(
+        context,
+        event=event,
+        chat_provider_id="test",
+        extra_user_content_parts=parts,
+        agent_context=SimpleNamespace(context=context, event=event),
+    )
+
+    request = runner.reset.await_args.kwargs["request"]
+    assert request.extra_user_content_parts == parts

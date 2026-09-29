@@ -650,6 +650,7 @@ import {
   type ProviderMetadataSource,
 } from '@/utils/providerMetadata';
 import { useToast } from '@/utils/toast';
+import { readChatDraft, writeChatDraft } from '@/utils/chatDraftStorage';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 
 const props = withDefaults(
@@ -734,7 +735,7 @@ const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
-const draft = ref('');
+const draft = ref(readChatDraft(currSessionId.value));
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref('');
@@ -770,6 +771,9 @@ const threadSelection = reactive<{
 const enableStreaming = ref(true);
 const enableReasoning = ref(true);
 const sendShortcut = ref<'enter' | 'shift_enter'>('enter');
+const DRAFT_SAVE_DELAY_MS = 300;
+let activeDraftSessionId = currSessionId.value;
+let draftSaveTimer: number | null = null;
 const {
   isRecording,
   startRecording: startRecorder,
@@ -951,6 +955,21 @@ watch(transportMode, (mode) => {
   localStorage.setItem('chat.transportMode', mode);
 });
 
+watch(draft, (value) => {
+  if (draftSaveTimer !== null) window.clearTimeout(draftSaveTimer);
+  const sessionId = activeDraftSessionId;
+  draftSaveTimer = window.setTimeout(() => {
+    writeChatDraft(sessionId, value);
+    draftSaveTimer = null;
+  }, DRAFT_SAVE_DELAY_MS);
+});
+
+watch(currSessionId, (sessionId) => {
+  flushDraft();
+  activeDraftSessionId = sessionId;
+  draft.value = readChatDraft(sessionId);
+});
+
 const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
 const canSend = computed(
   () =>
@@ -1060,6 +1079,7 @@ function getSelectedProviderSelection() {
 provide('isDark', isDark);
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', flushDraft);
   loadingSessions.value = true;
   try {
     await Promise.all([getSessions(), getProjects(), loadTokenProviders()]);
@@ -1075,6 +1095,8 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  flushDraft();
+  window.removeEventListener('beforeunload', flushDraft);
   pointerMediaQuery.removeEventListener('change', handlePointerChange);
   cleanupMediaCache();
 });
@@ -1342,6 +1364,10 @@ async function selectSession(sessionId: string, pushRoute = true) {
 async function sendCurrentMessage() {
   if (!canSend.value) return;
 
+  const draftSessionId = activeDraftSessionId;
+  const draftText = draft.value;
+  const text = draftText.trim();
+  const outgoingParts = buildOutgoingParts(text);
   sending.value = true;
   try {
     let sessionId = currSessionId.value;
@@ -1349,6 +1375,8 @@ async function sendCurrentMessage() {
     const targetProject = selectedProject.value;
     if (!sessionId) {
       sessionId = await newSession();
+      await nextTick();
+      draft.value = draftText;
       if (targetProjectId) {
         await addSessionToProject(sessionId, targetProjectId);
         sessionProjects.set(
@@ -1369,9 +1397,7 @@ async function sendCurrentMessage() {
       await getSessions();
     }
 
-    const text = draft.value.trim();
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const outgoingParts = buildOutgoingParts(text);
     const selection = getSelectedProviderSelection();
     const { userRecord, botRecord } = createLocalExchange({
       sessionId,
@@ -1380,6 +1406,12 @@ async function sendCurrentMessage() {
     });
     updateTitleFromText(sessionId, text);
 
+    if (draftSaveTimer !== null) {
+      window.clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+    }
+    writeChatDraft(draftSessionId, '');
+    writeChatDraft(activeDraftSessionId, '');
     draft.value = '';
     replyTarget.value = null;
     clearStaged({ revokeUrls: false });
@@ -1403,6 +1435,14 @@ async function sendCurrentMessage() {
     sending.value = false;
     await focusChatInput();
   }
+}
+
+function flushDraft() {
+  if (draftSaveTimer !== null) {
+    window.clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+  writeChatDraft(activeDraftSessionId, draft.value);
 }
 
 async function toggleWebChatTools() {

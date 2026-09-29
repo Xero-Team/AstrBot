@@ -2278,7 +2278,20 @@ async def build_main_agent(
 
     req = clone_provider_request(req)
     if provider_request_from_event and req.conversation:
-        req.contexts = load_sanitized_history(req.conversation.history)
+        # Handler requests are prepared before the pipeline acquires the session
+        # lock. Reload the bound conversation here so queued turns include
+        # replies saved while they were waiting.
+        conversation = await plugin_context.conversation_manager.get_conversation(
+            event.unified_msg_origin, req.conversation.cid
+        )
+        if conversation is None:
+            _set_llm_error_message(
+                event,
+                "LLM 请求失败：请求的会话已不存在，请重新发送消息。",
+            )
+            return None
+        req.conversation = conversation
+        req.contexts = load_sanitized_history(conversation.history)
 
     await prepare_event_attachments(event, req, config, plugin_context)
 

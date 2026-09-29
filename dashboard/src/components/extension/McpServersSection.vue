@@ -591,9 +591,14 @@ const filteredMcpServers = computed(() => {
   return mcpServers.value.filter((server) => {
     const args = Array.isArray(server.args) ? server.args.join(' ') : '';
     const tools = Array.isArray(server.tools) ? server.tools.join(' ') : '';
-    return [server.name, server.transport, server.command, args, tools].some(
-      (field) => matchesText(field, query),
-    );
+    return [
+      server.name,
+      server.transport,
+      server.command,
+      server.url,
+      args,
+      tools,
+    ].some((field) => matchesText(field, query));
   });
 });
 

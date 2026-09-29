@@ -110,7 +110,7 @@
                 variant="tonal"
                 size="small"
                 prepend-icon="mdi-select-multiple"
-                :disabled="deletableSkills.length === 0"
+                :disabled="visibleDeletableSkills.length === 0"
                 @click="startBatchSelection"
               >
                 {{ tm('skills.select') }}
@@ -1425,10 +1425,6 @@ function isReadOnlySourceSkill(skill: SkillItem) {
     isBuiltinPresetSkill(skill)
   );
 }
-
-const deletableSkills = computed(() =>
-  skills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
-);
 
 const filteredSkills = computed(() => {
   const query = buildSearchQuery(skillSearch.value);

@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 );
 ```
 
-- `config` 是文件，所以它的 ledger 是 `cmd_config.json` 里的整数 `schema_revision`，语义相同。文件无法共用 SQLite 事务，因此迁移后的值和 `schema_revision` 必须通过 `AstrBotConfig.save_config`（临时文件、`fsync`、`os.replace`）一次性原子写入，绝不能把 revision 和值分成两次写。非法、布尔或负数的 revision 视为未设置并执行迁移；比代码更新的 revision 会拒绝启动。
+- `config` 是文件，所以它的 ledger 是 `cmd_config.json` 里的整数 `schema_revision`，语义相同。文件无法共用执行器的 SQLite 事务，因此一个步骤必须通过 `AstrBotConfig.save_config`（临时文件、`fsync`、`os.replace`）把迁移后的值和 `schema_revision` 一次性原子写入；分成两次写会在崩溃后让两者不一致。非法、布尔或负数的 revision 视为未设置并执行迁移；比代码更新的 revision 会拒绝启动。
 
 ### 步骤模块
 
@@ -160,6 +160,19 @@ MIGRATIONS = (
 
 `SQLiteDatabase` 只有在调用方显式传入 legacy 路径时才导入。运行时由 `runtime_services` 传入 `LEGACY_DB_PATH`；测试和二级存储传 `None`，因此永远不会读取仓库里的 `data/`。
 
+### 首次上线：执行器出现前就存在的存储
+
+第一个带执行器的版本不能对已有表、且有数据的存储直接重放 `0001_initial`。因此首次上线按已知形状认领每个旧存储，绝不把它的 revision 假定为 0：
+
+- **空存储：** 基线步骤跑 `create_all`，然后把基线写进 ledger。
+- **执行器出现前的有数据存储：** 识别已知的旧形状，要么记录基线，要么跑把它往前带的步骤：
+  - `main`：唯一受支持的有数据旧文件是 `data/data_v4.db`。它的形状与当前不同（没有代理 `id`、没有外键），因此用一次性导入认领，而不是重放 `0001`；导入会自己记录 `main` 基线。
+  - `kb`：旧 `kb.db` 的 `kb_media` 没有 `updated_at`；revision 2 会按需补列，所以有数据的存储可以安全地从 revision 1 开始跑链。
+  - `doc` 和 `config`：基线是幂等的（`create_all` 与扁平转分组），已有存储原地认领。
+- **未知形状：** 有数据但没有 `main` ledger 行的 `data/astrbot.db`，视为比代码更新，直接拒绝启动，而不是猜测。唯一受支持的旧主库文件是 `data_v4.db`。
+
+每一种受支持的旧存储形状都有一份 fixture 断言不丢行迁到 head；有数据但没有 `main` ledger 的存储会拒绝启动。
+
 ## 贡献者规则
 
 1. **改 schema 或改配置形状就是要加步骤的破坏性变更。** 在对应 store 的 `MIGRATIONS` 末尾追加一个新 revision 及其 `upgrade` 函数。不要修改已应用的步骤；checksum 会让启动失败。
@@ -176,7 +189,7 @@ MIGRATIONS = (
 
 - `tests/unit/db/test_migrations_runner.py`：空库跑完、重复 no-op、checksum 漂移、store 超前、缺失步骤、ledger 空档、声明序列空档、失败回滚。
 - `tests/unit/db/test_migrations_equivalence.py`：`create_all` 建的库与迁移到 head 的库，表、列、索引、唯一约束和外键一致。
-- `tests/unit/db/test_migrations_bootstrap.py`：旧形状 `data_v4.db` 导入到 `astrbot.db`，含列改名、丢弃旧列、补齐新 NOT NULL 默认列、JSON/时间戳保持类型；未显式传入旧路径时不导入。
+- `tests/unit/db/test_migrations_bootstrap.py`：旧形状 `data_v4.db` 导入到 `astrbot.db`，含列改名、丢弃旧列、补齐新 NOT NULL 默认列、JSON/时间戳保持类型、分批拷贝；未显式传入旧路径时不导入；有数据但没有 `main` ledger 的 `astrbot.db` 拒绝启动。
 - `tests/unit/db/test_foreign_keys.py`：`PRAGMA foreign_keys=ON` 生效，父行删除时级联清理子行。
 - `tests/unit/test_config_migrations.py`：旧扁平配置迁到分组、保留用户值、幂等，并在加载时写回 `schema_revision`。
 

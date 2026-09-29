@@ -100,13 +100,13 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 ```
 
 - The `config` store is a file, so its ledger is an integer
-  `schema_revision` inside `cmd_config.json`, with the same semantics. Because a
-  file cannot share the SQLite transaction, the migrated values and
-  `schema_revision` are written in one atomic snapshot through
-  `AstrBotConfig.save_config` (temporary file, `fsync`, `os.replace`); never
-  write the revision and the values as two separate files. A non-integer,
-  boolean, or negative revision is treated as unset and migrated; a revision
-  newer than the code refuses startup.
+  `schema_revision` inside `cmd_config.json`, with the same semantics. A file
+  cannot share the runner's SQLite transaction, so a step writes the migrated
+  values and `schema_revision` in one atomic snapshot through
+  `AstrBotConfig.save_config` (temporary file, `fsync`, `os.replace`); writing
+  the revision and the values separately can leave them out of sync after a
+  crash. A non-integer, boolean, or negative revision is treated as unset and
+  migrated; a revision newer than the code refuses startup.
 
 ### Step modules
 
@@ -238,6 +238,33 @@ rather than several SQLite steps:
 `runtime_services` passes `LEGACY_DB_PATH`; tests and secondary stores pass
 `None`, so they never read the checkout's `data/`.
 
+### First rollout on stores that predate the runner
+
+The first release with the runner must not replay `0001_initial` onto a
+populated store that already has those tables. Rollout therefore adopts each
+known pre-runner store by shape, never by assuming its revision is zero:
+
+- **Empty store:** the baseline step runs `create_all`, then records the
+  baseline in the ledger.
+- **Populated pre-runner store:** recognize the known pre-runner shape and
+  either record the baseline or run the steps that bridge it forward:
+  - `main`: the only supported populated pre-runner file is
+    `data/data_v4.db`. Its shape differs from the current one (no surrogate
+    `id`, no foreign keys), so it is adopted by the one-time import rather than
+    by replaying `0001`; the import records the `main` baseline itself.
+  - `kb`: a pre-runner `kb.db` carries the old `kb_media` without
+    `updated_at`; revision 2 adds it conditionally, so a populated store can
+    start the chain at revision 1 safely.
+  - `doc` and `config`: the baseline is idempotent (`create_all` and the
+    flat-to-grouped step), so an existing store is adopted in place.
+- **Unknown shape:** a populated `data/astrbot.db` with no `main` ledger row is
+  treated as newer than the code and refuses startup, instead of guessing. The
+  only supported pre-runner main file is `data_v4.db`.
+
+Each supported pre-runner store shape has a fixture that migrates to head
+without losing rows, and a populated store with no `main` ledger refuses
+startup.
+
 ## Contributor rules
 
 1. **A schema or config-shape change is a breaking change that needs a step.**
@@ -270,8 +297,9 @@ These tests lock the migration system:
   constraints, and foreign keys.
 - `tests/unit/db/test_migrations_bootstrap.py`: an old-shape `data_v4.db`
   imports into `astrbot.db`, covering column renames, dropped legacy columns,
-  filled new NOT NULL defaults, and preserved JSON/timestamp types; no import
-  happens without an explicit legacy path.
+  filled new NOT NULL defaults, preserved JSON/timestamp types, and batched
+  copies; no import happens without an explicit legacy path; a populated
+  `astrbot.db` with no `main` ledger refuses startup.
 - `tests/unit/db/test_foreign_keys.py`: `PRAGMA foreign_keys=ON` is enforced and
   deleting a parent cascades to children.
 - `tests/unit/test_config_migrations.py`: flat legacy config moves to groups,

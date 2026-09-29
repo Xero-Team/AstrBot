@@ -61,6 +61,7 @@ from astrbot.core.platform.send_result import DeliveryReceipt
 from astrbot.core.prompt_error_reply import (
     get_agent_error_message,
 )
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
@@ -119,6 +120,7 @@ def _history_merge_fields(
 class InternalAgentSubStage:
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.session_services = SessionServiceManager(ctx.preferences)
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
@@ -472,6 +474,22 @@ class InternalAgentSubStage:
                 self.ctx.execution_context.session_lock_manager.acquire_lock(lock_key),
             ):
                 logger.debug("acquired session lock for llm request")
+                current_config = self._profile_config(event)
+                llm_disabled = not current_config.get("provider_settings", {}).get(
+                    "enable", True
+                )
+                session_services = getattr(self, "session_services", None)
+                if not llm_disabled and session_services is not None:
+                    llm_disabled = (
+                        not await session_services.should_process_llm_request(event)
+                    )
+                if llm_disabled:
+                    logger.debug(
+                        "LLM was disabled while waiting for the session lock; "
+                        "skipping request for %s.",
+                        event.unified_msg_origin,
+                    )
+                    return
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 runner_stop_callback = None

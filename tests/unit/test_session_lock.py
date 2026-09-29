@@ -4,10 +4,20 @@ import asyncio
 import threading
 import weakref
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.astr_main_agent import MainAgentBuildConfig
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils.session_lock import SessionLockManager
+from tests.unit.agent_sub_stage_support import (
+    FakeInternalProcessEvent,
+    _internal_plugin_context,
+    _pipeline_context,
+)
 
 
 class TestSessionLockManagerBasic:
@@ -168,6 +178,68 @@ class TestCrossLoopIsolation:
 
 class TestConcurrency:
     """Tests for concurrent access."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("provider_enabled", "session_enabled"),
+        [(False, True), (True, False)],
+    )
+    async def test_waiting_llm_request_rechecks_enabled_status(
+        self,
+        monkeypatch,
+        provider_enabled,
+        session_enabled,
+    ):
+        """A queued request must honor LLM status changes made while waiting."""
+        session_id = "disabled-while-waiting"
+        manager = SessionLockManager()
+        typing_started = asyncio.Event()
+        config = {"provider_settings": {"enable": True}}
+        build_main_agent = AsyncMock(return_value=None)
+
+        stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+        stage.streaming_response = False
+        stage.show_tool_use = True
+        stage.show_tool_call_result = False
+        stage.show_reasoning = False
+        stage.buffer_intermediate_messages = False
+        stage.max_step = 5
+        stage.unsupported_streaming_strategy = "turn_off"
+        stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+        stage.main_agent_cfg = MainAgentBuildConfig(tool_call_timeout=1)
+        stage.ctx = _pipeline_context(_internal_plugin_context())
+        stage.ctx.execution_context.session_lock_manager = manager
+        stage.ctx.execution_context.get_config = lambda **_kwargs: config
+        stage.session_services = SessionServiceManager(SimpleNamespace())
+
+        event = FakeInternalProcessEvent(message_str="hello")
+        event.unified_msg_origin = session_id
+
+        async def send_typing():
+            typing_started.set()
+
+        event.send_typing = send_typing
+
+        monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
+        monkeypatch.setattr(internal, "build_main_agent", build_main_agent)
+        monkeypatch.setattr(
+            SessionServiceManager,
+            "should_process_llm_request",
+            AsyncMock(return_value=session_enabled),
+        )
+
+        async def process_request():
+            async for _ in stage.process(event):
+                pass
+
+        async with manager.acquire_lock(session_id):
+            task = asyncio.create_task(process_request())
+            await asyncio.wait_for(typing_started.wait(), timeout=5)
+            config["provider_settings"]["enable"] = provider_enabled
+
+        await task
+
+        build_main_agent.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_concurrent_acquisitions_same_loop(self):

@@ -120,6 +120,8 @@ def _history_merge_fields(
 class InternalAgentSubStage:
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        if ctx.preferences is None:
+            raise RuntimeError("InternalAgentSubStage requires shared preferences")
         self.session_services = SessionServiceManager(ctx.preferences)
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]

@@ -7,171 +7,208 @@
         <p class="text-medium-emphasis mt-4">{{ tm('mcpServers.empty') }}</p>
       </div>
 
-      <div v-else class="mcp-server-list">
-        <OutlinedActionListItem
-          v-for="server in mcpServers || []"
-          :key="server.name"
-          :title="server.name"
-          clickable
-          @click="editServer(server)"
-        >
-          <div
-            class="mcp-server-config text-body-2 text-medium-emphasis"
-            :title="getServerConfigSummary(server)"
-          >
-            <v-icon
-              :icon="getServerConfigIcon(server)"
-              size="small"
-              class="me-1"
+      <div v-else class="pb-3">
+        <div class="mcp-list-header">
+          <h3 class="mcp-list-title text-h3">
+            {{ tm('mcpServers.status.installed') }}
+          </h3>
+          <div class="mcp-search-wrap">
+            <v-text-field
+              v-model="mcpSearch"
+              :label="tm('mcpServers.searchPlaceholder')"
+              prepend-inner-icon="mdi-magnify"
+              density="compact"
+              variant="solo-filled"
+              flat
+              clearable
+              hide-details
+              single-line
+              class="mcp-search-field"
             />
-            <span>{{ getServerConfigSummary(server) }}</span>
           </div>
+        </div>
 
-          <div class="mcp-server-tools text-caption text-medium-emphasis">
-            <template v-if="server.tools && server.tools.length > 0">
-              <v-dialog max-width="600px" scrollable>
-                <template #activator="{ props: listToolsProps }">
-                  <button
-                    v-bind="listToolsProps"
-                    class="mcp-server-tools__button"
-                    type="button"
-                    @click.stop
-                  >
-                    <v-icon size="small" class="me-1">mdi-tools</v-icon>
-                    {{
-                      tm('mcpServers.status.availableTools', {
-                        count: server.tools.length,
-                      })
-                    }}
-                    ({{ server.tools.length }})
-                  </button>
-                </template>
-                <template #default="{ isActive }">
-                  <v-card class="app-dialog mcp-dialog__card mcp-tools-dialog">
-                    <v-card-title class="d-flex align-center">
-                      <span>{{ tm('mcpServers.status.availableTools') }}</span>
-                    </v-card-title>
-                    <v-card-text class="mcp-dialog__content">
-                      <ul>
-                        <li
-                          v-for="(tool, idx) in server.tools"
-                          :key="idx"
-                          class="mcp-tools-dialog__item"
-                        >
-                          {{ tool }}
-                        </li>
-                      </ul>
-                    </v-card-text>
-                    <v-card-actions
-                      class="d-flex justify-end mcp-dialog__actions"
-                    >
-                      <v-btn
-                        variant="text"
-                        color="primary"
-                        @click="isActive.value = false"
-                      >
-                        Close
-                      </v-btn>
-                    </v-card-actions>
-                  </v-card>
-                </template>
-              </v-dialog>
-            </template>
-            <template v-else>
-              <v-icon size="small" color="warning" class="me-1">
-                mdi-alert-circle
-              </v-icon>
-              {{ tm('mcpServers.status.noTools') }}
-            </template>
-          </div>
+        <div v-if="filteredMcpServers.length === 0" class="text-center pa-8">
+          <v-icon size="64" color="grey-lighten-1">mdi-magnify</v-icon>
+          <p class="text-grey mt-4">{{ tm('mcpServers.noSearchResult') }}</p>
+        </div>
 
-          <div
-            v-if="server.connection_status"
-            class="text-caption text-medium-emphasis"
+        <div v-else class="mcp-server-list">
+          <OutlinedActionListItem
+            v-for="server in filteredMcpServers"
+            :key="server.name"
+            :title="server.name"
+            clickable
+            @click="editServer(server)"
           >
-            {{
-              tm('mcpServers.status.runtime', {
-                status: server.connection_status,
-                resources: server.resource_count || 0,
-                prompts: server.prompt_count || 0,
-              })
-            }}
-          </div>
-
-          <template #actions>
-            <v-tooltip :text="tm('mcpServers.buttons.catalog')" location="top">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon="mdi-database-search-outline"
-                  variant="text"
-                  size="small"
-                  class="list-action-icon-btn"
-                  @click.stop="openCatalog(server)"
-                />
-              </template>
-            </v-tooltip>
-            <v-tooltip
-              v-if="server.auth_ref"
-              :text="tm('mcpServers.buttons.authorize')"
-              location="top"
+            <div
+              class="mcp-server-config text-body-2 text-medium-emphasis"
+              :title="getServerConfigSummary(server)"
             >
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon="mdi-shield-key-outline"
-                  variant="text"
-                  size="small"
-                  class="list-action-icon-btn"
-                  @click.stop="startAuthorization(server)"
-                />
-              </template>
-            </v-tooltip>
-            <v-tooltip :text="t('core.common.itemCard.delete')" location="top">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon="mdi-delete-outline"
-                  variant="text"
-                  size="small"
-                  class="list-action-icon-btn"
-                  @click.stop="deleteServer(server)"
-                />
-              </template>
-            </v-tooltip>
-          </template>
+              <v-icon
+                :icon="getServerConfigIcon(server)"
+                size="small"
+                class="me-1"
+              />
+              <span>{{ getServerConfigSummary(server) }}</span>
+            </div>
 
-          <template #control>
-            <v-progress-circular
-              v-if="mcpServerUpdateLoaders[server.name]"
-              indeterminate
-              color="primary"
-              size="18"
-            />
-
-            <v-tooltip location="top">
-              <template #activator="{ props }">
-                <v-switch
-                  v-bind="props"
-                  color="primary"
-                  density="compact"
-                  hide-details
-                  inset
-                  :model-value="server.active"
-                  :loading="mcpServerUpdateLoaders[server.name] || false"
-                  :disabled="mcpServerUpdateLoaders[server.name] || false"
-                  @click.stop
-                  @update:model-value="updateServerStatus(server)"
-                />
+            <div class="mcp-server-tools text-caption text-medium-emphasis">
+              <template v-if="server.tools && server.tools.length > 0">
+                <v-dialog max-width="600px" scrollable>
+                  <template #activator="{ props: listToolsProps }">
+                    <button
+                      v-bind="listToolsProps"
+                      class="mcp-server-tools__button"
+                      type="button"
+                      @click.stop
+                    >
+                      <v-icon size="small" class="me-1">mdi-tools</v-icon>
+                      {{
+                        tm('mcpServers.status.availableTools', {
+                          count: server.tools.length,
+                        })
+                      }}
+                      ({{ server.tools.length }})
+                    </button>
+                  </template>
+                  <template #default="{ isActive }">
+                    <v-card
+                      class="app-dialog mcp-dialog__card mcp-tools-dialog"
+                    >
+                      <v-card-title class="d-flex align-center">
+                        <span>{{
+                          tm('mcpServers.status.availableTools')
+                        }}</span>
+                      </v-card-title>
+                      <v-card-text class="mcp-dialog__content">
+                        <ul>
+                          <li
+                            v-for="(tool, idx) in server.tools"
+                            :key="idx"
+                            class="mcp-tools-dialog__item"
+                          >
+                            {{ tool }}
+                          </li>
+                        </ul>
+                      </v-card-text>
+                      <v-card-actions
+                        class="d-flex justify-end mcp-dialog__actions"
+                      >
+                        <v-btn
+                          variant="text"
+                          color="primary"
+                          @click="isActive.value = false"
+                        >
+                          Close
+                        </v-btn>
+                      </v-card-actions>
+                    </v-card>
+                  </template>
+                </v-dialog>
               </template>
-              <span>{{
-                server.active
-                  ? t('core.common.itemCard.enabled')
-                  : t('core.common.itemCard.disabled')
-              }}</span>
-            </v-tooltip>
-          </template>
-        </OutlinedActionListItem>
+              <template v-else>
+                <v-icon size="small" color="warning" class="me-1">
+                  mdi-alert-circle
+                </v-icon>
+                {{ tm('mcpServers.status.noTools') }}
+              </template>
+            </div>
+
+            <div
+              v-if="server.connection_status"
+              class="text-caption text-medium-emphasis"
+            >
+              {{
+                tm('mcpServers.status.runtime', {
+                  status: server.connection_status,
+                  resources: server.resource_count || 0,
+                  prompts: server.prompt_count || 0,
+                })
+              }}
+            </div>
+
+            <template #actions>
+              <v-tooltip
+                :text="tm('mcpServers.buttons.catalog')"
+                location="top"
+              >
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-database-search-outline"
+                    variant="text"
+                    size="small"
+                    class="list-action-icon-btn"
+                    @click.stop="openCatalog(server)"
+                  />
+                </template>
+              </v-tooltip>
+              <v-tooltip
+                v-if="server.auth_ref"
+                :text="tm('mcpServers.buttons.authorize')"
+                location="top"
+              >
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-shield-key-outline"
+                    variant="text"
+                    size="small"
+                    class="list-action-icon-btn"
+                    @click.stop="startAuthorization(server)"
+                  />
+                </template>
+              </v-tooltip>
+              <v-tooltip
+                :text="t('core.common.itemCard.delete')"
+                location="top"
+              >
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-delete-outline"
+                    variant="text"
+                    size="small"
+                    class="list-action-icon-btn"
+                    @click.stop="deleteServer(server)"
+                  />
+                </template>
+              </v-tooltip>
+            </template>
+
+            <template #control>
+              <v-progress-circular
+                v-if="mcpServerUpdateLoaders[server.name]"
+                indeterminate
+                color="primary"
+                size="18"
+              />
+
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <v-switch
+                    v-bind="props"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    inset
+                    :model-value="server.active"
+                    :loading="mcpServerUpdateLoaders[server.name] || false"
+                    :disabled="mcpServerUpdateLoaders[server.name] || false"
+                    @click.stop
+                    @update:model-value="updateServerStatus(server)"
+                  />
+                </template>
+                <span>{{
+                  server.active
+                    ? t('core.common.itemCard.enabled')
+                    : t('core.common.itemCard.disabled')
+                }}</span>
+              </v-tooltip>
+            </template>
+          </OutlinedActionListItem>
+        </div>
       </div>
     </v-container>
 
@@ -485,6 +522,7 @@ import {
   useConfirmDialog,
 } from '@/utils/confirmDialog';
 import { resolveErrorMessage } from '@/utils/errorUtils';
+import { buildSearchQuery, matchesText } from '@/utils/pluginSearch';
 
 type McpServerProvider = 'modelscope';
 type SnackbarColor = 'success' | 'error';
@@ -518,6 +556,7 @@ const {
 } = useDashboardStepUp();
 
 const mcpServers = ref<McpServerItem[]>([]);
+const mcpSearch = ref('');
 const showMcpServerDialog = ref(false);
 const showMcpCatalogDialog = ref(false);
 const catalogServerName = ref('');
@@ -543,6 +582,18 @@ const save_message_success = ref<SnackbarColor>('success');
 const isServerFormValid = computed(
   () => Boolean(currentServer.value.name.trim()) && !jsonError.value,
 );
+
+const filteredMcpServers = computed(() => {
+  const query = buildSearchQuery(mcpSearch.value);
+  if (!query) return mcpServers.value;
+  return mcpServers.value.filter((server) => {
+    const args = Array.isArray(server.args) ? server.args.join(' ') : '';
+    const tools = Array.isArray(server.tools) ? server.tools.join(' ') : '';
+    return [server.name, server.transport, server.command, args, tools].some(
+      (field) => matchesText(field, query),
+    );
+  });
+});
 
 const requestMcpStepUp = (resourceId: string) =>
   requestStepUp({
@@ -1076,6 +1127,27 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.mcp-list-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.mcp-list-title {
+  margin: 0 auto 0 0;
+}
+
+.mcp-search-wrap {
+  flex: 0 1 300px;
+  min-width: 200px;
+}
+
+.mcp-search-field {
+  width: 100%;
+}
+
 .mcp-server-config {
   align-items: center;
   display: flex;
@@ -1125,5 +1197,15 @@ onUnmounted(() => {
 
 .mcp-monaco-container {
   margin-top: var(--astrbot-space-4);
+}
+
+@media (max-width: 640px) {
+  .mcp-list-header {
+    align-items: stretch;
+  }
+
+  .mcp-search-wrap {
+    flex: 1 1 100%;
+  }
 }
 </style>

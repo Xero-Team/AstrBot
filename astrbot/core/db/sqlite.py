@@ -19,7 +19,7 @@ from astrbot.core.db.migrations.bootstrap import (
     import_legacy_main_database,
 )
 from astrbot.core.db.migrations.main import MIGRATIONS as MAIN_MIGRATIONS
-from astrbot.core.db.migrations.runner import LEDGER_TABLE
+from astrbot.core.db.migrations.runner import LEDGER_TABLE, MigrationError
 from astrbot.core.db.po.registry import import_all_models
 from astrbot.core.db.schema import apply_runtime_pragmas, initialize_sqlite_schema
 from astrbot.core.db.stores.aliases import UmoAliasStoreMixin
@@ -89,17 +89,20 @@ class SQLiteDatabase(
             )
             return {row[0] for row in result.fetchall()}
 
-    async def _legacy_import_done(self) -> bool:
+    async def _ledger_has(self, store: str) -> bool:
         if LEDGER_TABLE not in await self._table_names():
             return False
         async with self.engine.connect() as conn:
             row = (
                 await conn.exec_driver_sql(
                     "SELECT 1 FROM _schema_migrations WHERE store = ? LIMIT 1",
-                    (LEGACY_IMPORT_MARKER_STORE,),
+                    (store,),
                 )
             ).first()
         return row is not None
+
+    async def _legacy_import_done(self) -> bool:
+        return await self._ledger_has(LEGACY_IMPORT_MARKER_STORE)
 
     async def _has_user_rows(self) -> bool:
         import_all_models()
@@ -126,7 +129,13 @@ class SQLiteDatabase(
         return not await self._has_user_rows()
 
     async def initialize(self) -> None:
-        """Initialize the database, importing a legacy file when present."""
+        """Initialize the database, importing a legacy file when present.
+
+        Raises:
+            MigrationError: When the store is populated but carries no ``main``
+                ledger row, so it is not a recognized pre-runner store and
+                guessing its shape could lose or corrupt rows.
+        """
         async with self._init_lock:
             if self.inited:
                 return
@@ -137,6 +146,14 @@ class SQLiteDatabase(
                 )
                 await apply_runtime_pragmas(self.engine)
             else:
+                if await self._has_user_rows() and not await self._ledger_has("main"):
+                    raise MigrationError(
+                        f"{self.db_path} contains user rows but no 'main' "
+                        "migration ledger; it is not a recognized pre-runner "
+                        "main database. The supported pre-runner file is "
+                        "data_v4.db; restore a backup or start from an empty "
+                        "file instead",
+                    )
                 await initialize_sqlite_schema(self.engine)
             self.inited = True
 

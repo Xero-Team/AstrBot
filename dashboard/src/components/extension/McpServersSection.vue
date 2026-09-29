@@ -29,8 +29,10 @@
         </div>
 
         <div v-if="filteredMcpServers.length === 0" class="text-center pa-8">
-          <v-icon size="64" color="grey-lighten-1">mdi-magnify</v-icon>
-          <p class="text-grey mt-4">{{ tm('mcpServers.noSearchResult') }}</p>
+          <v-icon size="64" color="on-surface-variant">mdi-magnify</v-icon>
+          <p class="text-medium-emphasis mt-4">
+            {{ tm('mcpServers.noSearchResult') }}
+          </p>
         </div>
 
         <div v-else class="mcp-server-list">

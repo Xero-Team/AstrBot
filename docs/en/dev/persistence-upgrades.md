@@ -224,7 +224,8 @@ rather than several SQLite steps:
    representation: legacy `DATETIME` columns hold ISO text and legacy `JSON`
    columns hold JSON text, which is exactly what the current columns expect.
    Routing through SQLAlchemy bind processors would instead reject that
-   already-serialized text.
+   already-serialized text. Rows are read and written in batches inside the
+   single transaction, so a large table is never fully materialized in memory.
 8. The copied rows and an import-completion ledger row
    (`main_legacy_import`) commit in the **same transaction**, so a crash cannot
    record a completed import that only half-copied.

@@ -35,6 +35,10 @@ _MARK_IMPORT_DONE = text(
     "VALUES (:store, :revision, :description, :checksum, :applied_at)",
 )
 
+# Rows per driver-level ``executemany`` during the copy. Keeps a large legacy
+# table from being materialized entirely in memory before it is written.
+IMPORT_BATCH_SIZE = 1000
+
 # Legacy column names that changed during the reshape, per table.
 LEGACY_COLUMN_RENAMES: dict[str, dict[str, str]] = {
     "api_keys": {"inner_id": "id"},
@@ -100,7 +104,9 @@ async def import_legacy_main_database(
     on-disk SQLite representation: legacy ``DateTime`` columns hold ISO text and
     ``JSON`` columns hold JSON text, which is exactly what the current columns
     expect. Going through SQLAlchemy bind processors instead would reject the
-    already-serialized text.
+    already-serialized text. Rows are read and written in
+    ``IMPORT_BATCH_SIZE`` batches inside one transaction so a large legacy
+    table is never fully materialized in memory.
 
     Args:
         dest_engine: Engine bound to the new ``astrbot.db``.
@@ -120,35 +126,42 @@ async def import_legacy_main_database(
     copied = 0
     try:
         existing = _legacy_table_names(source)
-        pending: list[tuple[str, list[dict]]] = []
-        for table in SQLModel.metadata.sorted_tables:
-            if table.name not in existing:
-                continue
-            target_columns = {column.name: column for column in table.columns}
-            mapped_rows = []
-            select_all = "SELECT * FROM " + _quote(table.name)
-            for row in source.execute(select_all):
-                mapped = _map_row(table.name, row, target_columns)
-                if mapped is not None:
-                    mapped_rows.append(mapped)
-            if mapped_rows:
-                pending.append((table.name, mapped_rows))
-
         async with dest_engine.connect() as conn:
             # Legacy data predates the foreign keys; import it as-is. The PRAGMA
             # must run outside a transaction, so set it before BEGIN.
             await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
             await conn.exec_driver_sql("BEGIN")
             try:
-                for table_name, mapped_rows in pending:
-                    statement = _insert_statement(table_name, list(mapped_rows[0]))
-                    await conn.exec_driver_sql(statement, mapped_rows)
-                    copied += len(mapped_rows)
-                    logger.info(
-                        "imported %s rows from legacy %s",
-                        len(mapped_rows),
-                        table_name,
-                    )
+                for table in SQLModel.metadata.sorted_tables:
+                    if table.name not in existing:
+                        continue
+                    target_columns = {column.name: column for column in table.columns}
+                    select_all = "SELECT * FROM " + _quote(table.name)
+                    statement: str | None = None
+                    table_copied = 0
+                    batch: list[dict] = []
+                    for row in source.execute(select_all):
+                        mapped = _map_row(table.name, row, target_columns)
+                        if mapped is None:
+                            continue
+                        if statement is None:
+                            statement = _insert_statement(table.name, list(mapped))
+                        batch.append(mapped)
+                        if len(batch) >= IMPORT_BATCH_SIZE:
+                            await conn.exec_driver_sql(statement, batch)
+                            copied += len(batch)
+                            table_copied += len(batch)
+                            batch.clear()
+                    if batch and statement is not None:
+                        await conn.exec_driver_sql(statement, batch)
+                        copied += len(batch)
+                        table_copied += len(batch)
+                    if table_copied:
+                        logger.info(
+                            "imported %s rows from legacy %s",
+                            table_copied,
+                            table.name,
+                        )
                 await conn.execute(
                     _MARK_IMPORT_DONE,
                     {

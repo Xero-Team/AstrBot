@@ -153,7 +153,7 @@ MIGRATIONS = (
 4. 列名映射由 `LEGACY_COLUMN_RENAMES` 处理（五张表的 `inner_*` → `id`）。
 5. 目标表里不存在的旧列被丢弃；旧库里缺的、带 Python 默认值的 NOT NULL 列（例如后加到 `session_project_relations` 的时间戳）在导入时补齐。
 6. 整个拷贝在**一个事务**里完成，并临时 `PRAGMA foreign_keys=OFF`，因为旧数据可能引用已经不存在的父行。
-7. 行通过驱动级参数插入，保持 SQLite 的磁盘表示：旧 `DATETIME` 列是 ISO 文本，旧 `JSON` 列是 JSON 文本，正好是当前列期望的格式；走 SQLAlchemy 绑定处理器反而会拒绝这些已序列化的文本。
+7. 行通过驱动级参数插入，保持 SQLite 的磁盘表示：旧 `DATETIME` 列是 ISO 文本，旧 `JSON` 列是 JSON 文本，正好是当前列期望的格式；走 SQLAlchemy 绑定处理器反而会拒绝这些已序列化的文本。读取与插入都在同一事务里分批进行，大表不会整体驻留内存。
 8. 拷贝的行与一条导入完成 ledger 行（`main_legacy_import`）在**同一个事务**里提交，崩溃不会留下"拷贝了一半却已记录完成"的导入。
 9. `SQLiteDatabase.initialize()` 在完成标记缺失且没有任何用户行时重试导入，因此基线 schema 与拷贝之间崩溃不会留下静默为空的存储。
 10. 旧文件保留在磁盘上作为备份，不删除。

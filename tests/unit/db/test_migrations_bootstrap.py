@@ -9,10 +9,12 @@ from pathlib import Path
 import pytest
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from sqlmodel import select
+from sqlmodel import SQLModel, col, select
 
 from astrbot.core.db import create_sqlite_async_engine, dispose_async_engine
+from astrbot.core.db.migrations import bootstrap
 from astrbot.core.db.migrations.bootstrap import import_legacy_main_database
+from astrbot.core.db.migrations.runner import MigrationError
 from astrbot.core.db.migrations.main import MIGRATIONS
 from astrbot.core.db.po import (
     ApiKey,
@@ -249,5 +251,71 @@ async def test_initialize_retries_import_when_marker_is_missing(tmp_path):
                 (await session.execute(select(ConversationV2))).scalars().all()
             )
         assert [conversation.id for conversation in conversations] == [3]
+    finally:
+        await db.close()
+
+
+async def test_import_writes_every_row_across_batches(tmp_path, monkeypatch):
+    import_all_models()
+    legacy = tmp_path / "data_v4.db"
+    conn = sqlite3.connect(legacy)
+    try:
+        conn.executescript(_LEGACY_DDL)
+        conn.executemany(
+            "INSERT INTO api_keys (inner_id, key_id, name, key_hash, key_prefix, "
+            "scopes, created_by, last_used_at, expires_at, revoked_at, created_at, "
+            "updated_at) VALUES (?, ?, 'batch', ?, ?, NULL, 'owner', NULL, NULL, "
+            "NULL, '2026-09-24 12:10:43.876623', '2026-09-24 12:10:43.876623')",
+            [(i, f"key-{i}", f"hash-{i}", f"sk-{i}") for i in range(1, 6)],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Smaller than the row count so the final partial batch is exercised.
+    monkeypatch.setattr(bootstrap, "IMPORT_BATCH_SIZE", 2)
+
+    engine = create_sqlite_async_engine(str(tmp_path / "astrbot.db"))
+    try:
+        copied = await import_legacy_main_database(engine, legacy, MIGRATIONS)
+        assert copied == 5
+
+        session_factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        async with session_factory() as session:
+            keys = (
+                (await session.execute(select(ApiKey).order_by(col(ApiKey.id))))
+                .scalars()
+                .all()
+            )
+        assert [key.id for key in keys] == [1, 2, 3, 4, 5]
+    finally:
+        await dispose_async_engine(engine, None)
+
+
+async def test_populated_store_without_ledger_refuses_startup(tmp_path):
+    import_all_models()
+    db_path = tmp_path / "astrbot.db"
+
+    # Simulate a populated store that predates the runner: current tables and
+    # a user row, but no ``main`` ledger row.
+    seed_engine = create_sqlite_async_engine(str(db_path))
+    try:
+        async with seed_engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+            await conn.exec_driver_sql(
+                "INSERT INTO platform_sessions "
+                "(session_id, platform_id, creator, created_at, updated_at) VALUES "
+                "('s1', 'webchat', 'owner', "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')",
+            )
+    finally:
+        await dispose_async_engine(seed_engine, None)
+
+    db = SQLiteDatabase(str(db_path))
+    try:
+        with pytest.raises(MigrationError, match="no 'main' migration ledger"):
+            await db.initialize()
     finally:
         await db.close()

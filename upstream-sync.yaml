@@ -35,8 +35,10 @@ last_synced:
     relocation of the fork's differently shaped local t2i keys were not applied.
     One corrective style follow-up reapplies prettier formatting over the icon
     and pagination commits. No upstream version change absorbed, so the fork
-    version and changelog are unchanged. Focused pytest, uv run pytest (6343
-    passed), make check, and the Dashboard typecheck all passed. make quality
-    pyright/bandit/complexity passed; the audit gates still flag the
-    pre-existing brace-expansion, dompurify, and pyjwt advisories, which are not
-    touched by this window.
+    version and changelog are unchanged. Post-review fixes upgrade PyJWT,
+    DOMPurify, and brace-expansion past newly disclosed advisories; restore the
+    provider selection before asynchronous session loading; scope browser drafts
+    to the authenticated account; align the session-detail type; stabilize the
+    pagination fixture; and stop helper processes after their launcher exits.
+    Focused pytest/Vitest, make check, make quality, and make test-blocking all
+    passed.

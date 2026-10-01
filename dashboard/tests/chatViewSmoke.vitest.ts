@@ -33,12 +33,16 @@ const testState = vi.hoisted(() => ({
   loadSessionMessagesMock: vi.fn(),
   loadEarlierMessagesMock: vi.fn(),
   currSessionId: '',
+  currSessionIdRef: null as { value: string } | null,
+  routerPushMock: vi.fn(),
   getSessionsMock: vi.fn(),
   newSessionMock: vi.fn(),
+  deleteSessionMock: vi.fn(),
   getProjectsMock: vi.fn(),
   getProjectSessionsMock: vi.fn(),
   addSessionToProjectMock: vi.fn(),
   chatApiUpdateSessionMock: vi.fn(),
+  askForConfirmationMock: vi.fn(),
   regenerateMessageMock: vi.fn(),
   inputSelection: {
     providerId: 'current-provider',
@@ -53,7 +57,7 @@ vi.mock('vue-router', async () => {
     ...actual,
     useRoute: () => testState.route,
     useRouter: () => ({
-      push: vi.fn(),
+      push: testState.routerPushMock,
       replace: vi.fn(),
     }),
   };
@@ -77,22 +81,26 @@ vi.mock('@/api/v1', () => ({
 }));
 
 vi.mock('@/composables/useSessions', () => ({
-  useSessions: () => ({
-    sessions: ref(testState.sessions),
-    sessionsPagination: reactive({
-      page: 1,
-      hasMore: false,
-      loading: false,
-      error: false,
-      append: false,
-    }),
-    currSessionId: ref(testState.currSessionId),
-    getSessions: testState.getSessionsMock,
-    newSession: testState.newSessionMock,
-    newChat: vi.fn(),
-    deleteSession: vi.fn(),
-    updateSessionTitle: vi.fn(),
-  }),
+  useSessions: () => {
+    const currSessionId = ref(testState.currSessionId);
+    testState.currSessionIdRef = currSessionId;
+    return {
+      sessions: ref(testState.sessions),
+      sessionsPagination: reactive({
+        page: 1,
+        hasMore: false,
+        loading: false,
+        error: false,
+        append: false,
+      }),
+      currSessionId,
+      getSessions: testState.getSessionsMock,
+      newSession: testState.newSessionMock,
+      newChat: vi.fn(),
+      deleteSession: testState.deleteSessionMock,
+      updateSessionTitle: vi.fn(),
+    };
+  },
 }));
 
 vi.mock('@/composables/useProjects', () => ({
@@ -193,7 +201,7 @@ vi.mock('@/i18n/composables', () => ({
 }));
 
 vi.mock('@/utils/confirmDialog', () => ({
-  askForConfirmation: vi.fn(),
+  askForConfirmation: testState.askForConfirmationMock,
   useConfirmDialog: () => undefined,
 }));
 
@@ -310,15 +318,19 @@ describe('Chat view smoke', () => {
     testState.loadedSessions = new Map();
     testState.sessionProjects = new Map();
     testState.paginationBySession = new Map();
+    testState.currSessionIdRef = null;
     testState.loadSessionMessagesMock.mockResolvedValue(undefined);
     testState.currSessionId = '';
     testState.getSessionsMock.mockResolvedValue(undefined);
     testState.newSessionMock.mockResolvedValue('session-new');
+    testState.deleteSessionMock.mockResolvedValue(true);
+    testState.routerPushMock.mockResolvedValue(undefined);
     testState.getProjectsMock.mockResolvedValue(undefined);
     testState.getProjectSessionsMock.mockResolvedValue([]);
     testState.addSessionToProjectMock.mockResolvedValue(undefined);
     testState.chatApiUpdateSessionMock.mockResolvedValue(undefined);
     testState.regenerateMessageMock.mockResolvedValue(undefined);
+    testState.askForConfirmationMock.mockResolvedValue(true);
     testState.inputSelection = {
       providerId: 'current-provider',
       modelName: 'current-model',
@@ -331,6 +343,29 @@ describe('Chat view smoke', () => {
 
     expect(wrapper.find('.welcome-title').text()).toBe('How can AstrBot help?');
     expect(wrapper.find('.chat-input-stub').exists()).toBe(true);
+  });
+
+  it('mounts when browser storage is unavailable', async () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, 'getItem')
+      .mockImplementation(() => {
+        throw new Error('blocked');
+      });
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('blocked');
+      });
+
+    try {
+      const wrapper = mountChat();
+      await flushPromises();
+
+      expect(wrapper.find('.chat-input-stub').exists()).toBe(true);
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    }
   });
 
   it('restores a session provider before waiting for message loading', async () => {
@@ -367,6 +402,39 @@ describe('Chat view smoke', () => {
 
     resolveLoad();
     await flushPromises();
+  });
+
+  it('does not navigate away after another session wins a deletion race', async () => {
+    let resolveDelete!: (deleted: boolean) => void;
+    testState.currSessionId = 'session-a';
+    testState.sessions = [
+      { session_id: 'session-a', display_name: 'Session A' },
+      { session_id: 'session-b', display_name: 'Session B' },
+    ];
+    testState.deleteSessionMock.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+
+    const wrapper = mountChat();
+    await flushPromises();
+    const sessionItems = wrapper.findAll('.session-item');
+
+    await sessionItems[0].findAll('.session-action-btn')[1].trigger('click');
+    await flushPromises();
+    expect(testState.deleteSessionMock).toHaveBeenCalledWith('session-a');
+
+    await sessionItems[1].trigger('click');
+    await flushPromises();
+    expect(testState.currSessionIdRef?.value).toBe('session-b');
+
+    resolveDelete(true);
+    await flushPromises();
+
+    expect(testState.routerPushMock).toHaveBeenCalledWith('/chat/session-b');
+    expect(testState.routerPushMock).not.toHaveBeenCalledWith('/chat');
   });
 
   it('renders the provider workspace route without mounting the welcome state', async () => {

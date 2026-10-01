@@ -738,6 +738,24 @@ const {
 
 type WorkspaceView = 'chat' | 'providers';
 
+/** Read browser state without letting restricted storage abort chat setup. */
+function readStoredValue(key: string): string {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** Persist browser state when storage is available. */
+function writeStoredValue(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Browser persistence must not block chat interactions.
+  }
+}
+
 const sidebarCollapsed = ref(false);
 interface TokenProviderConfig extends ProviderMetadataSource {
   id: string;
@@ -758,7 +776,7 @@ const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
-const draftOwner = localStorage.getItem('user') || '';
+const draftOwner = readStoredValue('user');
 const draft = ref(readChatDraft(draftOwner, currSessionId.value));
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
@@ -956,7 +974,7 @@ watch(currSessionId, (sessionId, previousSessionId) => {
 const activeConfigId = ref<string | null>(null);
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem('chat.transportMode') as TransportMode) === 'websocket'
+  (readStoredValue('chat.transportMode') as TransportMode) === 'websocket'
     ? 'websocket'
     : 'sse',
 );
@@ -979,7 +997,7 @@ const currentTransportLabel = computed(() =>
 );
 
 watch(transportMode, (mode) => {
-  localStorage.setItem('chat.transportMode', mode);
+  writeStoredValue('chat.transportMode', mode);
 });
 
 watch(draft, (value) => {
@@ -1110,8 +1128,8 @@ function getSelectedProviderSelection() {
   }
   syncSelectedTokenProvider();
   return {
-    providerId: localStorage.getItem('selectedProvider') || '',
-    modelName: localStorage.getItem('selectedProviderModel') || '',
+    providerId: readStoredValue('selectedProvider'),
+    modelName: readStoredValue('selectedProviderModel'),
   };
 }
 
@@ -1126,9 +1144,7 @@ const SESSION_PROVIDER_STORAGE_PREFIX = 'chat.sessionProvider.';
 /** Read a validated provider/model choice for one chat session. */
 function readSessionProviderSelection(sessionId: string) {
   try {
-    const raw = localStorage.getItem(
-      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
-    );
+    const raw = readStoredValue(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.providerId === 'string' && parsed.providerId) {
@@ -1150,7 +1166,7 @@ function writeSessionProviderSelection(
 ) {
   if (!sessionId || !selection?.providerId) return;
   try {
-    localStorage.setItem(
+    writeStoredValue(
       SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
       JSON.stringify({
         providerId: selection.providerId,
@@ -1282,8 +1298,7 @@ function sessionTitle(session: Session) {
 
 function syncSelectedTokenProvider() {
   if (typeof window === 'undefined') return;
-  selectedTokenProviderId.value =
-    localStorage.getItem('selectedProvider') || '';
+  selectedTokenProviderId.value = readStoredValue('selectedProvider');
 }
 
 async function loadTokenProviders() {
@@ -1420,7 +1435,7 @@ async function deleteSidebarSession(session: Session) {
   const wasCurrent = currSessionId.value === session.session_id;
   if (!(await deleteSession(session.session_id))) return;
   writeChatDraft(draftOwner, session.session_id, '');
-  if (wasCurrent) {
+  if (wasCurrent && !currSessionId.value) {
     selectedProjectId.value = null;
     await router.push(basePath());
   }

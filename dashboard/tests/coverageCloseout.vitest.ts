@@ -719,7 +719,12 @@ describe('coverage closeout', () => {
         },
       },
     });
-    api.chatApi.listSessions.mockResolvedValue({ data: { data: [] } });
+    api.chatApi.listSessions.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: { sessions: [], page: 1, page_size: 30, total: 0 },
+      },
+    });
     const result = await sessions.batchDeleteSessions(['s2']);
     expect(result.currentSessionDeleted).toBe(false);
     expect(result.failed_items[0]?.reason).toBe('busy');

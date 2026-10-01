@@ -2309,6 +2309,8 @@ export const openUnifiedChatWebSocket = <ThrowOnError extends boolean = false>(
 
 /**
  * List webchat sessions
+ *
+ * API-key requests return a paginated object and require username. Dashboard requests with page or page_size return the same paginated object (sessions, page, page_size, total), scoped to the authenticated user. Dashboard requests without pagination parameters retain the legacy array response, limited to 100 sessions. Paginated requests default to page 1 and page_size 20, with page_size clamped to 1-100.
  */
 export const listChatSessions = <ThrowOnError extends boolean = false>(
   options?: Options<ListChatSessionsData, ThrowOnError>,
@@ -2381,6 +2383,8 @@ export const deleteChatSession = <ThrowOnError extends boolean = false>(
 
 /**
  * Get a webchat session and its messages
+ *
+ * Includes session metadata independently of the paginated session list.
  */
 export const getChatSession = <ThrowOnError extends boolean = false>(
   options: Options<GetChatSessionData, ThrowOnError>,

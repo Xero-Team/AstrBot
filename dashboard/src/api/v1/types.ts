@@ -642,6 +642,13 @@ export interface ChatSessionListParams {
   username?: string;
 }
 
+export interface ChatSessionPage {
+  sessions: ChatSessionSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 export interface CronJobListParams {
   type?: string;
 }

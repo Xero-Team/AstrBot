@@ -164,7 +164,9 @@ class PlatformSessionStoreMixin(DatabaseStoreMixin):
             total = int(total_result.scalar_one() or 0)
 
             result_query = (
-                base_query.order_by(desc(PlatformSession.updated_at))
+                base_query.order_by(
+                    desc(PlatformSession.updated_at), desc(PlatformSession.session_id)
+                )
                 .offset(offset)
                 .limit(page_size)
             )

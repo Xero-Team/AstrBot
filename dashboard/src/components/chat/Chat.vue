@@ -83,9 +83,14 @@
         />
       </div>
 
-      <div v-if="!isSidebarCollapsed" class="session-list">
+      <div
+        v-if="!isSidebarCollapsed"
+        ref="sidebarContent"
+        class="session-list"
+        @scroll.passive="loadMoreSessions"
+      >
         <div
-          v-for="session in sessions"
+          v-for="session in sidebarSessions"
           :key="session.session_id"
           class="session-item"
           :class="{
@@ -129,11 +134,25 @@
         </div>
 
         <div
-          v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
+          v-if="!isSidebarCollapsed && !sidebarSessions.length && !loadingSessions"
           class="empty-sessions"
         >
           {{ tm('conversation.noHistory') }}
         </div>
+
+        <v-progress-linear
+          v-if="sessionsPagination.loading"
+          color="primary"
+          height="2"
+          indeterminate
+          :aria-label="tm('conversation.loading')"
+        />
+        <ChatLoadError
+          v-if="sessionsPagination.error"
+          :message="tm('conversation.loadFailed')"
+          :loading="sessionsPagination.loading"
+          @retry="getSessions(sessionsPagination.append)"
+        />
       </div>
 
       <div class="sidebar-footer">
@@ -675,6 +694,7 @@ const { languageOptions, currentLanguage, switchLanguage, locale } =
   useLanguageSwitcher();
 const {
   sessions,
+  sessionsPagination,
   currSessionId,
   getSessions,
   newSession,
@@ -740,6 +760,7 @@ const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
+const sidebarContent = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const suppressAutoScroll = ref(false);
@@ -819,6 +840,7 @@ const {
   loadedSessions,
   paginationBySession,
   sessionProjects,
+  sessionDetails,
   activeMessages,
   isSessionRunning,
   isUserMessage,
@@ -984,6 +1006,7 @@ const currentSession = computed(
     projectSessions.value.find(
       (session) => session.session_id === currSessionId.value,
     ) ||
+    sessionDetails.get(currSessionId.value) ||
     null,
 );
 const sessionProject = computed(() =>
@@ -991,6 +1014,17 @@ const sessionProject = computed(() =>
     ? (sessionProjects.get(currSessionId.value) ?? null)
     : null,
 );
+const sidebarSessions = computed<Session[]>(() => {
+  const current = currentSession.value;
+  if (
+    current &&
+    !sessionProject.value &&
+    !sessions.value.some((session) => session.session_id === current.session_id)
+  ) {
+    return [current, ...sessions.value];
+  }
+  return sessions.value;
+});
 const currentSessionTitle = computed(() =>
   currentSession.value ? sessionTitle(currentSession.value) : '',
 );
@@ -1130,6 +1164,18 @@ watch(activeMessages, () => {
     scrollToBottom();
   }
 });
+
+watch(
+  [
+    () => sessionsPagination.loading,
+    () => sessions.value.length,
+    isSidebarCollapsed,
+  ],
+  () => {
+    void nextTick(loadMoreSessions);
+  },
+  { flush: 'post' },
+);
 
 function getRouteSessionId() {
   const raw = route.params.conversationId;
@@ -1278,6 +1324,10 @@ async function saveSessionTitleDialog() {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
+    const sessionDetail = sessionDetails.get(sessionId);
+    if (sessionDetail) {
+      sessionDetail.display_name = displayName;
+    }
     const projectSession = projectSessions.value.find(
       (session) => session.session_id === sessionId,
     );
@@ -1286,6 +1336,8 @@ async function saveSessionTitleDialog() {
     }
     if (refreshProjectSessionsAfterTitleSave.value) {
       await loadProjectSessions();
+    } else {
+      await getSessions();
     }
     sessionTitleDialogOpen.value = false;
   } finally {
@@ -1845,6 +1897,27 @@ async function retryCurrentSessionLoad() {
     return;
   }
   await loadSessionMessages(sessionId, true, true);
+}
+
+function loadMoreSessions() {
+  const container = sidebarContent.value;
+  if (
+    !container ||
+    container.clientHeight === 0 ||
+    isSidebarCollapsed.value ||
+    !sessionsPagination.hasMore ||
+    sessionsPagination.loading ||
+    sessionsPagination.error
+  ) {
+    return;
+  }
+  if (
+    container.scrollHeight - container.scrollTop - container.clientHeight >
+    120
+  ) {
+    return;
+  }
+  void getSessions(true);
 }
 
 function maybeLoadEarlierOnScroll(container: HTMLElement) {

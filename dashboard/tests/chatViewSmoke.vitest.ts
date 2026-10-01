@@ -1,4 +1,4 @@
-import { defineComponent, nextTick, ref } from 'vue';
+import { defineComponent, nextTick, reactive, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import Chat from '@/components/chat/Chat.vue';
@@ -78,6 +78,13 @@ vi.mock('@/api/v1', () => ({
 vi.mock('@/composables/useSessions', () => ({
   useSessions: () => ({
     sessions: ref(testState.sessions),
+    sessionsPagination: reactive({
+      page: 1,
+      hasMore: false,
+      loading: false,
+      error: false,
+      append: false,
+    }),
     currSessionId: ref(testState.currSessionId),
     getSessions: testState.getSessionsMock,
     newSession: testState.newSessionMock,
@@ -138,6 +145,7 @@ vi.mock('@/composables/useMessages', () => ({
     loadedSessions: testState.loadedSessions,
     paginationBySession: testState.paginationBySession,
     sessionProjects: testState.sessionProjects,
+    sessionDetails: new Map(),
     activeMessages: ref(testState.activeMessages),
     isSessionRunning: () => false,
     isUserMessage: (message: { content?: { type?: string } }) =>

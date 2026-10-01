@@ -31,6 +31,7 @@ class Star(PluginKVStoreMixin):
         )
 
     def _get_context_config(self, umo: str | None = None) -> Any:
+        """Resolve the configuration bound to a unified message origin."""
         try:
             return self.context.config.get(umo)
         except Exception as exc:
@@ -72,6 +73,7 @@ class Star(PluginKVStoreMixin):
         )
 
     def _resolve_active_template(self, umo: str | None) -> str | None:
+        """Return the active local text-to-image template for a context."""
         config_obj = self._get_context_config(umo)
         if not hasattr(config_obj, "get"):
             return None

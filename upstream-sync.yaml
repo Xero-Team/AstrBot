@@ -5,44 +5,38 @@ upstream:
   branch: master
 
 last_synced:
-  commit: b53999e959cfc3b71d7b74713ddee837be843fcb
-  synced_at_utc: 2026-09-29T13:17:14Z
+  commit: da4811ae81295fca5a1031ffd1114ca10376b318
+  synced_at_utc: 2026-10-01T08:38:23Z
   sync_method: adapt
   source_pr: >-
-    9705, 10061, 10183, 10184, 10193, 10209, 10216, 10217, 10227, 10229, 10231,
-    10234, 10237, 10238, 10243, 10245, 10246, 10247, 10248, 10253, 10256, 10257,
-    10270, 10271, 10272, 10273, 10274
+    10265, 10278, 10279, 10282, 10289, 10290, 10299, 10301, 10302, 10304,
+    10306
   note: >-
-    Reviewed 69ae35a359e8c9a44375004e6b8252ee366102bb..b53999e959cfc3b71d7b74713ddee837be843fcb
-    (30 commits). upstream/master has since advanced two further commits
-    (5a4745f151c9f64a9e81bd19b26dd07f5ff3b804 docs, fe29538e6b0581ab49e75b4dde86bfdd7c81fb57 icons)
-    that are out of scope for this window and remain pending. Adapted 15: #10243
-    (reasoning panel scroll intent on the fork ReasoningSidebar), #10238 (reload
-    queued conversation history under the session lock in build_main_agent), #10237
-    (forward extra_user_content_parts through CoreExecutionContext.tool_loop_agent),
-    #10229 (weixin_oc positive timeout floors with the fork's 5000ms long-poll
-    floor kept), #10209 (prepare File attachments before the session lock; the
-    provider-wake-prefix parts were dropped), #10234 (recheck provider enable and
-    the session/sender overlay after acquiring the lock), #10184 (github-actions
-    bumps onto the fork's peeled pinned SHAs; no setup-qemu-action), #10247 (chat
-    draft persistence ported to a typed .ts module), #10217 (Skills/MCP search only;
-    the MCP batch-selection feature and ja/ru locales were omitted), #10246 (UTC
-    history cutoff in the message_history store), #10061 (dark-mode icons rule in
-    vuetify-overrides.scss, provider monochrome set, and platform template order),
-    #9705 (qqofficial Mention serialization to qqbot-at-user markup plus
-    mention-stripping at both incoming sites), #10271 (requestAnimationFrame-coalesced
-    chat scroll), #10274 (sort only touched trace spans), #10193 (shorten the
-    <name>-<40hex> plugin archive root before extract_zip_safely). Cherry-picked 7:
-    #10231, #10216, #10183, #10248, #10270, #10272, #10273. Skipped 8: #10245
-    (provider_wake_prefix was removed from the fork), #10253 and #10257 (built on the
-    upstream ChatUI scroll state machine the fork never adopted; #10257 is recorded as
-    revisit-when if streamed auto-scroll regresses), #10227, #10256 and f0ab10a3 (the
-    macOS desktop shell/mobileDrawer layout the fork does not ship), bd9df8bf and
-    bcf43547 (the 4.28.2 bump and its revert; the fork is already 4.28.2 with its own
-    changelog). Three corrective follow-ups are included in the same branch:
-    3cd1aa3da (use the fork's semantic design-system tokens for the new search empty
-    states), 55284f384 (pyright arg-type suppression for the #10231 log-base signature)
-    and 6aaf6b6ca (shared-preferences guard for the #10234 session service). No
-    upstream version change in this window, so no version or changelog update. Focused
-    pytest, uv run pytest tests/unit --test-profile blocking, make check, make quality,
-    and the Dashboard build all passed.
+    Reviewed b53999e959cfc3b71d7b74713ddee837be843fcb..da4811ae81295fca5a1031ffd1114ca10376b318
+    (11 commits). Adapted 5: #10278 (pointed the Dashboard logo, setup page,
+    and fork-only AiConfigPanel mark at /favicon.svg, added
+    docs/public/favicon.svg, kept the fork docs base), #10279 (sidebar session
+    pagination: reused get_chat_sessions for dashboard page/page_size requests
+    while keeping the legacy array branch, moved the SQLite tie-break ordering
+    into core/db/stores/sessions.py, get_session returns session metadata
+    without the absent is_group column, wired the fork session-list scroll and
+    auto-fill, regenerated OpenAPI source/client/public JSON, en/zh locales
+    only), #10265 (codeql-action kept on peeled commit pins, v4.38.1 ->
+    v4.38.2 at 2892aa5e), #10301 (shared useProviderModelSelection composable
+    plus per-session provider/model persistence in the fork Chat.vue), #10306
+    (Star.text_to_image umo/template_name resolution on the fork local-only t2i
+    stack and the getVisibleItemEntries invisible-item filter). Skipped 6:
+    #10282 (fork docs intentionally label the group as upstream), #10289 (fork
+    docs already document slider), #10290 and #10299 (fork READMEs are rewritten
+    and have no such badges), #10302 (fork keeps its own 4.28.2 version and
+    changelog; prerelease policy), #10304 (fork sidebar has no brand version
+    strip and uses MDI string icons with a generated subset font, not lucide).
+    The upstream da4811a remote-render endpoint plumbing and config-profile
+    relocation of the fork's differently shaped local t2i keys were not applied.
+    One corrective style follow-up reapplies prettier formatting over the icon
+    and pagination commits. No upstream version change absorbed, so the fork
+    version and changelog are unchanged. Focused pytest, uv run pytest (6343
+    passed), make check, and the Dashboard typecheck all passed. make quality
+    pyright/bandit/complexity passed; the audit gates still flag the
+    pre-existing brace-expansion, dompurify, and pyjwt advisories, which are not
+    touched by this window.

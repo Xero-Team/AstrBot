@@ -35,11 +35,7 @@ onMounted(async () => {
       <v-card-title>
         <div class="auth-header">
           <div class="auth-header__brand">
-            <img
-              width="80"
-              src="/favicon.svg"
-              alt="AstrBot Logo"
-            />
+            <img width="80" src="/favicon.svg" alt="AstrBot Logo" />
           </div>
           <AuthAppearanceMenu />
         </div>

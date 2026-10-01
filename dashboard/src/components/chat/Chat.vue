@@ -134,7 +134,9 @@
         </div>
 
         <div
-          v-if="!isSidebarCollapsed && !sidebarSessions.length && !loadingSessions"
+          v-if="
+            !isSidebarCollapsed && !sidebarSessions.length && !loadingSessions
+          "
           class="empty-sessions"
         >
           {{ tm('conversation.noHistory') }}

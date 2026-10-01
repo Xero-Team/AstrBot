@@ -140,6 +140,7 @@ export function mergeHistoryRecords(
   return merged;
 }
 
+/** Manage request-scoped chat messages, history pages, and live transports. */
 export function useMessages(options: UseMessagesOptions) {
   const loadingMessagesState = ref(false);
   const sending = ref(false);
@@ -334,12 +335,8 @@ export function useMessages(options: UseMessagesOptions) {
       }
       sessionProjects.set(sessionId, normalizeSessionProject(payload.project));
       const sessionMeta = payload.session;
-      if (
-        sessionMeta &&
-        typeof sessionMeta === 'object' &&
-        typeof (sessionMeta as { session_id?: unknown }).session_id === 'string'
-      ) {
-        sessionDetails.set(sessionId, sessionMeta as Session);
+      if (sessionMeta?.session_id === sessionId) {
+        sessionDetails.set(sessionId, sessionMeta);
       }
       loadedSessions.set(sessionId, true);
       if (resumeRuns && Array.isArray(payload.active_runs)) {

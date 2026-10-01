@@ -264,6 +264,7 @@ async def chat_sessions(
     service: OpenApiService = Depends(get_service),
     chat_service: ChatService = Depends(get_chat_service),
 ):
+    """List sessions in the legacy or paginated response shape."""
     if auth.via != "api_key":
         await require_resource_action(
             request,

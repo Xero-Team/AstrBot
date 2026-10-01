@@ -9,17 +9,26 @@ const selectedProviderId = ref('');
 const selectedModelName = ref('');
 let syncedFromStorage = false;
 
+/** Hydrate the shared selection once when the dashboard loads. */
 function syncFromStorage() {
   if (syncedFromStorage || typeof window === 'undefined') return;
   syncedFromStorage = true;
-  selectedProviderId.value = localStorage.getItem(SELECTED_PROVIDER_KEY) || '';
-  selectedModelName.value =
-    localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || '';
+  try {
+    selectedProviderId.value =
+      localStorage.getItem(SELECTED_PROVIDER_KEY) || '';
+    selectedModelName.value =
+      localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || '';
+  } catch {
+    selectedProviderId.value = '';
+    selectedModelName.value = '';
+  }
 }
 
+/** Share provider/model selection state across chat selector instances. */
 export function useProviderModelSelection() {
   syncFromStorage();
 
+  /** Update the shared state and its browser persistence. */
   function setSelection(providerId: string, modelName = '') {
     selectedProviderId.value = providerId;
     selectedModelName.value = modelName;

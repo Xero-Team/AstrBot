@@ -55,6 +55,7 @@ export function useSessions(chatboxMode: boolean = false) {
 
   const SESSIONS_PAGE_SIZE = 30;
 
+  /** Load the initial session range or append the next page. */
   async function getSessions(append = false) {
     if (append && (sessionsPagination.loading || !sessionsPagination.hasMore)) {
       return;
@@ -158,14 +159,21 @@ export function useSessions(chatboxMode: boolean = false) {
     }
   }
 
-  async function deleteSession(sessionId: string) {
+  /** Delete a session and report whether the backend mutation succeeded. */
+  async function deleteSession(sessionId: string): Promise<boolean> {
     try {
       await chatApi.deleteSession(sessionId);
       await getSessions();
-      currSessionId.value = '';
-      selectedSessions.value = [];
+      if (currSessionId.value === sessionId) {
+        currSessionId.value = '';
+      }
+      selectedSessions.value = selectedSessions.value.filter(
+        (selectedSessionId) => selectedSessionId !== sessionId,
+      );
+      return true;
     } catch (err) {
       console.error(err);
+      return false;
     }
   }
 

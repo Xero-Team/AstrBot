@@ -207,6 +207,7 @@ export interface ChatSessionProjectData {
 }
 
 export interface ChatSessionDetailData {
+  session?: ChatSessionSummary;
   session_id?: string;
   display_name?: string | null;
   platform_id?: string;

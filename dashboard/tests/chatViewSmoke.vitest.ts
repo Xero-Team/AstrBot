@@ -30,6 +30,7 @@ const testState = vi.hoisted(() => ({
   loadedSessions: new Map<string, boolean>(),
   sessionProjects: new Map<string, unknown>(),
   paginationBySession: new Map<string, Record<string, unknown>>(),
+  loadSessionMessagesMock: vi.fn(),
   loadEarlierMessagesMock: vi.fn(),
   currSessionId: '',
   getSessionsMock: vi.fn(),
@@ -152,7 +153,7 @@ vi.mock('@/composables/useMessages', () => ({
       message.content?.type === 'user',
     messageParts: (message: { content?: { message?: unknown[] } }) =>
       message.content?.message || [],
-    loadSessionMessages: vi.fn(),
+    loadSessionMessages: testState.loadSessionMessagesMock,
     loadEarlierMessages: testState.loadEarlierMessagesMock,
     createLocalExchange: vi.fn(),
     sendMessageStream: vi.fn(),
@@ -296,6 +297,8 @@ function mountChat() {
 describe('Chat view smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    localStorage.setItem('user', 'alice');
     testState.route.path = '/chat';
     testState.route.params = {};
     testState.customizer.uiTheme = 'AstrBotLight';
@@ -307,6 +310,7 @@ describe('Chat view smoke', () => {
     testState.loadedSessions = new Map();
     testState.sessionProjects = new Map();
     testState.paginationBySession = new Map();
+    testState.loadSessionMessagesMock.mockResolvedValue(undefined);
     testState.currSessionId = '';
     testState.getSessionsMock.mockResolvedValue(undefined);
     testState.newSessionMock.mockResolvedValue('session-new');
@@ -327,6 +331,42 @@ describe('Chat view smoke', () => {
 
     expect(wrapper.find('.welcome-title').text()).toBe('How can AstrBot help?');
     expect(wrapper.find('.chat-input-stub').exists()).toBe(true);
+  });
+
+  it('restores a session provider before waiting for message loading', async () => {
+    let resolveLoad!: () => void;
+    testState.sessions = [
+      {
+        session_id: 'session-1',
+        display_name: 'Session 1',
+      },
+    ];
+    testState.loadSessionMessagesMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    localStorage.setItem(
+      'chat.sessionProvider.session-1',
+      JSON.stringify({
+        providerId: 'session-provider',
+        modelName: 'session-model',
+      }),
+    );
+
+    const wrapper = mountChat();
+    await flushPromises();
+
+    await wrapper.get('.session-item').trigger('click');
+    await nextTick();
+
+    expect(localStorage.getItem('selectedProvider')).toBe('session-provider');
+    expect(localStorage.getItem('selectedProviderModel')).toBe('session-model');
+    expect(testState.loadSessionMessagesMock).toHaveBeenCalledWith('session-1');
+
+    resolveLoad();
+    await flushPromises();
   });
 
   it('renders the provider workspace route without mounting the welcome state', async () => {

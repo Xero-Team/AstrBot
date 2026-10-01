@@ -15,17 +15,22 @@ vi.mock('vue-router', async () => {
 
 const api = vi.hoisted(() => ({
   listSessions: vi.fn(),
+  deleteSession: vi.fn(),
   upsert: vi.fn(),
   list: vi.fn(),
 }));
 
 vi.mock('@/api/v1', () => ({
-  chatApi: { listSessions: api.listSessions },
+  chatApi: {
+    listSessions: api.listSessions,
+    deleteSession: api.deleteSession,
+  },
   configRouteApi: { upsert: api.upsert, list: api.list },
 }));
 
 import { useSessions, type Session } from '@/composables/useSessions';
 
+/** Build one session summary for pagination fixtures. */
 function session(index: number): Session {
   return {
     session_id: `s${index}`,
@@ -37,6 +42,7 @@ function session(index: number): Session {
   };
 }
 
+/** Wrap a session page in the dashboard response envelope. */
 function page(sessions: Session[], pageNumber: number, total: number) {
   return {
     data: {
@@ -58,7 +64,9 @@ describe('sidebar session pagination', () => {
   });
 
   it('loads the newest page and appends older pages', async () => {
-    const newest = Array.from({ length: 30 }, (_, index) => session(100 - index));
+    const newest = Array.from({ length: 30 }, (_, index) =>
+      session(100 - index),
+    );
     const older = Array.from({ length: 5 }, (_, index) => session(70 - index));
     api.listSessions
       .mockResolvedValueOnce(page(newest, 1, 35))
@@ -89,7 +97,9 @@ describe('sidebar session pagination', () => {
   });
 
   it('deduplicates sessions across overlapping pages', async () => {
-    const newest = Array.from({ length: 30 }, (_, index) => session(30 - index));
+    const newest = Array.from({ length: 30 }, (_, index) =>
+      session(30 - index),
+    );
     const overlap = [session(3), session(2), session(1)];
     api.listSessions
       .mockResolvedValueOnce(page(newest, 1, 33))
@@ -127,5 +137,19 @@ describe('sidebar session pagination', () => {
     await sessions.getSessions(true);
 
     expect(api.listSessions).not.toHaveBeenCalled();
+  });
+
+  it('keeps the active session when deleting a different session', async () => {
+    api.deleteSession.mockResolvedValue({ data: { status: 'ok' } });
+    api.listSessions.mockResolvedValue(page([session(1)], 1, 1));
+
+    const sessions = useSessions();
+    sessions.currSessionId.value = 's1';
+    sessions.selectedSessions.value = ['s1', 's2'];
+
+    await expect(sessions.deleteSession('s2')).resolves.toBe(true);
+
+    expect(sessions.currSessionId.value).toBe('s1');
+    expect(sessions.selectedSessions.value).toEqual(['s1']);
   });
 });

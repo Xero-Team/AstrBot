@@ -37,15 +37,18 @@ const providerSelectMenuRef = ref<InstanceType<
 > | null>(null);
 const variant = props.variant;
 
+/** Keep the shared provider ID in sync with the select control. */
 function updateSelection(value: string | string[]) {
   if (typeof value === 'string') setSelection(value, selectedModelName.value);
 }
 
+/** Persist the complete provider and model selection. */
 function saveSelection(provider: ProviderSelection | null) {
   if (!provider) return;
   setSelection(provider.id, provider.model || '');
 }
 
+/** Return the provider/model pair used for the next request. */
 function getCurrentSelection() {
   return (
     providerSelectMenuRef.value?.getCurrentSelection() || {

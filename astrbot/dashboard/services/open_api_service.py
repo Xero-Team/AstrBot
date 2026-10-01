@@ -611,14 +611,28 @@ class OpenApiService:
         self,
         *,
         username: str,
-        page,
-        page_size,
+        page: int | str,
+        page_size: int | str,
         platform_id: str | None,
     ) -> dict:
+        """Return one owner-scoped page of non-project WebChat sessions.
+
+        Args:
+            username: Authenticated owner whose sessions are listed.
+            page: One-based page number from the query string.
+            page_size: Requested number of sessions, clamped to 1-100.
+            platform_id: Optional platform filter.
+
+        Returns:
+            Serialized sessions and pagination metadata.
+
+        Raises:
+            OpenApiServiceError: If page or page_size is not an integer.
+        """
         try:
             page = int(page)
             page_size = int(page_size)
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise OpenApiServiceError("page and page_size must be integers") from exc
 
         if page < 1:

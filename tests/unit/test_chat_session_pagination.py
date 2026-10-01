@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlmodel import col, update
 
 from astrbot.core.db.po.sessions import PlatformSession
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -14,12 +13,14 @@ from astrbot.dashboard.services.open_api_service import (
 
 
 def _open_api_service(db: SQLiteDatabase) -> OpenApiService:
+    """Build the service with only the database dependency used by these tests."""
     service = OpenApiService.__new__(OpenApiService)
     service.db = db
     return service
 
 
 def _chat_service(db: SQLiteDatabase) -> ChatService:
+    """Build a minimal ChatService for session-detail coverage."""
     service = ChatService.__new__(ChatService)
     service.db = db
     service.platform_history_mgr = PlatformMessageHistoryManager(db)
@@ -30,25 +31,28 @@ def _chat_service(db: SQLiteDatabase) -> ChatService:
 
 
 async def _seed_owner_sessions(db: SQLiteDatabase, count: int) -> None:
+    """Insert equally timestamped sessions in one transaction."""
     timestamp = datetime(2026, 1, 1, tzinfo=UTC)
-    for index in range(count):
-        await db.create_platform_session(
-            creator="owner",
-            platform_id="webchat",
-            session_id=f"session-{index:03}",
-            display_name=f"Session {index}",
-        )
     async with db.get_db() as session:
         async with session.begin():
-            await session.execute(
-                update(PlatformSession)
-                .where(col(PlatformSession.creator) == "owner")
-                .values(updated_at=timestamp, created_at=timestamp)
+            session.add_all(
+                [
+                    PlatformSession(
+                        creator="owner",
+                        platform_id="webchat",
+                        session_id=f"session-{index:03}",
+                        display_name=f"Session {index}",
+                        created_at=timestamp,
+                        updated_at=timestamp,
+                    )
+                    for index in range(count)
+                ]
             )
 
 
 @pytest.mark.asyncio
 async def test_get_chat_sessions_paginates_scopes_and_clamps(temp_db: SQLiteDatabase):
+    """Paginate deterministically while enforcing owner and project scope."""
     await _seed_owner_sessions(temp_db, 125)
     await temp_db.create_platform_session(
         creator="other", platform_id="webchat", session_id="foreign"
@@ -95,6 +99,7 @@ async def test_get_chat_sessions_paginates_scopes_and_clamps(temp_db: SQLiteData
 
 @pytest.mark.asyncio
 async def test_get_session_returns_session_metadata(temp_db: SQLiteDatabase):
+    """Return metadata for an owned session and reject foreign sessions."""
     service = _chat_service(temp_db)
     await temp_db.create_platform_session(
         creator="owner",

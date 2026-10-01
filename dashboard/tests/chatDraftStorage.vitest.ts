@@ -27,29 +27,41 @@ function createStorage(): Storage {
 describe('chat draft storage', () => {
   it('round-trips a session draft', () => {
     const storage = createStorage();
-    writeChatDraft('session-1', 'hello', storage);
-    expect(storage.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}session-1`)).toBe(
+    writeChatDraft('alice', 'session-1', 'hello', storage);
+    expect(storage.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}alice.session-1`)).toBe(
       'hello',
     );
-    expect(readChatDraft('session-1', storage)).toBe('hello');
+    expect(readChatDraft('alice', 'session-1', storage)).toBe('hello');
   });
 
   it('removes the key when the draft is cleared', () => {
     const storage = createStorage();
-    writeChatDraft('session-1', 'hello', storage);
-    writeChatDraft('session-1', '', storage);
-    expect(storage.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}session-1`)).toBeNull();
+    writeChatDraft('alice', 'session-1', 'hello', storage);
+    writeChatDraft('alice', 'session-1', '', storage);
+    expect(
+      storage.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}alice.session-1`),
+    ).toBeNull();
   });
 
-  it('stores the new-conversation composer under the "new" key', () => {
+  it('isolates the new-conversation composer by dashboard account', () => {
     const storage = createStorage();
-    writeChatDraft('', 'fresh', storage);
-    expect(storage.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}new`)).toBe('fresh');
-    expect(readChatDraft('', storage)).toBe('fresh');
+    writeChatDraft('alice', '', 'fresh', storage);
+    expect(storage.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}alice.new`)).toBe(
+      'fresh',
+    );
+    expect(readChatDraft('alice', '', storage)).toBe('fresh');
+    expect(readChatDraft('bob', '', storage)).toBe('');
+  });
+
+  it('does not persist drafts without an authenticated owner', () => {
+    const storage = createStorage();
+    writeChatDraft('', '', 'fresh', storage);
+    expect(storage.length).toBe(0);
+    expect(readChatDraft('', '', storage)).toBe('');
   });
 
   it('returns an empty string when no draft is stored', () => {
-    expect(readChatDraft('missing', createStorage())).toBe('');
+    expect(readChatDraft('alice', 'missing', createStorage())).toBe('');
   });
 
   it('swallows storage failures', () => {
@@ -64,7 +76,9 @@ describe('chat draft storage', () => {
         throw new Error('blocked');
       },
     } as unknown as Storage;
-    expect(readChatDraft('session-1', throwing)).toBe('');
-    expect(() => writeChatDraft('session-1', 'x', throwing)).not.toThrow();
+    expect(readChatDraft('alice', 'session-1', throwing)).toBe('');
+    expect(() =>
+      writeChatDraft('alice', 'session-1', 'x', throwing),
+    ).not.toThrow();
   });
 });

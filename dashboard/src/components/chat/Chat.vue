@@ -758,7 +758,8 @@ const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
-const draft = ref(readChatDraft(currSessionId.value));
+const draftOwner = localStorage.getItem('user') || '';
+const draft = ref(readChatDraft(draftOwner, currSessionId.value));
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref('');
@@ -985,7 +986,7 @@ watch(draft, (value) => {
   if (draftSaveTimer !== null) window.clearTimeout(draftSaveTimer);
   const sessionId = activeDraftSessionId;
   draftSaveTimer = window.setTimeout(() => {
-    writeChatDraft(sessionId, value);
+    writeChatDraft(draftOwner, sessionId, value);
     draftSaveTimer = null;
   }, DRAFT_SAVE_DELAY_MS);
 });
@@ -993,7 +994,7 @@ watch(draft, (value) => {
 watch(currSessionId, (sessionId) => {
   flushDraft();
   activeDraftSessionId = sessionId;
-  draft.value = readChatDraft(sessionId);
+  draft.value = readChatDraft(draftOwner, sessionId);
 });
 
 const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
@@ -1122,6 +1123,7 @@ const {
 
 const SESSION_PROVIDER_STORAGE_PREFIX = 'chat.sessionProvider.';
 
+/** Read a validated provider/model choice for one chat session. */
 function readSessionProviderSelection(sessionId: string) {
   try {
     const raw = localStorage.getItem(
@@ -1141,6 +1143,7 @@ function readSessionProviderSelection(sessionId: string) {
   return null;
 }
 
+/** Persist a provider/model choice without blocking chat interactions. */
 function writeSessionProviderSelection(
   sessionId: string,
   selection: { providerId?: string; modelName?: string } | null,
@@ -1332,6 +1335,7 @@ function openEditProjectDialog(project: Project) {
   projectDialogOpen.value = true;
 }
 
+/** Open a project and return keyboard focus to the composer. */
 async function selectProject(projectId: string) {
   showChatWorkspace();
   selectedProjectId.value = projectId;
@@ -1371,6 +1375,7 @@ function openSessionTitleDialog(
   sessionTitleDialogOpen.value = true;
 }
 
+/** Save a session title and refresh the list that currently owns it. */
 async function saveSessionTitleDialog() {
   if (!editingSessionTitleId.value) return;
 
@@ -1413,7 +1418,8 @@ async function deleteSidebarSession(session: Session) {
   if (!(await askForConfirmation(message, confirmDialog))) return;
 
   const wasCurrent = currSessionId.value === session.session_id;
-  await deleteSession(session.session_id);
+  if (!(await deleteSession(session.session_id))) return;
+  writeChatDraft(draftOwner, session.session_id, '');
   if (wasCurrent) {
     selectedProjectId.value = null;
     await router.push(basePath());
@@ -1430,7 +1436,8 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
 }
 
 async function deleteProjectSession(sessionId: string) {
-  await deleteSession(sessionId);
+  if (!(await deleteSession(sessionId))) return;
+  writeChatDraft(draftOwner, sessionId, '');
   await loadProjectSessions();
 }
 
@@ -1458,11 +1465,18 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
   }
 }
 
+/** Select a session and restore its provider before any asynchronous loading. */
 async function selectSession(sessionId: string, pushRoute = true) {
   showChatWorkspace();
   selectedProjectId.value = null;
   currSessionId.value = sessionId;
   replyTarget.value = null;
+  const storedSelection = readSessionProviderSelection(sessionId);
+  if (storedSelection) {
+    setProviderSelection(storedSelection.providerId, storedSelection.modelName);
+  } else {
+    writeSessionProviderSelection(sessionId, getSelectedProviderSelection());
+  }
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
     if (currSessionId.value !== sessionId) return;
@@ -1471,15 +1485,12 @@ async function selectSession(sessionId: string, pushRoute = true) {
     await loadSessionMessages(sessionId);
     if (currSessionId.value !== sessionId) return;
   }
-  const storedSelection = readSessionProviderSelection(sessionId);
-  if (storedSelection) {
-    setProviderSelection(storedSelection.providerId, storedSelection.modelName);
-  }
   scrollToBottom();
   closeMobileSidebar();
   await focusChatInput();
 }
 
+/** Create the target session if needed, then start one chat request. */
 async function sendCurrentMessage() {
   if (!canSend.value) return;
 
@@ -1530,8 +1541,8 @@ async function sendCurrentMessage() {
       window.clearTimeout(draftSaveTimer);
       draftSaveTimer = null;
     }
-    writeChatDraft(draftSessionId, '');
-    writeChatDraft(activeDraftSessionId, '');
+    writeChatDraft(draftOwner, draftSessionId, '');
+    writeChatDraft(draftOwner, activeDraftSessionId, '');
     draft.value = '';
     replyTarget.value = null;
     clearStaged({ revokeUrls: false });
@@ -1562,7 +1573,7 @@ function flushDraft() {
     window.clearTimeout(draftSaveTimer);
     draftSaveTimer = null;
   }
-  writeChatDraft(activeDraftSessionId, draft.value);
+  writeChatDraft(draftOwner, activeDraftSessionId, draft.value);
 }
 
 async function toggleWebChatTools() {
@@ -1711,6 +1722,7 @@ async function saveMessageEdit() {
   }
 }
 
+/** Regenerate a bot message with the selected or restored provider. */
 async function handleRegenerateMessage(
   message: ChatRecord,
   selection?: RegenerateModelSelection,
@@ -1963,6 +1975,7 @@ async function retryCurrentSessionLoad() {
   await loadSessionMessages(sessionId, true, true);
 }
 
+/** Request the next sidebar page when the scroll container nears its end. */
 function loadMoreSessions() {
   const container = sidebarContent.value;
   if (

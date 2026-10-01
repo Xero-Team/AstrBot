@@ -264,6 +264,7 @@ async def chat_sessions(
     service: OpenApiService = Depends(get_service),
     chat_service: ChatService = Depends(get_chat_service),
 ):
+    """List sessions in the legacy or paginated response shape."""
     if auth.via != "api_key":
         await require_resource_action(
             request,
@@ -272,13 +273,22 @@ async def chat_sessions(
             resource=object_resource("webchat-user", auth.username),
         )
         try:
+            if "page" in request.query_params or "page_size" in request.query_params:
+                return ok(
+                    await service.get_chat_sessions(
+                        username=auth.username,
+                        page=request.query_params.get("page", 1),
+                        page_size=request.query_params.get("page_size", 20),
+                        platform_id=request.query_params.get("platform_id"),
+                    )
+                )
             return ok(
                 await chat_service.get_sessions(
                     auth.username,
                     request.query_params.get("platform_id"),
                 )
             )
-        except ChatServiceError as exc:
+        except (ChatServiceError, OpenApiServiceError) as exc:
             return service_error_response(exc)
 
     try:

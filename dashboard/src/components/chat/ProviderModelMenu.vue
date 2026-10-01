@@ -12,8 +12,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import ProviderSelectMenu from '@/components/shared/ProviderSelectMenu.vue';
+import { useProviderModelSelection } from '@/composables/useProviderModelSelection';
 
 interface ProviderSelection {
   id: string;
@@ -29,27 +30,25 @@ const props = withDefaults(
   },
 );
 
-const SELECTED_PROVIDER_KEY = 'selectedProvider';
-const SELECTED_PROVIDER_MODEL_KEY = 'selectedProviderModel';
-const selectedProviderId = ref('');
-const selectedModelName = ref('');
+const { selectedProviderId, selectedModelName, setSelection } =
+  useProviderModelSelection();
 const providerSelectMenuRef = ref<InstanceType<
   typeof ProviderSelectMenu
 > | null>(null);
 const variant = props.variant;
 
+/** Keep the shared provider ID in sync with the select control. */
 function updateSelection(value: string | string[]) {
-  if (typeof value === 'string') selectedProviderId.value = value;
+  if (typeof value === 'string') setSelection(value, selectedModelName.value);
 }
 
+/** Persist the complete provider and model selection. */
 function saveSelection(provider: ProviderSelection | null) {
   if (!provider) return;
-  selectedProviderId.value = provider.id;
-  selectedModelName.value = provider.model || '';
-  localStorage.setItem(SELECTED_PROVIDER_KEY, provider.id);
-  localStorage.setItem(SELECTED_PROVIDER_MODEL_KEY, provider.model || '');
+  setSelection(provider.id, provider.model || '');
 }
 
+/** Return the provider/model pair used for the next request. */
 function getCurrentSelection() {
   return (
     providerSelectMenuRef.value?.getCurrentSelection() || {
@@ -58,12 +57,6 @@ function getCurrentSelection() {
     }
   );
 }
-
-onMounted(() => {
-  selectedProviderId.value = localStorage.getItem(SELECTED_PROVIDER_KEY) || '';
-  selectedModelName.value =
-    localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || '';
-});
 
 defineExpose({ getCurrentSelection });
 </script>

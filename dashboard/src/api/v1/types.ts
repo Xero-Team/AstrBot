@@ -207,6 +207,7 @@ export interface ChatSessionProjectData {
 }
 
 export interface ChatSessionDetailData {
+  session?: ChatSessionSummary;
   session_id?: string;
   display_name?: string | null;
   platform_id?: string;
@@ -640,6 +641,13 @@ export interface ChatSessionListParams {
   page?: number;
   page_size?: number;
   username?: string;
+}
+
+export interface ChatSessionPage {
+  sessions: ChatSessionSummary[];
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export interface CronJobListParams {

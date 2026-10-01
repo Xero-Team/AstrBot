@@ -169,10 +169,14 @@ async def test_open_api_chat_forwards_webchat_step_up_tokens(monkeypatch):
 def _session(
     session_id: str = "session-1", creator: str = "alice", platform_id: str = "webchat"
 ):
+    created_at = datetime.now(UTC)
     return SimpleNamespace(
         session_id=session_id,
         creator=creator,
         platform_id=platform_id,
+        display_name=None,
+        created_at=created_at,
+        updated_at=created_at,
     )
 
 

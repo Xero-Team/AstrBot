@@ -15,6 +15,7 @@ import type {
   ChatHistoryPageParams,
   ChatSessionDetailData,
   ChatSessionListParams,
+  ChatSessionPage,
   ChatSessionSummary,
   ChatThreadData,
   ChatThreadDetailData,
@@ -37,7 +38,7 @@ export const chatApi = {
     return `${protocol}//${host}/api/v1/unified-chat/ws?token=${encodeURIComponent(token)}`;
   },
   listSessions(params?: ChatSessionListParams) {
-    return typed<ChatSessionSummary[]>(
+    return typed<ChatSessionSummary[] | ChatSessionPage>(
       openApiV1.listChatSessions({ query: generatedQuery(params) }),
     );
   },

@@ -166,11 +166,16 @@ function shouldShowItem(itemMeta, itemKey) {
   return searchableText.includes(keyword);
 }
 
+/** Return metadata entries that should render in the requested section. */
 function getVisibleItemEntries(collapsed = false) {
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {};
   return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
     const isCollapsed = Boolean(itemMeta?.collapsed);
-    return isCollapsed === collapsed && shouldShowItem(itemMeta, itemKey);
+    return (
+      isCollapsed === collapsed &&
+      !itemMeta?.invisible &&
+      shouldShowItem(itemMeta, itemKey)
+    );
   });
 }
 

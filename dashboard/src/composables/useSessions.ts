@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, computed, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { chatApi, configRouteApi } from '@/api/v1';
 import { useToast } from '@/utils/toast';
@@ -32,6 +32,14 @@ export function useSessions(chatboxMode: boolean = false) {
   const toast = useToast();
   const { tm } = useModuleI18n('features/chat');
   const sessions = ref<Session[]>([]);
+  const sessionsPagination = reactive({
+    page: 0,
+    hasMore: false,
+    loading: false,
+    error: false,
+    append: false,
+  });
+  let sessionsRequestId = 0;
   const selectedSessions = ref<string[]>([]);
   const currSessionId = ref('');
   const pendingSessionId = ref<string | null>(null);
@@ -45,15 +53,58 @@ export function useSessions(chatboxMode: boolean = false) {
     return sessions.value.find((s) => s.session_id === currSessionId.value);
   });
 
-  async function getSessions() {
+  const SESSIONS_PAGE_SIZE = 30;
+
+  /** Load the initial session range or append the next page. */
+  async function getSessions(append = false) {
+    if (append && (sessionsPagination.loading || !sessionsPagination.hasMore)) {
+      return;
+    }
+    const requestId = ++sessionsRequestId;
+    // Refresh the loaded range after mutations so older visible sessions stay accessible.
+    const lastPage = append
+      ? sessionsPagination.page + 1
+      : Math.max(1, sessionsPagination.page);
+    const loaded: Session[] = append ? [...sessions.value] : [];
+    sessionsPagination.loading = true;
+    sessionsPagination.error = false;
+    sessionsPagination.append = append;
     try {
-      const response = await chatApi.listSessions();
-      sessions.value = response.data.data;
+      for (let page = append ? lastPage : 1; page <= lastPage; page += 1) {
+        const response = await chatApi.listSessions({
+          page,
+          page_size: SESSIONS_PAGE_SIZE,
+        });
+        if (requestId !== sessionsRequestId) return;
+        if (response.data.status !== 'ok') {
+          throw new Error(response.data.message || 'Failed to load sessions');
+        }
+        const payload = response.data.data;
+        if (Array.isArray(payload)) {
+          throw new Error('Unexpected session list response');
+        }
+        loaded.push(...payload.sessions);
+        const hasMore = page * payload.page_size < payload.total;
+        if (page === lastPage || !hasMore) {
+          sessions.value = [
+            ...new Map(
+              loaded.map((session) => [session.session_id, session] as const),
+            ).values(),
+          ];
+          sessionsPagination.page = page;
+          sessionsPagination.hasMore = hasMore;
+          break;
+        }
+      }
     } catch (err) {
+      if (requestId !== sessionsRequestId) return;
+      sessionsPagination.error = true;
       if (hasStatusCode(err, 401)) {
         void router.push('/auth/login?redirect=/chatbox');
       }
       console.error(err);
+    } finally {
+      if (requestId === sessionsRequestId) sessionsPagination.loading = false;
     }
   }
 
@@ -108,14 +159,21 @@ export function useSessions(chatboxMode: boolean = false) {
     }
   }
 
-  async function deleteSession(sessionId: string) {
+  /** Delete a session and report whether the backend mutation succeeded. */
+  async function deleteSession(sessionId: string): Promise<boolean> {
     try {
       await chatApi.deleteSession(sessionId);
       await getSessions();
-      currSessionId.value = '';
-      selectedSessions.value = [];
+      if (currSessionId.value === sessionId) {
+        currSessionId.value = '';
+      }
+      selectedSessions.value = selectedSessions.value.filter(
+        (selectedSessionId) => selectedSessionId !== sessionId,
+      );
+      return true;
     } catch (err) {
       console.error(err);
+      return false;
     }
   }
 
@@ -243,6 +301,7 @@ export function useSessions(chatboxMode: boolean = false) {
 
   return {
     sessions,
+    sessionsPagination,
     selectedSessions,
     currSessionId,
     pendingSessionId,

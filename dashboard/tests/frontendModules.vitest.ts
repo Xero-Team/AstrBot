@@ -265,16 +265,22 @@ describe('frontend modules', () => {
   it('covers session, conversation, and project composables', async () => {
     apiMocks.listSessions.mockResolvedValue({
       data: {
-        data: [
-          {
-            session_id: 's1',
-            display_name: 'one',
-            updated_at: '',
-            platform_id: 'webchat',
-            creator: 'u',
-            created_at: '',
-          },
-        ],
+        status: 'ok',
+        data: {
+          sessions: [
+            {
+              session_id: 's1',
+              display_name: 'one',
+              updated_at: '',
+              platform_id: 'webchat',
+              creator: 'u',
+              created_at: '',
+            },
+          ],
+          page: 1,
+          page_size: 30,
+          total: 1,
+        },
       },
     });
     apiMocks.createSession.mockResolvedValue({
@@ -292,6 +298,20 @@ describe('frontend modules', () => {
     expect(sessions.sessions.value).toHaveLength(1);
     await sessions.newSession();
 
+    apiMocks.listSessions.mockResolvedValue({
+      data: {
+        data: [
+          {
+            session_id: 's1',
+            display_name: 'one',
+            updated_at: '',
+            platform_id: 'webchat',
+            creator: 'u',
+            created_at: '',
+          },
+        ],
+      },
+    });
     const conversations = useConversations();
     await conversations.getConversations();
     expect(conversations.conversations.value.length).toBeGreaterThan(0);

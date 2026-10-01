@@ -132,16 +132,22 @@ describe('frontend logic coverage', () => {
   it('covers session, conversation, and project flows', async () => {
     api.chatApi.listSessions.mockResolvedValue({
       data: {
-        data: [
-          {
-            session_id: 's1',
-            display_name: 'one',
-            updated_at: '2024-01-01',
-            platform_id: 'webchat',
-            creator: 'u',
-            created_at: '',
-          },
-        ],
+        status: 'ok',
+        data: {
+          sessions: [
+            {
+              session_id: 's1',
+              display_name: 'one',
+              updated_at: '2024-01-01',
+              platform_id: 'webchat',
+              creator: 'u',
+              created_at: '',
+            },
+          ],
+          page: 1,
+          page_size: 30,
+          total: 1,
+        },
       },
     });
     api.chatApi.createSession.mockResolvedValue({

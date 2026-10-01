@@ -24,7 +24,7 @@ export function head(base = '/'): HeadConfig[] {
         href: 'https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap',
       },
     ],
-    ['link', { rel: 'icon', href: `${prefix}/logo.png` }],
+    ['link', { rel: 'icon', href: `${prefix}/favicon.svg` }],
     ['meta', { name: 'description', content: 'AstrBot' }],
     ['meta', { name: 'referrer', content: 'no-referrer' }],
     [

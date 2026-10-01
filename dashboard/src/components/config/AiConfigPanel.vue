@@ -52,7 +52,7 @@
               <img
                 v-if="runnerType === 'local'"
                 class="ai-config-panel__brand-logo"
-                src="@/assets/images/plugin_icon.png"
+                src="/favicon.svg"
                 alt=""
               />
             </h3>

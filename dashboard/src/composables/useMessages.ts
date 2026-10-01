@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from 'vue';
 import { chatApi, fileApi } from '@/api/v1';
 import { fetchWithAuth } from '@/api/http';
+import type { Session } from '@/composables/useSessions';
 import type {
   ChatContent,
   ChatRecord,
@@ -139,6 +140,7 @@ export function mergeHistoryRecords(
   return merged;
 }
 
+/** Manage request-scoped chat messages, history pages, and live transports. */
 export function useMessages(options: UseMessagesOptions) {
   const loadingMessagesState = ref(false);
   const sending = ref(false);
@@ -157,6 +159,9 @@ export function useMessages(options: UseMessagesOptions) {
   const sessionProjects = reactive(
     new Map<string, ChatSessionProject | null>(),
   );
+  // Session metadata returned with a session load, used to keep an opened
+  // session visible in the sidebar before its paginated page is fetched.
+  const sessionDetails = reactive(new Map<string, Session>());
 
   const activeMessages = computed(() =>
     options.currentSessionId.value
@@ -329,6 +334,10 @@ export function useMessages(options: UseMessagesOptions) {
         });
       }
       sessionProjects.set(sessionId, normalizeSessionProject(payload.project));
+      const sessionMeta = payload.session;
+      if (sessionMeta?.session_id === sessionId) {
+        sessionDetails.set(sessionId, sessionMeta);
+      }
       loadedSessions.set(sessionId, true);
       if (resumeRuns && Array.isArray(payload.active_runs)) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
@@ -1404,6 +1413,7 @@ export function useMessages(options: UseMessagesOptions) {
     loadedSessions,
     paginationBySession,
     sessionProjects,
+    sessionDetails,
     activeMessages,
     isSessionRunning,
     isUserMessage,

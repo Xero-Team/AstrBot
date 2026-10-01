@@ -83,9 +83,14 @@
         />
       </div>
 
-      <div v-if="!isSidebarCollapsed" class="session-list">
+      <div
+        v-if="!isSidebarCollapsed"
+        ref="sidebarContent"
+        class="session-list"
+        @scroll.passive="loadMoreSessions"
+      >
         <div
-          v-for="session in sessions"
+          v-for="session in sidebarSessions"
           :key="session.session_id"
           class="session-item"
           :class="{
@@ -129,11 +134,27 @@
         </div>
 
         <div
-          v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
+          v-if="
+            !isSidebarCollapsed && !sidebarSessions.length && !loadingSessions
+          "
           class="empty-sessions"
         >
           {{ tm('conversation.noHistory') }}
         </div>
+
+        <v-progress-linear
+          v-if="sessionsPagination.loading"
+          color="primary"
+          height="2"
+          indeterminate
+          :aria-label="tm('conversation.loading')"
+        />
+        <ChatLoadError
+          v-if="sessionsPagination.error"
+          :message="tm('conversation.loadFailed')"
+          :loading="sessionsPagination.loading"
+          @retry="getSessions(sessionsPagination.append)"
+        />
       </div>
 
       <div class="sidebar-footer">
@@ -634,6 +655,7 @@ import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useRecording } from '@/composables/useRecording';
 import { useProjects } from '@/composables/useProjects';
 import { useDragUpload } from '@/composables/useDragUpload';
+import { useProviderModelSelection } from '@/composables/useProviderModelSelection';
 import { useCustomizerStore } from '@/stores/customizer';
 import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue';
 import {
@@ -675,6 +697,7 @@ const { languageOptions, currentLanguage, switchLanguage, locale } =
   useLanguageSwitcher();
 const {
   sessions,
+  sessionsPagination,
   currSessionId,
   getSessions,
   newSession,
@@ -715,6 +738,24 @@ const {
 
 type WorkspaceView = 'chat' | 'providers';
 
+/** Read browser state without letting restricted storage abort chat setup. */
+function readStoredValue(key: string): string {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** Persist browser state when storage is available. */
+function writeStoredValue(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Browser persistence must not block chat interactions.
+  }
+}
+
 const sidebarCollapsed = ref(false);
 interface TokenProviderConfig extends ProviderMetadataSource {
   id: string;
@@ -735,11 +776,13 @@ const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
-const draft = ref(readChatDraft(currSessionId.value));
+const draftOwner = readStoredValue('user');
+const draft = ref(readChatDraft(draftOwner, currSessionId.value));
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
+const sidebarContent = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const suppressAutoScroll = ref(false);
@@ -819,6 +862,7 @@ const {
   loadedSessions,
   paginationBySession,
   sessionProjects,
+  sessionDetails,
   activeMessages,
   isSessionRunning,
   isUserMessage,
@@ -930,7 +974,7 @@ watch(currSessionId, (sessionId, previousSessionId) => {
 const activeConfigId = ref<string | null>(null);
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem('chat.transportMode') as TransportMode) === 'websocket'
+  (readStoredValue('chat.transportMode') as TransportMode) === 'websocket'
     ? 'websocket'
     : 'sse',
 );
@@ -953,14 +997,14 @@ const currentTransportLabel = computed(() =>
 );
 
 watch(transportMode, (mode) => {
-  localStorage.setItem('chat.transportMode', mode);
+  writeStoredValue('chat.transportMode', mode);
 });
 
 watch(draft, (value) => {
   if (draftSaveTimer !== null) window.clearTimeout(draftSaveTimer);
   const sessionId = activeDraftSessionId;
   draftSaveTimer = window.setTimeout(() => {
-    writeChatDraft(sessionId, value);
+    writeChatDraft(draftOwner, sessionId, value);
     draftSaveTimer = null;
   }, DRAFT_SAVE_DELAY_MS);
 });
@@ -968,7 +1012,7 @@ watch(draft, (value) => {
 watch(currSessionId, (sessionId) => {
   flushDraft();
   activeDraftSessionId = sessionId;
-  draft.value = readChatDraft(sessionId);
+  draft.value = readChatDraft(draftOwner, sessionId);
 });
 
 const isDark = computed(() => customizer.uiTheme === 'AstrBotDark');
@@ -984,6 +1028,7 @@ const currentSession = computed(
     projectSessions.value.find(
       (session) => session.session_id === currSessionId.value,
     ) ||
+    sessionDetails.get(currSessionId.value) ||
     null,
 );
 const sessionProject = computed(() =>
@@ -991,6 +1036,17 @@ const sessionProject = computed(() =>
     ? (sessionProjects.get(currSessionId.value) ?? null)
     : null,
 );
+const sidebarSessions = computed<Session[]>(() => {
+  const current = currentSession.value;
+  if (
+    current &&
+    !sessionProject.value &&
+    !sessions.value.some((session) => session.session_id === current.session_id)
+  ) {
+    return [current, ...sessions.value];
+  }
+  return sessions.value;
+});
 const currentSessionTitle = computed(() =>
   currentSession.value ? sessionTitle(currentSession.value) : '',
 );
@@ -1072,10 +1128,64 @@ function getSelectedProviderSelection() {
   }
   syncSelectedTokenProvider();
   return {
-    providerId: localStorage.getItem('selectedProvider') || '',
-    modelName: localStorage.getItem('selectedProviderModel') || '',
+    providerId: readStoredValue('selectedProvider'),
+    modelName: readStoredValue('selectedProviderModel'),
   };
 }
+
+const {
+  selectedProviderId: currentProviderId,
+  selectedModelName: currentModelName,
+  setSelection: setProviderSelection,
+} = useProviderModelSelection();
+
+const SESSION_PROVIDER_STORAGE_PREFIX = 'chat.sessionProvider.';
+
+/** Read a validated provider/model choice for one chat session. */
+function readSessionProviderSelection(sessionId: string) {
+  try {
+    const raw = readStoredValue(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.providerId === 'string' && parsed.providerId) {
+      return {
+        providerId: parsed.providerId,
+        modelName: typeof parsed.modelName === 'string' ? parsed.modelName : '',
+      };
+    }
+  } catch {
+    // Ignore corrupted entries.
+  }
+  return null;
+}
+
+/** Persist a provider/model choice without blocking chat interactions. */
+function writeSessionProviderSelection(
+  sessionId: string,
+  selection: { providerId?: string; modelName?: string } | null,
+) {
+  if (!sessionId || !selection?.providerId) return;
+  try {
+    writeStoredValue(
+      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
+      JSON.stringify({
+        providerId: selection.providerId,
+        modelName: selection.modelName || '',
+      }),
+    );
+  } catch {
+    // Session model persistence must not block chat flows.
+  }
+}
+
+// Remember the model picked by the user for the active session.
+watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
+  if (!currSessionId.value || !providerId) return;
+  writeSessionProviderSelection(currSessionId.value, {
+    providerId,
+    modelName,
+  });
+});
 
 provide('isDark', isDark);
 
@@ -1131,6 +1241,18 @@ watch(activeMessages, () => {
   }
 });
 
+watch(
+  [
+    () => sessionsPagination.loading,
+    () => sessions.value.length,
+    isSidebarCollapsed,
+  ],
+  () => {
+    void nextTick(loadMoreSessions);
+  },
+  { flush: 'post' },
+);
+
 function getRouteSessionId() {
   const raw = route.params.conversationId;
   return Array.isArray(raw) ? raw[0] : raw || '';
@@ -1176,8 +1298,7 @@ function sessionTitle(session: Session) {
 
 function syncSelectedTokenProvider() {
   if (typeof window === 'undefined') return;
-  selectedTokenProviderId.value =
-    localStorage.getItem('selectedProvider') || '';
+  selectedTokenProviderId.value = readStoredValue('selectedProvider');
 }
 
 async function loadTokenProviders() {
@@ -1229,6 +1350,7 @@ function openEditProjectDialog(project: Project) {
   projectDialogOpen.value = true;
 }
 
+/** Open a project and return keyboard focus to the composer. */
 async function selectProject(projectId: string) {
   showChatWorkspace();
   selectedProjectId.value = projectId;
@@ -1237,6 +1359,7 @@ async function selectProject(projectId: string) {
   await router.push(basePath());
   await loadProjectSessions(projectId);
   closeMobileSidebar();
+  await focusChatInput();
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
@@ -1267,6 +1390,7 @@ function openSessionTitleDialog(
   sessionTitleDialogOpen.value = true;
 }
 
+/** Save a session title and refresh the list that currently owns it. */
 async function saveSessionTitleDialog() {
   if (!editingSessionTitleId.value) return;
 
@@ -1278,6 +1402,10 @@ async function saveSessionTitleDialog() {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
+    const sessionDetail = sessionDetails.get(sessionId);
+    if (sessionDetail) {
+      sessionDetail.display_name = displayName;
+    }
     const projectSession = projectSessions.value.find(
       (session) => session.session_id === sessionId,
     );
@@ -1286,6 +1414,8 @@ async function saveSessionTitleDialog() {
     }
     if (refreshProjectSessionsAfterTitleSave.value) {
       await loadProjectSessions();
+    } else {
+      await getSessions();
     }
     sessionTitleDialogOpen.value = false;
   } finally {
@@ -1303,8 +1433,9 @@ async function deleteSidebarSession(session: Session) {
   if (!(await askForConfirmation(message, confirmDialog))) return;
 
   const wasCurrent = currSessionId.value === session.session_id;
-  await deleteSession(session.session_id);
-  if (wasCurrent) {
+  if (!(await deleteSession(session.session_id))) return;
+  writeChatDraft(draftOwner, session.session_id, '');
+  if (wasCurrent && !currSessionId.value) {
     selectedProjectId.value = null;
     await router.push(basePath());
   }
@@ -1320,7 +1451,8 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
 }
 
 async function deleteProjectSession(sessionId: string) {
-  await deleteSession(sessionId);
+  if (!(await deleteSession(sessionId))) return;
+  writeChatDraft(draftOwner, sessionId, '');
   await loadProjectSessions();
 }
 
@@ -1348,11 +1480,18 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
   }
 }
 
+/** Select a session and restore its provider before any asynchronous loading. */
 async function selectSession(sessionId: string, pushRoute = true) {
   showChatWorkspace();
   selectedProjectId.value = null;
   currSessionId.value = sessionId;
   replyTarget.value = null;
+  const storedSelection = readSessionProviderSelection(sessionId);
+  if (storedSelection) {
+    setProviderSelection(storedSelection.providerId, storedSelection.modelName);
+  } else {
+    writeSessionProviderSelection(sessionId, getSelectedProviderSelection());
+  }
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
     if (currSessionId.value !== sessionId) return;
@@ -1366,6 +1505,7 @@ async function selectSession(sessionId: string, pushRoute = true) {
   await focusChatInput();
 }
 
+/** Create the target session if needed, then start one chat request. */
 async function sendCurrentMessage() {
   if (!canSend.value) return;
 
@@ -1404,6 +1544,7 @@ async function sendCurrentMessage() {
 
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const selection = getSelectedProviderSelection();
+    writeSessionProviderSelection(sessionId, selection);
     const { userRecord, botRecord } = createLocalExchange({
       sessionId,
       messageId,
@@ -1415,8 +1556,8 @@ async function sendCurrentMessage() {
       window.clearTimeout(draftSaveTimer);
       draftSaveTimer = null;
     }
-    writeChatDraft(draftSessionId, '');
-    writeChatDraft(activeDraftSessionId, '');
+    writeChatDraft(draftOwner, draftSessionId, '');
+    writeChatDraft(draftOwner, activeDraftSessionId, '');
     draft.value = '';
     replyTarget.value = null;
     clearStaged({ revokeUrls: false });
@@ -1447,7 +1588,7 @@ function flushDraft() {
     window.clearTimeout(draftSaveTimer);
     draftSaveTimer = null;
   }
-  writeChatDraft(activeDraftSessionId, draft.value);
+  writeChatDraft(draftOwner, activeDraftSessionId, draft.value);
 }
 
 async function toggleWebChatTools() {
@@ -1596,12 +1737,14 @@ async function saveMessageEdit() {
   }
 }
 
+/** Regenerate a bot message with the selected or restored provider. */
 async function handleRegenerateMessage(
   message: ChatRecord,
   selection?: RegenerateModelSelection,
 ) {
   if (!currSessionId.value || isUserMessage(message)) return;
   const resolvedSelection = selection ?? getSelectedProviderSelection();
+  writeSessionProviderSelection(currSessionId.value, resolvedSelection);
   message.threads = [];
   await regenerateMessage(
     currSessionId.value,
@@ -1845,6 +1988,28 @@ async function retryCurrentSessionLoad() {
     return;
   }
   await loadSessionMessages(sessionId, true, true);
+}
+
+/** Request the next sidebar page when the scroll container nears its end. */
+function loadMoreSessions() {
+  const container = sidebarContent.value;
+  if (
+    !container ||
+    container.clientHeight === 0 ||
+    isSidebarCollapsed.value ||
+    !sessionsPagination.hasMore ||
+    sessionsPagination.loading ||
+    sessionsPagination.error
+  ) {
+    return;
+  }
+  if (
+    container.scrollHeight - container.scrollTop - container.clientHeight >
+    120
+  ) {
+    return;
+  }
+  void getSessions(true);
 }
 
 function maybeLoadEarlierOnScroll(container: HTMLElement) {

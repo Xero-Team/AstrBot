@@ -242,6 +242,11 @@ async def _terminate(tree: ProcessTree, process: asyncio.subprocess.Process) -> 
         if not await _reaped(process):
             await asyncio.to_thread(tree.stop, process, force=True)
             await _reaped(process)
+    else:
+        # The launcher can exit after handing work to a helper. Its process
+        # group or Windows job still owns that helper even though the launcher
+        # itself no longer needs reaping.
+        await asyncio.to_thread(tree.stop, process, force=True)
     await tree.close()
 
 

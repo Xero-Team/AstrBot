@@ -88,6 +88,65 @@ class TestStarBase:
             assert result == "D:/temp/image.png"
 
     @pytest.mark.asyncio
+    async def test_text_to_image_resolves_template_from_umo_config(self):
+        """Test text_to_image reads the template from the umo-bound config."""
+        from astrbot.core.star import Star
+
+        mock_context = MagicMock()
+        session_config = MagicMock()
+        session_config.get.side_effect = lambda key, default=None: {
+            "t2i": {"active_template": "session-template"},
+        }.get(key, default)
+        mock_context.config.get.return_value = session_config
+
+        class TestStar(Star):
+            name = "test_star"
+            author = "test_author"
+
+        star = TestStar(context=mock_context)
+
+        with patch.object(
+            mock_context.rendering, "text_to_image", new_callable=AsyncMock
+        ) as mock_render:
+            mock_render.return_value = "D:/temp/image.png"
+            result = await star.text_to_image("test text", umo="qq:group:1")
+
+            mock_context.config.get.assert_called_once_with("qq:group:1")
+            mock_render.assert_called_once_with(
+                "test text",
+                template_name="session-template",
+            )
+            assert result == "D:/temp/image.png"
+
+    @pytest.mark.asyncio
+    async def test_text_to_image_explicit_template_takes_precedence(self):
+        """Test an explicit template wins over the resolved config template."""
+        from astrbot.core.star import Star
+
+        mock_context = MagicMock()
+        mock_context.config.get.return_value = MagicMock()
+
+        class TestStar(Star):
+            name = "test_star"
+            author = "test_author"
+
+        star = TestStar(context=mock_context)
+
+        with patch.object(
+            mock_context.rendering, "text_to_image", new_callable=AsyncMock
+        ) as mock_render:
+            mock_render.return_value = "D:/temp/image.png"
+            result = await star.text_to_image(
+                "test text",
+                template_name="mine",
+                umo="qq:group:1",
+            )
+
+            mock_context.config.get.assert_not_called()
+            mock_render.assert_called_once_with("test text", template_name="mine")
+            assert result == "D:/temp/image.png"
+
+    @pytest.mark.asyncio
     async def test_html_render(self):
         """Test html_render method."""
         from astrbot.core.star import Star

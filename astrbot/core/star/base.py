@@ -30,9 +30,9 @@ class Star(PluginKVStoreMixin):
             else logging.getLogger("astrbot")
         )
 
-    def _get_context_config(self) -> Any:
+    def _get_context_config(self, umo: str | None = None) -> Any:
         try:
-            return self.context.config.get()
+            return self.context.config.get(umo)
         except Exception as exc:
             logger.debug("Unable to resolve plugin configuration: %s", exc)
             return None
@@ -44,19 +44,41 @@ class Star(PluginKVStoreMixin):
             module_path=cls.__module__,
         )
 
-    async def text_to_image(self, text: str) -> str:
-        """将文本转换为图片"""
-        config_obj = self._get_context_config()
-        template_name = None
-        if hasattr(config_obj, "get"):
-            try:
-                template_name = (config_obj.get("t2i") or {}).get("active_template")
-            except Exception:
-                template_name = None
+    async def text_to_image(
+        self,
+        text: str,
+        *,
+        template_name: str | None = None,
+        umo: str | None = None,
+    ) -> str:
+        """将文本转换为图片。
+
+        Args:
+            text: The text to render.
+            template_name: Explicit t2i template name. Takes precedence over
+                the `t2i.active_template` value from the resolved configuration.
+            umo: The unified_message_origin used to resolve the bound
+                configuration file. Falls back to the default configuration
+                when omitted or unbound.
+
+        Returns:
+            The rendered image path or URL.
+        """
+        if template_name is None:
+            template_name = self._resolve_active_template(umo)
         return await self.context.rendering.text_to_image(
             text,
             template_name=template_name,
         )
+
+    def _resolve_active_template(self, umo: str | None) -> str | None:
+        config_obj = self._get_context_config(umo)
+        if not hasattr(config_obj, "get"):
+            return None
+        try:
+            return (config_obj.get("t2i") or {}).get("active_template")
+        except Exception:
+            return None
 
     async def html_render(
         self,

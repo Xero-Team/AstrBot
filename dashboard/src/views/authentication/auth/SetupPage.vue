@@ -37,7 +37,7 @@ onMounted(async () => {
           <div class="auth-header__brand">
             <img
               width="80"
-              src="@/assets/images/plugin_icon.png"
+              src="/favicon.svg"
               alt="AstrBot Logo"
             />
           </div>

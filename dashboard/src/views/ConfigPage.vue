@@ -127,7 +127,7 @@
                 v-bind="tooltipProps"
                 icon="mdi-chat-processing"
                 size="x-large"
-                color="secondary"
+                color="primary"
                 @click="openTestChat"
               >
               </v-btn>

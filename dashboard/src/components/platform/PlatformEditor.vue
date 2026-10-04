@@ -137,7 +137,21 @@
             hide-details
             :disabled="!routesReady"
             class="route-default-card__select"
-          />
+          >
+            <template #item="{ props: itemProps, item }">
+              <v-list-item v-bind="itemProps">
+                <template #append>
+                  <v-btn
+                    icon="mdi-open-in-new"
+                    variant="text"
+                    size="x-small"
+                    :aria-label="sharedTm('configProfileDrawer.title')"
+                    @click.stop.prevent="openConfigDrawer(item.value)"
+                  />
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
         </div>
 
         <div class="route-builder">
@@ -200,7 +214,21 @@
               variant="outlined"
               hide-details
               :disabled="!routesReady"
-            />
+            >
+              <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps">
+                  <template #append>
+                    <v-btn
+                      icon="mdi-open-in-new"
+                      variant="text"
+                      size="x-small"
+                      :aria-label="sharedTm('configProfileDrawer.title')"
+                      @click.stop.prevent="openConfigDrawer(item.value)"
+                    />
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
 
             <v-btn
               color="primary"
@@ -356,6 +384,7 @@
       </section>
     </div>
   </div>
+  <ConfigProfileDrawer v-model="configDrawerOpen" :config-id="configDrawerId" />
 </template>
 
 <script setup>
@@ -368,6 +397,7 @@ import {
   sessionApi,
 } from '@/api/v1';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import ConfigProfileDrawer from '@/components/config/ConfigProfileDrawer.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
@@ -408,6 +438,16 @@ const emit = defineEmits([
 ]);
 
 const { tm } = useModuleI18n('features/platform');
+const { tm: sharedTm } = useModuleI18n('core/shared');
+
+const configDrawerOpen = ref(false);
+const configDrawerId = ref('');
+
+function openConfigDrawer(configId) {
+  configDrawerId.value =
+    configId === SYSTEM_DEFAULT_CONFIG ? 'default' : configId;
+  configDrawerOpen.value = true;
+}
 
 const draft = ref({});
 const originalPlatformId = ref('');

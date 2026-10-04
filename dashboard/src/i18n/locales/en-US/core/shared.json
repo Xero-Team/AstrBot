@@ -1,4 +1,8 @@
 {
+  "configProfileDrawer": {
+    "title": "Edit Config Profile",
+    "close": "Close"
+  },
   "knowledgeBaseSelector": {
     "notSelected": "Not selected",
     "buttonText": "Select Knowledge Base...",

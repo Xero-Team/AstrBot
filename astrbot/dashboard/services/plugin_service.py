@@ -254,9 +254,8 @@ class PluginService:
             if token := self._logo_cache.get(logo_path):
                 if not await self.file_token_service.check_token_expired(token):
                     return token
-            token = await self.file_token_service.register_file(
-                logo_path, ttl_seconds=300
-            )
+                self._logo_cache.pop(logo_path, None)
+            token = await self.file_token_service.register_snapshot(logo_path)
             self._logo_cache[logo_path] = token
             return token
         except Exception as exc:

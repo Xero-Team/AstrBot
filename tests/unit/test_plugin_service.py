@@ -1,6 +1,7 @@
 import ipaddress
 import logging
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -59,6 +60,23 @@ class SimpleLifecycle:
 
 async def _async_none(*args, **kwargs):
     return None
+
+
+@pytest.mark.asyncio
+async def test_plugin_logo_refreshes_expired_cached_snapshot() -> None:
+    service = PluginService.__new__(PluginService)
+    service._logo_cache = {"/tmp/logo.svg": "old-token"}
+    service.file_token_service = SimpleNamespace(
+        check_token_expired=AsyncMock(return_value=True),
+        register_snapshot=AsyncMock(return_value="new-token"),
+    )
+
+    token = await service.get_plugin_logo_token("/tmp/logo.svg")
+
+    assert token == "new-token"
+    service.file_token_service.register_snapshot.assert_awaited_once_with(
+        "/tmp/logo.svg"
+    )
 
 
 @pytest.mark.asyncio

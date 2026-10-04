@@ -327,6 +327,41 @@ async def test_get_astrbot_config_loads_dashboard_platform_metadata(
 
 
 @pytest.mark.asyncio
+async def test_platform_logo_refreshes_expired_cached_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    logo = tmp_path / "logo.svg"
+    logo.write_text("<svg/>", encoding="utf-8")
+    token_service = SimpleNamespace(
+        check_token_expired=AsyncMock(return_value=True),
+        register_snapshot=AsyncMock(return_value="new-token"),
+    )
+    registration = SimpleNamespace(cls_type=object)
+    service = config_service.ConfigDisplayService(
+        SimpleNamespace(),
+        SimpleNamespace(get=lambda _name: registration),
+        SimpleNamespace(),
+        SimpleNamespace(),
+        token_service,
+    )
+    platform = SimpleNamespace(name="demo", logo_path=logo.name)
+    service._logo_token_cache[f"{platform.name}:{platform.logo_path}"] = "old-token"
+    monkeypatch.setattr(
+        config_service.inspect, "getfile", lambda _cls: str(tmp_path / "adapter.py")
+    )
+    templates = {platform.name: {}}
+
+    await service.register_platform_logo(platform, templates)
+
+    assert templates[platform.name]["logo_token"] == "new-token"
+    token_service.register_snapshot.assert_awaited_once_with(
+        str(logo),
+        ttl_seconds=3600,
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_astrbot_config_redacts_sensitive_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1287,14 +1287,19 @@ class ConfigDisplayService:
 
         try:
             cache_key = f"{platform.name}:{platform.logo_path}"
-            if cache_key in self._logo_token_cache:
-                self._set_platform_logo_token(
-                    platform_default_tmpl,
-                    platform.name,
-                    self._logo_token_cache[cache_key],
-                )
-                logger.debug(f"Using cached logo token for platform {platform.name}")
-                return
+            if cached_token := self._logo_token_cache.get(cache_key):
+                if await self.file_token_service.check_token_expired(cached_token):
+                    self._logo_token_cache.pop(cache_key, None)
+                else:
+                    self._set_platform_logo_token(
+                        platform_default_tmpl,
+                        platform.name,
+                        cached_token,
+                    )
+                    logger.debug(
+                        f"Using cached logo token for platform {platform.name}"
+                    )
+                    return
 
             registration = self.platform_catalog.get(platform.name)
             if registration is None:
@@ -1312,7 +1317,7 @@ class ConfigDisplayService:
                 )
                 return
 
-            logo_token = await self.file_token_service.register_file(
+            logo_token = await self.file_token_service.register_snapshot(
                 logo_file_path,
                 ttl_seconds=3600,
             )

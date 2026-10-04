@@ -32,7 +32,7 @@ const open = computed({
     :scrim="true"
     @click:outside="open = false"
   >
-    <v-card class="app-dialog config-profile-drawer-card" elevation="12">
+    <v-card class="app-dialog config-profile-drawer-card">
       <div class="config-profile-drawer-header">
         <span class="text-h6">{{ tm('configProfileDrawer.title') }}</span>
         <v-btn

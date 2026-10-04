@@ -1,8 +1,9 @@
 import asyncio
 import re
 from collections.abc import AsyncGenerator
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import cast
+from urllib.parse import urlsplit
 
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -24,6 +25,7 @@ from astrbot.core.platform.message_limits import (
 )
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -80,12 +82,29 @@ class SlackMessageEvent(AstrMessageEvent):
                 "alt_text": "图片",
             }
         if isinstance(segment, File):
-            # upload file
-            url = segment.url or segment.file
-            response = await web_client.files_upload_v2(
-                file=url,
-                filename=segment.name or "file",
-            )
+            source = segment.url
+            if source:
+                if source.lower().startswith(("http://", "https://")):
+                    scheme, separator, remainder = source.partition(":")
+                    source = scheme.lower() + separator + remainder
+                else:
+                    scheme = urlsplit(source).scheme
+                    if scheme not in ("", "file") and not PureWindowsPath(source).drive:
+                        raise ValueError("Slack file URLs must use HTTP or HTTPS.")
+                    local_path = Path(file_uri_to_path(source))
+                    if not await asyncio.to_thread(local_path.is_file):
+                        raise ValueError("Slack file upload requires an existing file.")
+                    source = str(local_path.absolute())
+            source = source or await segment.get_file()
+            if not source:
+                raise ValueError(
+                    "Slack file upload requires a URL or an existing file."
+                )
+            async with MediaResolver(source).as_path() as resolved:
+                response = await web_client.files_upload_v2(
+                    file=str(resolved.path),
+                    filename=segment.name or "file",
+                )
             if not response["ok"]:
                 logger.error(f"Slack file upload failed: {response['error']}")
                 return {

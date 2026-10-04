@@ -166,7 +166,6 @@ const MONOCHROME_PROVIDER_ICONS = new Set([
   'xai',
   'anthropic',
   'ollama',
-  'deepseek',
   'modelscope',
   'zhipu',
   'siliconflow',

@@ -219,4 +219,37 @@ describe('PromptForm', () => {
       }),
     );
   });
+
+  it('does not offer deletion for the system default prompt', async () => {
+    const wrapper = mountWithVuetify(PromptForm, {
+      props: {
+        modelValue: true,
+        editingPrompt: {
+          prompt_id: 'default',
+          system_prompt: 'This is the editable system default prompt.',
+          custom_error_message: '',
+          begin_dialogs: [],
+          tools: null,
+          skills: null,
+          folder_id: null,
+        },
+      },
+      global: {
+        stubs: {
+          VDialog: {
+            props: ['modelValue'],
+            template: '<div class="v-dialog-stub"><slot /></div>',
+          },
+        },
+      },
+    });
+
+    await flushPromises();
+
+    expect(
+      wrapper
+        .findAll('button')
+        .some((button) => button.text().trim() === 'Delete'),
+    ).toBe(false);
+  });
 });

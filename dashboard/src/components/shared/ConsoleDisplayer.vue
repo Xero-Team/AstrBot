@@ -134,6 +134,10 @@ const levelColors: Record<LogLevel, string> = {
 
 const maxRetryAttempts = 10;
 const baseRetryDelay = 1000;
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  `${String.fromCharCode(27)}\\[[0-9;]*m`,
+  'g',
+);
 
 function closeEventSource(): void {
   if (eventSource.value) {
@@ -185,13 +189,13 @@ function matchesKeyword(log: ConsoleLogEntry): boolean {
   if (!searchKeyword.value) {
     return true;
   }
-  const text = log.data.replace(/\u001b\[[0-9;]*m/g, '').toLowerCase();
+  const text = log.data.replace(ANSI_ESCAPE_PATTERN, '').toLowerCase();
   return text.includes(searchKeyword.value.toLowerCase());
 }
 
 function appendHighlightedText(element: HTMLElement, text: string): void {
   const keyword = searchKeyword.value;
-  const cleanText = text.replace(/\u001b\[[0-9;]*m/g, '');
+  const cleanText = text.replace(ANSI_ESCAPE_PATTERN, '');
   if (!keyword || !cleanText) {
     element.textContent = cleanText;
     return;

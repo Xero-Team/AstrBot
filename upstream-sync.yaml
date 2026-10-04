@@ -23,8 +23,9 @@ last_synced:
     on removed legacy Plugin Pages and incompatible sidebar structure; #10346,
     #10339, #10347, and #10367 are already implemented equivalently or more
     completely in the fork. No upstream version change was present, so the fork
-    version and changelog remain unchanged. Two style follow-ups align the
-    adapted Dashboard changes with the fork lint and design-system guards.
+    version and changelog remain unchanged. Review follow-ups align the adapted
+    Dashboard changes with the fork lint and design-system guards and hide the
+    protected default prompt's delete action.
     Focused pytest and Vitest suites, the complete blocking pytest suite,
     make check, make quality, and the documentation build passed; the blocking
     suite was run with inherited proxy variables cleared because their

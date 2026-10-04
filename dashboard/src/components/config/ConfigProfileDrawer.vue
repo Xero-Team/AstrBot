@@ -19,7 +19,7 @@ const { tm } = useModuleI18n('core/shared');
 
 const open = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value),
+  set: (value) => void emit('update:modelValue', value),
 });
 </script>
 

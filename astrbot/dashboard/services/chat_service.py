@@ -104,6 +104,17 @@ def sanitize_upload_filename(filename: str | None) -> str:
     return name
 
 
+def unique_attachment_filename(filename: str) -> str:
+    """Prefix an upload name while keeping the stored filename within 255 bytes."""
+    prefix = f"{uuid.uuid4().hex}_"
+    budget = 255 - len(prefix.encode())
+    stem, suffix = os.path.splitext(filename)
+    if len(suffix.encode()) >= budget:
+        stem, suffix = filename, ""
+    stem = stem.encode()[: budget - len(suffix.encode())].decode(errors="ignore")
+    return f"{prefix}{stem}{suffix}"
+
+
 def extract_web_search_refs(
     accumulated_text: str,
     accumulated_parts: list,
@@ -562,7 +573,9 @@ class ChatService:
             attach_type = "file"
 
         attachments_dir = Path(self.attachments_dir).resolve(strict=False)
-        file_path = (attachments_dir / filename).resolve(strict=False)
+        file_path = (attachments_dir / unique_attachment_filename(filename)).resolve(
+            strict=False
+        )
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
@@ -599,6 +612,7 @@ class ChatService:
                         )
                     await asyncio.to_thread(file_path.rename, target_path)
                     file_path = target_path
+                    filename = os.path.splitext(filename)[0] + detected_suffix
         attachment = await self.db.insert_attachment(
             path=str(file_path),
             type=attach_type,
@@ -610,7 +624,8 @@ class ChatService:
 
         return {
             "attachment_id": attachment.attachment_id,
-            "filename": os.path.basename(attachment.path),
+            "filename": filename,
+            "stored_filename": os.path.basename(attachment.path),
             "type": attach_type,
         }
 

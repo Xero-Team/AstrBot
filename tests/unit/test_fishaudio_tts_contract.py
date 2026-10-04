@@ -75,6 +75,13 @@ class _Stream:
 class _Client:
     def __init__(self, response: _Response | BaseException) -> None:
         self.response = response
+        self.closed = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        self.closed = True
 
     def stream(self, *_args: object, **_kwargs: object) -> _Stream:
         return _Stream(self.response)
@@ -95,13 +102,15 @@ def _patch_client(
     monkeypatch: pytest.MonkeyPatch,
     response: _Response | BaseException,
     tmp_path: Path,
-) -> None:
+) -> _Client:
+    client = _Client(response)
     monkeypatch.setattr(
-        fishaudio_tts_api_source, "AsyncClient", lambda **_kwargs: _Client(response)
+        fishaudio_tts_api_source, "AsyncClient", lambda **_kwargs: client
     )
     monkeypatch.setattr(
         fishaudio_tts_api_source, "get_astrbot_temp_path", lambda: str(tmp_path)
     )
+    return client
 
 
 @pytest.mark.parametrize(
@@ -139,7 +148,7 @@ def test_fishaudio_tts_does_not_log_proxy_credentials(caplog) -> None:
 async def test_fishaudio_tts_hides_http_error_from_logs_and_exception(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog
 ) -> None:
-    _patch_client(monkeypatch, _Response(status_code=500), tmp_path)
+    client = _patch_client(monkeypatch, _Response(status_code=500), tmp_path)
 
     with caplog.at_level(logging.ERROR, logger="astrbot"):
         with pytest.raises(
@@ -148,6 +157,7 @@ async def test_fishaudio_tts_hides_http_error_from_logs_and_exception(
             await _provider().get_audio("text")
 
     assert caught.value.__cause__ is None
+    assert client.closed is True
     _assert_no_sensitive_values(caught.value, caplog.text)
     assert list(tmp_path.glob("*.wav")) == []
 

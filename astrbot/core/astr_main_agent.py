@@ -1008,15 +1008,30 @@ def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> No
     )
 
 
-def _append_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
-    req.extra_user_content_parts.append(
-        TextPart(text=f"[Audio Attachment: path {audio_path}]")
-    )
+async def _append_record_attachment(
+    req: ProviderRequest,
+    record: Record,
+    *,
+    context: str | None = None,
+) -> None:
+    """Append a voice attachment, degrading an unavailable source to text."""
+    try:
+        audio_path = await record.convert_to_file_path()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "%s voice attachment is unavailable (%s).",
+            context.capitalize() if context else "Direct",
+            type(exc).__name__,
+        )
+        req.extra_user_content_parts.append(TextPart(text="[Voice unavailable]"))
+        return
 
-
-def _append_quoted_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
+    req.audio_urls.append(audio_path)
+    label = f" in {context} message" if context else ""
     req.extra_user_content_parts.append(
-        TextPart(text=f"[Audio Attachment in quoted message: path {audio_path}]")
+        TextPart(text=f"[Audio Attachment{label}: path {audio_path}]")
     )
 
 
@@ -1876,9 +1891,7 @@ async def _append_direct_attachments(
                 TextPart(text=f"[Image Attachment: path {path}]")
             )
         elif isinstance(component, Record):
-            audio_path = await component.convert_to_file_path()
-            req.audio_urls.append(audio_path)
-            _append_audio_attachment(req, audio_path)
+            await _append_record_attachment(req, component)
         elif isinstance(component, File):
             file_path = await component.get_file()
             file_name = component.name or os.path.basename(file_path)
@@ -1955,16 +1968,7 @@ async def _append_message_component_context(
                     )
                 )
             elif isinstance(component, Record):
-                audio_path = await component.convert_to_file_path()
-                req.audio_urls.append(audio_path)
-                req.extra_user_content_parts.append(
-                    TextPart(
-                        text=(
-                            "[Audio Attachment in forwarded message: "
-                            f"path {audio_path}]"
-                        )
-                    )
-                )
+                await _append_record_attachment(req, component, context="forwarded")
             elif isinstance(component, File):
                 file_path = await component.get_file()
                 file_name = component.name or os.path.basename(file_path)
@@ -2005,9 +2009,7 @@ async def _append_quoted_reply_components(
             req.image_urls.append(path)
             _append_quoted_image_attachment(req, path)
         elif isinstance(component, Record):
-            audio_path = await component.convert_to_file_path()
-            req.audio_urls.append(audio_path)
-            _append_quoted_audio_attachment(req, audio_path)
+            await _append_record_attachment(req, component, context="quoted")
         elif isinstance(component, File):
             file_path = await component.get_file()
             file_name = component.name or os.path.basename(file_path)

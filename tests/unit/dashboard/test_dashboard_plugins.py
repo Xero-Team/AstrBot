@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403
@@ -107,6 +109,52 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
         assert any("Starting WebUI at http://" in message for message in info_messages)
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
+async def test_generated_dashboard_password_is_written_only_to_stdout(
+    monkeypatch,
+    capsys,
+):
+    class Config(dict):
+        pass
+
+    generated_password = "GeneratedPassword123"
+    config = Config(
+        dashboard={
+            "username": "astrbot",
+            "port": 6185,
+            "host": "127.0.0.1",
+            "enable": True,
+            "disable_access_log": True,
+        }
+    )
+    config._generated_dashboard_password = generated_password
+    server = object.__new__(AstrBotDashboard)
+    server.runtime = SimpleNamespace(astrbot_config=config)
+    server.config = config
+    server.data_path = None
+    server.asgi_app = object()
+    server.shutdown_event = asyncio.Event()
+    info_messages = []
+
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
+
+    def capture_info(message, *args):
+        info_messages.append(message % args if args else message)
+
+    monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+    monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+    monkeypatch.setattr("astrbot.dashboard.server.logger.info", capture_info)
+
+    await server.run()
+
+    stdout = capsys.readouterr().out
+    assert f"Initial password: {generated_password}" in stdout
+    assert generated_password not in "\n".join(info_messages)
+    assert "Initial credentials follow below" in "\n".join(info_messages)
+    assert getattr(config, "_generated_dashboard_password", None) is None
 
 
 @pytest.mark.asyncio

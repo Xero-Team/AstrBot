@@ -488,11 +488,11 @@ class AstrBotDashboard:
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
 
-    def _build_dashboard_credentials_display(self) -> str:
+    def _build_dashboard_credentials_display(self) -> tuple[str, str | None]:
         username = self.config["dashboard"].get("username", "astrbot")
         generated_password = getattr(self.config, "_generated_dashboard_password", None)
         if not generated_password:
-            return f"   ➜  Username: {username}\n ✨✨✨\n"
+            return f"   ➜  Username: {username}\n ✨✨✨\n", None
 
         credentials_display = (
             f"   ➜  Initial username: {username}\n"
@@ -500,7 +500,7 @@ class AstrBotDashboard:
             "   ➜  Change it after logging in\n ✨✨✨\n"
         )
         object.__setattr__(self.config, "_generated_dashboard_password", None)
-        return credentials_display
+        return "   ➜  Initial credentials follow below\n ✨✨✨\n", credentials_display
 
     @staticmethod
     def _resolve_dashboard_ssl_config(
@@ -636,7 +636,10 @@ class AstrBotDashboard:
         parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
             parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
-        parts.append(self._build_dashboard_credentials_display())
+        credentials_summary, generated_credentials = (
+            self._build_dashboard_credentials_display()
+        )
+        parts.append(credentials_summary)
         display = "".join(parts)
 
         if not ip_addr:
@@ -645,6 +648,12 @@ class AstrBotDashboard:
             )
 
         logger.info(display)
+        if generated_credentials:
+            # This one-time secret must bypass the redacted logging sinks so a
+            # local operator can recover access. Development runners capture
+            # stdout and surface these lines, while persistent AstrBot logs do
+            # not retain the password.
+            print(generated_credentials, end="", flush=True)
 
         # 配置 Hypercorn
         config = HyperConfig()

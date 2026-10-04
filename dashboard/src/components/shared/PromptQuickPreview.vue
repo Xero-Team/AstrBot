@@ -165,13 +165,6 @@ const toolMetaMap = ref({});
 const skillMetaMap = ref({});
 const availableSkills = ref([]);
 
-const defaultPromptData = {
-  prompt_id: 'default',
-  system_prompt: 'You are a helpful and friendly assistant.',
-  tools: null,
-  skills: null,
-};
-
 const normalizedTools = computed(() =>
   Array.isArray(promptData.value?.tools) ? promptData.value.tools : [],
 );
@@ -257,11 +250,6 @@ async function loadSkillsMeta() {
 async function loadPromptPreview(promptId) {
   if (!promptId) {
     promptData.value = null;
-    return;
-  }
-
-  if (promptId === 'default') {
-    promptData.value = defaultPromptData;
     return;
   }
 

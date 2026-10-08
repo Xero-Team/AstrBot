@@ -193,6 +193,10 @@ WORKDIR /AstrBot
 
 COPY . /AstrBot/
 
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv pip install -e . --no-deps --no-cache-dir --system \
+    && touch /AstrBot/.astrbot
+
 RUN npm install -g @openai/codex --no-fund --no-audit \
     && current_node_dir="$(dirname "$(dirname "$(nvm which current)")")" \
     && test -x "${current_node_dir}/bin/codex" \
@@ -510,6 +514,7 @@ COPY --from=runtime-assets /opt/astrbot/runtime-assets/ /opt/astrbot/runtime-ass
 
 COPY --from=builder /usr/local/lib/python3.14/site-packages/ \
     /usr/local/lib/python3.14/site-packages/
+COPY --from=builder /usr/local/bin/astrbot /usr/local/bin/astrbot
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -550,7 +555,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY --from=builder /AstrBot/astrbot /AstrBot/astrbot
 COPY --from=builder /AstrBot/changelogs /AstrBot/changelogs
 COPY --from=builder /AstrBot/main.py /AstrBot/runtime_bootstrap.py \
-    /AstrBot/pyproject.toml /AstrBot/requirements.txt /AstrBot/.python-version /AstrBot/
+    /AstrBot/pyproject.toml /AstrBot/requirements.txt /AstrBot/.python-version \
+    /AstrBot/.astrbot /AstrBot/
 
 EXPOSE 6185
 

@@ -44,6 +44,8 @@ uv run main.py --reset-password
 
 重置时，如果设置了 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`，AstrBot 会使用该变量的值；未设置时才会生成随机密码。随机密码仅在连接了运维终端时显示。非交互重置时，请为本次启动设置该变量。不要手工删除 `pbkdf2_password`、`jwt_secret` 或向配置文件写入明文密码。
 
+源码构建的 Docker Compose 部署可执行 `docker compose exec astrbot astrbot password`，然后执行 `docker compose restart astrbot`。镜像提供该 CLI 命令，并会更新挂载的 `data/` 配置。
+
 ### 为什么从服务器 IP 无法访问
 
 WebUI 默认只监听 `127.0.0.1:6185`。把浏览器中的 `localhost` 替换为服务器 IP 并不会改变监听地址。

@@ -44,6 +44,8 @@ uv run main.py --reset-password
 
 During reset, AstrBot uses `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` when it is set and generates a random password only when it is unset. A generated password is shown only when an operator terminal is attached. For a non-interactive reset, provide the variable for that startup. Do not delete `pbkdf2_password` or `jwt_secret` manually, and never put a plaintext password in the configuration file.
 
+For a source-built Docker Compose deployment, run `docker compose exec astrbot astrbot password`, then `docker compose restart astrbot`. The image provides that CLI command and updates the mounted `data/` configuration.
+
 ### Why is the server IP unreachable?
 
 The WebUI listens only on `127.0.0.1:6185` by default. Replacing `localhost` with a server IP in the browser does not change the bind address.

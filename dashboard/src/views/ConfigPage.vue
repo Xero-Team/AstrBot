@@ -669,6 +669,27 @@ async function openUnsavedChangesDialog(message: string) {
   );
 }
 
+async function requestClose(): Promise<boolean> {
+  if (!hasUnsavedChanges.value) {
+    return true;
+  }
+
+  const saveBeforeClose = await openUnsavedChangesDialog(
+    tm('unsavedChangesWarning.leavePage'),
+  );
+  if (saveBeforeClose === 'close') {
+    return false;
+  }
+  if (!saveBeforeClose) {
+    return true;
+  }
+
+  const result = await updateConfig();
+  return result?.success === true;
+}
+
+defineExpose({ requestClose });
+
 function normalizeConfigName(name: unknown) {
   return typeof name === 'string' ? name.trim() : '';
 }

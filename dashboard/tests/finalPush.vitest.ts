@@ -34,7 +34,9 @@ import {
 } from '@/utils/pluginConfigDefaults';
 import { formatContextLimit } from '@/utils/providerMetadata';
 import { generateMissingKeys } from '@/i18n/tools';
-import MainRoutes from '@/router/MainRoutes';
+import MainRoutes, {
+  resolveDashboardWorkspaceRedirect,
+} from '@/router/MainRoutes';
 import AuthRoutes from '@/router/AuthRoutes';
 import ChatBoxRoutes from '@/router/ChatBoxRoutes';
 
@@ -100,6 +102,26 @@ describe('final coverage push', () => {
       .find((route) => route.name === 'Chat')
       ?.children?.find((route) => route.name === 'ChatDetail');
     expect(chatDetail?.props).toBe(true);
+  });
+
+  it('reopens the last Dashboard workspace tab', () => {
+    localStorage.setItem('dashboard_last_tab', 'Trace');
+
+    expect(
+      resolveDashboardWorkspaceRedirect({
+        query: { scope: 'week' },
+        hash: '#latest',
+      } as never),
+    ).toEqual({
+      name: 'Trace',
+      query: { scope: 'week' },
+      hash: '#latest',
+    });
+
+    localStorage.setItem('dashboard_last_tab', 'NotARoute');
+    expect(
+      resolveDashboardWorkspaceRedirect({ query: {}, hash: '' } as never),
+    ).toMatchObject({ name: 'Stats' });
   });
 
   it('covers plugin lifecycle callbacks and form-data encoding', async () => {

@@ -89,7 +89,7 @@ Config profiles still control routed Agent, model, message-processing, and plugi
 
 ## Data workspace
 
-**More → Data** opens `/dashboard` with tabs for Statistics, Conversations, Logs, and Trace. The runtime `data/` file manager remains at `/data`; see [Data files](#data-files).
+**More → Data** opens `/dashboard` with tabs for Statistics, Conversations, Logs, and Trace. The first visit opens Statistics; later visits reopen the last tab you used. The runtime `data/` file manager remains at `/data`; see [Data files](#data-files).
 
 ### Statistics
 

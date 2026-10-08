@@ -1,7 +1,10 @@
 import asyncio
+import os
 import re
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path, PureWindowsPath
+from tempfile import mkstemp
 from typing import cast
 from urllib.parse import urlsplit
 
@@ -24,8 +27,55 @@ from astrbot.core.platform.message_limits import (
     split_platform_text,
 )
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
+from astrbot.core.utils.media_utils import file_uri_to_path
+from astrbot.core.utils.outbound_http import OutboundRequestPolicy, download_to_path
+
+_SLACK_FILE_UPLOAD_POLICY = OutboundRequestPolicy(
+    allowed_schemes=frozenset({"https"}),
+    allowed_hosts=None,
+    allowed_ports=frozenset({443}),
+    allow_private_network=False,
+    max_redirects=3,
+    max_url_length=2048,
+    max_response_bytes=32 * 1024 * 1024,
+    timeout_seconds=120.0,
+    allowed_content_types=None,
+)
+
+
+@asynccontextmanager
+async def _resolve_slack_file_source(source: str):
+    """Resolve a validated Slack upload source and clean remote snapshots."""
+    parsed = urlsplit(source)
+    scheme = parsed.scheme.lower()
+    if scheme in {"http", "https"}:
+        if scheme != "https":
+            raise ValueError("Slack remote file uploads require HTTPS.")
+        source = parsed._replace(scheme=scheme).geturl()
+        temp_root = Path(get_astrbot_temp_path())
+        temp_root.mkdir(parents=True, exist_ok=True)
+        descriptor, temp_name = mkstemp(
+            prefix="slack-upload-",
+            suffix=Path(parsed.path).suffix,
+            dir=temp_root,
+        )
+        os.close(descriptor)
+        temp_path = Path(temp_name)
+        try:
+            await download_to_path(source, temp_path, _SLACK_FILE_UPLOAD_POLICY)
+            yield temp_path
+        finally:
+            temp_path.unlink(missing_ok=True)
+        return
+
+    if scheme not in ("", "file") and not PureWindowsPath(source).drive:
+        raise ValueError("Slack file URLs must use HTTPS.")
+    local_path = Path(file_uri_to_path(source)).absolute()
+    if not await asyncio.to_thread(local_path.is_file):
+        raise ValueError("Slack file upload requires an existing file.")
+    yield local_path
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -82,27 +132,16 @@ class SlackMessageEvent(AstrMessageEvent):
                 "alt_text": "图片",
             }
         if isinstance(segment, File):
-            source = segment.url
-            if source:
-                if source.lower().startswith(("http://", "https://")):
-                    scheme, separator, remainder = source.partition(":")
-                    source = scheme.lower() + separator + remainder
-                else:
-                    scheme = urlsplit(source).scheme
-                    if scheme not in ("", "file") and not PureWindowsPath(source).drive:
-                        raise ValueError("Slack file URLs must use HTTP or HTTPS.")
-                    local_path = Path(file_uri_to_path(source))
-                    if not await asyncio.to_thread(local_path.is_file):
-                        raise ValueError("Slack file upload requires an existing file.")
-                    source = str(local_path.absolute())
-            source = source or await segment.get_file()
+            source = segment.url or segment.file_
+            if not source:
+                source = await segment.get_file(allow_return_url=True)
             if not source:
                 raise ValueError(
                     "Slack file upload requires a URL or an existing file."
                 )
-            async with MediaResolver(source).as_path() as resolved:
+            async with _resolve_slack_file_source(source) as resolved_path:
                 response = await web_client.files_upload_v2(
-                    file=str(resolved.path),
+                    file=str(resolved_path),
                     filename=segment.name or "file",
                 )
             if not response["ok"]:

@@ -1,3 +1,4 @@
+import ipaddress
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -12,8 +13,9 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.sources.slack import slack_event
 from astrbot.core.platform.sources.slack.slack_event import SlackMessageEvent
-from astrbot.core.utils import media_utils
+from astrbot.core.utils.outbound_http import OutboundRequestError, validate_outbound_url
 
 
 def _build_event(*, group_id: str | None = None) -> SlackMessageEvent:
@@ -276,14 +278,15 @@ async def test_slack_remote_file_is_materialized_and_cleaned(
 ):
     downloaded: list[Path] = []
 
-    async def fake_download(url: str, path: str) -> None:
+    async def fake_download(url: str, path: str, policy) -> None:
         assert url == "https://example.com/report.pdf"
+        assert policy is slack_event._SLACK_FILE_UPLOAD_POLICY
         target = Path(path)
         target.write_bytes(b"report")
         downloaded.append(target)
 
-    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
-    monkeypatch.setattr(media_utils, "download_file", fake_download)
+    monkeypatch.setattr(slack_event, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(slack_event, "download_to_path", fake_download)
     web_client = AsyncMock()
 
     async def upload(**kwargs):
@@ -303,6 +306,53 @@ async def test_slack_remote_file_is_materialized_and_cleaned(
 
     assert downloaded
     assert all(not path.exists() for path in downloaded)
+
+
+@pytest.mark.asyncio
+async def test_slack_remote_file_in_file_field_is_uploaded(monkeypatch, tmp_path):
+    async def fake_download(url: str, path: str, policy) -> None:
+        assert url == "https://example.com/report.pdf"
+        assert policy is slack_event._SLACK_FILE_UPLOAD_POLICY
+        Path(path).write_bytes(b"report")
+
+    monkeypatch.setattr(slack_event, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(slack_event, "download_to_path", fake_download)
+    web_client = AsyncMock()
+    web_client.files_upload_v2.return_value = {
+        "ok": True,
+        "files": [{"permalink": "https://slack.example/files/report.pdf"}],
+    }
+
+    await SlackMessageEvent._from_segment_to_slack_block(
+        File(name="report.pdf", file="https://example.com/report.pdf"),
+        web_client,
+    )
+
+    uploaded_path = Path(web_client.files_upload_v2.await_args.kwargs["file"])
+    assert not uploaded_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_slack_remote_file_rejects_cleartext_http(monkeypatch):
+    download = AsyncMock()
+    monkeypatch.setattr(slack_event, "download_to_path", download)
+
+    with pytest.raises(ValueError, match="require HTTPS"):
+        await SlackMessageEvent._from_segment_to_slack_block(
+            File(name="report.pdf", url="http://example.com/report.pdf"),
+            AsyncMock(),
+        )
+
+    download.assert_not_awaited()
+
+
+def test_slack_remote_file_policy_rejects_private_destinations() -> None:
+    with pytest.raises(OutboundRequestError, match="private or reserved"):
+        validate_outbound_url(
+            "https://internal.example/report.pdf",
+            slack_event._SLACK_FILE_UPLOAD_POLICY,
+            resolve_addresses=lambda _host, _port: [ipaddress.ip_address("127.0.0.1")],
+        )
 
 
 @pytest.mark.asyncio

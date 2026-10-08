@@ -1,4 +1,5 @@
 import base64
+import builtins
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
@@ -525,7 +526,19 @@ class ProviderAnthropic(Provider):
                     payloads.get("tool_choice", "auto")
                 )
 
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged_tools = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                name = tool.get("name") if isinstance(tool, dict) else None
+                merged_tools[name or ("_", builtins.id(tool))] = tool
+            payloads["tools"] = list(merged_tools.values())
+            extra_body = {
+                key: value for key, value in extra_body.items() if key != "tools"
+            }
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
@@ -629,7 +642,19 @@ class ProviderAnthropic(Provider):
         final_tool_calls = []
         id = None
         usage = TokenUsage()
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged_tools = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                name = tool.get("name") if isinstance(tool, dict) else None
+                merged_tools[name or ("_", builtins.id(tool))] = tool
+            payloads["tools"] = list(merged_tools.values())
+            extra_body = {
+                key: value for key, value in extra_body.items() if key != "tools"
+            }
         reasoning_content = ""
         reasoning_signature = ""
 

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from anthropic import _base_client as anthropic_base_client
+from anthropic.types import Message, TextBlock, Usage
 
 from astrbot.core.agent.llm_types import TokenUsage
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -115,6 +116,85 @@ def test_anthropic_update_usage_zero_cache_creation_keeps_input_tokens():
     assert token_usage.input_other == 12
     assert token_usage.input_cached == 3
     assert token_usage.output == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("custom_extra_body", "registered_name", "expected_names", "expected_extra_body"),
+    [
+        (
+            {
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                "custom_flag": True,
+            },
+            "get_time",
+            ["get_time", "web_search"],
+            {"custom_flag": True},
+        ),
+        (
+            {
+                "tools": [
+                    {
+                        "type": "web_search_20250305",
+                        "name": "web_search",
+                        "max_uses": 3,
+                    }
+                ]
+            },
+            "web_search",
+            ["web_search"],
+            {},
+        ),
+        (None, "get_time", ["get_time"], {}),
+    ],
+)
+async def test_anthropic_query_merges_custom_tools(
+    custom_extra_body,
+    registered_name,
+    expected_names,
+    expected_extra_body,
+):
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+            "custom_extra_body": custom_extra_body,
+        },
+        provider_settings={},
+    )
+    captured: dict[str, object] = {}
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return Message(
+                id="msg_1",
+                content=[TextBlock(text="ok", type="text")],
+                model="claude-test",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=1, output_tokens=1),
+            )
+
+    provider.client = SimpleNamespace(messages=FakeMessages())
+    tools = ToolSet(
+        [
+            FunctionTool(
+                name=registered_name,
+                description="Test tool.",
+                parameters={"type": "object", "properties": {}},
+            )
+        ]
+    )
+
+    await provider._query({"model": "claude-test", "messages": []}, tools)
+
+    assert [tool["name"] for tool in captured["tools"]] == expected_names
+    assert captured["extra_body"] == expected_extra_body
 
 
 def _tool_use_stream(

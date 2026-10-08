@@ -145,7 +145,9 @@ describe('chat component smokes', () => {
       },
     });
 
-    await wrapper.get('.preview-image').trigger('click');
+    const previewButton = wrapper.get('.preview-image-button');
+    expect(previewButton.attributes('aria-label')).toBe('Open image preview');
+    await previewButton.trigger('click');
     await flushPromises();
 
     expect(document.body.querySelector('.preview-image-large')).not.toBeNull();

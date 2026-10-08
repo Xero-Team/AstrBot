@@ -34,12 +34,14 @@
             :key="'img-' + index"
             class="attachment-card image-preview"
           >
-            <img
-              :src="img"
-              class="preview-image"
-              alt="attachment preview"
+            <button
+              type="button"
+              class="preview-image-button"
+              :aria-label="tm('input.previewImage')"
               @click="openImagePreview(img)"
-            />
+            >
+              <img :src="img" class="preview-image" alt="" />
+            </button>
             <v-btn
               @click="$emit('removeImage', index)"
               class="remove-attachment-btn"
@@ -1436,6 +1438,25 @@ defineExpose({
   height: 100%;
   object-fit: cover;
   border-radius: 8px;
+}
+
+.preview-image-button {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  cursor: zoom-in;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.preview-image-button:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.preview-image-button .preview-image {
+  display: block;
   cursor: zoom-in;
 }
 

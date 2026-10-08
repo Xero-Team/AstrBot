@@ -17,6 +17,7 @@
     "recordingPrompt": "Recording, please speak...",
     "chatPrompt": "Let's chat!",
     "dropToUpload": "Drop files to upload",
+    "previewImage": "Open image preview",
     "stopGenerating": "Stop generating",
     "scrollToBottom": "Scroll to bottom"
   },

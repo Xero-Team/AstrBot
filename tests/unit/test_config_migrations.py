@@ -93,6 +93,31 @@ def test_migration_is_idempotent():
     assert json.dumps(conf, sort_keys=True) == snapshot
 
 
+def test_retired_gemini_embedding_model_is_migrated_without_changing_others():
+    conf = {
+        "schema_revision": 1,
+        "provider": [
+            {
+                "type": "gemini_embedding",
+                "embedding_model": "gemini-embedding-exp-03-07",
+            },
+            {
+                "type": "gemini_embedding",
+                "embedding_model": "custom-embedding-model",
+            },
+            {"type": "openai_embedding", "embedding_model": "text-embedding-3"},
+        ],
+    }
+
+    assert migrate_config_dict(conf) is True
+    assert conf["schema_revision"] == CONFIG_SCHEMA_REVISION
+    assert conf["provider"] == [
+        {"type": "gemini_embedding", "embedding_model": "gemini-embedding-001"},
+        {"type": "gemini_embedding", "embedding_model": "custom-embedding-model"},
+        {"type": "openai_embedding", "embedding_model": "text-embedding-3"},
+    ]
+
+
 def test_config_load_migrates_and_persists_flat_file(tmp_path):
     config_path = tmp_path / "cmd_config.json"
     config_path.write_text(

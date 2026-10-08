@@ -120,7 +120,13 @@ def test_anthropic_update_usage_zero_cache_creation_keeps_input_tokens():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("custom_extra_body", "registered_name", "expected_names", "expected_extra_body"),
+    (
+        "custom_extra_body",
+        "registered_name",
+        "expected_names",
+        "expected_extra_body",
+        "expected_custom_tool",
+    ),
     [
         (
             {
@@ -130,6 +136,7 @@ def test_anthropic_update_usage_zero_cache_creation_keeps_input_tokens():
             "get_time",
             ["get_time", "web_search"],
             {"custom_flag": True},
+            {"type": "web_search_20250305", "name": "web_search"},
         ),
         (
             {
@@ -144,8 +151,13 @@ def test_anthropic_update_usage_zero_cache_creation_keeps_input_tokens():
             "web_search",
             ["web_search"],
             {},
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 3,
+            },
         ),
-        (None, "get_time", ["get_time"], {}),
+        (None, "get_time", ["get_time"], {}, None),
     ],
 )
 async def test_anthropic_query_merges_custom_tools(
@@ -153,6 +165,7 @@ async def test_anthropic_query_merges_custom_tools(
     registered_name,
     expected_names,
     expected_extra_body,
+    expected_custom_tool,
 ):
     provider = ProviderAnthropic(
         provider_config={
@@ -195,6 +208,11 @@ async def test_anthropic_query_merges_custom_tools(
 
     assert [tool["name"] for tool in captured["tools"]] == expected_names
     assert captured["extra_body"] == expected_extra_body
+    if expected_custom_tool is not None:
+        assert (
+            next(tool for tool in captured["tools"] if tool["name"] == "web_search")
+            == expected_custom_tool
+        )
 
 
 def _tool_use_stream(

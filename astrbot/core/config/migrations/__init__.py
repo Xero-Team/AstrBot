@@ -9,7 +9,7 @@ value survives the rename.
 
 from __future__ import annotations
 
-CONFIG_SCHEMA_REVISION = 1
+CONFIG_SCHEMA_REVISION = 2
 
 
 class ConfigMigrationError(RuntimeError):
@@ -74,6 +74,25 @@ def _migrate_flat_to_grouped(conf: dict) -> bool:
     return True
 
 
+def _migrate_retired_gemini_embedding_model(conf: dict) -> bool:
+    """Replace the retired Gemini embedding model in saved provider configs."""
+    providers = conf.get("provider")
+    if not isinstance(providers, list):
+        return False
+
+    changed = False
+    for provider in providers:
+        if not isinstance(provider, dict):
+            continue
+        if (
+            provider.get("type") == "gemini_embedding"
+            and provider.get("embedding_model") == "gemini-embedding-exp-03-07"
+        ):
+            provider["embedding_model"] = "gemini-embedding-001"
+            changed = True
+    return changed
+
+
 def migrate_config_dict(conf: dict) -> bool:
     """Bring a raw configuration document to the current revision.
 
@@ -100,12 +119,17 @@ def migrate_config_dict(conf: dict) -> bool:
             f"{CONFIG_SCHEMA_REVISION}; upgrade the application or restore a backup",
         )
 
-    if revision >= CONFIG_SCHEMA_REVISION:
-        return False
+    changed = False
+    while revision < CONFIG_SCHEMA_REVISION:
+        if revision == 0:
+            changed |= _migrate_flat_to_grouped(conf)
+        elif revision == 1:
+            changed |= _migrate_retired_gemini_embedding_model(conf)
+        revision += 1
+        changed = True
 
-    _migrate_flat_to_grouped(conf)
-    conf["schema_revision"] = CONFIG_SCHEMA_REVISION
-    return True
+    conf["schema_revision"] = revision
+    return changed
 
 
 __all__ = [

@@ -20,6 +20,9 @@ describe('DataFilesPage contract', () => {
     expect(page).toContain('@/components/shared/LazyMonacoEditor');
     expect(lazyMonacoEditor).toContain("await import('@/utils/monacoLoader')");
     expect(lazyMonacoEditor).toContain("import('@guolao/vue-monaco-editor')");
+    expect(lazyMonacoEditor).toContain('loadingComponent');
+    expect(lazyMonacoEditor).toContain('errorComponent');
+    expect(lazyMonacoEditor).toContain('attempts <= 2');
     expect(page).toContain("customizer.isDark ? 'vs-dark' : 'vs-light'");
     expect(page).toContain('readOnly: !selectedEntry.value?.writable');
   });

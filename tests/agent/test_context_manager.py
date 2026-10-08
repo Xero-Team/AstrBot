@@ -568,8 +568,13 @@ class TestContextManager:
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 
         class FailingProvider(MockProvider):
+            def __init__(self):
+                super().__init__()
+                self.text_chat_calls = []
+
             async def text_chat(self, **kwargs):
                 self.last_text_chat_kwargs = kwargs
+                self.text_chat_calls.append(kwargs)
                 raise RuntimeError("quota exhausted")
 
         provider = FailingProvider()
@@ -578,6 +583,7 @@ class TestContextManager:
         result = await compressor(self.create_messages(4))
 
         assert result == self.create_messages(4)
+        assert len(provider.text_chat_calls) == 1
         assert provider.last_text_chat_kwargs["request_max_retries"] == 1
 
     @pytest.mark.asyncio

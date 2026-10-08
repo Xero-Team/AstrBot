@@ -24,9 +24,12 @@ last_synced:
     #10339, #10347, and #10367 are already implemented equivalently or more
     completely in the fork. No upstream version change was present, so the fork
     version and changelog remain unchanged. Review follow-ups align the adapted
-    Dashboard changes with the fork lint and design-system guards and hide the
-    protected default prompt's delete action.
-    Focused pytest and Vitest suites, the complete blocking pytest suite,
-    make check, make quality, and the documentation build passed; the blocking
-    suite was run with inherited proxy variables cleared because their
-    unsupported socks:// value otherwise breaks unrelated provider tests.
+    Dashboard changes with the fork lint and design-system guards, keep the
+    protected default prompt rooted, guard unsaved profile edits, constrain
+    Slack remote uploads, keep initial credentials out of process logs, preserve
+    attachment display/storage names, and correct scoped documentation anchors.
+    The follow-up also updates Python and Dashboard locks to resolve all five
+    dependency advisories reported by the original quality run. Focused pytest
+    and Vitest suites, Dashboard tests and build, the complete blocking pytest
+    suite (6361 passed), make check, make quality, and the documentation build
+    passed.

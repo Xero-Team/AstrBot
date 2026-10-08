@@ -72,6 +72,22 @@ async def test_expired_published_snapshot_cleans_copy_and_preserves_source(
 
 
 @pytest.mark.asyncio
+async def test_published_snapshot_accepts_custom_ttl(tmp_path, monkeypatch):
+    from astrbot.core.utils import astrbot_path
+
+    monkeypatch.setattr(
+        astrbot_path, "get_astrbot_temp_path", lambda: str(tmp_path / "tokens")
+    )
+    source = tmp_path / "logo.png"
+    source.write_bytes(b"logo")
+    service = FileTokenService()
+
+    token = await service.register_snapshot(str(source), ttl_seconds=-1)
+
+    assert await service.check_token_expired(token)
+
+
+@pytest.mark.asyncio
 async def test_owned_artifact_is_deleted_after_response_release(tmp_path):
     artifact = tmp_path / "audio.mp3"
     artifact.write_bytes(b"audio")

@@ -416,6 +416,28 @@ export type FileUploadRequest = {
   file: Blob | File;
 };
 
+export type UploadedFileData = {
+  /**
+   * Stable identifier used by attachment download endpoints.
+   */
+  attachment_id: string;
+  /**
+   * Sanitized display filename; image suffixes reflect detected MIME type.
+   */
+  filename: string;
+  /**
+   * Collision-resistant on-disk name accepted by the filename download endpoint.
+   */
+  stored_filename: string;
+  type: 'image' | 'record' | 'video' | 'file';
+};
+
+export type UploadedFileResponse = {
+  status: 'ok' | 'warning';
+  message?: string;
+  data: UploadedFileData;
+};
+
 export type ChatUploadInitRequest = {
   filename: string;
   total_size: number;
@@ -3206,9 +3228,9 @@ export type UploadFileData = {
 
 export type UploadFileResponses = {
   /**
-   * Standard AstrBot success response
+   * Uploaded attachment metadata
    */
-  200: SuccessEnvelope;
+  200: UploadedFileResponse;
 };
 
 export type UploadFileResponse = UploadFileResponses[keyof UploadFileResponses];
@@ -3256,9 +3278,9 @@ export type CompleteFileUploadData = {
 
 export type CompleteFileUploadResponses = {
   /**
-   * Standard AstrBot success response
+   * Uploaded attachment metadata
    */
-  200: SuccessEnvelope;
+  200: UploadedFileResponse;
 };
 
 export type CompleteFileUploadResponse =
@@ -3457,9 +3479,9 @@ export type UploadOpenApiFileData = {
 
 export type UploadOpenApiFileResponses = {
   /**
-   * Standard AstrBot success response
+   * Uploaded attachment metadata
    */
-  200: SuccessEnvelope;
+  200: UploadedFileResponse;
 };
 
 export type UploadOpenApiFileResponse =

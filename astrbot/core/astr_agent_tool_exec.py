@@ -263,6 +263,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         elif tool.is_background_task:
+            event = run_context.context.event
+            registry = run_context.context.context.active_event_registry
+            if registry.get_background_stop_signal(event).is_set():
+                return
             task_id = uuid.uuid4().hex
 
             async def _run_in_background() -> None:
@@ -279,11 +283,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         exc_info=True,
                     )
 
-            create_tracked_task(
+            task = create_tracked_task(
                 run_context.context.context.background_tasks,
                 _run_in_background(),
                 name=f"background_tool:{tool.name}",
             )
+            registry.register_background_task(event, task)
             text_content = mcp.types.TextContent(
                 type="text",
                 text=f"Background task submitted. task_id={task_id}",
@@ -588,6 +593,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         user of the result – the same pattern used by
         ``_execute_background`` for regular background tasks.
         """
+        event = run_context.context.event
+        registry = run_context.context.context.active_event_registry
+        if registry.get_background_stop_signal(event).is_set():
+            return
         task_id = uuid.uuid4().hex
 
         async def _run_handoff_in_background() -> None:
@@ -604,11 +613,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     exc_info=True,
                 )
 
-        create_tracked_task(
+        task = create_tracked_task(
             run_context.context.context.background_tasks,
             _run_handoff_in_background(),
             name=f"background_handoff:{tool.name}",
         )
+        registry.register_background_task(event, task)
 
         text_content = mcp.types.TextContent(
             type="text",
@@ -728,6 +738,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         event = run_context.context.event
         ctx = run_context.context.context
+        stop_signal = ctx.active_event_registry.get_background_stop_signal(event)
+        if stop_signal.is_set():
+            return
 
         task_result = {
             "task_id": task_id,
@@ -737,7 +750,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         }
         if extra_result_fields:
             task_result.update(extra_result_fields)
-        extras = {"background_task_result": task_result}
+        extras = {
+            "background_task_result": task_result,
+            "_background_stop_signal": stop_signal,
+        }
 
         session = MessageSession.from_str(event.unified_msg_origin)
         cron_event = CronMessageEvent(
@@ -792,6 +808,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
+        if stop_signal.is_set():
+            return
         req.conversation = conv
         req.contexts = load_sanitized_history(conv.history)
 
@@ -817,6 +835,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         result = await build_main_agent(
             event=cron_event, plugin_context=ctx, config=config, req=req
         )
+        if stop_signal.is_set():
+            return
         if not result:
             logger.error(f"Failed to build main agent for background task {tool_name}.")
             return

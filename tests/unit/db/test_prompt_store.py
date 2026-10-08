@@ -61,3 +61,53 @@ async def test_update_prompt_folder_can_clear_parent_and_description(
     assert updated.parent_id is None
     assert updated.description is None
     assert updated.sort_order == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nested", [False, True], ids=["root-folder", "nested-folder"])
+async def test_delete_prompt_folder_preserves_children_and_prompts(
+    temp_db: SQLiteDatabase,
+    nested: bool,
+) -> None:
+    unrelated = await temp_db.insert_prompt_folder("Unrelated")
+    parent_id = unrelated.folder_id if nested else None
+    target = await temp_db.insert_prompt_folder("Target", parent_id=parent_id)
+    child = await temp_db.insert_prompt_folder("Child", parent_id=target.folder_id)
+    sibling = await temp_db.insert_prompt_folder("Sibling", parent_id=target.folder_id)
+    grandchild = await temp_db.insert_prompt_folder(
+        "Grandchild",
+        parent_id=child.folder_id,
+    )
+    for name, folder in (
+        ("direct", target),
+        ("child", child),
+        ("grandchild", grandchild),
+        ("unrelated", unrelated),
+    ):
+        await temp_db.insert_prompt(name, "Test prompt", folder_id=folder.folder_id)
+
+    await temp_db.delete_prompt_folder(target.folder_id)
+
+    assert await temp_db.get_prompt_folder_by_id(target.folder_id) is None
+    assert {folder.folder_id for folder in await temp_db.get_prompt_folders()} == {
+        unrelated.folder_id,
+        child.folder_id,
+        sibling.folder_id,
+    }
+    assert {
+        folder.folder_id for folder in await temp_db.get_prompt_folders(child.folder_id)
+    } == {grandchild.folder_id}
+    assert {folder.folder_id for folder in await temp_db.get_all_prompt_folders()} == {
+        unrelated.folder_id,
+        child.folder_id,
+        sibling.folder_id,
+        grandchild.folder_id,
+    }
+    assert {
+        prompt.prompt_id: prompt.folder_id for prompt in await temp_db.get_prompts()
+    } == {
+        "direct": None,
+        "child": child.folder_id,
+        "grandchild": grandchild.folder_id,
+        "unrelated": unrelated.folder_id,
+    }

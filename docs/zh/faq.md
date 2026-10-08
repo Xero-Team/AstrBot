@@ -18,7 +18,7 @@ uv run python scripts/sync_dashboard_dist.py
 
 ### 首次登录账号和密码是什么
 
-默认用户名是 `astrbot`。首次启动会生成随机强密码并打印在启动日志中：
+默认用户名是 `astrbot`。未设置 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` 时，首次启动会生成随机强密码，并且仅显示在连接的运维终端中：
 
 ```text
 ➜  Initial username: astrbot
@@ -26,7 +26,7 @@ uv run python scripts/sync_dashboard_dist.py
 ➜  Change it after logging in
 ```
 
-不存在固定的默认密码。使用初始密码登录后应立即修改；不要把包含密码的启动日志公开。
+不存在固定的默认密码，密码也不会写入启动日志。设置 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` 时，AstrBot 会使用该值且不再显示。非交互启动时，请通过该变量提供一个临时强密码；登录后立即修改。
 
 ### 忘记 WebUI 密码
 
@@ -42,7 +42,7 @@ uv run astrbot run --reset-password
 uv run main.py --reset-password
 ```
 
-重启过程会生成新密码并打印到日志。不要手工删除 `pbkdf2_password`、`jwt_secret` 或向配置文件写入明文密码。
+重置时，如果设置了 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`，AstrBot 会使用该变量的值；未设置时才会生成随机密码。随机密码仅在连接了运维终端时显示。非交互重置时，请为本次启动设置该变量。不要手工删除 `pbkdf2_password`、`jwt_secret` 或向配置文件写入明文密码。
 
 ### 为什么从服务器 IP 无法访问
 

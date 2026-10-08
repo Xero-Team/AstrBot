@@ -1,5 +1,6 @@
 """Tests for astr_main_agent module."""
 
+import asyncio
 import base64
 import datetime
 import json
@@ -19,7 +20,15 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.conversation_mgr import DIALOGUE_LOOP_SCOPE, WORK_LOOP_SCOPE
 from astrbot.core.conversation_models import Conversation
-from astrbot.core.message.components import Face, Image, Json, Plain, Reply, Video
+from astrbot.core.message.components import (
+    Face,
+    Image,
+    Json,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -2422,6 +2431,48 @@ class TestPluginToolFilter:
         )
         assert req.func_tool is not None
         assert "astrbot_execute_shell" in req.func_tool.names()
+
+
+@pytest.mark.asyncio
+async def test_unavailable_voice_attachment_degrades_to_text(monkeypatch):
+    record = Record(file="missing.amr")
+    event = SimpleNamespace(message_obj=SimpleNamespace(message=[record]))
+    request = ProviderRequest()
+
+    async def unavailable(_record):
+        raise ValueError("missing voice")
+
+    monkeypatch.setattr(Record, "convert_to_file_path", unavailable)
+
+    await ama._append_direct_attachments(
+        event,
+        request,
+        ama.MainAgentBuildConfig(tool_call_timeout=60),
+    )
+
+    assert request.audio_urls == []
+    assert [part.text for part in request.extra_user_content_parts] == [
+        "[Voice unavailable]"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_voice_attachment_propagates_cancellation(monkeypatch):
+    record = Record(file="pending.amr")
+    event = SimpleNamespace(message_obj=SimpleNamespace(message=[record]))
+
+    monkeypatch.setattr(
+        Record,
+        "convert_to_file_path",
+        AsyncMock(side_effect=asyncio.CancelledError),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await ama._append_direct_attachments(
+            event,
+            ProviderRequest(),
+            ama.MainAgentBuildConfig(tool_call_timeout=60),
+        )
 
 
 class TestBuildMainAgent:

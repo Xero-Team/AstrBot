@@ -374,4 +374,56 @@ describe('PluginPageHost', () => {
     );
     wrapper.unmount();
   });
+
+  it('only intercepts fragment links resolved inside the markdown document', async () => {
+    const { tm } = useModuleI18n('features.extension');
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    Object.defineProperty(window.CSS, 'escape', {
+      configurable: true,
+      value: (value: string) => value,
+    });
+    const plugin = {
+      name: 'astrbot_plugin_palette',
+      display_name: 'Palette',
+      components: [{ type: 'command', name: 'paint' }],
+    };
+    apiMocks.readme.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          content:
+            '[Components](#plugin-components)\n\n## Local target\n\n[Local](#local-target)',
+        },
+      },
+    });
+    const wrapper = mount(PluginDetailPage, {
+      props: {
+        plugin,
+        state: { tm, router: { push: routerPush } },
+      },
+      global: { stubs: globalStubs },
+    });
+    await flushPromises();
+
+    const links = wrapper.findAll('.docs-markdown a');
+    const outsideClick = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+    });
+    links[0].element.dispatchEvent(outsideClick);
+    expect(outsideClick.defaultPrevented).toBe(false);
+
+    const localClick = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+    });
+    links[1].element.dispatchEvent(localClick);
+    expect(localClick.defaultPrevented).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
 });

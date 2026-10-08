@@ -3,15 +3,14 @@
     <BaseFolderItemSelector
       :model-value="modelValue"
       :folder-tree="folderTree"
-      :items="currentPrompts"
+      :items="selectablePrompts"
       :tree-loading="treeLoading"
       :items-loading="itemsLoading"
       :labels="labels"
       :show-create-button="true"
       :show-edit-button="true"
-      :default-item="defaultPrompt"
       item-id-field="prompt_id"
-      item-name-field="prompt_id"
+      item-name-field="name"
       @update:model-value="handleUpdate"
       item-description-field="system_prompt"
       :display-value-formatter="formatDisplayValue"
@@ -81,13 +80,23 @@ const showPromptDialog = ref(false);
 const editingPrompt = ref<PromptSelectableItem | null>(null);
 const currentFolderId = ref<string | null>(null);
 
-// 默认提示词
-const defaultPrompt: SelectableItem = {
-  id: 'default',
-  prompt_id: 'default',
-  name: tm('promptSelector.defaultPrompt'),
-  system_prompt: 'You are a helpful and friendly assistant.',
-};
+const selectablePrompts = computed(() => {
+  const prompts = currentPrompts.value.map((prompt) => ({
+    ...prompt,
+    name: formatDisplayValue(prompt.prompt_id),
+  }));
+  if (currentFolderId.value !== null) {
+    return prompts;
+  }
+  const defaultIndex = prompts.findIndex(
+    (prompt) => prompt.prompt_id === 'default',
+  );
+  if (defaultIndex <= 0) {
+    return prompts;
+  }
+  const [defaultPrompt] = prompts.splice(defaultIndex, 1);
+  return [defaultPrompt, ...prompts];
+});
 
 // 递归查找文件夹名称
 function findFolderName(

@@ -127,7 +127,7 @@
                 v-bind="tooltipProps"
                 icon="mdi-chat-processing"
                 size="x-large"
-                color="secondary"
+                color="primary"
                 @click="openTestChat"
               >
               </v-btn>
@@ -668,6 +668,27 @@ async function openUnsavedChangesDialog(message: string) {
     )) ?? false
   );
 }
+
+async function requestClose(): Promise<boolean> {
+  if (!hasUnsavedChanges.value) {
+    return true;
+  }
+
+  const saveBeforeClose = await openUnsavedChangesDialog(
+    tm('unsavedChangesWarning.leavePage'),
+  );
+  if (saveBeforeClose === 'close') {
+    return false;
+  }
+  if (!saveBeforeClose) {
+    return true;
+  }
+
+  const result = await updateConfig();
+  return result?.success === true;
+}
+
+defineExpose({ requestClose });
 
 function normalizeConfigName(name: unknown) {
   return typeof name === 'string' ? name.trim() : '';

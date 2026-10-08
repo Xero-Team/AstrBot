@@ -1888,7 +1888,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "$ref": "#/components/responses/UploadedFile"
           }
         }
       }
@@ -1957,7 +1957,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "$ref": "#/components/responses/UploadedFile"
           }
         }
       }
@@ -2026,7 +2026,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "$ref": "#/components/responses/UploadedFile"
           }
         }
       },
@@ -5559,6 +5559,16 @@
           }
         }
       },
+      "UploadedFile": {
+        "description": "Uploaded attachment metadata",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UploadedFileResponse"
+            }
+          }
+        }
+      },
       "Error": {
         "description": "Standard AstrBot error response",
         "content": {
@@ -6332,6 +6342,46 @@
             "format": "binary"
           }
         }
+      },
+      "UploadedFileData": {
+        "type": "object",
+        "required": ["attachment_id", "filename", "stored_filename", "type"],
+        "properties": {
+          "attachment_id": {
+            "type": "string",
+            "description": "Stable identifier used by attachment download endpoints."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Sanitized display filename; image suffixes reflect detected MIME type."
+          },
+          "stored_filename": {
+            "type": "string",
+            "description": "Collision-resistant on-disk name accepted by the filename download endpoint."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["image", "record", "video", "file"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "UploadedFileResponse": {
+        "type": "object",
+        "required": ["status", "data"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "warning"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/UploadedFileData"
+          }
+        },
+        "additionalProperties": false
       },
       "ChatUploadInitRequest": {
         "type": "object",

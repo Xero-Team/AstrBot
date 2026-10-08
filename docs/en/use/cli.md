@@ -38,11 +38,11 @@ The CLI resolves its runtime root from `ASTRBOT_ROOT` when set, otherwise the cu
 
 Common `run` options:
 
-| Option              | Purpose                                                    |
-| ------------------- | ---------------------------------------------------------- |
-| `-p, --port <PORT>` | Temporarily override the WebUI port.                       |
-| `-r, --reload`      | Enable plugin auto-reload.                                 |
-| `--reset-password`  | Reset the random initial password and print it at startup. |
+| Option              | Purpose                                                                |
+| ------------------- | ---------------------------------------------------------------------- |
+| `-p, --port <PORT>` | Temporarily override the WebUI port.                                   |
+| `-r, --reload`      | Enable plugin auto-reload.                                             |
+| `--reset-password`  | Reset the random initial password and show it on an attached terminal. |
 
 ```bash
 uv run astrbot run --port 6185

@@ -119,6 +119,7 @@ export interface TotpSetupData {
 export interface UploadedFileData {
   attachment_id: string;
   filename: string;
+  stored_filename?: string;
   type: string;
   [key: string]: unknown;
 }

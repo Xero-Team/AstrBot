@@ -5,13 +5,13 @@
     rounded="md"
     variant="outlined"
     elevation="0"
-    draggable="true"
+    :draggable="prompt.prompt_id !== 'default'"
     @click="emit('view')"
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
   >
     <v-card-title class="d-flex justify-space-between align-center">
-      <div class="text-truncate ml-2">{{ prompt.prompt_id }}</div>
+      <div class="text-truncate ml-2">{{ promptDisplayName }}</div>
       <v-menu offset-y>
         <template #activator="{ props: activatorProps }">
           <v-btn
@@ -29,7 +29,10 @@
             </template>
             <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click.stop="emit('move')">
+          <v-list-item
+            v-if="prompt.prompt_id !== 'default'"
+            @click.stop="emit('move')"
+          >
             <template #prepend>
               <v-icon size="small">mdi-folder-move</v-icon>
             </template>
@@ -44,7 +47,11 @@
             <v-list-item-title>{{ tm('buttons.export') }}</v-list-item-title>
           </v-list-item>
           <v-divider class="my-1" />
-          <v-list-item class="text-error" @click.stop="emit('delete')">
+          <v-list-item
+            v-if="prompt.prompt_id !== 'default'"
+            class="text-error"
+            @click.stop="emit('delete')"
+          >
             <template #prepend>
               <v-icon size="small" color="error">mdi-delete</v-icon>
             </template>
@@ -120,12 +127,12 @@
   <!-- Custom Drag Preview -->
   <div ref="dragPreview" class="drag-preview">
     <v-icon size="small" class="mr-2">mdi-account</v-icon>
-    <span class="text-subtitle-2">{{ prompt.prompt_id }}</span>
+    <span class="text-subtitle-2">{{ promptDisplayName }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,
@@ -157,11 +164,21 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/prompt');
+const { tm: sharedTm } = useModuleI18n('core.shared');
 const confirmDialog = useConfirmDialog();
 const dragPreview = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
+const promptDisplayName = computed(() =>
+  props.prompt.prompt_id === 'default'
+    ? sharedTm('promptSelector.defaultPrompt')
+    : props.prompt.prompt_id,
+);
 
 function handleDragStart(event: DragEvent) {
+  if (props.prompt.prompt_id === 'default') {
+    event.preventDefault();
+    return;
+  }
   isDragging.value = true;
   if (!event.dataTransfer) {
     return;

@@ -1682,5 +1682,6 @@ async def test_file_scope_is_available_for_developer_api_key(
     assert upload_res.status_code == 200
     assert upload_data["status"] == "ok"
     assert upload_data["data"]["filename"] == "api-key-upload.txt"
+    assert upload_data["data"]["stored_filename"].endswith("_api-key-upload.txt")
     assert upload_data["data"]["type"] == "file"
     assert upload_data["data"]["attachment_id"]

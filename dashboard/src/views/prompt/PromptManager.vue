@@ -195,7 +195,7 @@
     <v-dialog v-model="showViewDialog" max-width="700px" scrollable>
       <v-card v-if="viewingPrompt" class="prompt-preview-dialog__card">
         <v-card-title class="d-flex justify-space-between align-center">
-          <span class="text-h5">{{ viewingPrompt.prompt_id }}</span>
+          <span class="text-h5">{{ promptDisplayName(viewingPrompt) }}</span>
           <div class="d-flex align-center ga-1">
             <v-btn
               color="primary"
@@ -469,6 +469,7 @@ type MoveDialogType = 'prompt' | 'folder';
 type SnackbarType = 'success' | 'error';
 
 const { tm } = useModuleI18n('features/prompt');
+const { tm: sharedTm } = useModuleI18n('core.shared');
 const confirmDialog = useConfirmDialog();
 const promptStore = usePromptStore();
 const { folderTree, currentFolderId, currentFolders, currentPrompts, loading } =
@@ -661,6 +662,12 @@ function editPrompt(prompt: StorePrompt) {
 function viewPrompt(prompt: StorePrompt) {
   viewingPrompt.value = prompt;
   showViewDialog.value = true;
+}
+
+function promptDisplayName(prompt: StorePrompt): string {
+  return prompt.prompt_id === 'default'
+    ? sharedTm('promptSelector.defaultPrompt')
+    : prompt.prompt_id;
 }
 
 function openEditFromViewDialog() {

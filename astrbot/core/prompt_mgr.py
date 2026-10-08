@@ -8,9 +8,11 @@ from astrbot.core.prompt_models import PromptSpec
 from astrbot.core.sentinels import NOT_GIVEN
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
+SYSTEM_DEFAULT_PROMPT_ID = "default"
+
 DEFAULT_PROMPT_SPEC = PromptSpec(
     prompt="You are a helpful and friendly assistant.",
-    name="default",
+    name=SYSTEM_DEFAULT_PROMPT_ID,
     begin_dialogs=[],
     tools=None,
     skills=None,
@@ -38,6 +40,14 @@ class PromptManager:
 
     async def initialize(self) -> None:
         self.prompts = await self.get_all_prompts()
+        if not any(
+            prompt.prompt_id == SYSTEM_DEFAULT_PROMPT_ID for prompt in self.prompts
+        ):
+            default_prompt = await self.db.insert_prompt(
+                prompt_id=SYSTEM_DEFAULT_PROMPT_ID,
+                system_prompt=DEFAULT_PROMPT_SPEC["prompt"],
+            )
+            self.prompts.append(default_prompt)
         self._refresh_runtime_prompts()
         logger.info("Loaded %s prompts.", len(self.prompts))
 
@@ -52,17 +62,20 @@ class PromptManager:
         """Resolve a runtime prompt object by id.
 
         - None/empty id returns None.
-        - "default" maps to in-memory DEFAULT_PROMPT_SPEC.
-        - Otherwise search in runtime_prompts by prompt name.
+        - A stored prompt with the requested id takes precedence.
+        - "default" falls back to in-memory DEFAULT_PROMPT_SPEC when absent.
         """
         if not prompt_id:
             return None
-        if prompt_id == "default":
-            return DEFAULT_PROMPT_SPEC
-        return next(
+        prompt = next(
             (prompt for prompt in self.runtime_prompts if prompt["name"] == prompt_id),
             None,
         )
+        if prompt is not None:
+            return prompt
+        if prompt_id == SYSTEM_DEFAULT_PROMPT_ID:
+            return DEFAULT_PROMPT_SPEC
+        return None
 
     async def get_default_runtime_prompt(
         self,
@@ -114,6 +127,13 @@ class PromptManager:
             (item for item in self.runtime_prompts if item["name"] == prompt_id),
             None,
         )
+        is_implicit_system_default = (
+            not force_applied_prompt_id
+            and conversation_prompt_id is None
+            and prompt_id == SYSTEM_DEFAULT_PROMPT_ID
+        )
+        if is_implicit_system_default and platform_name == "webchat":
+            prompt = None
 
         use_webchat_special_default = False
         if not prompt and platform_name == "webchat" and prompt_id != "[%None]":
@@ -129,6 +149,8 @@ class PromptManager:
 
     async def delete_prompt(self, prompt_id: str) -> None:
         """删除指定 prompt"""
+        if prompt_id == SYSTEM_DEFAULT_PROMPT_ID:
+            raise ValueError("The system default prompt cannot be deleted.")
         if not await self.db.get_prompt_by_id(prompt_id):
             raise ValueError(f"Prompt with ID {prompt_id} does not exist.")
         await self.db.delete_prompt(prompt_id)
@@ -191,6 +213,10 @@ class PromptManager:
             prompt_id: Prompt ID
             folder_id: 目标文件夹 ID，None 表示移动到根目录
         """
+        if prompt_id == SYSTEM_DEFAULT_PROMPT_ID and folder_id is not None:
+            raise ValueError(
+                "The system default prompt must remain in the root folder."
+            )
         prompt = await self.db.move_prompt_to_folder(prompt_id, folder_id)
         if prompt:
             for i, p in enumerate(self.prompts):
@@ -333,6 +359,8 @@ class PromptManager:
             folder_id: 所属文件夹 ID，None 表示根目录
             sort_order: 排序顺序
         """
+        if prompt_id == SYSTEM_DEFAULT_PROMPT_ID:
+            raise ValueError("Prompt ID 'default' is reserved for the system default.")
         if await self.db.get_prompt_by_id(prompt_id):
             raise ValueError(f"Prompt with ID {prompt_id} already exists.")
         new_prompt = await self.db.insert_prompt(

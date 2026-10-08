@@ -4,8 +4,12 @@
     class="console-displayer-wrapper"
     :class="{ 'console-displayer-wrapper--workspace': props.workspaceMode }"
   >
-    <div v-if="props.showLevelBtns" class="filter-controls mb-2">
+    <div
+      v-if="props.showLevelBtns || props.showSearch"
+      class="filter-controls mb-2"
+    >
       <v-chip-group
+        v-if="props.showLevelBtns"
         v-model="selectedLevels"
         class="log-level-filters"
         column
@@ -26,6 +30,21 @@
           {{ level }}
         </v-chip>
       </v-chip-group>
+      <v-text-field
+        v-if="props.showSearch"
+        :model-value="searchInput"
+        class="log-search-field"
+        density="compact"
+        variant="solo-filled"
+        flat
+        hide-details
+        single-line
+        clearable
+        prepend-inner-icon="mdi-magnify"
+        :aria-label="tm('search.label')"
+        :placeholder="tm('search.placeholder')"
+        @update:model-value="searchInput = normalizeTextInput($event)"
+      />
       <v-spacer></v-spacer>
       <slot name="header-actions"></slot>
       <v-btn
@@ -46,7 +65,9 @@
 
 <script setup lang="ts">
 import { logApi } from '@/api/v1';
+import { useModuleI18n } from '@/i18n/composables';
 import { useCommonStore } from '@/stores/common';
+import { normalizeTextInput } from '@/utils/inputValue';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -65,15 +86,18 @@ const props = withDefaults(
     autoScroll?: boolean;
     hideUserChat?: boolean;
     workspaceMode?: boolean;
+    showSearch?: boolean;
   }>(),
   {
     showLevelBtns: true,
     autoScroll: true,
     hideUserChat: true,
     workspaceMode: false,
+    showSearch: false,
   },
 );
 
+const { tm } = useModuleI18n('features/logs');
 const commonStore = useCommonStore();
 const consoleWrapper = ref<HTMLElement | null>(null);
 const termElement = ref<HTMLDivElement | null>(null);
@@ -84,6 +108,9 @@ const eventSource = ref<EventSourcePolyfill | null>(null);
 const retryTimer = ref<ReturnType<typeof window.setTimeout> | null>(null);
 const retryAttempts = ref(0);
 const lastEventId = ref<string | null>(null);
+const searchInput = ref('');
+const searchKeyword = ref('');
+const searchTimer = ref<ReturnType<typeof window.setTimeout> | null>(null);
 
 const logColorAnsiMap: Record<string, string> = {
   '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
@@ -107,6 +134,10 @@ const levelColors: Record<LogLevel, string> = {
 
 const maxRetryAttempts = 10;
 const baseRetryDelay = 1000;
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  `${String.fromCharCode(27)}\\[[0-9;]*m`,
+  'g',
+);
 
 function closeEventSource(): void {
   if (eventSource.value) {
@@ -149,8 +180,47 @@ function isLevelSelected(level: string): boolean {
 function isVisible(log: ConsoleLogEntry): boolean {
   return (
     isLevelSelected(log.level) &&
-    !(props.hideUserChat && log.category === 'user_chat')
+    !(props.hideUserChat && log.category === 'user_chat') &&
+    matchesKeyword(log)
   );
+}
+
+function matchesKeyword(log: ConsoleLogEntry): boolean {
+  if (!searchKeyword.value) {
+    return true;
+  }
+  const text = log.data.replace(ANSI_ESCAPE_PATTERN, '').toLowerCase();
+  return text.includes(searchKeyword.value.toLowerCase());
+}
+
+function appendHighlightedText(element: HTMLElement, text: string): void {
+  const keyword = searchKeyword.value;
+  const cleanText = text.replace(ANSI_ESCAPE_PATTERN, '');
+  if (!keyword || !cleanText) {
+    element.textContent = cleanText;
+    return;
+  }
+
+  const lowerText = cleanText.toLowerCase();
+  const lowerKeyword = keyword.toLowerCase();
+  let cursor = 0;
+  let index = lowerText.indexOf(lowerKeyword);
+  while (index !== -1) {
+    if (index > cursor) {
+      element.appendChild(
+        document.createTextNode(cleanText.slice(cursor, index)),
+      );
+    }
+    const highlight = document.createElement('span');
+    highlight.className = 'console-log-highlight';
+    highlight.textContent = cleanText.slice(index, index + keyword.length);
+    element.appendChild(highlight);
+    cursor = index + keyword.length;
+    index = lowerText.indexOf(lowerKeyword, cursor);
+  }
+  if (cursor < cleanText.length) {
+    element.appendChild(document.createTextNode(cleanText.slice(cursor)));
+  }
 }
 
 function appendLogContent(element: HTMLPreElement, log: string): void {
@@ -158,7 +228,7 @@ function appendLogContent(element: HTMLPreElement, log: string): void {
     /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
   );
   if (levelMatch?.index === undefined) {
-    element.textContent = log;
+    appendHighlightedText(element, log);
     return;
   }
 
@@ -169,15 +239,15 @@ function appendLogContent(element: HTMLPreElement, log: string): void {
 
   const prefixSpan = document.createElement('span');
   prefixSpan.className = 'console-log-prefix';
-  prefixSpan.textContent = prefix;
+  appendHighlightedText(prefixSpan, prefix);
 
   const levelSpan = document.createElement('span');
   levelSpan.className = 'console-log-level';
-  levelSpan.textContent = levelMatch[0];
+  appendHighlightedText(levelSpan, levelMatch[0]);
 
   const messageSpan = document.createElement('span');
   messageSpan.className = 'console-log-message';
-  messageSpan.textContent = message;
+  appendHighlightedText(messageSpan, message);
 
   element.classList.add('console-log-line--structured');
   element.appendChild(prefixSpan);
@@ -387,6 +457,20 @@ watch(
   { deep: true },
 );
 
+watch(searchInput, (value) => {
+  if (searchTimer.value !== null) {
+    clearTimeout(searchTimer.value);
+  }
+  searchTimer.value = window.setTimeout(() => {
+    searchTimer.value = null;
+    const keyword = value.trim();
+    if (keyword !== searchKeyword.value) {
+      searchKeyword.value = keyword;
+      refreshDisplay();
+    }
+  }, 250);
+});
+
 onMounted(async () => {
   await fetchLogHistory();
   connectSSE();
@@ -397,6 +481,10 @@ onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   closeEventSource();
   clearRetryTimer();
+  if (searchTimer.value !== null) {
+    clearTimeout(searchTimer.value);
+    searchTimer.value = null;
+  }
   retryAttempts.value = 0;
 });
 </script>
@@ -420,12 +508,24 @@ onBeforeUnmount(() => {
   --v-theme-surface-variant: 163, 163, 163;
 }
 
+.console-displayer-wrapper:fullscreen .log-search-field :deep(.v-field) {
+  --v-theme-surface: 36, 36, 36;
+  --v-theme-surface-variant: 36, 36, 36;
+  --v-theme-on-surface: 255, 255, 255;
+}
+
 .filter-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.log-search-field {
+  flex: 0 1 260px;
+  max-width: 260px;
+  min-width: 160px;
 }
 
 .console-displayer-wrapper--workspace {
@@ -505,6 +605,11 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 
+:deep(.console-log-highlight) {
+  background: rgba(255, 213, 79, 0.35);
+  border-radius: 2px;
+}
+
 @media (max-width: 768px) {
   .console-displayer-wrapper--workspace {
     border-radius: 14px;
@@ -526,9 +631,15 @@ onBeforeUnmount(() => {
     order: 1;
   }
 
+  .console-displayer-wrapper--workspace .log-search-field {
+    flex: 1 1 100%;
+    max-width: none;
+    order: 3;
+  }
+
   .console-displayer-wrapper--workspace :deep(.console-header-actions) {
     flex: 1 1 100%;
-    order: 3;
+    order: 4;
   }
 
   .console-displayer-wrapper--workspace .fullscreen-btn {

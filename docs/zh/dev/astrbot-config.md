@@ -379,7 +379,7 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 uv run astrbot run --reset-password
 ```
 
-源码入口也支持 `uv run main.py --reset-password`。启动日志会输出新生成的临时密码，并要求登录后修改。
+源码入口也支持 `uv run main.py --reset-password`。新生成的临时密码仅显示在连接的运维终端中，并要求登录后修改；非交互启动时请为本次运行设置 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`。
 
 Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和受信任设备均按账户保存。安全页面会同步 `dashboard.totp` 快照，供配置导出和界面使用，但登录和高风险操作只验证账户记录。不要手工编辑该快照、在账户之间复制 TOTP 字段，或把它当作丢失恢复码后的绕过方式。
 

@@ -16,6 +16,7 @@ from astrbot.core.message.components import Image
 from astrbot.core.tools.function_tool_manager import (
     FunctionToolManager,
 )
+from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 
 
 class _DummyEvent:
@@ -23,12 +24,13 @@ class _DummyEvent:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
         self.role = "member"
+        self.extras: dict[str, object] = {}
 
-    def get_extra(self, _key: str, default=None):
-        return default
+    def get_extra(self, key: str, default=None):
+        return self.extras.get(key, default)
 
-    def set_extra(self, _key: str, _value) -> None:
-        return None
+    def set_extra(self, key: str, value) -> None:
+        self.extras[key] = value
 
 
 class _DummyTool:
@@ -46,7 +48,11 @@ def _build_run_context(message_components: list[object] | None = None):
         authorize=AsyncMock(return_value=SimpleNamespace(allowed=True))
     )
     ctx = SimpleNamespace(
-        event=event, context=SimpleNamespace(authorization=authorization)
+        event=event,
+        context=SimpleNamespace(
+            authorization=authorization,
+            active_event_registry=ActiveEventRegistry(),
+        ),
     )
     return ContextWrapper(context=ctx)
 
@@ -198,7 +204,10 @@ async def test_background_tool_tasks_are_owned_by_the_execution_context(
     second_tasks: set[asyncio.Task] = set()
 
     async def schedule(tasks: set[asyncio.Task]) -> None:
-        execution_context = SimpleNamespace(background_tasks=tasks)
+        execution_context = SimpleNamespace(
+            background_tasks=tasks,
+            active_event_registry=ActiveEventRegistry(),
+        )
         event = _DummyEvent()
         event.subject = SimpleNamespace(id="im:test:bot:user", authenticated=True)
         event.resource = SimpleNamespace(config_id="default")
@@ -762,6 +771,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
+        active_event_registry=ActiveEventRegistry(),
         get_config=lambda **_kwargs: {
             "plugin_set": ["allowed"],
             "provider_settings": provider_settings,
@@ -871,6 +881,7 @@ async def test_background_wakeup_honors_explicit_runtime_and_safety_mode(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
+        active_event_registry=ActiveEventRegistry(),
         get_config=lambda **_kwargs: {
             "provider_settings": {"computer_use_runtime": "local"},
             "agent_runner": {"config": {"safety_mode": False}},
@@ -960,6 +971,7 @@ async def test_background_wakeup_applies_max_agent_step(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
+        active_event_registry=ActiveEventRegistry(),
         get_config=lambda **_kwargs: {
             "provider_settings": {},
             "agent_runner": {

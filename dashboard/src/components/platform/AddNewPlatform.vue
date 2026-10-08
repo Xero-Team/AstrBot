@@ -779,41 +779,10 @@
     </v-card>
   </v-dialog>
 
-  <v-overlay
+  <ConfigProfileDrawer
     v-model="showConfigDrawer"
-    class="config-drawer-overlay"
-    location="right"
-    transition="slide-x-reverse-transition"
-    :scrim="true"
-    @click:outside="closeConfigDrawer"
-  >
-    <v-card class="app-dialog config-drawer-card">
-      <div class="config-drawer-header">
-        <div>
-          <span class="text-h6">{{
-            tm('createDialog.configDrawerTitle')
-          }}</span>
-          <div
-            v-if="configDrawerTargetId"
-            class="text-caption text-medium-emphasis"
-          >
-            {{ tm('createDialog.configDrawerIdLabel') }}:
-            {{ configDrawerTargetId }}
-          </div>
-        </div>
-        <v-btn icon variant="text" @click="closeConfigDrawer">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </div>
-      <v-divider></v-divider>
-      <div class="config-drawer-content">
-        <ConfigPage
-          v-if="showConfigDrawer"
-          :initial-config-id="configDrawerTargetId || 'default'"
-        />
-      </div>
-    </v-card>
-  </v-overlay>
+    :config-id="configDrawerTargetId || 'default'"
+  />
 </template>
 
 <script setup lang="ts">
@@ -833,7 +802,7 @@ import {
 import { resolveErrorMessage } from '@/utils/errorUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
-import ConfigPage from '@/views/ConfigPage.vue';
+import ConfigProfileDrawer from '@/components/config/ConfigProfileDrawer.vue';
 import PlatformRegistrationAction from '@/components/platform/PlatformRegistrationAction.vue';
 import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import {
@@ -1468,10 +1437,6 @@ function openConfigDrawer(configId: string | null | undefined) {
   }
   state.configDrawerTargetId = targetId;
   state.showConfigDrawer = true;
-}
-
-function closeConfigDrawer() {
-  state.showConfigDrawer = false;
 }
 
 async function newPlatform() {
@@ -2192,32 +2157,6 @@ function scrollDialogToBottom() {
 .platform-config-select {
   min-width: 200px;
   max-width: 30%;
-}
-
-.config-drawer-overlay {
-  align-items: stretch;
-  justify-content: flex-end;
-}
-
-.config-drawer-card {
-  width: clamp(320px, 60vw, 820px);
-  height: calc(100dvh - 32px);
-  display: flex;
-  flex-direction: column;
-  margin: 16px;
-}
-
-.config-drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--astrbot-space-4) var(--astrbot-space-6) var(--astrbot-space-3);
-}
-
-.config-drawer-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--astrbot-space-4) var(--astrbot-space-4) var(--astrbot-space-6);
 }
 
 .platform-action-row {

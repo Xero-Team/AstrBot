@@ -137,7 +137,11 @@ class FileTokenService:
             )
             return token
 
-    async def register_snapshot(self, file_path: str) -> str:
+    async def register_snapshot(
+        self,
+        file_path: str,
+        ttl_seconds: float | None = None,
+    ) -> str:
         """Publish a reusable, expiring owned copy for platform media fetches."""
         from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -156,7 +160,10 @@ class FileTokenService:
                 await task
                 raise
             return await self._register(
-                snapshot, None, owned_path=snapshot, published=True
+                snapshot,
+                ttl_seconds,
+                owned_path=snapshot,
+                published=True,
             )
         except BaseException:
             Path(snapshot).unlink(missing_ok=True)

@@ -5,40 +5,31 @@ upstream:
   branch: master
 
 last_synced:
-  commit: da4811ae81295fca5a1031ffd1114ca10376b318
-  synced_at_utc: 2026-10-01T08:38:23Z
+  commit: 42972e932a64f01d96e2e0708579b0f79dd6f792
+  synced_at_utc: 2026-10-04T10:13:43Z
   sync_method: adapt
   source_pr: >-
-    10265, 10278, 10279, 10282, 10289, 10290, 10299, 10301, 10302, 10304,
-    10306
+    10287, 10294, 10296, 10307, 10309, 10310, 10319, 10323, 10327, 10332,
+    10337, 10339, 10341, 10346, 10347, 10351, 10353, 10355, 10356, 10358,
+    10361, 10365, 10367
   note: >-
-    Reviewed b53999e959cfc3b71d7b74713ddee837be843fcb..da4811ae81295fca5a1031ffd1114ca10376b318
-    (11 commits). Adapted 5: #10278 (pointed the Dashboard logo, setup page,
-    and fork-only AiConfigPanel mark at /favicon.svg, added
-    docs/public/favicon.svg, kept the fork docs base), #10279 (sidebar session
-    pagination: reused get_chat_sessions for dashboard page/page_size requests
-    while keeping the legacy array branch, moved the SQLite tie-break ordering
-    into core/db/stores/sessions.py, get_session returns session metadata
-    without the absent is_group column, wired the fork session-list scroll and
-    auto-fill, regenerated OpenAPI source/client/public JSON, en/zh locales
-    only), #10265 (codeql-action kept on peeled commit pins, v4.38.1 ->
-    v4.38.2 at 2892aa5e), #10301 (shared useProviderModelSelection composable
-    plus per-session provider/model persistence in the fork Chat.vue), #10306
-    (Star.text_to_image umo/template_name resolution on the fork local-only t2i
-    stack and the getVisibleItemEntries invisible-item filter). Skipped 6:
-    #10282 (fork docs intentionally label the group as upstream), #10289 (fork
-    docs already document slider), #10290 and #10299 (fork READMEs are rewritten
-    and have no such badges), #10302 (fork keeps its own 4.28.2 version and
-    changelog; prerelease policy), #10304 (fork sidebar has no brand version
-    strip and uses MDI string icons with a generated subset font, not lucide).
-    The upstream da4811a remote-render endpoint plumbing and config-profile
-    relocation of the fork's differently shaped local t2i keys were not applied.
-    One corrective style follow-up reapplies prettier formatting over the icon
-    and pagination commits. No upstream version change absorbed, so the fork
-    version and changelog are unchanged. Post-review fixes upgrade PyJWT,
-    DOMPurify, and brace-expansion past newly disclosed advisories; restore the
-    provider selection before asynchronous session loading; scope browser drafts
-    to the authenticated account; align the session-detail type; stabilize the
-    pagination fixture; and stop helper processes after their launcher exits.
-    Focused pytest/Vitest, make check, make quality, and make test-blocking all
+    Reviewed da4811ae81295fca5a1031ffd1114ca10376b318..42972e932a64f01d96e2e0708579b0f79dd6f792
+    (23 commits). Cherry-picked 1 (#10365) and adapted 16: #10309, #10310,
+    #10296, #10294, #10327, #10323, #10332, #10337, #10341, #10351, #10287,
+    #10361, #10358, #10355, #10353, and #10356. Adaptations preserve the
+    fork's runtime-owned services, Prompt rename, Dashboard Extension Protocol
+    v1, local provider assets, MDI UI, en/zh locale scope, in-app documentation,
+    upload limits, and security boundaries. Skipped 6: #10307 and #10319 depend
+    on removed legacy Plugin Pages and incompatible sidebar structure; #10346,
+    #10339, #10347, and #10367 are already implemented equivalently or more
+    completely in the fork. No upstream version change was present, so the fork
+    version and changelog remain unchanged. Review follow-ups align the adapted
+    Dashboard changes with the fork lint and design-system guards, keep the
+    protected default prompt rooted, guard unsaved profile edits, constrain
+    Slack remote uploads, keep initial credentials out of process logs, preserve
+    attachment display/storage names, and correct scoped documentation anchors.
+    The follow-up also updates Python and Dashboard locks to resolve all five
+    dependency advisories reported by the original quality run. Focused pytest
+    and Vitest suites, Dashboard tests and build, the complete blocking pytest
+    suite (6361 passed), make check, make quality, and the documentation build
     passed.

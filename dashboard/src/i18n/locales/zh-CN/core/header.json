@@ -22,7 +22,7 @@
       "passwordHint": "长度至少 8 位，且包含大写字母、小写字母和数字",
       "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
-      "defaultCredentials": "默认用户名为 astrbot，初始密码会在首次启动时自动生成并显示在控制台中。"
+      "defaultCredentials": "默认用户名为 astrbot。未通过环境变量提供初始密码时，首次启动会自动生成，并且仅显示在连接的运维终端中。"
     },
     "validation": {
       "passwordRequired": "请输入密码",

@@ -197,11 +197,7 @@ class PromptStoreMixin(DatabaseStoreMixin):
         return await self.get_prompt_folder_by_id(folder_id)
 
     async def delete_prompt_folder(self, folder_id: str) -> None:
-        """Delete a prompt folder by its folder_id.
-
-        Note: This will also set folder_id to NULL for all prompts in this folder,
-        moving them to the root directory.
-        """
+        """Delete a folder and move direct prompts and child folders to root."""
         async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
@@ -210,6 +206,11 @@ class PromptStoreMixin(DatabaseStoreMixin):
                     update(Prompt)
                     .where(col(Prompt.folder_id) == folder_id)
                     .values(folder_id=None)
+                )
+                await session.execute(
+                    update(PromptFolder)
+                    .where(col(PromptFolder.parent_id) == folder_id)
+                    .values(parent_id=None)
                 )
                 # Delete the folder
                 await session.execute(

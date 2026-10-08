@@ -548,7 +548,7 @@
 
       <v-card-actions class="prompt-form-actions">
         <v-btn
-          v-if="editingPrompt"
+          v-if="editingPrompt && editingPrompt.prompt_id !== 'default'"
           color="error"
           variant="text"
           @click="deletePrompt"

@@ -156,6 +156,7 @@ describe('frontend modules', () => {
     expect(isMonochromeProviderIcon('opencode-go')).toBe(true);
     expect(isMonochromeProviderIcon('openai')).toBe(true);
     expect(isMonochromeProviderIcon('google')).toBe(false);
+    expect(isMonochromeProviderIcon('deepseek')).toBe(false);
     expect(getProviderIcon('typesafe').toLowerCase()).toContain('typesafe');
     expect(isMonochromeProviderIcon('typesafe')).toBe(true);
     expect(getProviderDisplayName('jev_systemone', 'jev_systemone')).toBe(

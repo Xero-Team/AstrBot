@@ -114,11 +114,15 @@ export function useMediaHandling() {
     ) {
       return undefined;
     }
-    return {
+    const payload: UploadedFileData = {
       attachment_id: record.attachment_id,
       filename: record.filename,
       type: record.type,
     };
+    if (typeof record.stored_filename === 'string') {
+      payload.stored_filename = record.stored_filename;
+    }
+    return payload;
   }
 
   function stageUploaded(

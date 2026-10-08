@@ -61,7 +61,7 @@ uv run main.py
 uv run --no-sync main.py
 ```
 
-首次启动会创建 `data/`、生成随机 WebUI 初始密码，并在日志中打印登录信息。默认用户名为 `astrbot`，WebUI 仅监听 `127.0.0.1:6185`。
+首次启动会创建 `data/`。未设置 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` 时，AstrBot 会生成随机 WebUI 初始密码；密码仅显示在连接的运维终端中，不会写入启动日志。设置该变量时，AstrBot 会使用所提供的值且不再显示。默认用户名为 `astrbot`，WebUI 仅监听 `127.0.0.1:6185`。
 
 ## 远程访问
 

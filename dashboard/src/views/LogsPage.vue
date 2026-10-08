@@ -70,6 +70,7 @@ async function pipInstall(): Promise<void> {
     <ConsoleDisplayer
       class="console-display"
       workspace-mode
+      show-search
       :auto-scroll="autoScrollEnabled"
       :hide-user-chat="hideUserChatEnabled"
     >

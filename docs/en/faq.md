@@ -42,7 +42,7 @@ Or use:
 uv run main.py --reset-password
 ```
 
-Startup generates a new password and shows it only when an operator terminal is attached. For a non-interactive reset, provide `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` for that startup. Do not delete `pbkdf2_password` or `jwt_secret` manually, and never put a plaintext password in the configuration file.
+During reset, AstrBot uses `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` when it is set and generates a random password only when it is unset. A generated password is shown only when an operator terminal is attached. For a non-interactive reset, provide the variable for that startup. Do not delete `pbkdf2_password` or `jwt_secret` manually, and never put a plaintext password in the configuration file.
 
 ### Why is the server IP unreachable?
 

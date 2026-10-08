@@ -42,7 +42,7 @@ uv run astrbot run --reset-password
 uv run main.py --reset-password
 ```
 
-重启过程会生成新密码，并且仅在连接了运维终端时显示。非交互重置时，请为本次启动设置 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`。不要手工删除 `pbkdf2_password`、`jwt_secret` 或向配置文件写入明文密码。
+重置时，如果设置了 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD`，AstrBot 会使用该变量的值；未设置时才会生成随机密码。随机密码仅在连接了运维终端时显示。非交互重置时，请为本次启动设置该变量。不要手工删除 `pbkdf2_password`、`jwt_secret` 或向配置文件写入明文密码。
 
 ### 为什么从服务器 IP 无法访问
 

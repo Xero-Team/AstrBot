@@ -5,31 +5,24 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 42972e932a64f01d96e2e0708579b0f79dd6f792
-  synced_at_utc: 2026-10-04T10:13:43Z
+  commit: 6b2e41791e16460bfbde3f79911f4d258c6da944
+  synced_at_utc: 2026-10-08T18:36:24Z
   sync_method: adapt
   source_pr: >-
-    10287, 10294, 10296, 10307, 10309, 10310, 10319, 10323, 10327, 10332,
-    10337, 10339, 10341, 10346, 10347, 10351, 10353, 10355, 10356, 10358,
-    10361, 10365, 10367
+    10055, 10251, 10372, 10376, 10380, 10392, 10393, 10399, 10400, 10413,
+    10415, 10432, 10436, 10437, 10442, 10444, 10445, 10446
   note: >-
-    Reviewed da4811ae81295fca5a1031ffd1114ca10376b318..42972e932a64f01d96e2e0708579b0f79dd6f792
-    (23 commits). Cherry-picked 1 (#10365) and adapted 16: #10309, #10310,
-    #10296, #10294, #10327, #10323, #10332, #10337, #10341, #10351, #10287,
-    #10361, #10358, #10355, #10353, and #10356. Adaptations preserve the
-    fork's runtime-owned services, Prompt rename, Dashboard Extension Protocol
-    v1, local provider assets, MDI UI, en/zh locale scope, in-app documentation,
-    upload limits, and security boundaries. Skipped 6: #10307 and #10319 depend
-    on removed legacy Plugin Pages and incompatible sidebar structure; #10346,
-    #10339, #10347, and #10367 are already implemented equivalently or more
-    completely in the fork. No upstream version change was present, so the fork
-    version and changelog remain unchanged. Review follow-ups align the adapted
-    Dashboard changes with the fork lint and design-system guards, keep the
-    protected default prompt rooted, guard unsaved profile edits, constrain
-    Slack remote uploads, keep initial credentials out of process logs, preserve
-    attachment display/storage names, and correct scoped documentation anchors.
-    The follow-up also updates Python and Dashboard locks to resolve all five
-    dependency advisories reported by the original quality run. Focused pytest
-    and Vitest suites, Dashboard tests and build, the complete blocking pytest
-    suite (6361 passed), make check, make quality, and the documentation build
-    passed.
+    Reviewed 42972e932a64f01d96e2e0708579b0f79dd6f792..6b2e41791e16460bfbde3f79911f4d258c6da944
+    (18 commits). Cherry-picked 1 (#10392) and adapted 14: #10380, #10400,
+    #10376, #10251, #10413, #10393, #10055, #10442, #10444, #10445, #10446,
+    #10432, #10436, and #10437. Adaptations preserve the fork's normalized
+    Telegram handling, immutable command catalog, Dashboard Extension Protocol
+    v1, source-built Docker image, bounded static gzip, local Monaco worker
+    setup, zh/en locale scope, and explicit group admission policy. Skipped 3:
+    #10399 is already implemented more completely; #10372 targets the removed
+    legacy command-group matcher; #10415 restores incompatible legacy plugin
+    Page/View APIs. No upstream version change was present, so the fork version
+    and changelog remain unchanged. Focused Python and Dashboard suites, the
+    complete blocking pytest suite (6376 passed, 8 skipped), Dashboard tests,
+    i18n check and build, documentation build, make check, and make quality
+    passed. Docker engine was unavailable, so the image build was not run.

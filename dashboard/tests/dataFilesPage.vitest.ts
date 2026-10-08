@@ -10,15 +10,16 @@ const api = readFileSync(
   resolve(process.cwd(), 'src/api/v1/dataFiles.ts'),
   'utf8',
 );
-const monacoLoader = readFileSync(
-  resolve(process.cwd(), 'src/utils/monacoLoader.ts'),
+const lazyMonacoEditor = readFileSync(
+  resolve(process.cwd(), 'src/components/shared/LazyMonacoEditor.ts'),
   'utf8',
 );
 
 describe('DataFilesPage contract', () => {
-  it('uses the shared Monaco loader and Dashboard theme mapping', () => {
-    expect(page).toContain('@/utils/monacoLoader');
-    expect(monacoLoader).toContain("from 'monaco-editor';");
+  it('lazy-loads the shared Monaco editor and keeps the Dashboard theme mapping', () => {
+    expect(page).toContain('@/components/shared/LazyMonacoEditor');
+    expect(lazyMonacoEditor).toContain("await import('@/utils/monacoLoader')");
+    expect(lazyMonacoEditor).toContain("import('@guolao/vue-monaco-editor')");
     expect(page).toContain("customizer.isDark ? 'vs-dark' : 'vs-light'");
     expect(page).toContain('readOnly: !selectedEntry.value?.writable');
   });

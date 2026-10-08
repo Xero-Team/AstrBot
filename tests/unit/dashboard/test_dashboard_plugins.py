@@ -148,6 +148,7 @@ async def test_generated_dashboard_password_is_written_only_to_operator_terminal
     monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
     monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
     monkeypatch.setattr("astrbot.dashboard.server.logger.info", capture_info)
+    monkeypatch.delenv("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", raising=False)
     monkeypatch.setattr(
         "astrbot.dashboard.server._write_dashboard_credentials_to_terminal",
         lambda credentials: terminal_messages.append(credentials) or True,
@@ -195,6 +196,7 @@ async def test_generated_dashboard_password_is_hidden_without_operator_terminal(
 
     monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
     monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+    monkeypatch.delenv("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", raising=False)
     monkeypatch.setattr(
         "astrbot.dashboard.server.logger.info",
         lambda message, *args: info_messages.append(

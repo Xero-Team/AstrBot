@@ -1,8 +1,7 @@
 <script setup>
 import MarkdownIt from 'markdown-it';
 import DOMPurify from 'dompurify';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import '@/utils/monacoLoader';
+import { LazyMonacoEditor as VueMonacoEditor } from './LazyMonacoEditor';
 import { ref, computed } from 'vue';
 import ConfigItemRenderer from './ConfigItemRenderer.vue';
 import TemplateListEditor from './TemplateListEditor.vue';

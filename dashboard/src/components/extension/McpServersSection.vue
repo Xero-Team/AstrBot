@@ -505,9 +505,8 @@
 </template>
 
 <script setup lang="ts">
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
-import '@/utils/monacoLoader';
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { mcpApi } from '@/api/v1';
 import type {
   DynamicConfig,

@@ -364,8 +364,7 @@ import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapp
 import ConfigProfileMenu from '@/components/config/ConfigProfileMenu.vue';
 import ConfigDocsLink from '@/components/shared/ConfigDocsLink.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import '@/utils/monacoLoader';
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,

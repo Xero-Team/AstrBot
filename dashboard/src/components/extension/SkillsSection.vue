@@ -933,8 +933,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import '@/utils/monacoLoader';
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import type { SkillItemData } from '@/api/v1';
 import { skillApi, systemConfigApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';

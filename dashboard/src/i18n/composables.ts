@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { translations as staticTranslations } from './translations';
+import { localeLoaders } from './localeLoader';
 import type { Locale } from './types';
 
 type TranslationTree = Record<string, unknown>;
@@ -14,32 +14,20 @@ const translations = ref<TranslationTree>({});
 export async function initI18n(locale: Locale = 'zh-CN') {
   currentLocale.value = locale;
 
-  // 加载静态翻译数据
-  loadTranslations(locale);
+  await loadTranslations(locale);
 }
 
 /**
- * 加载翻译数据（现在从静态导入获取）
+ * Load one locale into a dedicated async chunk.
  */
-function loadTranslations(locale: Locale) {
+async function loadTranslations(locale: Locale) {
   try {
-    const data = staticTranslations[locale];
-    if (data) {
-      translations.value = data;
-    } else {
-      console.warn(`Translations not found for locale: ${locale}`);
-      // 回退到中文
-      if (locale !== 'zh-CN') {
-        console.log('Falling back to zh-CN');
-        translations.value = staticTranslations['zh-CN'];
-      }
-    }
+    translations.value = await localeLoaders[locale]();
   } catch (error) {
     console.error(`Failed to load translations for ${locale}:`, error);
-    // 回退到中文
     if (locale !== 'zh-CN') {
       console.log('Falling back to zh-CN');
-      translations.value = staticTranslations['zh-CN'];
+      translations.value = await localeLoaders['zh-CN']();
     }
   }
 }
@@ -90,7 +78,7 @@ export function useI18n() {
   const setLocale = async (newLocale: Locale) => {
     if (newLocale !== currentLocale.value) {
       currentLocale.value = newLocale;
-      loadTranslations(newLocale);
+      await loadTranslations(newLocale);
 
       // 保存到localStorage
       localStorage.setItem('astrbot-locale', newLocale);

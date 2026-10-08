@@ -131,6 +131,35 @@ describe('chat component smokes', () => {
     ).toBe(false);
   });
 
+  it('opens and closes the staged image preview', async () => {
+    const wrapper = mountWithVuetify(ChatInput, {
+      props: {
+        prompt: '',
+        stagedImagesUrl: ['https://example.com/image.png'],
+        stagedAudioUrl: '',
+        disabled: false,
+        enableStreaming: true,
+        enableReasoning: true,
+        isRecording: false,
+        isRunning: false,
+      },
+    });
+
+    await wrapper.get('.preview-image').trigger('click');
+    await flushPromises();
+
+    expect(document.body.querySelector('.preview-image-large')).not.toBeNull();
+    const overlay = document.body.querySelector<HTMLElement>(
+      '.image-preview-overlay',
+    );
+    expect(overlay).not.toBeNull();
+    overlay?.click();
+    await flushPromises();
+    expect(
+      document.body.querySelector('.preview-image-large')?.getAttribute('src'),
+    ).toBe('');
+  });
+
   it('keeps a textarea and only expands the composer for multiline prompts', async () => {
     vi.spyOn(
       HTMLTextAreaElement.prototype,

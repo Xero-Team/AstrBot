@@ -235,10 +235,12 @@ class LLMSummaryCompressor:
         )
         log_context_sanitize_stats(sanitize_stats)
 
-        # Generate summary
+        # A failed summary falls back to truncation, so retries only delay the
+        # active request without improving the result.
         try:
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,
+                request_max_retries=1,
             )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:

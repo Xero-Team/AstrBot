@@ -564,30 +564,45 @@ class TestContextManager:
             assert result == messages
 
     @pytest.mark.asyncio
-    async def test_double_check_after_compression(self):
-        """Test that halving is applied if still over threshold after compression."""
+    async def test_failed_summary_requests_once(self):
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        class FailingProvider(MockProvider):
+            async def text_chat(self, **kwargs):
+                self.last_text_chat_kwargs = kwargs
+                raise RuntimeError("quota exhausted")
+
+        provider = FailingProvider()
+        compressor = LLMSummaryCompressor(provider=provider, keep_recent_ratio=0.15)  # type: ignore[arg-type]
+
+        result = await compressor(self.create_messages(4))
+
+        assert result == self.create_messages(4)
+        assert provider.last_text_chat_kwargs["request_max_retries"] == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_compression_drops_oldest_complete_rounds(self):
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
+        messages = [
+            self.create_message("system", "s"),
+            self.create_message("user", "a" * 50),
+            self.create_message("assistant", "b" * 50),
+            self.create_message("user", "c" * 50),
+            self.create_message("assistant", "d" * 50),
+            self.create_message("user", "latest" * 5),
+        ]
+        manager.token_counter.count_tokens = lambda items, *_: sum(
+            len(str(message.content)) for message in items
+        )
+        manager.compressor = AsyncMock(return_value=messages)
+        manager.compressor.should_compress = lambda _messages, tokens, maximum: (
+            tokens > maximum * 0.82
+        )
 
-        # Create messages that would still be over threshold after compression
-        long_messages = [self.create_message("user", "x" * 200) for _ in range(10)]
+        result = await manager._run_compression(messages, prev_tokens=230)
 
-        # Mock compressor to return messages still over threshold
-        async def mock_compress(msgs):
-            return msgs  # Return same messages (still over limit)
-
-        # Mock should_compress to return True twice (before and after compression)
-        with patch.object(manager.compressor, "should_compress", return_value=True):
-            with patch.object(manager.compressor, "__call__", new=mock_compress):
-                with patch.object(
-                    manager.truncator,
-                    "truncate_by_halving",
-                    return_value=long_messages[:5],
-                ) as mock_halving:
-                    _ = await manager.process(long_messages)
-
-                    # Halving should be called
-                    mock_halving.assert_called_once()
+        assert result == [messages[0], messages[-1]]
 
     # ==================== Combined Truncation and Compression Tests ====================
 

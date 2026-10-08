@@ -461,10 +461,11 @@ async def test_save_uploaded_file_renames_image_to_detected_suffix(
     assert insert_kwargs["type"] == "image"
     assert insert_kwargs["mime_type"] == "image/png"
     assert insert_kwargs["path"].endswith("_photo.png")
+    stored_filename = Path(insert_kwargs["path"]).name
     assert result == {
         "attachment_id": "att-1",
         "filename": "photo.png",
-        "stored_filename": Path(insert_kwargs["path"]).name,
+        "stored_filename": stored_filename,
         "type": "image",
     }
 
@@ -478,6 +479,46 @@ def test_unique_attachment_filename_preserves_suffix_and_byte_limit() -> None:
     assert first.endswith("_image.png")
     assert len(long_name.encode()) <= 255
     assert long_name.endswith(".png")
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_keeps_detected_suffix_within_byte_limit(
+    tmp_path, monkeypatch
+) -> None:
+    service = _service()
+    service.attachments_dir = str(tmp_path)
+
+    async def insert_attachment(*, path, type, mime_type):
+        return SimpleNamespace(attachment_id="att-long", path=path)
+
+    service.db.insert_attachment = AsyncMock(side_effect=insert_attachment)
+    upload = UploadFile(
+        filename=f"{'图' * 120}.x",
+        file=BytesIO(b"binary"),
+        headers={"content-type": "image/jpeg"},
+    )
+
+    async def fake_save_upload_to_path(file, path, *, max_bytes=None, root=None):
+        path.write_bytes(b"binary")
+
+    monkeypatch.setattr(
+        chat_service_module,
+        "save_upload_to_path",
+        fake_save_upload_to_path,
+    )
+    monkeypatch.setattr(
+        chat_service_module,
+        "detect_image_mime_type_async",
+        AsyncMock(return_value="image/jpeg"),
+    )
+
+    result = await service.save_uploaded_file(upload)
+
+    stored_filename = result["stored_filename"]
+    assert len(stored_filename.encode()) <= 255
+    assert stored_filename.endswith(".jpg")
+    assert result["filename"].endswith(".jpg")
+    assert (tmp_path / stored_filename).exists()
 
 
 @pytest.mark.asyncio

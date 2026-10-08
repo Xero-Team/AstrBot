@@ -115,6 +115,14 @@ def unique_attachment_filename(filename: str) -> str:
     return f"{prefix}{stem}{suffix}"
 
 
+def attachment_path_with_suffix(file_path: Path, suffix: str) -> Path:
+    """Replace a stored attachment suffix without exceeding 255 bytes."""
+    suffix_bytes = suffix.encode()
+    stem_budget = 255 - len(suffix_bytes)
+    stem = file_path.stem.encode()[:stem_budget].decode(errors="ignore")
+    return file_path.with_name(f"{stem}{suffix}")
+
+
 def extract_web_search_refs(
     accumulated_text: str,
     accumulated_parts: list,
@@ -605,7 +613,10 @@ class ChatService:
                 content_type = detected_mime_type
                 detected_suffix = MEDIA_MIME_EXTENSIONS.get(detected_mime_type)
                 if detected_suffix and file_path.suffix.lower() != detected_suffix:
-                    target_path = file_path.with_suffix(detected_suffix)
+                    target_path = attachment_path_with_suffix(
+                        file_path,
+                        detected_suffix,
+                    )
                     if target_path.exists():
                         target_path = (
                             attachments_dir / f"{uuid.uuid4().hex}{detected_suffix}"
@@ -622,10 +633,11 @@ class ChatService:
         if not attachment:
             raise ChatServiceError("Failed to create attachment")
 
+        stored_filename = os.path.basename(attachment.path)
         return {
             "attachment_id": attachment.attachment_id,
             "filename": filename,
-            "stored_filename": os.path.basename(attachment.path),
+            "stored_filename": stored_filename,
             "type": attach_type,
         }
 

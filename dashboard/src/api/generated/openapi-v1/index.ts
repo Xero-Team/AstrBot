@@ -1420,6 +1420,8 @@ export type {
   UploadDataFileData,
   UploadDataFileResponse,
   UploadDataFileResponses,
+  UploadedFileData,
+  UploadedFileResponse,
   UploadFileChunkData,
   UploadFileChunkResponse,
   UploadFileChunkResponses,

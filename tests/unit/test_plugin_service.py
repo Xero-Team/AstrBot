@@ -67,7 +67,7 @@ async def test_plugin_logo_refreshes_expired_cached_snapshot() -> None:
     service = PluginService.__new__(PluginService)
     service._logo_cache = {"/tmp/logo.svg": "old-token"}
     service.file_token_service = SimpleNamespace(
-        check_token_expired=AsyncMock(return_value=True),
+        check_token_expired=AsyncMock(side_effect=[True, False]),
         register_snapshot=AsyncMock(return_value="new-token"),
     )
 
@@ -77,6 +77,10 @@ async def test_plugin_logo_refreshes_expired_cached_snapshot() -> None:
     service.file_token_service.register_snapshot.assert_awaited_once_with(
         "/tmp/logo.svg"
     )
+    assert service._logo_cache["/tmp/logo.svg"] == "new-token"
+
+    assert await service.get_plugin_logo_token("/tmp/logo.svg") == "new-token"
+    service.file_token_service.register_snapshot.assert_awaited_once()
 
 
 @pytest.mark.asyncio

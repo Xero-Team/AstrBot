@@ -334,7 +334,7 @@ async def test_platform_logo_refreshes_expired_cached_snapshot(
     logo = tmp_path / "logo.svg"
     logo.write_text("<svg/>", encoding="utf-8")
     token_service = SimpleNamespace(
-        check_token_expired=AsyncMock(return_value=True),
+        check_token_expired=AsyncMock(side_effect=[True, False]),
         register_snapshot=AsyncMock(return_value="new-token"),
     )
     registration = SimpleNamespace(cls_type=object)
@@ -359,6 +359,14 @@ async def test_platform_logo_refreshes_expired_cached_snapshot(
         str(logo),
         ttl_seconds=3600,
     )
+    cache_key = f"{platform.name}:{platform.logo_path}"
+    assert service._logo_token_cache[cache_key] == "new-token"
+
+    next_templates = {platform.name: {}}
+    await service.register_platform_logo(platform, next_templates)
+
+    assert next_templates[platform.name]["logo_token"] == "new-token"
+    token_service.register_snapshot.assert_awaited_once()
 
 
 @pytest.mark.asyncio

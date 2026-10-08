@@ -393,7 +393,7 @@ Passwords are stored as PBKDF2 hashes in `pbkdf2_password`. New writes clear the
 uv run astrbot run --reset-password
 ```
 
-The source entry point also accepts `uv run main.py --reset-password`. Startup logs print the new temporary password and require it to be changed after login.
+The source entry point also accepts `uv run main.py --reset-password`. The new temporary password is shown only on an attached operator terminal and must be changed after login. For non-interactive startup, provide `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` for that run.
 
 Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-code hash, and trusted devices are stored per account. The Security page synchronizes the `dashboard.totp` snapshot for configuration export and UI use, but login and high-risk operations validate only the account record. Do not edit that snapshot manually, copy TOTP fields between accounts, or treat it as a recovery-code bypass.
 

@@ -41,7 +41,7 @@ For remote access, explicitly set `dashboard.host` in `data/cmd_config.json` to 
 
 ## Login
 
-For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`).
+For first-time login, AstrBot generates a random initial password and shows it only on an attached operator terminal; the password is not written to startup logs. The username is usually `astrbot`. For a non-interactive service or container startup, set `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` to a strong temporary value before the first run, then change it immediately after login.
 
 The login page now also shows public version information before authentication:
 

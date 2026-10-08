@@ -18,6 +18,7 @@ from hypercorn.logging import AccessLogAtoms
 from hypercorn.logging import Logger as HypercornLogger
 
 from astrbot import logger
+from astrbot.core.config.astrbot_config import DASHBOARD_INITIAL_PASSWORD_ENV
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_runtime import CoreControl, CoreRuntime
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -49,6 +50,34 @@ _BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
     ),
 )
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+
+def _write_dashboard_credentials_to_terminal(credentials: str) -> bool:
+    """Write one-time credentials only to the attached operator terminal."""
+    terminal_path = "CONOUT$" if os.name == "nt" else "/dev/tty"
+    flags = os.O_WRONLY
+    if hasattr(os, "O_NOCTTY"):
+        flags |= os.O_NOCTTY
+    try:
+        descriptor = os.open(terminal_path, flags)
+    except OSError:
+        return False
+
+    try:
+        if not os.isatty(descriptor):
+            return False
+        payload = credentials.encode("utf-8")
+        written = 0
+        while written < len(payload):
+            chunk_size = os.write(descriptor, payload[written:])
+            if chunk_size <= 0:
+                return False
+            written += chunk_size
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(descriptor)
 
 
 def _check_body_limit(
@@ -639,7 +668,26 @@ class AstrBotDashboard:
         credentials_summary, generated_credentials = (
             self._build_dashboard_credentials_display()
         )
-        parts.append(credentials_summary)
+        if generated_credentials:
+            if os.environ.get(DASHBOARD_INITIAL_PASSWORD_ENV):
+                parts.append(
+                    "   ➜  Initial password was supplied through the process "
+                    "environment and was not displayed\n ✨✨✨\n"
+                )
+            elif _write_dashboard_credentials_to_terminal(generated_credentials):
+                parts.append(
+                    "   ➜  Initial credentials were shown on the attached terminal\n"
+                    " ✨✨✨\n"
+                )
+            else:
+                parts.append(
+                    "   ➜  Initial password was not displayed because no operator "
+                    "terminal is attached\n"
+                    "   ➜  Set ASTRBOT_DASHBOARD_INITIAL_PASSWORD before startup or "
+                    "reset it from an interactive terminal\n ✨✨✨\n"
+                )
+        else:
+            parts.append(credentials_summary)
         display = "".join(parts)
 
         if not ip_addr:
@@ -648,12 +696,6 @@ class AstrBotDashboard:
             )
 
         logger.info(display)
-        if generated_credentials:
-            # This one-time secret must bypass the redacted logging sinks so a
-            # local operator can recover access. Development runners capture
-            # stdout and surface these lines, while persistent AstrBot logs do
-            # not retain the password.
-            print(generated_credentials, end="", flush=True)
 
         # 配置 Hypercorn
         config = HyperConfig()

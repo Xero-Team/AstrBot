@@ -18,7 +18,7 @@ Restart AstrBot, then force-refresh with `Ctrl+Shift+R` / `Ctrl+F5` (`Cmd+Shift+
 
 ### What are the first-login credentials?
 
-The default username is `astrbot`. First startup generates a random strong password and prints it in the startup log:
+The default username is `astrbot`. First startup generates a random strong password and shows it only on an attached operator terminal:
 
 ```text
 ➜  Initial username: astrbot
@@ -26,7 +26,7 @@ The default username is `astrbot`. First startup generates a random strong passw
 ➜  Change it after logging in
 ```
 
-There is no fixed default password. Change the initial password immediately and do not publish startup logs that contain it.
+There is no fixed default password, and the password is not written to startup logs. For non-interactive startup, set `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` to a strong temporary value. Change the initial password immediately after login.
 
 ### I forgot the WebUI password
 
@@ -42,7 +42,7 @@ Or use:
 uv run main.py --reset-password
 ```
 
-Startup generates a new password and prints it in the log. Do not delete `pbkdf2_password` or `jwt_secret` manually, and never put a plaintext password in the configuration file.
+Startup generates a new password and shows it only when an operator terminal is attached. For a non-interactive reset, provide `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` for that startup. Do not delete `pbkdf2_password` or `jwt_secret` manually, and never put a plaintext password in the configuration file.
 
 ### Why is the server IP unreachable?
 

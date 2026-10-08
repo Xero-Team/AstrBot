@@ -22,7 +22,7 @@
       "passwordHint": "At least 8 characters, including uppercase, lowercase letters, and digits",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "The default username is astrbot. An initial password is generated on first startup and shown in the console."
+      "defaultCredentials": "The default username is astrbot. An initial password is generated on first startup and shown only on an attached operator terminal."
     },
     "validation": {
       "passwordRequired": "Please enter password",

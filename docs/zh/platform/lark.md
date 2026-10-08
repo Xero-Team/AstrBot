@@ -2,13 +2,19 @@
 
 ## 支持的基本消息类型
 
-| 消息类型 | 是否支持接收 | 是否支持发送 | 备注 |
-| -------- | ------------ | ------------ | ---- |
-| 文本     | 是           | 是           |      |
-| 图片     | 是           | 是           |      |
-| 语音     | 否           | 是           |      |
-| 视频     | 否           | 是           |      |
-| 文件     | 否           | 是           |      |
+| 消息类型 | 是否支持接收 | 是否支持发送 | 备注                                  |
+| -------- | ------------ | ------------ | ------------------------------------- |
+| 文本     | 是           | 是           |                                       |
+| 图片     | 是           | 是           |                                       |
+| 语音     | 是           | 是           | 接收时转换为 WAV，发送时转换为 Opus。 |
+| 视频     | 是           | 是           | 发送前转换为 MP4。                    |
+| 文件     | 是           | 是           |                                       |
+
+引用消息会解析其中的文本、图片、视频和文件。
+
+飞书权限决定哪些群消息会送达 AstrBot；内置 AI 是否回复仍由当前配置档的
+`llm_access.group`、`llm_access.reply_to_bot` 和前缀设置控制。@ 提及不是独立的
+内置 AI 放行策略。
 
 主动消息推送：支持。
 
@@ -27,14 +33,14 @@
 在 `选择创建方式` 中选择 `扫码一键创建`，按需选择国内版或海外版，然后使用手机飞书扫描页面中的二维码并确认。创建成功后，AstrBot 会自动写入该应用的 `app_id`、`app_secret` 和域名配置。
 
 > [!IMPORTANT]
-> 通过扫码方式创建后，群聊下默认仅会接收 @ 机器人和通过唤醒前缀（例如 `/`）触发的消息。如果你希望机器人接收群聊中的所有消息，需要前往飞书开发者后台为应用开通额外权限。
+> 飞书在群聊中默认只会把 @ 机器人的消息推送给 AstrBot。若要接收所有群消息，请在飞书开发者后台开通 `im:message.group_msg` 权限。收到消息本身不代表内置 AI 会回复；还需要单独配置当前配置档的群聊访问策略。
 >
 > 可以将下面链接中的 `<APP_ID>` 替换为你的飞书应用 App ID 后打开，一键进入权限开通页：
 >
 > App ID 获取方式：回到 AstrBot 的 `机器人` 页，找到刚刚创建的飞书机器人，点击 `编辑`，弹出的对话框中可以看到 App ID。
 >
 > ```text
-> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
+> https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message.group_msg,im:message:send_as_bot,im:resource,cardkit:card:write&op_from=openapi&token_type=tenant
 > ```
 
 扫码创建完成后，建议继续检查后文的事件订阅、权限、版本发布和拉入群组步骤。
@@ -120,7 +126,7 @@
 如果需要在群聊里使用，请额外开通 `im:message.group_at_msg:readonly` 和 `im:message.group_msg` 权限。
 
 > [!TIP]
-> 扫码一键创建的应用默认适合 @ 机器人和唤醒前缀触发。如果要接收群聊所有消息，请确认已经开通 `im:message.group_msg`。你也可以使用上文提供的权限开通链接快速进入对应页面。
+> 扫码一键创建的应用默认接收 @ 机器人的消息。如果要接收群聊所有消息，请确认已经开通 `im:message.group_msg`。你也可以使用上文提供的权限开通链接快速进入对应页面。要让内置 AI 回应这些消息，仍须另行配置 `llm_access`。
 
 如果需要使用流式输出，请额外开通 `创建与更新卡片(cardkit:card:write)` 权限。
 

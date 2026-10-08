@@ -128,7 +128,7 @@ class PromptManager:
             None,
         )
         is_implicit_system_default = (
-            force_applied_prompt_id is None
+            not force_applied_prompt_id
             and conversation_prompt_id is None
             and prompt_id == SYSTEM_DEFAULT_PROMPT_ID
         )
@@ -213,6 +213,10 @@ class PromptManager:
             prompt_id: Prompt ID
             folder_id: 目标文件夹 ID，None 表示移动到根目录
         """
+        if prompt_id == SYSTEM_DEFAULT_PROMPT_ID and folder_id is not None:
+            raise ValueError(
+                "The system default prompt must remain in the root folder."
+            )
         prompt = await self.db.move_prompt_to_folder(prompt_id, folder_id)
         if prompt:
             for i, p in enumerate(self.prompts):

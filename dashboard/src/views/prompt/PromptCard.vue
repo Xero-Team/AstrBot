@@ -5,7 +5,7 @@
     rounded="md"
     variant="outlined"
     elevation="0"
-    draggable="true"
+    :draggable="prompt.prompt_id !== 'default'"
     @click="emit('view')"
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
@@ -29,7 +29,10 @@
             </template>
             <v-list-item-title>{{ tm('buttons.edit') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click.stop="emit('move')">
+          <v-list-item
+            v-if="prompt.prompt_id !== 'default'"
+            @click.stop="emit('move')"
+          >
             <template #prepend>
               <v-icon size="small">mdi-folder-move</v-icon>
             </template>
@@ -172,6 +175,10 @@ const promptDisplayName = computed(() =>
 );
 
 function handleDragStart(event: DragEvent) {
+  if (props.prompt.prompt_id === 'default') {
+    event.preventDefault();
+    return;
+  }
   isDragging.value = true;
   if (!event.dataTransfer) {
     return;

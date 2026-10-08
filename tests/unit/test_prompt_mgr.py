@@ -93,3 +93,44 @@ async def test_webchat_implicit_default_keeps_chatui_prompt() -> None:
     assert prompt_id == "_chatui_default_"
     assert prompt is None
     assert use_webchat is True
+
+
+@pytest.mark.asyncio
+async def test_webchat_empty_forced_prompt_keeps_chatui_default() -> None:
+    preferences = SimpleNamespace(get_async=AsyncMock(return_value={"prompt_id": ""}))
+    manager = PromptManager(
+        db_helper=MagicMock(),
+        acm=SimpleNamespace(
+            default_conf={"agent_runner": {}},
+            get_conf=lambda _umo: {"agent_runner": {}},
+        ),
+        preferences=preferences,
+    )
+    manager.runtime_prompts = [{"name": "default", "prompt": "System default"}]
+
+    prompt_id, prompt, force_id, use_webchat = await manager.resolve_selected_prompt(
+        umo="webchat:FriendMessage:user",
+        conversation_prompt_id=None,
+        platform_name="webchat",
+    )
+
+    assert prompt_id == "_chatui_default_"
+    assert prompt is None
+    assert force_id == ""
+    assert use_webchat is True
+
+
+@pytest.mark.asyncio
+async def test_system_default_prompt_cannot_be_moved_into_a_folder() -> None:
+    db = MagicMock()
+    db.move_prompt_to_folder = AsyncMock()
+    manager = PromptManager(
+        db_helper=db,
+        acm=SimpleNamespace(default_conf={}),
+        preferences=SimpleNamespace(),
+    )
+
+    with pytest.raises(ValueError, match="root folder"):
+        await manager.move_prompt_to_folder("default", "folder-1")
+
+    db.move_prompt_to_folder.assert_not_awaited()

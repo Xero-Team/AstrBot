@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.tools.computer_tools import util as computer_util
 from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTool
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
     GetExecutionHistoryTool,
@@ -99,3 +100,29 @@ async def test_browser_tool_without_runtime_context_is_not_gated_by_legacy_confi
     )
 
     assert "Error executing browser command" in result
+
+
+@pytest.mark.asyncio
+async def test_local_permission_error_names_capabilities_tab(monkeypatch):
+    policy = SimpleNamespace(allow_execution=False)
+    monkeypatch.setattr(computer_util, "is_local_runtime", lambda _context: True)
+    monkeypatch.setattr(
+        computer_util,
+        "get_local_permission_policy",
+        lambda _context: policy,
+    )
+
+    async def allow_operation(_context, _operation_name):
+        return None
+
+    monkeypatch.setattr(computer_util, "check_admin_permission", allow_operation)
+
+    resolved, error = await computer_util.check_local_execution_permission(
+        object(),
+        "Shell execution",
+    )
+
+    assert resolved is policy
+    assert error is not None
+    assert "WebUI -> Config -> AI -> Capabilities" in error
+    assert "Local Permission Policies" in error

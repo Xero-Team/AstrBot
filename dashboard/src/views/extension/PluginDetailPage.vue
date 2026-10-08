@@ -612,7 +612,6 @@ const handleDocsClick = (event) => {
   const anchor = target?.closest('a[href^="#"]');
   if (!anchor) return;
 
-  event.preventDefault();
   const rawHref = anchor.getAttribute('href') || '';
   let targetId = '';
   try {
@@ -624,9 +623,11 @@ const handleDocsClick = (event) => {
 
   const container = event.currentTarget;
   if (!(container instanceof Element)) return;
-  container
-    .querySelector(`#${CSS.escape(targetId)}`)
-    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const fragmentTarget = container.querySelector(`#${CSS.escape(targetId)}`);
+  if (!fragmentTarget) return;
+
+  event.preventDefault();
+  fragmentTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 const updateHeaderStuckState = () => {
@@ -1125,6 +1126,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .plugin-detail-page {
+  --plugin-detail-header-height: 56px;
+
   margin: 0 auto;
   max-width: 1040px;
   padding: 16px 24px 32px;
@@ -1381,7 +1384,9 @@ onBeforeUnmount(() => {
   font-weight: 700;
   line-height: 1.3;
   margin: 1.4em 0 0.6em;
-  scroll-margin-top: calc(var(--v-layout-top, 64px) + 24px);
+  scroll-margin-top: calc(
+    var(--v-layout-top, 64px) + var(--plugin-detail-header-height) + 24px
+  );
 }
 
 .docs-markdown :deep(h1:first-child),

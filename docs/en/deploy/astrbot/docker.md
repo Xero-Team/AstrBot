@@ -229,6 +229,22 @@ This setting is the global outbound route described in [`http_proxy`](/en/dev/as
 
 The default username is `astrbot`. Container startup is normally non-interactive, so set `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` to a strong temporary value in the AstrBot service environment before the first startup. Generated passwords are shown only on an attached operator terminal and are never written to container logs. Change the password immediately after logging in, then remove the temporary environment value.
 
+## Reset the Dashboard Password
+
+The runtime image includes the AstrBot CLI. For the source-built Compose service,
+run the password command inside the container, then restart the service:
+
+```bash
+docker compose exec astrbot astrbot password
+docker compose restart astrbot
+```
+
+To change the username at the same time, add `--username <new-username>` to the
+first command. With the NapCat Compose file, add
+`-f compose-with-napcat.yml` to both commands. The command updates the mounted
+`data/` configuration; do not reset credentials by editing password or JWT
+fields manually.
+
 To update, back up `data/`, pull the latest code, and rebuild the selected service:
 
 ```bash

@@ -1,6 +1,5 @@
 <script setup>
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import '@/utils/monacoLoader';
+import { LazyMonacoEditor as VueMonacoEditor } from './LazyMonacoEditor';
 import { ref, computed } from 'vue';
 import ConfigItemRenderer from './ConfigItemRenderer.vue';
 import ConfigDefaultReset from './ConfigDefaultReset.vue';

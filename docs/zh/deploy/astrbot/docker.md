@@ -213,6 +213,19 @@ Clash 一类软件常见 HTTP `7890`、SOCKS `7891`，按实际协议写 `http:/
 
 默认用户名为 `astrbot`。容器通常以非交互方式启动，因此首次启动前请在 AstrBot 服务的环境变量中用 `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` 设置临时强密码。自动生成的密码仅显示在连接的运维终端中，不会写入容器日志。登录后立即修改密码，并移除临时环境变量。
 
+## 重置 Dashboard 密码
+
+运行时镜像内置 AstrBot CLI。对于从源码构建的 Compose 服务，请在容器内执行密码命令，再重启服务：
+
+```bash
+docker compose exec astrbot astrbot password
+docker compose restart astrbot
+```
+
+如需同时修改用户名，请在第一条命令后添加 `--username <新用户名>`。使用 NapCat
+Compose 文件时，两条命令都要加上 `-f compose-with-napcat.yml`。该命令会更新挂载的
+`data/` 配置；不要通过手工编辑密码或 JWT 字段重置凭据。
+
 更新时先备份 `data/`，再拉取代码并重新构建所用服务：
 
 ```bash

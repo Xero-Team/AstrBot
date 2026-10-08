@@ -329,8 +329,7 @@ import {
   useRouter,
   type RouteLocationRaw,
 } from 'vue-router';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import '@/utils/monacoLoader';
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { dataFilesApi, type DataFileEntry } from '@/api/v1';
 import { useCustomizerStore } from '@/stores/customizer';

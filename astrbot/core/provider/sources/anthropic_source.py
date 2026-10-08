@@ -1,4 +1,5 @@
 import base64
+import builtins
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
@@ -525,7 +526,19 @@ class ProviderAnthropic(Provider):
                     payloads.get("tool_choice", "auto")
                 )
 
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged_tools = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                name = tool.get("name") if isinstance(tool, dict) else None
+                merged_tools[name or ("_", builtins.id(tool))] = tool
+            payloads["tools"] = list(merged_tools.values())
+            extra_body = {
+                key: value for key, value in extra_body.items() if key != "tools"
+            }
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
@@ -629,7 +642,19 @@ class ProviderAnthropic(Provider):
         final_tool_calls = []
         id = None
         usage = TokenUsage()
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.provider_config.get("custom_extra_body") or {}
+        if not isinstance(extra_body, dict):
+            extra_body = {}
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            merged_tools = {}
+            for tool in [*payloads["tools"], *custom_tools]:
+                name = tool.get("name") if isinstance(tool, dict) else None
+                merged_tools[name or ("_", builtins.id(tool))] = tool
+            payloads["tools"] = list(merged_tools.values())
+            extra_body = {
+                key: value for key, value in extra_body.items() if key != "tools"
+            }
         reasoning_content = ""
         reasoning_signature = ""
 
@@ -665,10 +690,14 @@ class ProviderAnthropic(Provider):
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
+                        # Keep the start-event input when no JSON deltas follow.
+                        start_input = event.content_block.input
                         tool_use_buffer[event.index] = {
                             "id": event.content_block.id,
                             "name": event.content_block.name,
-                            "input": {},
+                            "input": start_input
+                            if isinstance(start_input, dict)
+                            else {},
                         }
 
                 elif event.type == "content_block_delta":
@@ -713,7 +742,7 @@ class ProviderAnthropic(Provider):
                         # 解析完整的工具调用
                         tool_info = tool_use_buffer[event.index]
                         try:
-                            if "input_json" in tool_info:
+                            if tool_info.get("input_json"):
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
                             # 添加到最终结果

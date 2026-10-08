@@ -551,6 +551,90 @@ def test_slack_parse_blocks_handles_rich_text_lists_and_markdown_sections():
     assert components[4].text == "*bold*"
 
 
+@pytest.mark.parametrize("block_type", ["rich_text_preformatted", "rich_text_quote"])
+def test_slack_parse_blocks_preserves_preformatted_and_quote_text(block_type):
+    adapter = _build_adapter()
+
+    components = adapter._parse_blocks(
+        [
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "Question:"}],
+                    },
+                    {
+                        "type": block_type,
+                        "elements": [
+                            {"type": "text", "text": "line one\nline two"},
+                        ],
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "Answer"}],
+                    },
+                ],
+            },
+        ]
+    )
+
+    assert (
+        "".join(
+            component.text
+            for component in components
+            if isinstance(component, Comp.Plain)
+        )
+        == "Question:\nline one\nline two\nAnswer"
+    )
+
+
+def test_slack_parse_blocks_keeps_quote_boundaries_around_mentions():
+    adapter = _build_adapter()
+
+    components = adapter._parse_blocks(
+        [
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "Question:"}],
+                    },
+                    {
+                        "type": "rich_text_quote",
+                        "elements": [
+                            {"type": "text", "text": "quoted "},
+                            {"type": "user", "user_id": "UOTHER"},
+                            {"type": "text", "text": " text"},
+                        ],
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "Answer"}],
+                    },
+                ],
+            },
+        ]
+    )
+
+    assert [
+        (
+            type(component),
+            component.text if isinstance(component, Comp.Plain) else component.target,
+        )
+        for component in components
+    ] == [
+        (Comp.Plain, "Question:"),
+        (Comp.Plain, "\n"),
+        (Comp.Plain, "quoted "),
+        (Comp.Mention, "UOTHER"),
+        (Comp.Plain, " text"),
+        (Comp.Plain, "\n"),
+        (Comp.Plain, "Answer"),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_slack_handle_socket_event_filters_noise_and_forwards_valid_message():
     adapter = _build_adapter()

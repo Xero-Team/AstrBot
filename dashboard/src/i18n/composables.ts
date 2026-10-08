@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { translations as staticTranslations } from './translations';
+import { localeLoaders } from './localeLoader';
 import type { Locale } from './types';
 
 type TranslationTree = Record<string, unknown>;
@@ -7,41 +7,46 @@ type TranslationTree = Record<string, unknown>;
 // 全局状态
 const currentLocale = ref<Locale>('zh-CN');
 const translations = ref<TranslationTree>({});
+let latestLocaleRequest = 0;
 
 /**
  * 初始化i18n系统
  */
 export async function initI18n(locale: Locale = 'zh-CN') {
-  currentLocale.value = locale;
+  const request = ++latestLocaleRequest;
+  const loadedLocale = await loadTranslations(locale, request);
 
-  // 加载静态翻译数据
-  loadTranslations(locale);
+  if (request === latestLocaleRequest) {
+    currentLocale.value = loadedLocale;
+  }
 }
 
 /**
- * 加载翻译数据（现在从静态导入获取）
+ * Load one locale into a dedicated async chunk.
  */
-function loadTranslations(locale: Locale) {
+async function loadTranslations(
+  locale: Locale,
+  request: number,
+): Promise<Locale> {
+  let loadedLocale = locale;
+  let loadedTranslations: TranslationTree;
   try {
-    const data = staticTranslations[locale];
-    if (data) {
-      translations.value = data;
-    } else {
-      console.warn(`Translations not found for locale: ${locale}`);
-      // 回退到中文
-      if (locale !== 'zh-CN') {
-        console.log('Falling back to zh-CN');
-        translations.value = staticTranslations['zh-CN'];
-      }
-    }
+    loadedTranslations = await localeLoaders[locale]();
   } catch (error) {
     console.error(`Failed to load translations for ${locale}:`, error);
-    // 回退到中文
-    if (locale !== 'zh-CN') {
-      console.log('Falling back to zh-CN');
-      translations.value = staticTranslations['zh-CN'];
+    if (locale === 'zh-CN') {
+      throw error;
     }
+    console.log('Falling back to zh-CN');
+    loadedTranslations = await localeLoaders['zh-CN']();
+    loadedLocale = 'zh-CN';
   }
+
+  if (request === latestLocaleRequest) {
+    translations.value = loadedTranslations;
+  }
+
+  return loadedLocale;
 }
 
 /**
@@ -88,22 +93,32 @@ export function useI18n() {
 
   // 切换语言
   const setLocale = async (newLocale: Locale) => {
-    if (newLocale !== currentLocale.value) {
-      currentLocale.value = newLocale;
-      loadTranslations(newLocale);
-
-      // 保存到localStorage
-      localStorage.setItem('astrbot-locale', newLocale);
-
-      // 触发自定义事件，通知相关页面重新加载配置数据
-      // 这是因为插件适配器的 i18n 数据是通过后端 API 注入的，
-      // 需要根据 Accept-Language 头重新获取
-      window.dispatchEvent(
-        new CustomEvent('astrbot-locale-changed', {
-          detail: { locale: newLocale },
-        }),
-      );
+    const request = ++latestLocaleRequest;
+    if (
+      newLocale === currentLocale.value &&
+      Object.keys(translations.value).length > 0
+    ) {
+      return;
     }
+
+    const loadedLocale = await loadTranslations(newLocale, request);
+    if (request !== latestLocaleRequest) {
+      return;
+    }
+
+    currentLocale.value = loadedLocale;
+
+    // 保存到localStorage
+    localStorage.setItem('astrbot-locale', loadedLocale);
+
+    // 触发自定义事件，通知相关页面重新加载配置数据
+    // 这是因为插件适配器的 i18n 数据是通过后端 API 注入的，
+    // 需要根据 Accept-Language 头重新获取
+    window.dispatchEvent(
+      new CustomEvent('astrbot-locale-changed', {
+        detail: { locale: loadedLocale },
+      }),
+    );
   };
 
   // 获取当前语言

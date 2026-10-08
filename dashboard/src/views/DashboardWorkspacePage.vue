@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 import { useI18n } from '@/i18n/composables';
 
@@ -34,6 +34,20 @@ const tabs = computed(() => [
 ]);
 
 const activeTab = computed(() => String(route.meta.dataTab || 'statistics'));
+
+watch(
+  activeTab,
+  (value) => {
+    const tab = tabs.value.find((item) => item.value === value);
+    if (!tab) return;
+    try {
+      localStorage.setItem('dashboard_last_tab', tab.routeName);
+    } catch {
+      // A blocked browser storage implementation should not prevent navigation.
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

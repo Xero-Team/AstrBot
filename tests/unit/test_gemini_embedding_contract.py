@@ -185,3 +185,23 @@ def test_constructor_does_not_log_proxy_contents(caplog, monkeypatch) -> None:
 
     assert provider.client is client
     _assert_no_sensitive_values(caplog.text)
+
+
+def test_constructor_uses_current_embedding_model_by_default(monkeypatch) -> None:
+    client = _Client(_response([0.1, 0.2, 0.3]))
+    monkeypatch.setattr(
+        gemini_module.genai,
+        "Client",
+        lambda **_kwargs: SimpleNamespace(aio=client),
+    )
+
+    provider = GeminiEmbeddingProvider(
+        {
+            "type": "gemini_embedding",
+            "embedding_api_key": "gemini-api-key",
+            "embedding_api_base": "",
+        },
+        {},
+    )
+
+    assert provider.model == "gemini-embedding-001"

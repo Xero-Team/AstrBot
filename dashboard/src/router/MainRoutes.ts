@@ -4,6 +4,27 @@ import {
   EXTENSION_ROUTE_NAME,
 } from './routeConstants';
 
+const DASHBOARD_LAST_TAB_KEY = 'dashboard_last_tab';
+const dashboardTabRouteNames = new Set([
+  'Stats',
+  'Conversation',
+  'Logs',
+  'Trace',
+]);
+
+export function resolveDashboardWorkspaceRedirect(to: RouteLocationGeneric) {
+  let routeName = 'Stats';
+  try {
+    const savedRouteName = localStorage.getItem(DASHBOARD_LAST_TAB_KEY);
+    if (savedRouteName && dashboardTabRouteNames.has(savedRouteName)) {
+      routeName = savedRouteName;
+    }
+  } catch {
+    // A blocked browser storage implementation should not prevent navigation.
+  }
+  return { name: routeName, query: to.query, hash: to.hash };
+}
+
 const MainRoutes = {
   path: '/main',
   meta: {
@@ -61,11 +82,7 @@ const MainRoutes = {
       name: 'DashboardWorkspace',
       path: '/dashboard',
       component: () => import('@/views/DashboardWorkspacePage.vue'),
-      redirect: (to: RouteLocationGeneric) => ({
-        name: 'Stats',
-        query: to.query,
-        hash: to.hash,
-      }),
+      redirect: resolveDashboardWorkspaceRedirect,
       children: [
         {
           name: 'Stats',

@@ -34,7 +34,14 @@
             :key="'img-' + index"
             class="attachment-card image-preview"
           >
-            <img :src="img" class="preview-image" alt="attachment preview" />
+            <button
+              type="button"
+              class="preview-image-button"
+              :aria-label="tm('input.previewImage')"
+              @click="openImagePreview(img)"
+            >
+              <img :src="img" class="preview-image" alt="" />
+            </button>
             <v-btn
               @click="$emit('removeImage', index)"
               class="remove-attachment-btn"
@@ -366,6 +373,20 @@
         </div>
       </div>
     </div>
+
+    <v-overlay
+      v-model="imagePreview.visible"
+      class="image-preview-overlay"
+      scrim="rgba(0, 0, 0, 0.86)"
+      @click="closeImagePreview"
+    >
+      <img
+        :src="imagePreview.url"
+        class="preview-image-large"
+        alt="attachment preview"
+        @click.stop
+      />
+    </v-overlay>
   </div>
 </template>
 
@@ -373,6 +394,7 @@
 import {
   ref,
   computed,
+  reactive,
   watch,
   nextTick,
   onMounted,
@@ -493,6 +515,17 @@ const isReplyClosing = ref(false);
 const isComposing = ref(false);
 const inputIsMultiline = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
+const imagePreview = reactive({ visible: false, url: '' });
+
+function openImagePreview(url: string) {
+  imagePreview.url = url;
+  imagePreview.visible = true;
+}
+
+function closeImagePreview() {
+  imagePreview.visible = false;
+  imagePreview.url = '';
+}
 
 // 命令提示相关状态
 const allCommands = ref<CommandItem[]>([]);
@@ -1405,6 +1438,39 @@ defineExpose({
   height: 100%;
   object-fit: cover;
   border-radius: 8px;
+}
+
+.preview-image-button {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  cursor: zoom-in;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.preview-image-button:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.preview-image-button .preview-image {
+  display: block;
+  cursor: zoom-in;
+}
+
+.image-preview-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image-large {
+  max-width: min(92vw, 1200px);
+  max-height: 90vh;
+  object-fit: contain;
+  cursor: zoom-out;
 }
 
 .attachment-icon {

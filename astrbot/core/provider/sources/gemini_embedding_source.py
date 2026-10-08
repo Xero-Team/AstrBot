@@ -50,7 +50,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
         self.model = provider_config.get(
             "embedding_model",
-            "gemini-embedding-exp-03-07",
+            "gemini-embedding-001",
         )
 
     @staticmethod

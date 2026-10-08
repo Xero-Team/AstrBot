@@ -8,8 +8,7 @@ import {
   watch,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import '@/utils/monacoLoader';
+import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
 import { conversationApi } from '@/api/v1';
 import ConversationHistoryPreview from '@/components/conversation/ConversationHistoryPreview.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';

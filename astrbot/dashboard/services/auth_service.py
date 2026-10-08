@@ -65,13 +65,14 @@ SKIP_DEFAULT_PASSWORD_AUTH_ENV = "ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH"
 LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
 DEFAULT_PASSWORD_LOGIN_FAILURE_MESSAGE = (
     "Login failed. If this is your first time using AstrBot, the old default "
-    "astrbot password has been replaced by a random strong password shown only "
-    "on an attached operator terminal. For non-interactive startup, set "
+    "astrbot password has been replaced by a supplied or generated strong "
+    "initial password. Generated values are shown only on an attached operator "
+    "terminal. For non-interactive startup, set "
     "ASTRBOT_DASHBOARD_INITIAL_PASSWORD or reset the password interactively. "
     f"Learn more: {docs_href('faq.html', english=True)}\n\n"
-    "登录失败。如果您是初次使用，旧版默认 astrbot 密码已替换为随机强密码，且仅在"
-    "连接的运维终端中显示。非交互启动请设置 ASTRBOT_DASHBOARD_INITIAL_PASSWORD，"
-    "或在交互终端中重置密码。了解更多："
+    "登录失败。如果您是初次使用，旧版默认 astrbot 密码已替换为外部提供或自动生成的"
+    "强初始密码；自动生成的值仅在连接的运维终端中显示。非交互启动请设置 "
+    "ASTRBOT_DASHBOARD_INITIAL_PASSWORD，或在交互终端中重置密码。了解更多："
     f"{docs_href('faq.html')}"
 )
 TOTP_TRUSTED_DEVICE_COOKIE_NAME = _TOTP_TRUSTED_DEVICE_COOKIE_NAME

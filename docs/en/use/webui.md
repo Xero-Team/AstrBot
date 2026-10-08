@@ -41,7 +41,7 @@ For remote access, explicitly set `dashboard.host` in `data/cmd_config.json` to 
 
 ## Login
 
-For first-time login, AstrBot generates a random initial password and shows it only on an attached operator terminal; the password is not written to startup logs. The username is usually `astrbot`. For a non-interactive service or container startup, set `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` to a strong temporary value before the first run, then change it immediately after login.
+For first-time login, AstrBot generates a random initial password only when `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` is unset. Generated passwords appear only on an attached operator terminal and are not written to startup logs; supplied passwords are not displayed. The username is usually `astrbot`. For a non-interactive service or container startup, set the variable to a strong temporary value before the first run, then change it immediately after login.
 
 The login page now also shows public version information before authentication:
 

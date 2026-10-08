@@ -18,7 +18,7 @@ Restart AstrBot, then force-refresh with `Ctrl+Shift+R` / `Ctrl+F5` (`Cmd+Shift+
 
 ### What are the first-login credentials?
 
-The default username is `astrbot`. First startup generates a random strong password and shows it only on an attached operator terminal:
+The default username is `astrbot`. When `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` is unset, first startup generates a random strong password and shows it only on an attached operator terminal:
 
 ```text
 ➜  Initial username: astrbot
@@ -26,7 +26,7 @@ The default username is `astrbot`. First startup generates a random strong passw
 ➜  Change it after logging in
 ```
 
-There is no fixed default password, and the password is not written to startup logs. For non-interactive startup, set `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` to a strong temporary value. Change the initial password immediately after login.
+There is no fixed default password, and the password is not written to startup logs. When `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` is set, AstrBot uses that value without displaying it. For non-interactive startup, set it to a strong temporary value. Change the initial password immediately after login.
 
 ### I forgot the WebUI password
 

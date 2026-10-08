@@ -61,7 +61,7 @@ After dependencies are synchronized, skip the startup sync check with:
 uv run --no-sync main.py
 ```
 
-First startup creates `data/` and generates a random initial WebUI password. The password is shown only on the attached operator terminal and is not written to the startup log. The default username is `astrbot`; WebUI listens only on `127.0.0.1:6185`. For non-interactive startup, set `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` in advance.
+First startup creates `data/`. When `ASTRBOT_DASHBOARD_INITIAL_PASSWORD` is unset, AstrBot generates a random initial WebUI password, shows it only on the attached operator terminal, and does not write it to the startup log. When the variable is set, AstrBot uses the supplied value without displaying it. The default username is `astrbot`; WebUI listens only on `127.0.0.1:6185`.
 
 ## Remote Access
 

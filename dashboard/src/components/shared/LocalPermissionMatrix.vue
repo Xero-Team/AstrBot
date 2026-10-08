@@ -157,7 +157,7 @@
                         tm(
                           item.value === 'none'
                             ? 'scopeHints.none'
-                            : 'scopeHints.host',
+                            : `modeHints.${item.value}`,
                         )
                       }}
                       <v-menu

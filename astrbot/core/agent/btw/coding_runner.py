@@ -623,6 +623,13 @@ async def run_coding_task(
         could not start at all reports a failure rather than raising.
     """
     project_dir = str(agent.get("project_dir", ""))
+    # The agent runs with the task folder as its working directory, so a
+    # relative ``project_dir`` is relative to that folder, not to AstrBot's
+    # own.  Resolve it once here so the snapshot and the artifact walk inspect
+    # the same directory the CLI was granted.
+    project_path = Path(project_dir).expanduser() if project_dir else None
+    if project_path is not None and not project_path.is_absolute():
+        project_path = (workspace / project_path).resolve()
     is_stopped = stop_requested or (lambda: False)
     # Create the observer before anything cancellable, so a run that is stopped
     # while its baseline is read or its child is starting still seals a truthful
@@ -639,7 +646,7 @@ async def run_coding_task(
     try:
         write_task_file(workspace, task)
         invocation = build_invocation(agent, workspace=workspace)
-        baseline = await snapshot_artifacts(Path(project_dir) if project_dir else None)
+        baseline = await snapshot_artifacts(project_path)
         await tree.arm()
         try:
             process = await tree.spawn(
@@ -725,9 +732,7 @@ async def run_coding_task(
         elif process.returncode != 0:
             detail = f"The coding agent exited with code {process.returncode}."
             status = STATUS_FAILED
-        artifacts = await collect_artifacts(
-            baseline, workspace, Path(project_dir) if project_dir else None
-        )
+        artifacts = await collect_artifacts(baseline, workspace, project_path)
         output_text = adapter.final_text if adapter is not None else ""
         if not output_text:
             output_text = agent_result_text(agent, stdout_text, last_message)

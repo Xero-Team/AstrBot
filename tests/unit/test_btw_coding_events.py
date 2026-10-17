@@ -229,6 +229,42 @@ async def test_the_runner_parses_live_events_and_collects_the_result(
 
 
 @pytest.mark.asyncio
+async def test_a_relative_project_dir_is_resolved_against_the_workspace(
+    tmp_path, monkeypatch
+):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    seen = []
+
+    def fake_invocation(agent, *, workspace):
+        del agent
+        return CodingInvocation(argv=(sys.executable, "-c", "pass"), cwd=workspace)
+
+    async def fake_snapshot(project_dir):
+        seen.append(("snapshot", project_dir))
+        return coding_runner.ArtifactBaseline(started_at=0.0)
+
+    async def fake_collect(baseline, workspace, project_dir=None):
+        del baseline, workspace
+        seen.append(("collect", project_dir))
+        return []
+
+    monkeypatch.setattr(coding_runner, "build_invocation", fake_invocation)
+    monkeypatch.setattr(coding_runner, "snapshot_artifacts", fake_snapshot)
+    monkeypatch.setattr(coding_runner, "collect_artifacts", fake_collect)
+
+    result = await coding_runner.run_coding_task(
+        normalized_agent(CASES[0], project_dir="project"),
+        workspace=workspace,
+        task="write",
+    )
+
+    assert result.status == coding_runner.STATUS_COMPLETED
+    expected = (workspace / "project").resolve()
+    assert seen == [("snapshot", expected), ("collect", expected)]
+
+
+@pytest.mark.asyncio
 async def test_a_failed_run_still_writes_its_summary(tmp_path):
     agent = normalized_agent(
         CASES[0],

@@ -85,11 +85,12 @@ describe('CodingAgentsEditor', () => {
     const wrapper = mountEditor([
       { ...claudeAgent },
       { ...claudeAgent, id: 'codex', type: 'codex' },
+      { ...claudeAgent, id: 'opencode', type: 'opencode' },
       { ...claudeAgent, id: 'other', type: 'custom', command: 'other-cli' },
     ]);
 
     const agents = wrapper.findAll('.coding-agents-editor__agent');
-    expect(agents).toHaveLength(3);
+    expect(agents).toHaveLength(4);
 
     expect(
       agents[0].find('.coding-agents-editor__permission-mode').exists(),
@@ -107,6 +108,12 @@ describe('CodingAgentsEditor', () => {
       agents[2].find('.coding-agents-editor__permission-mode').exists(),
     ).toBe(false);
     expect(agents[2].find('.coding-agents-editor__sandbox').exists()).toBe(
+      false,
+    );
+    expect(
+      agents[3].find('.coding-agents-editor__permission-mode').exists(),
+    ).toBe(false);
+    expect(agents[3].find('.coding-agents-editor__sandbox').exists()).toBe(
       false,
     );
 
@@ -342,6 +349,13 @@ describe('CodingAgentsEditor', () => {
     expect(lastEmitted(wrapper)[0]).toMatchObject({
       type: 'codex',
       command: 'codex',
+    });
+
+    type.vm.$emit('update:modelValue', 'opencode');
+    await wrapper.vm.$nextTick();
+    expect(lastEmitted(wrapper)[0]).toMatchObject({
+      type: 'opencode',
+      command: 'opencode',
     });
     wrapper.unmount();
 

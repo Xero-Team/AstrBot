@@ -51,5 +51,6 @@
   },
   "pluginWebui": "插件页面",
   "btw": "BTW 双循环",
-  "thirdPartyAgents": "第三方agent配置"
+  "thirdPartyAgents": "第三方agent配置",
+  "btwRuns": "BTW 委派运行"
 }

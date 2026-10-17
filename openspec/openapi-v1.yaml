@@ -714,6 +714,16 @@ paths:
         '200':
           $ref: '#/components/responses/Ok'
 
+  /api/v1/btw/work-sessions:
+    get:
+      tags: [BTW]
+      summary: List BTW work sessions and coding-agent delegation progress
+      operationId: listBtwWorkSessions
+      x-astrbot-scope: chat
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+
   /api/v1/config-routes:
     get:
       tags: [Bot Config Routes]
@@ -5948,6 +5958,135 @@ components:
           type: integer
           minimum: 1
       additionalProperties: false
+
+    BtwDelegationEvent:
+      type: object
+      required: [type, timestamp, summary, tool, status]
+      properties:
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        summary:
+          type: string
+        tool:
+          type: string
+        status:
+          type: string
+      additionalProperties: false
+
+    BtwDelegation:
+      type: object
+      required:
+        - run_id
+        - agent_id
+        - agent_name
+        - agent_type
+        - workspace
+        - status
+        - started_at
+        - updated_at
+        - latest_action
+        - event_count
+        - tool_call_count
+        - usage
+        - artifacts
+        - recent_events
+      properties:
+        run_id:
+          type: string
+        agent_id:
+          type: string
+        agent_name:
+          type: string
+        agent_type:
+          type: string
+          enum: [claude_code, codex, opencode, custom]
+        workspace:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed, timed_out, cancelled]
+        started_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+        latest_action:
+          type: string
+        event_count:
+          type: integer
+          minimum: 0
+        tool_call_count:
+          type: integer
+          minimum: 0
+        exit_code:
+          type: [integer, 'null']
+        detail:
+          type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+        artifacts:
+          type: array
+          items:
+            type: string
+        recent_events:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/BtwDelegationEvent'
+
+    BtwWorkSession:
+      type: object
+      required:
+        - id
+        - config_id
+        - origin
+        - request
+        - task_type
+        - status
+        - created_at
+        - updated_at
+        - artifacts
+        - delegations
+      properties:
+        id:
+          type: string
+        config_id:
+          type: string
+        origin:
+          type: string
+        request:
+          type: string
+        task_type:
+          type: string
+          enum: [conversation, work]
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled, unconfirmed]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        error:
+          type: [string, 'null']
+        artifacts:
+          type: array
+          items:
+            type: string
+        delegations:
+          type: array
+          items:
+            $ref: '#/components/schemas/BtwDelegation'
 
     CodingCliSwitchRequest:
       type: object

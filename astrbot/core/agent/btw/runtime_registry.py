@@ -8,7 +8,7 @@ work-submission tool hands a task to the work loop through the same registry.
 
 from typing import TYPE_CHECKING
 
-from .types import WorkSessionStatus
+from .types import WorkDelegation, WorkSession, WorkSessionStatus, WorkStatusSnapshot
 from .work_sessions import WorkSessionManager
 
 if TYPE_CHECKING:
@@ -114,6 +114,14 @@ async def record_work_artifacts(event, paths: list[str]) -> bool:
     return await manager.record_artifacts(session_id, paths)
 
 
+async def latest_session(config_id: str, origin: str) -> WorkSession | None:
+    """Return the newest retained session for one profile and origin."""
+    manager = _managers.get(config_id)
+    if manager is None:
+        return None
+    return await manager.get_for_origin(origin)
+
+
 async def latest_status(
     config_id: str, origin: str
 ) -> tuple[str, WorkSessionStatus] | None:
@@ -126,10 +134,99 @@ async def latest_status(
     Returns:
         The task text and status, or ``None`` when no retained task exists.
     """
-    manager = _managers.get(config_id)
-    if manager is None:
-        return None
-    session = await manager.get_for_origin(origin)
+    session = await latest_session(config_id, origin)
     if session is None:
         return None
     return session.request, session.status
+
+
+async def latest_status_snapshot(
+    config_id: str, origin: str
+) -> WorkStatusSnapshot | None:
+    """Return the task, lifecycle status, and latest delegation progress."""
+    session = await latest_session(config_id, origin)
+    if session is None:
+        return None
+    delegation = session.delegations[-1] if session.delegations else None
+    return WorkStatusSnapshot(
+        request=session.request,
+        status=session.status,
+        delegation=delegation,
+    )
+
+
+async def list_work_sessions() -> list[tuple[str, WorkSession]]:
+    """Return a stable snapshot of every registered profile's sessions.
+
+    The Dashboard reads this without taking ownership of a pipeline's manager.
+    Each manager applies its own expiry cleanup and lock; this function copies
+    the registry first so a concurrent profile reload cannot change the
+    dictionary while it is being iterated.
+    """
+    sessions: list[tuple[str, WorkSession]] = []
+    for config_id, manager in list(_managers.items()):
+        sessions.extend(
+            (config_id, session) for session in await manager.list_sessions()
+        )
+    sessions.sort(key=lambda item: item[1].created_at, reverse=True)
+    return sessions
+
+
+async def start_work_delegation(event, delegation: WorkDelegation) -> bool:
+    """Attach one coding-agent delegation to the event's work session."""
+    session_id = event.get_extra("btw_work_session_id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    manager = _managers.get(config_id_of(event))
+    if manager is None:
+        return False
+    return await manager.start_delegation(session_id, delegation)
+
+
+async def record_work_delegation_event(event, run_id: str, item) -> bool:
+    """Record one normalized coding event on the event's work session."""
+    session_id = event.get_extra("btw_work_session_id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    manager = _managers.get(config_id_of(event))
+    if manager is None:
+        return False
+    return await manager.record_delegation_event(
+        session_id,
+        run_id,
+        event_type=item.type,
+        summary=item.summary,
+        tool=item.tool,
+        status=item.status,
+        usage=item.usage,
+    )
+
+
+async def finish_work_delegation(
+    event,
+    run_id: str,
+    *,
+    status: str,
+    exit_code: int | None,
+    artifacts: list[str],
+    detail: str = "",
+    latest_action: str = "",
+    usage: dict[str, int | float] | None = None,
+) -> bool:
+    """Mark one coding-agent delegation terminal on the event's session."""
+    session_id = event.get_extra("btw_work_session_id")
+    if not isinstance(session_id, str) or not session_id:
+        return False
+    manager = _managers.get(config_id_of(event))
+    if manager is None:
+        return False
+    return await manager.finish_delegation(
+        session_id,
+        run_id,
+        status=status,
+        exit_code=exit_code,
+        artifacts=artifacts,
+        detail=detail,
+        latest_action=latest_action,
+        usage=usage,
+    )

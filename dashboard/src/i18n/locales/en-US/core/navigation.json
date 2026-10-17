@@ -51,5 +51,6 @@
   },
   "pluginWebui": "Plugin Pages",
   "btw": "BTW Dual Loop",
-  "thirdPartyAgents": "Third-party Agent Config"
+  "thirdPartyAgents": "Third-party Agent Config",
+  "btwRuns": "BTW Delegated Runs"
 }

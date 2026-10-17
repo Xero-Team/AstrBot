@@ -32,6 +32,12 @@ from astrbot.core.agent.btw.coding_agents import (
     build_invocation,
     truncate_output,
 )
+from astrbot.core.agent.btw.coding_events import (
+    EVENTS_LOG_NAME,
+    RUN_SUMMARY_NAME,
+    CodingRunObserver,
+    adapter_for,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.process_tree import ProcessTree
@@ -39,7 +45,15 @@ from astrbot.core.utils.process_tree import ProcessTree
 OUTPUT_LOG_NAME = "output.log"
 # The files this module writes into the task folder.  They describe the run
 # rather than being produced by it, so artifacts never report them.
-TASK_BOOKKEEPING_FILES = frozenset({TASK_FILE_NAME, OUTPUT_LOG_NAME, LAST_MESSAGE_NAME})
+TASK_BOOKKEEPING_FILES = frozenset(
+    {
+        TASK_FILE_NAME,
+        OUTPUT_LOG_NAME,
+        LAST_MESSAGE_NAME,
+        EVENTS_LOG_NAME,
+        RUN_SUMMARY_NAME,
+    }
+)
 
 # How often a running task checks whether the user withdrew it.
 STOP_POLL_SECONDS = 0.5
@@ -52,6 +66,8 @@ MAX_ARTIFACTS = 50
 # still reaches the run log on disk; only the tail is held here, because a
 # thirty-minute ``stream-json`` run is not something to buffer whole.
 MAX_CAPTURED_CHARS = 1_000_000
+# A malformed or enormous NDJSON line must not grow without bound in memory.
+MAX_STREAM_LINE_CHARS = 1_000_000
 READ_CHUNK_BYTES = 64 * 1024
 # How many entries a directory walk may visit before it stops.  A walk is
 # capped so a large non-git root cannot turn one delegation into a long scan.
@@ -120,6 +136,11 @@ class CodingTaskResult:
         artifacts: Paths the run created or changed, relative to their root.
         output: The agent's own final message, already truncated.
         detail: A safe one-line reason when the run did not complete cleanly.
+        run_id: The task folder's run identifier.
+        event_count: Normalized stream events observed during the run.
+        tool_call_count: Tool calls observed during the run.
+        usage: Token/cost usage reported by the CLI.
+        summary: The final ``run.json`` payload.
     """
 
     status: str
@@ -128,6 +149,11 @@ class CodingTaskResult:
     artifacts: list[str] = field(default_factory=list)
     output: str = ""
     detail: str = ""
+    run_id: str = ""
+    event_count: int = 0
+    tool_call_count: int = 0
+    usage: dict[str, int | float] = field(default_factory=dict)
+    summary: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,6 +307,64 @@ async def _drain(stream: asyncio.StreamReader | None, log) -> str:
         log.write(tail)
         log.flush()
         captured.append(tail)
+    return "".join(captured)
+
+
+async def _drain_stdout(
+    stream: asyncio.StreamReader | None,
+    log,
+    *,
+    adapter,
+    observer: CodingRunObserver,
+) -> str:
+    """Copy stdout to the log, normalize each line live, and return its tail."""
+    if stream is None:
+        return ""
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    captured: deque[str] = deque()
+    captured_chars = 0
+    pending = ""
+    discarding = False
+
+    async def consume_line(line: str) -> None:
+        if adapter is not None:
+            for event in adapter.feed(line):
+                await observer.record(event)
+
+    while chunk := await stream.read(READ_CHUNK_BYTES):
+        text = decoder.decode(chunk)
+        if not text:
+            continue
+        log.write(text)
+        log.flush()
+        captured.append(text)
+        captured_chars += len(text)
+        while captured_chars > MAX_CAPTURED_CHARS and len(captured) > 1:
+            captured_chars -= len(captured.popleft())
+        pending += text
+        while "\n" in pending:
+            line, pending = pending.split("\n", 1)
+            if discarding:
+                discarding = False
+                continue
+            await consume_line(line)
+        if len(pending) > MAX_STREAM_LINE_CHARS:
+            logger.warning(
+                "Discarding an oversized coding-agent output line (%s characters).",
+                len(pending),
+            )
+            pending = ""
+            discarding = True
+
+    tail = decoder.decode(b"", final=True)
+    if tail:
+        log.write(tail)
+        log.flush()
+        captured.append(tail)
+        captured_chars += len(tail)
+        pending += tail
+    if pending and not discarding:
+        await consume_line(pending)
     return "".join(captured)
 
 
@@ -520,6 +604,8 @@ async def run_coding_task(
     workspace: Path,
     task: str,
     stop_requested: Callable[[], bool] | None = None,
+    on_event=None,
+    trace=None,
 ) -> CodingTaskResult:
     """Run one coding agent on one task and report the outcome.
 
@@ -529,6 +615,8 @@ async def run_coding_task(
         task: The complete task text.
         stop_requested: Polled while the child runs, so a withdrawn request
             stops waiting instead of running to completion.
+        on_event: Optional async callback for each normalized stream event.
+        trace: Optional event TraceSpan for lifecycle and progress records.
 
     Returns:
         The run's status, exit code, artifacts, and final message.  A run that
@@ -539,6 +627,13 @@ async def run_coding_task(
     invocation = build_invocation(agent, workspace=workspace)
     baseline = await snapshot_artifacts(Path(project_dir) if project_dir else None)
     is_stopped = stop_requested or (lambda: False)
+    observer = CodingRunObserver(
+        agent=agent,
+        workspace=workspace,
+        run_id=workspace.name,
+        on_event=on_event,
+        trace=trace,
+    )
     tree = ProcessTree.create()
     await tree.arm()
     try:
@@ -553,41 +648,83 @@ async def run_coding_task(
     except OSError as exc:
         await tree.close()
         logger.error("Coding agent could not start: %s", safe_error("", exc))
+        detail = f"Coding agent {agent.get('command')!r} could not be started."
+        summary = observer.finish(
+            status=STATUS_FAILED,
+            exit_code=None,
+            artifacts=[],
+            detail=detail,
+            latest_action="could not start",
+        )
+        observer.close()
         return CodingTaskResult(
             status=STATUS_FAILED,
             exit_code=None,
             workspace=workspace,
-            detail=f"Coding agent {agent.get('command')!r} could not be started.",
+            detail=detail,
+            run_id=observer.run_id,
+            summary=summary,
         )
 
+    adapter = adapter_for(str(agent.get("type", "")))
     stdout_text = ""
-    with (workspace / OUTPUT_LOG_NAME).open("w", encoding="utf-8") as log:
-        if process.stdin is not None:
-            process.stdin.write(task.encode("utf-8"))
-            await process.stdin.drain()
-            process.stdin.close()
-        stdout_task = asyncio.ensure_future(_drain(process.stdout, log))
-        stderr_task = asyncio.ensure_future(_drain(process.stderr, log))
-        try:
-            status = await _wait_for_exit(
-                tree,
-                process,
-                timeout_seconds=int(agent.get("timeout_seconds", 0)) or 1,
-                stop_requested=is_stopped,
+    try:
+        with (workspace / OUTPUT_LOG_NAME).open("w", encoding="utf-8") as log:
+            if process.stdin is not None:
+                process.stdin.write(task.encode("utf-8"))
+                await process.stdin.drain()
+                process.stdin.close()
+            stdout_task = asyncio.ensure_future(
+                _drain_stdout(
+                    process.stdout,
+                    log,
+                    adapter=adapter,
+                    observer=observer,
+                )
             )
-            stdout_text, _stderr_text = await asyncio.gather(stdout_task, stderr_task)
-        finally:
-            for pending in (stdout_task, stderr_task):
-                if not pending.done():
-                    pending.cancel()
-            # Timeout and cancellation are reaped above.  An unexpected error
-            # arrives here instead.  Either way a coding agent left running
-            # would keep writing to the host after the work loop stopped
-            # tracking it, and a run that ended on its own is not the same as
-            # the work it handed to a helper being over.  The shield lets the
-            # reap finish while this task unwinds.
-            with contextlib.suppress(asyncio.CancelledError):
-                await asyncio.shield(_terminate(tree, process))
+            stderr_task = asyncio.ensure_future(_drain(process.stderr, log))
+            try:
+                status = await _wait_for_exit(
+                    tree,
+                    process,
+                    timeout_seconds=int(agent.get("timeout_seconds", 0)) or 1,
+                    stop_requested=is_stopped,
+                )
+                stdout_text, _stderr_text = await asyncio.gather(
+                    stdout_task, stderr_task
+                )
+            finally:
+                for pending in (stdout_task, stderr_task):
+                    if not pending.done():
+                        pending.cancel()
+                # Timeout and cancellation are reaped above.  An unexpected
+                # error arrives here instead.  Either way a coding agent left
+                # running would keep writing to the host after the work loop
+                # stopped tracking it, and a run that ended on its own is not
+                # the same as the work it handed to a helper being over.  The
+                # shield lets the reap finish while this task unwinds.
+                with contextlib.suppress(asyncio.CancelledError):
+                    await asyncio.shield(_terminate(tree, process))
+    except asyncio.CancelledError:
+        observer.finish(
+            status=STATUS_CANCELLED,
+            exit_code=process.returncode,
+            artifacts=[],
+            detail="The coding agent was stopped.",
+            latest_action="cancelled",
+        )
+        observer.close()
+        raise
+    except Exception:
+        observer.finish(
+            status=STATUS_FAILED,
+            exit_code=process.returncode,
+            artifacts=[],
+            detail="The coding agent run failed.",
+            latest_action="failed",
+        )
+        observer.close()
+        raise
 
     last_message = ""
     last_message_path = workspace / LAST_MESSAGE_NAME
@@ -602,16 +739,37 @@ async def run_coding_task(
     elif process.returncode != 0:
         detail = f"The coding agent exited with code {process.returncode}."
         status = STATUS_FAILED
-    return CodingTaskResult(
-        status=status,
-        exit_code=process.returncode,
-        workspace=workspace,
-        artifacts=await collect_artifacts(
+    try:
+        artifacts = await collect_artifacts(
             baseline, workspace, Path(project_dir) if project_dir else None
-        ),
-        output=truncate_output(
-            agent_result_text(agent, stdout_text, last_message),
-            int(agent.get("max_output_chars", 0)) or 1,
-        ),
-        detail=detail,
-    )
+        )
+        output_text = adapter.final_text if adapter is not None else ""
+        if not output_text:
+            output_text = agent_result_text(agent, stdout_text, last_message)
+        elif str(agent.get("type", "")) == "codex" and last_message.strip():
+            output_text = last_message.strip()
+        summary = observer.finish(
+            status=status,
+            exit_code=process.returncode,
+            artifacts=artifacts,
+            detail=detail,
+            latest_action=output_text or detail or status,
+        )
+        return CodingTaskResult(
+            status=status,
+            exit_code=process.returncode,
+            workspace=workspace,
+            artifacts=artifacts,
+            output=truncate_output(
+                output_text,
+                int(agent.get("max_output_chars", 0)) or 1,
+            ),
+            detail=detail,
+            run_id=observer.run_id,
+            event_count=observer.events,
+            tool_call_count=observer.tool_calls,
+            usage=dict(observer.usage),
+            summary=summary,
+        )
+    finally:
+        observer.close()

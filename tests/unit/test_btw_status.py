@@ -151,3 +151,95 @@ async def test_failing_close_still_removes_its_registration(monkeypatch):
     with pytest.raises(RuntimeError, match="close failed"):
         await stage.close()
     assert runtime_registry._managers == {}
+
+
+@pytest.mark.asyncio
+async def test_status_snapshot_and_command_include_live_delegation_progress():
+    from astrbot.core.agent.btw.types import WorkDelegation
+
+    manager = WorkSessionManager()
+    event = DummyEvent(message_str="work status")
+    event.resource = SimpleNamespace(config_id="profile-a")
+    session = await manager.create(event.unified_msg_origin, "inspect the workspace")
+    await manager.update_status(session.id, WorkSessionStatus.RUNNING)
+    delegation = WorkDelegation(
+        run_id="run-1",
+        agent_id="codex",
+        agent_name="Codex",
+        agent_type="codex",
+        workspace="run-1",
+    )
+    await manager.start_delegation(session.id, delegation)
+    await manager.record_delegation_event(
+        session.id,
+        "run-1",
+        event_type="tool_call",
+        summary="shell: pytest -q",
+        tool="shell",
+        status="running",
+    )
+    runtime_registry.register("profile-a", manager)
+    context = SimpleNamespace(i18n=FakeI18n())
+
+    snapshot = await runtime_registry.latest_status_snapshot(
+        "profile-a", event.unified_msg_origin
+    )
+    assert snapshot is not None
+    assert snapshot.delegation is delegation
+
+    await WorkCommands(context).handle(event, "status")
+    text = event.result.get_plain_text()
+    assert "Coding agent: Codex" in text
+    assert "shell: pytest -q" in text
+    assert "Tool calls: 1; events: 1" in text
+
+
+@pytest.mark.asyncio
+async def test_delegation_progress_is_terminal_and_artifact_aware():
+    from astrbot.core.agent.btw.types import WorkDelegation
+
+    manager = WorkSessionManager()
+    session = await manager.create("origin", "task")
+    delegation = WorkDelegation(
+        run_id="run-1",
+        agent_id="opencode",
+        agent_name="OpenCode",
+        agent_type="opencode",
+        workspace="run-1",
+    )
+    assert await manager.start_delegation(session.id, delegation) is True
+    assert (
+        await manager.record_delegation_event(
+            session.id,
+            "run-1",
+            event_type="tool_call",
+            summary="write: report.md",
+            tool="write",
+            status="running",
+            usage={"input_tokens": 4},
+        )
+        is True
+    )
+    assert (
+        await manager.finish_delegation(
+            session.id,
+            "run-1",
+            status="completed",
+            exit_code=0,
+            artifacts=["report.md"],
+            latest_action="OpenCode finished",
+            usage={"output_tokens": 2},
+        )
+        is True
+    )
+    assert delegation.status == "completed"
+    assert delegation.tool_call_count == 1
+    assert delegation.usage == {"input_tokens": 4, "output_tokens": 2}
+    assert delegation.artifacts == ["report.md"]
+    assert delegation.recent_events[0]["summary"] == "write: report.md"
+    assert (
+        await manager.record_delegation_event(
+            "missing", "run-1", event_type="message", summary="ignored"
+        )
+        is False
+    )

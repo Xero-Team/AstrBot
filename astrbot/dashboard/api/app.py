@@ -23,6 +23,7 @@ from astrbot.dashboard.services.auth_service import (
     DashboardTokenValidator,
 )
 from astrbot.dashboard.services.backup_service import BackupService
+from astrbot.dashboard.services.btw_service import BtwService
 from astrbot.dashboard.services.chat_service import ChatService
 from astrbot.dashboard.services.chatui_project_service import ChatUIProjectService
 from astrbot.dashboard.services.command_service import CommandService
@@ -251,6 +252,7 @@ def create_dashboard_asgi_app(
         config_routes=ConfigRoutingService(runtime.umop_config_router),
         api_keys=ApiKeyService(db),
         auth=auth_service,
+        btw=BtwService(),
         backups=BackupService(
             db,
             runtime.astrbot_config,

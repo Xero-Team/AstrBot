@@ -254,6 +254,56 @@ export type CreateApiKeyRequest = {
   expires_in_days?: number;
 };
 
+export type BtwDelegationEvent = {
+  type: string;
+  timestamp: string;
+  summary: string;
+  tool: string;
+  status: string;
+};
+
+export type BtwDelegation = {
+  run_id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_type: 'claude_code' | 'codex' | 'opencode' | 'custom';
+  workspace: string;
+  status: 'running' | 'completed' | 'failed' | 'timed_out' | 'cancelled';
+  started_at: string;
+  updated_at: string;
+  finished_at?: string | null;
+  latest_action: string;
+  event_count: number;
+  tool_call_count: number;
+  exit_code?: number | null;
+  detail?: string;
+  usage: {
+    [key: string]: number;
+  };
+  artifacts: Array<string>;
+  recent_events: Array<BtwDelegationEvent>;
+};
+
+export type BtwWorkSession = {
+  id: string;
+  config_id: string;
+  origin: string;
+  request: string;
+  task_type: 'conversation' | 'work';
+  status:
+    | 'pending'
+    | 'running'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'unconfirmed';
+  created_at: string;
+  updated_at: string;
+  error?: string | null;
+  artifacts: Array<string>;
+  delegations: Array<BtwDelegation>;
+};
+
 export type CodingCliSwitchRequest = {
   cli: 'claude_code' | 'codex';
   provider_id: string;
@@ -2032,6 +2082,23 @@ export type RemoveCodingCliGlobalConfigResponses = {
 
 export type RemoveCodingCliGlobalConfigResponse =
   RemoveCodingCliGlobalConfigResponses[keyof RemoveCodingCliGlobalConfigResponses];
+
+export type ListBtwWorkSessionsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/v1/btw/work-sessions';
+};
+
+export type ListBtwWorkSessionsResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListBtwWorkSessionsResponse =
+  ListBtwWorkSessionsResponses[keyof ListBtwWorkSessionsResponses];
 
 export type ListConfigRoutesData = {
   body?: never;

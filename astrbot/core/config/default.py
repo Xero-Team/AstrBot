@@ -5003,7 +5003,7 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
         "btw.work_loop.coding_agents": {
             "description": "第三方编码代理",
             "type": "list",
-            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex）。每项包含 id、type、command、模型、输出上限、权限模式与可写目录；委派会启动本地进程并写入文件，因此还要求工作循环的 Computer Use 运行时为 local（sandbox 下委派等于绕过沙箱），并通过 tool.local_exec 与 tool.file_write 的授权。Claude Code 以非交互方式（-p）运行，没有终端可以回答权限询问：acceptEdits 只自动放行编辑，需要跑 shell 命令的任务会一直等到超时，这类任务要显式选择 bypassPermissions。代理使用的 provider 由「第三方agent配置」页面统一管理，切换的是该 CLI 自己的全局配置。",
+            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex、OpenCode）。每项包含 id、type、command、模型、输出上限、权限模式与可写目录；委派会启动本地进程并写入文件，因此还要求工作循环的 Computer Use 运行时为 local（sandbox 下委派等于绕过沙箱），并通过 tool.local_exec 与 tool.file_write 的授权。Claude Code 以非交互方式（-p）运行，没有终端可以回答权限询问：acceptEdits 只自动放行编辑，需要跑 shell 命令的任务会一直等到超时，这类任务要显式选择 bypassPermissions。代理使用的 provider 由「第三方agent配置」页面统一管理，切换的是该 CLI 自己的全局配置。",
             "_special": "select_coding_agents",
             # The editor is a list of cards, one per agent; half of a row is
             # not enough to lay one out.

@@ -8,6 +8,7 @@ from .auth import router as auth_router
 from .authorization import router as authorization_router
 from .backups import router as backups_router
 from .bots import router as bots_router
+from .btw import router as btw_router
 from .chat import router as chat_router
 from .chat_projects import router as chat_projects_router
 from .coding_cli import router as coding_cli_router
@@ -48,6 +49,7 @@ def build_api_router() -> APIRouter:
     router.include_router(coding_cli_router)
     router.include_router(api_keys_router)
     router.include_router(bots_router)
+    router.include_router(btw_router)
     router.include_router(providers_router)
     router.include_router(plugin_dashboard_router)
     router.include_router(plugins_router)

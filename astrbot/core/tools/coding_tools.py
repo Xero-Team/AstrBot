@@ -14,7 +14,7 @@ from pydantic.dataclasses import dataclass
 from astrbot import logger
 from astrbot.core.agent.btw import coding_runner, runtime_registry
 from astrbot.core.agent.btw.coding_agents import select_coding_agent
-from astrbot.core.agent.btw.types import stop_requested
+from astrbot.core.agent.btw.types import WorkDelegation, stop_requested
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -146,20 +146,54 @@ class DelegateCodingTaskTool(FunctionTool[AstrAgentContext]):
             str(session_id),
             str(agent["id"]),
         )
+        delegation = WorkDelegation(
+            run_id=workspace.name,
+            agent_id=str(agent.get("id", "")),
+            agent_name=str(agent.get("name", "")),
+            agent_type=str(agent.get("type", "")),
+            workspace=workspace.name,
+        )
+        await runtime_registry.start_work_delegation(event, delegation)
+
+        async def record_event(item) -> None:
+            await runtime_registry.record_work_delegation_event(
+                event, workspace.name, item
+            )
+
         try:
             result = await coding_runner.run_coding_task(
                 agent,
                 workspace=workspace,
                 task=task_text,
                 stop_requested=lambda: stop_requested(event),
+                on_event=record_event,
+                trace=getattr(event, "trace", None),
             )
         except Exception as exc:  # noqa: BLE001
             logger.error("Delegated coding task failed: %s", safe_error("", exc))
+            await runtime_registry.finish_work_delegation(
+                event,
+                workspace.name,
+                status=coding_runner.STATUS_FAILED,
+                exit_code=None,
+                artifacts=[],
+                detail="The coding agent run failed.",
+                latest_action="failed",
+            )
             return (
                 f"error: the coding agent could not be run in {workspace.name}. "
                 "Report the task as failed and say so."
             )
-        await runtime_registry.record_work_artifacts(
-            event, _relative_artifacts(workspace, root, result.artifacts)
+        relative_artifacts = _relative_artifacts(workspace, root, result.artifacts)
+        await runtime_registry.finish_work_delegation(
+            event,
+            result.run_id or workspace.name,
+            status=result.status,
+            exit_code=result.exit_code,
+            artifacts=relative_artifacts,
+            detail=result.detail,
+            latest_action=str(result.summary.get("latest_action", "")),
+            usage=result.usage,
         )
+        await runtime_registry.record_work_artifacts(event, relative_artifacts)
         return _format_report(result, agent, root)

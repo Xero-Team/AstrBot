@@ -7,6 +7,9 @@ if TYPE_CHECKING:
     from astrbot.core.agent.btw.runtime_registry import (
         latest_status as btw_work_latest_status,
     )
+    from astrbot.core.agent.btw.runtime_registry import (
+        latest_status_snapshot as btw_work_latest_snapshot,
+    )
     from astrbot.core.agent.btw.submission import (
         submit_work_task as btw_submit_work_task,
     )
@@ -32,6 +35,10 @@ _EXPORTS = {
     "btw_work_latest_status": (
         "astrbot.core.agent.btw.runtime_registry",
         "latest_status",
+    ),
+    "btw_work_latest_snapshot": (
+        "astrbot.core.agent.btw.runtime_registry",
+        "latest_status_snapshot",
     ),
     "btw_work_loop_enabled": (
         "astrbot.core.agent.btw.types",
@@ -129,6 +136,7 @@ __all__ = [
     "btw_submit_work_task",
     "btw_work_loop_enabled",
     "btw_work_latest_status",
+    "btw_work_latest_snapshot",
     "llm_tool",
     "logger",
     "overlay_flag_enabled",

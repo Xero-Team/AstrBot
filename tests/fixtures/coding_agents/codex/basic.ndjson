@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"codex-thread"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"command_execution","command":"pwd","status":"in_progress"}}
+{"type":"item.completed","item":{"type":"command_execution","command":"pwd","aggregated_output":"/tmp","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"type":"file_change","changes":[{"path":"report.md","kind":"add"}],"status":"completed"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"codex final"}}
+{"type":"turn.completed","usage":{"input_tokens":12,"output_tokens":6}}

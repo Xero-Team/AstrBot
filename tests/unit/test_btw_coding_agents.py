@@ -469,3 +469,54 @@ def test_truncation_marks_what_it_cut():
     truncated = ca.truncate_output("abcdefghij", 4)
     assert truncated.startswith("abcd")
     assert "6 characters truncated" in truncated
+
+
+def test_opencode_is_a_first_class_agent_type(tmp_path):
+    agent = ca.normalize_coding_agents(
+        [{"id": "oc", "type": "opencode", "enabled": True}]
+    )[0]
+    assert agent["command"] == "opencode"
+    invocation = ca.build_invocation(agent, workspace=tmp_path)
+    assert invocation.argv[:4] == ("opencode", "run", "--format", "json")
+    assert invocation.cwd == tmp_path
+
+
+def test_opencode_provider_is_an_inline_environment_layer(tmp_path):
+    agent = ca.normalize_coding_agents(
+        [
+            {
+                "id": "oc",
+                "type": "opencode",
+                "enabled": True,
+                "providers": [
+                    {
+                        "id": "gw",
+                        "name": "Gateway",
+                        "base_url": "https://gw.example/v1",
+                        "api_key": "sk-secret",
+                        "model": "glm-5",
+                    }
+                ],
+                "active_provider": "gw",
+            }
+        ]
+    )[0]
+    invocation = ca.build_invocation(agent, workspace=tmp_path)
+
+    assert invocation.settings_path is None
+    payload = json.loads(invocation.env["OPENCODE_CONFIG_CONTENT"])
+    provider = payload["provider"]["astrbot-btw-oc"]
+    assert provider["options"]["baseURL"] == "https://gw.example/v1"
+    assert provider["options"]["apiKey"] == "sk-secret"
+    assert payload["model"] == "astrbot-btw-oc/glm-5"
+    assert not (tmp_path / "coding-agents").exists()
+
+
+def test_the_opencode_result_line_is_read_from_the_stream():
+    stdout = "\n".join(
+        [
+            '{"type":"text","part":{"messageID":"m1","text":"first"}}',
+            '{"type":"text","part":{"messageID":"m1","text":"final answer"}}',
+        ]
+    )
+    assert ca.agent_result_text({"type": "opencode"}, stdout) == "final answer"

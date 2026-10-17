@@ -7,10 +7,10 @@ launched with -- so the config schema and the command line cannot drift apart.
 
 Provider presets follow cc-switch: each agent carries a list of providers and
 one active provider, and the active one is handed to the CLI in that CLI's own
-config format.  The generated file is a layer the CLI loads in addition to the
-user's own configuration (``--settings`` for Claude Code, ``--profile`` for
-Codex), so switching providers never rewrites the CLI config the user runs
-interactively.
+config format.  Claude Code gets a generated ``--settings`` file, Codex gets a
+``--profile`` layer, and OpenCode gets an inline ``OPENCODE_CONFIG_CONTENT``
+environment layer.  Switching a provider therefore never rewrites the CLI
+configuration the user runs interactively.
 """
 
 import json
@@ -20,14 +20,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from astrbot import logger
+from astrbot.core.agent.btw.coding_events import adapter_for
 from astrbot.core.agent.btw.types import is_work_loop_enabled
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.config_number import coerce_int_config
 
-CODING_AGENT_TYPES = ("claude_code", "codex", "custom")
+CODING_AGENT_TYPES = ("claude_code", "codex", "opencode", "custom")
 
-DEFAULT_COMMANDS = {"claude_code": "claude", "codex": "codex", "custom": ""}
+DEFAULT_COMMANDS = {
+    "claude_code": "claude",
+    "codex": "codex",
+    "opencode": "opencode",
+    "custom": "",
+}
 
 # Permission choices each CLI accepts for a non-interactive run.  The defaults
 # write only where the task is allowed to write and never reach the host's own
@@ -383,10 +388,46 @@ def _codex_profile(agent: Mapping, provider: Mapping) -> tuple[Path, dict[str, s
     return path, {credential_env: str(provider.get("api_key", ""))}
 
 
-def _settings_layer(agent: Mapping, provider: Mapping) -> tuple[Path, dict[str, str]]:
-    """Write the CLI config layer that makes one provider take effect."""
-    if agent.get("type") == "codex":
+def _opencode_provider(agent: Mapping, provider: Mapping) -> dict[str, str]:
+    """Return an inline OpenCode config for one provider.
+
+    OpenCode accepts ``OPENCODE_CONFIG_CONTENT`` as an additional JSON config
+    layer.  Keeping it in the child's environment means the credential never
+    lands in a generated file, and the provider switch cannot affect a session
+    the operator starts by hand.
+    """
+    base_url = str(provider.get("base_url", "")).strip()
+    api_key = str(provider.get("api_key", "")).strip()
+    model = (
+        str(provider.get("model", "")).strip() or str(agent.get("model", "")).strip()
+    )
+    provider_id = f"astrbot-btw-{agent_id_slug(agent.get('id'))}"
+    config: dict = {"$schema": "https://opencode.ai/config.json"}
+    if base_url:
+        provider_config: dict = {
+            "npm": "@ai-sdk/openai-compatible",
+            "name": str(provider.get("name", "")) or "AstrBot BTW",
+            "options": {"baseURL": base_url},
+        }
+        if api_key:
+            provider_config["options"]["apiKey"] = api_key
+        if model:
+            provider_config["models"] = {model: {"name": model}}
+        config["provider"] = {provider_id: provider_config}
+    if model:
+        config["model"] = f"{provider_id}/{model}" if base_url else model
+    return {"OPENCODE_CONFIG_CONTENT": json.dumps(config, ensure_ascii=False)}
+
+
+def _settings_layer(
+    agent: Mapping, provider: Mapping
+) -> tuple[Path | None, dict[str, str]]:
+    """Prepare the CLI config layer that makes one provider take effect."""
+    agent_type = agent.get("type")
+    if agent_type == "codex":
         return _codex_profile(agent, provider)
+    if agent_type == "opencode":
+        return None, _opencode_provider(agent, provider)
     return _claude_settings(agent, provider)
 
 
@@ -410,7 +451,7 @@ def _provider_is_configured(agent: Mapping, provider: Mapping | None) -> bool:
         return False
     if str(provider.get("base_url", "")) or str(provider.get("api_key", "")):
         return True
-    if agent.get("type") == "codex":
+    if agent.get("type") in {"codex", "opencode"}:
         return bool(provider.get("model")) or bool(agent.get("model"))
     return False
 
@@ -474,6 +515,11 @@ def build_invocation(
             argv += ["--add-dir", project_dir]
         if settings_path is not None:
             argv += ["--profile", codex_profile_name(agent)]
+    elif agent_type == "opencode":
+        argv = [command, "run", "--format", "json"]
+        argv += extra_args
+        if model := str(agent.get("model", "")):
+            argv += ["--model", model]
     else:
         argv = [command]
         argv += extra_args
@@ -486,47 +532,29 @@ def build_invocation(
     )
 
 
+def _stream_result_text(agent_type: str, stdout: str) -> str:
+    """Return the final message from one adapter's complete stream."""
+    adapter = adapter_for(agent_type)
+    if adapter is None:
+        return ""
+    for line in stdout.splitlines():
+        adapter.feed(line)
+    return adapter.final_text
+
+
 def _claude_result_text(stdout: str) -> str:
     """Return the final message of a Claude Code ``stream-json`` run."""
-    text = ""
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            payload = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(payload, dict) or payload.get("type") != "result":
-            continue
-        if payload.get("is_error"):
-            logger.warning("Claude Code reported an error result.")
-        result = payload.get("result")
-        if isinstance(result, str) and result.strip():
-            text = result.strip()
-    return text
+    return _stream_result_text("claude_code", stdout)
 
 
 def _codex_result_text(stdout: str) -> str:
     """Return the final message of a Codex ``--json`` run."""
-    text = ""
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            payload = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(payload, dict):
-            continue
-        item = payload.get("item")
-        if not isinstance(item, dict) or item.get("type") != "agent_message":
-            continue
-        message = item.get("text")
-        if isinstance(message, str) and message.strip():
-            text = message.strip()
-    return text
+    return _stream_result_text("codex", stdout)
+
+
+def _opencode_result_text(stdout: str) -> str:
+    """Return the final text of an OpenCode ``--format json`` run."""
+    return _stream_result_text("opencode", stdout)
 
 
 def agent_result_text(agent: Mapping, stdout: str, last_message: str = "") -> str:
@@ -540,6 +568,8 @@ def agent_result_text(agent: Mapping, stdout: str, last_message: str = "") -> st
         return last_message.strip() or _codex_result_text(stdout)
     if agent_type == "claude_code":
         return _claude_result_text(stdout)
+    if agent_type == "opencode":
+        return last_message.strip() or _opencode_result_text(stdout)
     return ""
 
 

@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
-from .types import WorkSession, WorkSessionStatus
+from .types import WorkDelegation, WorkSession, WorkSessionStatus
 
 
 class WorkSessionManager:
@@ -149,6 +149,98 @@ class WorkSessionManager:
                     session.artifacts.append(path)
             session.updated_at = datetime.now(UTC)
             return True
+
+    async def list_sessions(self) -> list[WorkSession]:
+        """Return retained sessions, newest first, after expiry cleanup."""
+        async with self._lock:
+            self._cleanup_expired_locked()
+            return sorted(
+                self._by_id.values(),
+                key=lambda session: session.created_at,
+                reverse=True,
+            )
+
+    async def start_delegation(
+        self, session_id: str, delegation: WorkDelegation
+    ) -> bool:
+        """Attach a newly started coding-agent run to one work session."""
+        async with self._lock:
+            self._cleanup_expired_locked()
+            session = self._by_id.get(session_id)
+            if session is None:
+                return False
+            session.delegations.append(delegation)
+            session.updated_at = datetime.now(UTC)
+            return True
+
+    async def record_delegation_event(
+        self,
+        session_id: str,
+        run_id: str,
+        *,
+        event_type: str,
+        summary: str,
+        tool: str = "",
+        status: str = "",
+        usage: dict[str, int | float] | None = None,
+    ) -> bool:
+        """Fold one normalized coding-agent event into a work session."""
+        async with self._lock:
+            self._cleanup_expired_locked()
+            session = self._by_id.get(session_id)
+            delegation = self._delegation_locked(session, run_id)
+            if delegation is None or session is None:
+                return False
+            delegation.record_event(
+                event_type=event_type,
+                summary=summary,
+                tool=tool,
+                status=status,
+                usage=usage,
+            )
+            session.updated_at = delegation.updated_at
+            return True
+
+    async def finish_delegation(
+        self,
+        session_id: str,
+        run_id: str,
+        *,
+        status: str,
+        exit_code: int | None,
+        artifacts: Sequence[str],
+        detail: str = "",
+        latest_action: str = "",
+        usage: dict[str, int | float] | None = None,
+    ) -> bool:
+        """Mark one coding-agent run terminal inside its work session."""
+        async with self._lock:
+            self._cleanup_expired_locked()
+            session = self._by_id.get(session_id)
+            delegation = self._delegation_locked(session, run_id)
+            if delegation is None or session is None:
+                return False
+            delegation.finish(
+                status=status,
+                exit_code=exit_code,
+                artifacts=list(artifacts),
+                detail=detail,
+                latest_action=latest_action,
+                usage=usage,
+            )
+            session.updated_at = delegation.updated_at
+            return True
+
+    @staticmethod
+    def _delegation_locked(
+        session: WorkSession | None, run_id: str
+    ) -> WorkDelegation | None:
+        if session is None:
+            return None
+        for delegation in reversed(session.delegations):
+            if delegation.run_id == run_id:
+                return delegation
+        return None
 
     async def cancel_if_pending(self, session_id: str) -> bool:
         """Cancel one session that has not started running yet.

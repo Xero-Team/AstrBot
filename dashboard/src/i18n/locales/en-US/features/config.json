@@ -220,7 +220,7 @@
     "emptySkill": "There are no enabled Skills."
   },
   "codingAgentsEditor": {
-    "hint": "Each entry names a local CLI agent the work loop hands writes to. Only enabled agents are used, and only while the work loop's Computer Use runtime is local. The permission mode and the sandbox are policies the CLI itself enforces, not operating-system isolation, so bypassPermissions and danger-full-access have to be chosen deliberately.",
+    "hint": "Each entry names a local CLI agent the work loop hands writes to (Claude Code, Codex, OpenCode, or a custom command). Only enabled agents are used, and only while the work loop's Computer Use runtime is local. The permission mode and the sandbox are policies the CLI itself enforces, not operating-system isolation, so bypassPermissions and danger-full-access have to be chosen deliberately.",
     "empty": "No coding agent yet. Add one to let the work loop delegate writes.",
     "newAgent": "New agent",
     "addAgent": "Add agent",
@@ -333,5 +333,37 @@
     "unsavedTitle": "Unsaved third-party agent configuration",
     "unsavedMessage": "Leaving now discards the changes here, including an unsaved provider list.",
     "actions": "Third-party agent configuration actions"
+  },
+  "btwRuns": {
+    "title": "BTW Delegated Runs",
+    "subtitle": "Live and retained work sessions, including each coding-agent delegation, its latest action, normalized event timeline, usage, and artifacts.",
+    "refresh": "Refresh",
+    "loadError": "Could not load BTW delegated runs.",
+    "retry": "Retry",
+    "empty": "No BTW work session has run yet.",
+    "emptyHint": "Start a task with /work or let the conversation loop delegate one. Active runs refresh automatically every three seconds.",
+    "noDelegations": "This work session has not delegated a coding task.",
+    "profile": "Profile",
+    "origin": "Origin",
+    "artifacts": "Artifacts",
+    "latestAction": "Latest action",
+    "events": "Events",
+    "toolCalls": "Tool calls",
+    "exitCode": "Exit code",
+    "runId": "Run",
+    "usage": "Usage",
+    "detail": "Detail",
+    "showTimeline": "Show event timeline",
+    "hideTimeline": "Hide event timeline",
+    "noEvents": "No normalized events have been recorded yet.",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "timed_out": "Timed out",
+      "cancelled": "Cancelled",
+      "unconfirmed": "Delivery unconfirmed"
+    }
   }
 }

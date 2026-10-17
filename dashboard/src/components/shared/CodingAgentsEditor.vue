@@ -317,7 +317,7 @@ import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import ListConfigItem from './ListConfigItem.vue';
 
-type AgentType = 'claude_code' | 'codex' | 'custom';
+type AgentType = 'claude_code' | 'codex' | 'opencode' | 'custom';
 
 interface CodingAgent {
   [key: string]: unknown;
@@ -337,11 +337,17 @@ interface CodingAgent {
 }
 
 // Mirrors `astrbot/core/agent/btw/coding_agents.py`.
-const CODING_AGENT_TYPES: AgentType[] = ['claude_code', 'codex', 'custom'];
+const CODING_AGENT_TYPES: AgentType[] = [
+  'claude_code',
+  'codex',
+  'opencode',
+  'custom',
+];
 const TYPE_OPTIONS = [...CODING_AGENT_TYPES];
 const DEFAULT_COMMANDS: Record<AgentType, string> = {
   claude_code: 'claude',
   codex: 'codex',
+  opencode: 'opencode',
   custom: '',
 };
 const CLAUDE_PERMISSION_MODES = [

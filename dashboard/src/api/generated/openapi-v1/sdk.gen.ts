@@ -343,6 +343,8 @@ import type {
   ListBotStatsResponses,
   ListBotTypesData,
   ListBotTypesResponses,
+  ListBtwWorkSessionsData,
+  ListBtwWorkSessionsResponses,
   ListChangelogVersionsData,
   ListChangelogVersionsResponses,
   ListChatConfigsData,
@@ -1683,6 +1685,23 @@ export const removeCodingCliGlobalConfig = <
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/coding-cli/global-config/{cli}',
+    ...options,
+  });
+
+/**
+ * List BTW work sessions and coding-agent delegation progress
+ */
+export const listBtwWorkSessions = <ThrowOnError extends boolean = false>(
+  options?: Options<ListBtwWorkSessionsData, ThrowOnError>,
+): RequestResult<ListBtwWorkSessionsResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListBtwWorkSessionsResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/btw/work-sessions',
     ...options,
   });
 

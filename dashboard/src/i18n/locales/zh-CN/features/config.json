@@ -220,7 +220,7 @@
     "emptySkill": "当前没有已启用的 Skill。"
   },
   "codingAgentsEditor": {
-    "hint": "每一项声明一个可被工作循环委派写入的本地 CLI 代理。只有已启用、且工作循环的 Computer Use 运行时为 local 时才会使用该代理。权限模式与沙箱由该 CLI 自己执行，不是操作系统级隔离，因此 bypassPermissions 与 danger-full-access 必须显式选择。",
+    "hint": "每一项声明一个可被工作循环委派写入的本地 CLI 代理（Claude Code、Codex、OpenCode 或自定义命令）。只有已启用、且工作循环的 Computer Use 运行时为 local 时才会使用该代理。权限模式与沙箱由该 CLI 自己执行，不是操作系统级隔离，因此 bypassPermissions 与 danger-full-access 必须显式选择。",
     "empty": "暂无编码代理。添加一个后工作循环才能委派写入。",
     "newAgent": "新代理",
     "addAgent": "添加代理",
@@ -333,5 +333,37 @@
     "unsavedTitle": "第三方 agent 配置尚未保存",
     "unsavedMessage": "现在离开会丢弃这里的改动，包括尚未保存的 provider 列表。",
     "actions": "第三方 agent 配置操作"
+  },
+  "btwRuns": {
+    "title": "BTW 委派运行",
+    "subtitle": "查看进行中和保留的工作会话，以及每次编码代理委派的最新进展、统一事件时间线、用量和产物。",
+    "refresh": "刷新",
+    "loadError": "无法加载 BTW 委派运行。",
+    "retry": "重试",
+    "empty": "还没有运行过 BTW 工作任务。",
+    "emptyHint": "使用 /work 提交任务，或由对话循环发起委派。进行中的任务每三秒自动刷新。",
+    "noDelegations": "该工作会话尚未委派编码任务。",
+    "profile": "配置档",
+    "origin": "消息来源",
+    "artifacts": "产物",
+    "latestAction": "最新进展",
+    "events": "事件",
+    "toolCalls": "工具调用",
+    "exitCode": "退出码",
+    "runId": "运行",
+    "usage": "用量",
+    "detail": "详情",
+    "showTimeline": "展开事件时间线",
+    "hideTimeline": "收起事件时间线",
+    "noEvents": "尚未记录统一事件。",
+    "status": {
+      "pending": "排队中",
+      "running": "执行中",
+      "completed": "已完成",
+      "failed": "已失败",
+      "timed_out": "已超时",
+      "cancelled": "已取消",
+      "unconfirmed": "投递未确认"
+    }
   }
 }

@@ -154,6 +154,7 @@ class CodingAgentEvent:
     summary: str
     detail: str = ""
     tool: str = ""
+    call_id: str = ""
     status: str = ""
     paths: list[str] = field(default_factory=list)
     usage: dict[str, int | float] = field(default_factory=dict)
@@ -169,6 +170,8 @@ class CodingAgentEvent:
             payload["detail"] = _bounded(self.detail, MAX_EVENT_DETAIL_CHARS)
         if self.tool:
             payload["tool"] = self.tool
+        if self.call_id:
+            payload["call_id"] = self.call_id
         if self.status:
             payload["status"] = self.status
         if self.paths:
@@ -289,6 +292,7 @@ class ClaudeStreamAdapter(CodingStreamAdapter):
                             summary=_tool_summary(tool, input_payload),
                             detail=_tool_detail(input_payload),
                             tool=tool,
+                            call_id=str(part.get("id", "")),
                             status="running",
                         )
                     )
@@ -323,7 +327,7 @@ class ClaudeStreamAdapter(CodingStreamAdapter):
                             MAX_SUMMARY_CHARS,
                         ),
                         detail=text,
-                        tool=str(part.get("tool_use_id", "")),
+                        call_id=str(part.get("tool_use_id", "")),
                         status="failed" if is_error else "completed",
                     )
                 )
@@ -466,6 +470,7 @@ class CodexStreamAdapter(CodingStreamAdapter):
                         summary=_bounded(f"shell: {command}", MAX_SUMMARY_CHARS),
                         detail=command,
                         tool="shell",
+                        call_id=str(item.get("id", "")),
                         status="running",
                     )
                 )
@@ -479,6 +484,7 @@ class CodexStreamAdapter(CodingStreamAdapter):
                         ),
                         detail=output,
                         tool="shell",
+                        call_id=str(item.get("id", "")),
                         status="failed" if exit_code not in {None, 0} else "completed",
                     )
                 )
@@ -518,6 +524,7 @@ class CodexStreamAdapter(CodingStreamAdapter):
                         summary=_bounded(f"{tool} started", MAX_SUMMARY_CHARS),
                         detail=_tool_detail(item),
                         tool=tool,
+                        call_id=str(item.get("id", "")),
                         status="running",
                     )
                 )
@@ -531,6 +538,7 @@ class CodexStreamAdapter(CodingStreamAdapter):
                             result if isinstance(result, Mapping) else item
                         ),
                         tool=tool,
+                        call_id=str(item.get("id", "")),
                         status="failed" if item.get("error") else "completed",
                     )
                 )
@@ -632,6 +640,7 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
                         summary=_tool_summary(tool, input_payload),
                         detail=_tool_detail(input_payload),
                         tool=tool,
+                        call_id=str(part_payload.get("callID", "")),
                         status="running",
                     )
                 )
@@ -646,6 +655,7 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
                         ),
                         detail=output_text,
                         tool=tool,
+                        call_id=str(part_payload.get("callID", "")),
                         status="failed"
                         if status in {"error", "failed"}
                         else "completed",
@@ -661,6 +671,7 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
                             ),
                             paths=paths,
                             tool=tool,
+                            call_id=str(part_payload.get("callID", "")),
                             status="changed",
                         )
                     )
@@ -696,17 +707,6 @@ def adapter_for(agent_type: str) -> CodingStreamAdapter | None:
     return None
 
 
-def normalized_stream_events(agent_type: str, stdout: str) -> list[CodingAgentEvent]:
-    """Normalize a complete stdout stream, primarily for result fallbacks."""
-    adapter = adapter_for(agent_type)
-    if adapter is None:
-        return []
-    events: list[CodingAgentEvent] = []
-    for line in stdout.splitlines():
-        events.extend(adapter.feed(line))
-    return events
-
-
 class CodingRunObserver:
     """Write one run's normalized events and summary into its task folder."""
 
@@ -732,6 +732,7 @@ class CodingRunObserver:
         self.artifacts: list[str] = []
         self.events = 0
         self.tool_calls = 0
+        self._tool_call_ids: set[str] = set()
         self.latest_action = "starting"
         self.usage: dict[str, int | float] = {}
         self._sequence = 0
@@ -780,7 +781,9 @@ class CodingRunObserver:
             "workspace": self.workspace.name,
             "event_count": self.events,
             "tool_call_count": self.tool_calls,
-            "latest_action": redact_sensitive_text(self.latest_action),
+            "latest_action": _bounded(
+                redact_sensitive_text(self.latest_action), MAX_SUMMARY_CHARS
+            ),
             "usage": dict(self.usage),
             "detail": redact_sensitive_text(self.detail),
             "artifacts": list(self.artifacts),
@@ -804,6 +807,17 @@ class CodingRunObserver:
         except OSError as exc:
             logger.debug("Could not write coding run summary: %s", safe_error("", exc))
 
+    def _counts_tool_call(self, event: CodingAgentEvent) -> bool:
+        """Count each call once, including completed-only CLI events."""
+        if event.type not in {"tool_call", "tool_result"}:
+            return False
+        if event.call_id:
+            if event.call_id in self._tool_call_ids:
+                return False
+            self._tool_call_ids.add(event.call_id)
+            return True
+        return event.type == "tool_call"
+
     async def record(self, event: CodingAgentEvent) -> None:
         """Persist one event and forward it to the live consumers."""
         self._sequence += 1
@@ -818,7 +832,7 @@ class CodingRunObserver:
             logger.debug("Could not write coding run event: %s", safe_error("", exc))
 
         self.events += 1
-        if event.type == "tool_call":
+        if self._counts_tool_call(event):
             self.tool_calls += 1
         if event.type == "usage":
             self.usage.update(event.usage)
@@ -831,6 +845,7 @@ class CodingRunObserver:
             run_id=self.run_id,
             event_type=event.type,
             tool=event.tool,
+            call_id=event.call_id,
             status=event.status,
             summary=event.summary,
             paths=event.paths,
@@ -891,5 +906,4 @@ __all__ = [
     "EVENTS_LOG_NAME",
     "RUN_SUMMARY_NAME",
     "adapter_for",
-    "normalized_stream_events",
 ]

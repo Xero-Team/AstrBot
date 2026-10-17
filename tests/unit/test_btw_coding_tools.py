@@ -1,5 +1,6 @@
 """Tests for the work loop's delegation tool."""
 
+import asyncio
 import sys
 from types import SimpleNamespace
 
@@ -174,3 +175,39 @@ async def test_an_empty_artifact_list_says_so(tmp_path, monkeypatch):
     folder = reply.splitlines()[2].split(": ", 1)[1]
     root = coding_runner.workspace_root({"btw": {}})
     assert (root / folder).is_dir()
+
+
+@pytest.mark.asyncio
+async def test_cancelling_a_delegation_finalizes_its_work_session(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    manager = WorkSessionManager()
+    session = await manager.create(UMO, "task")
+    runtime_registry._managers["cfg"] = manager
+    started = asyncio.Event()
+
+    async def wait_forever(*_args, **_kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(coding_runner, "run_coding_task", wait_forever)
+    try:
+        event = FakeEvent(session.id)
+        event.resource = SimpleNamespace(config_id="cfg")
+        tool = DelegateCodingTaskTool()
+        task = asyncio.create_task(
+            tool.call(_context(_profile([_fake_agent()]), event), task="write")
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        runtime_registry._managers.pop("cfg", None)
+
+    assert len(session.delegations) == 1
+    delegation = session.delegations[0]
+    assert delegation.status == "cancelled"
+    assert delegation.latest_action == "cancelled"
+    assert delegation.detail == "The coding agent was stopped."

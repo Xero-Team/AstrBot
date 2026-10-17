@@ -14,7 +14,6 @@ from astrbot.core.agent.btw.coding_events import (
     CodingAgentEvent,
     CodingRunObserver,
     adapter_for,
-    normalized_stream_events,
 )
 from tests.unit.coding_agent_support import CASES, FAKE_CLI, normalized_agent
 
@@ -34,9 +33,74 @@ def test_each_agent_stream_normalizes_to_the_same_event_model(case):
     assert "file_change" in types
     assert adapter.final_text == case.stream_final_text
     assert adapter.usage
-    assert normalized_stream_events(
-        case.agent_type, case.fixture.read_text(encoding="utf-8")
+
+
+def test_claude_tool_results_keep_the_call_id_separate_from_the_tool():
+    adapter = adapter_for("claude_code")
+    assert adapter is not None
+    events = []
+    for line in CASES[0].fixture.read_text(encoding="utf-8").splitlines():
+        events.extend(adapter.feed(line))
+
+    call = next(event for event in events if event.type == "tool_call")
+    result = next(event for event in events if event.type == "tool_result")
+    assert call.tool == "Write"
+    assert call.call_id == "tool-1"
+    assert result.tool == ""
+    assert result.call_id == "tool-1"
+
+
+@pytest.mark.asyncio
+async def test_completed_only_tool_events_count_as_one_call(tmp_path):
+    adapter = adapter_for("codex")
+    assert adapter is not None
+    observer = CodingRunObserver(
+        agent={"id": "codex", "name": "Codex", "type": "codex", "command": "codex"},
+        workspace=tmp_path,
+        run_id="run-1",
     )
+    events = adapter.feed(
+        json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "ws-1",
+                    "type": "web_search",
+                    "status": "completed",
+                    "result": {"title": "result"},
+                },
+            }
+        )
+    )
+    for event in events:
+        await observer.record(event)
+    observer.finish(
+        status=coding_runner.STATUS_COMPLETED,
+        exit_code=0,
+        artifacts=[],
+    )
+    observer.close()
+
+    assert observer.tool_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_run_summary_bounds_the_latest_action(tmp_path):
+    observer = CodingRunObserver(
+        agent={"id": "codex", "name": "Codex", "type": "codex", "command": "codex"},
+        workspace=tmp_path,
+        run_id="run-1",
+    )
+    summary = observer.finish(
+        status=coding_runner.STATUS_COMPLETED,
+        exit_code=0,
+        artifacts=[],
+        latest_action="x" * 10_000,
+    )
+    observer.close()
+
+    assert len(summary["latest_action"]) < 300
+    assert "characters truncated" in summary["latest_action"]
 
 
 @pytest.mark.asyncio

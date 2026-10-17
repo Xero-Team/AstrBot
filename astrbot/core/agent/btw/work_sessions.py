@@ -181,6 +181,7 @@ class WorkSessionManager:
         event_type: str,
         summary: str,
         tool: str = "",
+        call_id: str = "",
         status: str = "",
         usage: dict[str, int | float] | None = None,
     ) -> bool:
@@ -195,6 +196,7 @@ class WorkSessionManager:
                 event_type=event_type,
                 summary=summary,
                 tool=tool,
+                call_id=call_id,
                 status=status,
                 usage=usage,
             )

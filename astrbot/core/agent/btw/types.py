@@ -135,6 +135,7 @@ class WorkDelegation:
     usage: dict[str, int | float] = field(default_factory=dict)
     artifacts: list[str] = field(default_factory=list)
     recent_events: list[dict[str, Any]] = field(default_factory=list)
+    tool_call_ids: set[str] = field(default_factory=set, repr=False)
 
     def record_event(
         self,
@@ -142,13 +143,20 @@ class WorkDelegation:
         event_type: str,
         summary: str,
         tool: str = "",
+        call_id: str = "",
         status: str = "",
         usage: dict[str, int | float] | None = None,
     ) -> None:
         """Fold one normalized event into the live progress record."""
+        now = datetime.now(UTC)
         self.event_count += 1
-        if event_type == "tool_call":
-            self.tool_call_count += 1
+        if event_type in {"tool_call", "tool_result"}:
+            if call_id:
+                if call_id not in self.tool_call_ids:
+                    self.tool_call_ids.add(call_id)
+                    self.tool_call_count += 1
+            elif event_type == "tool_call":
+                self.tool_call_count += 1
         if usage:
             self.usage.update(usage)
         safe_summary = redact_sensitive_text(summary)[:500]
@@ -157,14 +165,14 @@ class WorkDelegation:
         self.recent_events.append(
             {
                 "type": event_type,
-                "timestamp": self.updated_at.isoformat(),
+                "timestamp": now.isoformat(),
                 "summary": safe_summary,
                 "tool": redact_sensitive_text(tool)[:120],
                 "status": status,
             }
         )
         del self.recent_events[:-50]
-        self.updated_at = datetime.now(UTC)
+        self.updated_at = now
 
     def finish(
         self,
@@ -190,6 +198,7 @@ class WorkDelegation:
 
     def as_dict(self) -> dict[str, Any]:
         payload = asdict(self)
+        payload.pop("tool_call_ids", None)
         for key in ("started_at", "updated_at", "finished_at"):
             value = payload.get(key)
             payload[key] = value.isoformat() if value is not None else None

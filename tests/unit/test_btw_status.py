@@ -215,11 +215,25 @@ async def test_delegation_progress_is_terminal_and_artifact_aware():
             event_type="tool_call",
             summary="write: report.md",
             tool="write",
+            call_id="call-1",
             status="running",
             usage={"input_tokens": 4},
         )
         is True
     )
+    assert (
+        await manager.record_delegation_event(
+            session.id,
+            "run-1",
+            event_type="tool_result",
+            summary="written",
+            tool="write",
+            call_id="call-1",
+            status="completed",
+        )
+        is True
+    )
+    last_event_at = delegation.updated_at
     assert (
         await manager.finish_delegation(
             session.id,
@@ -237,6 +251,7 @@ async def test_delegation_progress_is_terminal_and_artifact_aware():
     assert delegation.usage == {"input_tokens": 4, "output_tokens": 2}
     assert delegation.artifacts == ["report.md"]
     assert delegation.recent_events[0]["summary"] == "write: report.md"
+    assert delegation.recent_events[1]["timestamp"] == last_event_at.isoformat()
     assert (
         await manager.record_delegation_event(
             "missing", "run-1", event_type="message", summary="ignored"

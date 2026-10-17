@@ -215,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { btwApi, type BtwWorkSession } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 
@@ -228,15 +228,6 @@ const loaded = ref(false);
 const loadError = ref(false);
 const timelineOpen = ref(new Set<string>());
 let refreshTimer: number | undefined;
-
-const hasActiveRun = computed(() =>
-  sessions.value.some(
-    (session) =>
-      session.status === 'pending' ||
-      session.status === 'running' ||
-      session.delegations.some((delegation) => delegation.status === 'running'),
-  ),
-);
 
 function statusLabel(status: string) {
   return tm(`btwRuns.status.${status}`);
@@ -287,7 +278,7 @@ async function load() {
 function scheduleRefresh() {
   window.clearInterval(refreshTimer);
   refreshTimer = window.setInterval(() => {
-    if (hasActiveRun.value) void load();
+    if (document.visibilityState === 'visible') void load();
   }, 3000);
 }
 

@@ -197,6 +197,7 @@ async def record_work_delegation_event(event, run_id: str, item) -> bool:
         event_type=item.type,
         summary=item.summary,
         tool=item.tool,
+        call_id=item.call_id,
         status=item.status,
         usage=item.usage,
     )

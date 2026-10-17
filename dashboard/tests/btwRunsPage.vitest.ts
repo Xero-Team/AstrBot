@@ -1,5 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BtwRunsPage from '@/views/BtwRunsPage.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
 
@@ -64,6 +64,10 @@ describe('BtwRunsPage', () => {
     state.listMock.mockReset();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders the empty state when no work session has run', async () => {
     state.listMock.mockResolvedValue({ data: { data: { sessions: [] } } });
     const wrapper = mountPage();
@@ -90,6 +94,24 @@ describe('BtwRunsPage', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('tool_call');
     expect(wrapper.text()).toContain('shell: pytest -q');
+    wrapper.unmount();
+  });
+
+  it('discovers a task started after the initial empty load', async () => {
+    vi.useFakeTimers();
+    state.listMock
+      .mockResolvedValueOnce({ data: { data: { sessions: [] } } })
+      .mockResolvedValueOnce({ data: { data: { sessions: [SESSION] } } });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(state.listMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await flushPromises();
+
+    expect(state.listMock).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain('fix the parser');
     wrapper.unmount();
   });
 

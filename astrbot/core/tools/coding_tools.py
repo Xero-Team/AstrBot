@@ -6,6 +6,7 @@ complete task, a coding agent CLI carries it out inside its own task folder,
 and the work loop gets back a report it can turn into an answer.
 """
 
+import asyncio
 from pathlib import Path
 
 from pydantic import Field
@@ -169,6 +170,17 @@ class DelegateCodingTaskTool(FunctionTool[AstrAgentContext]):
                 on_event=record_event,
                 trace=getattr(event, "trace", None),
             )
+        except asyncio.CancelledError:
+            await runtime_registry.finish_work_delegation(
+                event,
+                workspace.name,
+                status=coding_runner.STATUS_CANCELLED,
+                exit_code=None,
+                artifacts=[],
+                detail="The coding agent was stopped.",
+                latest_action="cancelled",
+            )
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.error("Delegated coding task failed: %s", safe_error("", exc))
             await runtime_registry.finish_work_delegation(

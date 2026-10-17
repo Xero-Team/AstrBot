@@ -623,10 +623,10 @@ async def run_coding_task(
         could not start at all reports a failure rather than raising.
     """
     project_dir = str(agent.get("project_dir", ""))
-    write_task_file(workspace, task)
-    invocation = build_invocation(agent, workspace=workspace)
-    baseline = await snapshot_artifacts(Path(project_dir) if project_dir else None)
     is_stopped = stop_requested or (lambda: False)
+    # Create the observer before anything cancellable, so a run that is stopped
+    # while its baseline is read or its child is starting still seals a truthful
+    # summary instead of leaving ``run.json`` at its initial "running" state.
     observer = CodingRunObserver(
         agent=agent,
         workspace=workspace,
@@ -635,40 +635,42 @@ async def run_coding_task(
         trace=trace,
     )
     tree = ProcessTree.create()
-    await tree.arm()
+    process: asyncio.subprocess.Process | None = None
     try:
-        process = await tree.spawn(
-            *invocation.argv,
-            cwd=str(invocation.cwd),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=child_environment(invocation.env),
-        )
-    except OSError as exc:
-        await tree.close()
-        logger.error("Coding agent could not start: %s", safe_error("", exc))
-        detail = f"Coding agent {agent.get('command')!r} could not be started."
-        summary = observer.finish(
-            status=STATUS_FAILED,
-            exit_code=None,
-            artifacts=[],
-            detail=detail,
-            latest_action="could not start",
-        )
-        observer.close()
-        return CodingTaskResult(
-            status=STATUS_FAILED,
-            exit_code=None,
-            workspace=workspace,
-            detail=detail,
-            run_id=observer.run_id,
-            summary=summary,
-        )
+        write_task_file(workspace, task)
+        invocation = build_invocation(agent, workspace=workspace)
+        baseline = await snapshot_artifacts(Path(project_dir) if project_dir else None)
+        await tree.arm()
+        try:
+            process = await tree.spawn(
+                *invocation.argv,
+                cwd=str(invocation.cwd),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=child_environment(invocation.env),
+            )
+        except OSError as exc:
+            logger.error("Coding agent could not start: %s", safe_error("", exc))
+            detail = f"Coding agent {agent.get('command')!r} could not be started."
+            summary = observer.finish(
+                status=STATUS_FAILED,
+                exit_code=None,
+                artifacts=[],
+                detail=detail,
+                latest_action="could not start",
+            )
+            return CodingTaskResult(
+                status=STATUS_FAILED,
+                exit_code=None,
+                workspace=workspace,
+                detail=detail,
+                run_id=observer.run_id,
+                summary=summary,
+            )
 
-    adapter = adapter_for(str(agent.get("type", "")))
-    stdout_text = ""
-    try:
+        adapter = adapter_for(str(agent.get("type", "")))
+        stdout_text = ""
         with (workspace / OUTPUT_LOG_NAME).open("w", encoding="utf-8") as log:
             if process.stdin is not None:
                 process.stdin.write(task.encode("utf-8"))
@@ -705,41 +707,24 @@ async def run_coding_task(
                 # shield lets the reap finish while this task unwinds.
                 with contextlib.suppress(asyncio.CancelledError):
                     await asyncio.shield(_terminate(tree, process))
-    except asyncio.CancelledError:
-        observer.finish(
-            status=STATUS_CANCELLED,
-            exit_code=process.returncode,
-            artifacts=[],
-            detail="The coding agent was stopped.",
-            latest_action="cancelled",
-        )
-        observer.close()
-        raise
-    except Exception:
-        observer.finish(
-            status=STATUS_FAILED,
-            exit_code=process.returncode,
-            artifacts=[],
-            detail="The coding agent run failed.",
-            latest_action="failed",
-        )
-        observer.close()
-        raise
 
-    last_message = ""
-    last_message_path = workspace / LAST_MESSAGE_NAME
-    if last_message_path.is_file():
-        last_message = last_message_path.read_text(encoding="utf-8", errors="replace")
-    detail = ""
-    if status == STATUS_TIMED_OUT:
-        detail = f"The coding agent ran longer than {agent.get('timeout_seconds')}s."
-        detail += _stall_hint(agent)
-    elif status == STATUS_CANCELLED:
-        detail = "The coding agent was stopped."
-    elif process.returncode != 0:
-        detail = f"The coding agent exited with code {process.returncode}."
-        status = STATUS_FAILED
-    try:
+        last_message = ""
+        last_message_path = workspace / LAST_MESSAGE_NAME
+        if last_message_path.is_file():
+            last_message = last_message_path.read_text(
+                encoding="utf-8", errors="replace"
+            )
+        detail = ""
+        if status == STATUS_TIMED_OUT:
+            detail = (
+                f"The coding agent ran longer than {agent.get('timeout_seconds')}s."
+            )
+            detail += _stall_hint(agent)
+        elif status == STATUS_CANCELLED:
+            detail = "The coding agent was stopped."
+        elif process.returncode != 0:
+            detail = f"The coding agent exited with code {process.returncode}."
+            status = STATUS_FAILED
         artifacts = await collect_artifacts(
             baseline, workspace, Path(project_dir) if project_dir else None
         )
@@ -771,5 +756,26 @@ async def run_coding_task(
             usage=dict(observer.usage),
             summary=summary,
         )
+    except asyncio.CancelledError:
+        if observer.finished_at is None:
+            observer.finish(
+                status=STATUS_CANCELLED,
+                exit_code=process.returncode if process is not None else None,
+                artifacts=[],
+                detail="The coding agent was stopped.",
+                latest_action="cancelled",
+            )
+        raise
+    except Exception:
+        if observer.finished_at is None:
+            observer.finish(
+                status=STATUS_FAILED,
+                exit_code=process.returncode if process is not None else None,
+                artifacts=[],
+                detail="The coding agent run failed.",
+                latest_action="failed",
+            )
+        raise
     finally:
         observer.close()
+        await tree.close()

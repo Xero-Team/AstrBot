@@ -233,6 +233,76 @@ async def test_a_cancelled_run_still_writes_its_summary(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_a_cancelled_run_finalizes_before_the_child_starts(tmp_path, monkeypatch):
+    import asyncio
+
+    started = asyncio.Event()
+
+    async def block(*_args, **_kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(coding_runner, "snapshot_artifacts", block)
+    agent = normalized_agent(
+        CASES[0],
+        command=sys.executable,
+        extra_args=["-c", "pass"],
+        type="custom",
+    )
+    task = asyncio.create_task(
+        coding_runner.run_coding_task(agent, workspace=tmp_path, task="cancel")
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    summary = json.loads((tmp_path / RUN_SUMMARY_NAME).read_text(encoding="utf-8"))
+    assert summary["status"] == "cancelled"
+    assert summary["finished_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_run_finalizes_while_artifacts_are_collected(
+    tmp_path, monkeypatch
+):
+    import asyncio
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    started = asyncio.Event()
+
+    def fake_invocation(agent, *, workspace):
+        del agent
+        return CodingInvocation(
+            argv=(sys.executable, str(FAKE_CLI), str(CASES[0].fixture)),
+            cwd=workspace,
+        )
+
+    async def block(*_args, **_kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(coding_runner, "build_invocation", fake_invocation)
+    monkeypatch.setattr(coding_runner, "collect_artifacts", block)
+    task = asyncio.create_task(
+        coding_runner.run_coding_task(
+            normalized_agent(CASES[0]),
+            workspace=workspace,
+            task="cancel",
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    summary = json.loads((workspace / RUN_SUMMARY_NAME).read_text(encoding="utf-8"))
+    assert summary["status"] == "cancelled"
+    assert summary["finished_at"] is not None
+
+
+@pytest.mark.asyncio
 async def test_a_failing_progress_callback_does_not_break_the_observer(tmp_path):
     async def fail(_event):
         raise RuntimeError("dashboard offline")

@@ -280,6 +280,14 @@ async def _reaped(process: asyncio.subprocess.Process) -> bool:
         return False
 
 
+async def _terminate_guarded(
+    tree: ProcessTree, process: asyncio.subprocess.Process
+) -> None:
+    """Stop a tree without letting a second cancellation interrupt cleanup."""
+    with contextlib.suppress(asyncio.CancelledError):
+        await asyncio.shield(_terminate(tree, process))
+
+
 async def _drain(stream: asyncio.StreamReader | None, log) -> str:
     """Copy one child stream into the run log and return the tail of it.
 
@@ -308,6 +316,15 @@ async def _drain(stream: asyncio.StreamReader | None, log) -> str:
         log.flush()
         captured.append(tail)
     return "".join(captured)
+
+
+async def _write_stdin(process: asyncio.subprocess.Process, payload: bytes) -> None:
+    """Send the task without blocking stop polling on a non-reading child."""
+    if process.stdin is None:
+        return
+    process.stdin.write(payload)
+    await process.stdin.drain()
+    process.stdin.close()
 
 
 async def _drain_stdout(
@@ -419,9 +436,13 @@ async def _run_git(root: Path, *args: str) -> str | None:
         # A cancelled ``communicate`` leaves git running and holding the
         # index, so it has to be stopped rather than abandoned.
         if process is not None:
-            await _terminate(tree, process)
+            await _terminate_guarded(tree, process)
         logger.debug("Git timed out while reading artifacts in %s.", root)
         return None
+    except asyncio.CancelledError:
+        if process is not None:
+            await _terminate_guarded(tree, process)
+        raise
     except OSError as exc:
         logger.debug("Could not read git artifacts: %s", safe_error("", exc))
         return None
@@ -678,42 +699,54 @@ async def run_coding_task(
 
         adapter = adapter_for(str(agent.get("type", "")))
         stdout_text = ""
-        with (workspace / OUTPUT_LOG_NAME).open("w", encoding="utf-8") as log:
-            if process.stdin is not None:
-                process.stdin.write(task.encode("utf-8"))
-                await process.stdin.drain()
-                process.stdin.close()
-            stdout_task = asyncio.ensure_future(
-                _drain_stdout(
-                    process.stdout,
-                    log,
-                    adapter=adapter,
-                    observer=observer,
+        stream_tasks: list[asyncio.Future] = []
+        try:
+            with (workspace / OUTPUT_LOG_NAME).open("w", encoding="utf-8") as log:
+                stream_tasks.append(
+                    asyncio.ensure_future(
+                        _drain_stdout(
+                            process.stdout,
+                            log,
+                            adapter=adapter,
+                            observer=observer,
+                        )
+                    )
                 )
-            )
-            stderr_task = asyncio.ensure_future(_drain(process.stderr, log))
-            try:
-                status = await _wait_for_exit(
-                    tree,
-                    process,
-                    timeout_seconds=int(agent.get("timeout_seconds", 0)) or 1,
-                    stop_requested=is_stopped,
+                stream_tasks.append(asyncio.ensure_future(_drain(process.stderr, log)))
+                stream_tasks.append(
+                    asyncio.ensure_future(_write_stdin(process, task.encode("utf-8")))
                 )
-                stdout_text, _stderr_text = await asyncio.gather(
-                    stdout_task, stderr_task
-                )
-            finally:
-                for pending in (stdout_task, stderr_task):
-                    if not pending.done():
-                        pending.cancel()
-                # Timeout and cancellation are reaped above.  An unexpected
-                # error arrives here instead.  Either way a coding agent left
-                # running would keep writing to the host after the work loop
-                # stopped tracking it, and a run that ended on its own is not
-                # the same as the work it handed to a helper being over.  The
-                # shield lets the reap finish while this task unwinds.
-                with contextlib.suppress(asyncio.CancelledError):
-                    await asyncio.shield(_terminate(tree, process))
+                try:
+                    status = await _wait_for_exit(
+                        tree,
+                        process,
+                        timeout_seconds=int(agent.get("timeout_seconds", 0)) or 1,
+                        stop_requested=is_stopped,
+                    )
+                    stdout_text, _stderr_text = await asyncio.gather(
+                        stream_tasks[0], stream_tasks[1]
+                    )
+                    # A child that exits without reading stdin closes the pipe;
+                    # that failure is not the run's failure.
+                    await asyncio.gather(stream_tasks[2], return_exceptions=True)
+                finally:
+                    for pending in stream_tasks:
+                        if not pending.done():
+                            pending.cancel()
+                    # Timeout and cancellation are reaped above.  An
+                    # unexpected error or an interrupt during stdin writes
+                    # arrives here instead.  Either way a coding agent left
+                    # running would keep writing to the host after the work
+                    # loop stopped tracking it.
+                    await _terminate_guarded(tree, process)
+        finally:
+            for pending in stream_tasks:
+                if not pending.done():
+                    pending.cancel()
+            # A cancellation during output-log setup or task creation must not
+            # skip the process cleanup that the inner block normally performs.
+            if process.returncode is None:
+                await _terminate_guarded(tree, process)
 
         last_message = ""
         last_message_path = workspace / LAST_MESSAGE_NAME
@@ -782,5 +815,7 @@ async def run_coding_task(
             )
         raise
     finally:
+        if process is not None and process.returncode is None:
+            await _terminate_guarded(tree, process)
         observer.close()
         await tree.close()

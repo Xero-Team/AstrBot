@@ -1,0 +1,5 @@
+{"type":"step_start","part":{"type":"step-start"}}
+{"type":"text","part":{"messageID":"message-v2","type":"text","text":"I will inspect."}}
+{"type":"tool_use","part":{"type":"tool","tool":"write","id":"call-v2","state":{"status":"completed","input":{"filePath":"report.md"},"output":"Wrote file successfully."}}}
+{"type":"text","part":{"messageID":"message-v2","type":"text","text":"opencode v2 final"}}
+{"type":"step_finish","part":{"type":"step-finish","tokens":{"total":100,"input":80,"output":20,"reasoning":0,"cache":{"write":0,"read":0}},"cost":0.01}}

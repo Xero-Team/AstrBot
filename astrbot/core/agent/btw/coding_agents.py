@@ -415,8 +415,9 @@ def _opencode_config(
     The layer also carries the non-interactive policy: OpenCode has no
     ``--add-dir`` flag, so a configured ``project_dir`` is granted through
     ``external_directory``, and ``doom_loop`` is denied instead of prompting.
-    Other rules keep the operator's own configuration, including an explicit
-    ``ask`` rule, which needs ``--auto`` to run headless.
+    Other rules keep the operator's own configuration.  In non-interactive
+    mode, requests that would otherwise ask are rejected unless ``--auto`` was
+    supplied explicitly.
     """
     config: dict = {"$schema": "https://opencode.ai/config.json"}
     if provider is not None:
@@ -548,12 +549,15 @@ def build_invocation(
             workspace=workspace,
         )
         env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config, ensure_ascii=False)
-        argv = [command, "run", "--format", "json"]
-        argv += extra_args
-        # The inline layer owns the model whenever it set one.  Passing a
-        # second, agent-level ``--model`` would win over the provider that was
-        # just injected and its un-namespaced value would bypass it.
-        if "model" not in config and (model := str(agent.get("model", ""))):
+        # Extra arguments may enable a mode such as ``--auto``, but they must
+        # not disable the JSON stream this integration parses.  Managed flags
+        # come last because the CLI gives a repeated option its final value.
+        argv = [command, "run", *extra_args, "--format", "json"]
+        # The inline layer owns the model whenever it set one.  Repeat that
+        # fully-namespaced value last so an extra ``--model`` cannot bypass the
+        # provider that was just injected.
+        model = str(config.get("model") or agent.get("model", ""))
+        if model:
             argv += ["--model", model]
     else:
         argv = [command]

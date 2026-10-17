@@ -15,7 +15,12 @@ from astrbot.core.agent.btw.coding_events import (
     CodingRunObserver,
     adapter_for,
 )
-from tests.unit.coding_agent_support import CASES, FAKE_CLI, normalized_agent
+from tests.unit.coding_agent_support import (
+    CASES,
+    FAKE_CLI,
+    FIXTURES,
+    normalized_agent,
+)
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case.agent_type for case in CASES])
@@ -68,6 +73,44 @@ def test_opencode_usage_accumulates_across_steps():
         "cache_read": 14464,
         "cost": 0.03,
     }
+
+
+@pytest.mark.asyncio
+async def test_opencode_v2_tool_ids_are_counted(tmp_path):
+    adapter = adapter_for("opencode")
+    assert adapter is not None
+    events = []
+    for line in (
+        (FIXTURES / "opencode" / "v2_tool.ndjson")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ):
+        events.extend(adapter.feed(line))
+
+    result = next(event for event in events if event.type == "tool_result")
+    assert result.call_id == "call-v2"
+    assert adapter.final_text == "opencode v2 final"
+
+    observer = CodingRunObserver(
+        agent={
+            "id": "oc",
+            "name": "OpenCode",
+            "type": "opencode",
+            "command": "opencode",
+        },
+        workspace=tmp_path,
+        run_id="run-v2",
+    )
+    for event in events:
+        await observer.record(event)
+    observer.finish(
+        status=coding_runner.STATUS_COMPLETED,
+        exit_code=0,
+        artifacts=[],
+    )
+    observer.close()
+
+    assert observer.tool_calls == 1
 
 
 def test_claude_tool_results_keep_the_call_id_separate_from_the_tool():
@@ -302,6 +345,55 @@ async def test_a_cancelled_run_still_writes_its_summary(tmp_path):
     with pytest.raises(asyncio.CancelledError):
         await task
 
+    summary = json.loads((tmp_path / RUN_SUMMARY_NAME).read_text(encoding="utf-8"))
+    assert summary["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_cancelling_a_blocked_stdin_write_terminates_the_child(tmp_path):
+    import asyncio
+
+    child_code = """
+import os, pathlib, time
+p = pathlib.Path.cwd()
+(p / 'child.pid').write_text(str(os.getpid()))
+for _ in range(80):
+    (p / 'heartbeat').write_text(str(time.time_ns()))
+    time.sleep(0.05)
+"""
+    agent = normalized_agent(
+        CASES[0],
+        command=sys.executable,
+        extra_args=["-c", child_code],
+        type="custom",
+    )
+    task = asyncio.create_task(
+        coding_runner.run_coding_task(
+            agent,
+            workspace=tmp_path,
+            task="x" * 8_000_000,
+        )
+    )
+    heartbeat = tmp_path / "heartbeat"
+
+    def wait_for_heartbeat() -> None:
+        import time
+
+        deadline = time.monotonic() + 5
+        while not heartbeat.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+    await asyncio.to_thread(wait_for_heartbeat)
+    assert heartbeat.exists()
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    await asyncio.sleep(0.2)
+    stopped_at = heartbeat.read_text(encoding="utf-8")
+    await asyncio.sleep(0.3)
+    assert heartbeat.read_text(encoding="utf-8") == stopped_at
     summary = json.loads((tmp_path / RUN_SUMMARY_NAME).read_text(encoding="utf-8"))
     assert summary["status"] == "cancelled"
 

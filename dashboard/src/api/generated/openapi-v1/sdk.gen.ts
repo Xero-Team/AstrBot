@@ -1690,6 +1690,8 @@ export const removeCodingCliGlobalConfig = <
 
 /**
  * List BTW work sessions and coding-agent delegation progress
+ *
+ * Requires an authenticated Dashboard session; developer API keys are not accepted for instance-wide run data.
  */
 export const listBtwWorkSessions = <ThrowOnError extends boolean = false>(
   options?: Options<ListBtwWorkSessionsData, ThrowOnError>,

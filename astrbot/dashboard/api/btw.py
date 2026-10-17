@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request
 
-from astrbot.dashboard.responses import ok
+from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.services.btw_service import BtwService
 
 from .auth import AuthContext, require_scope
@@ -11,8 +11,17 @@ router = APIRouter(tags=["BTW"])
 
 
 async def require_btw_scope(request: Request) -> AuthContext:
-    """Work sessions are chat data; reading them needs the session scope."""
-    return await require_scope(request, "chat")
+    """Require a Dashboard session with chat scope for internal run data.
+
+    Work sessions span profiles and message origins, so a developer API key
+    cannot be scoped to the rows they contain.  Keep this surface on the same
+    authenticated control plane as the Dashboard page instead of widening the
+    ``chat`` API-key capability to every retained task.
+    """
+    auth = await require_scope(request, "chat")
+    if auth.via == "api_key":
+        raise ApiError("Dashboard session required", status_code=403)
+    return auth
 
 
 def get_service(request: Request) -> BtwService:

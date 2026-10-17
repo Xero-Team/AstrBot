@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 
 import pytest
 
@@ -31,6 +32,21 @@ def _selected(agent_type: str) -> bool:
     return not wanted or agent_type in wanted
 
 
+def _cli_version(executable: str) -> str:
+    try:
+        completed = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"version unavailable: {exc}"
+    output = completed.stdout.strip() or completed.stderr.strip()
+    return output or f"exit {completed.returncode}"
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     os.environ.get("ASTRBOT_LIVE_CODING_AGENTS") != "1",
@@ -43,6 +59,7 @@ async def test_a_real_cli_creates_the_requested_file(tmp_path, agent_type, comma
     executable = shutil.which(command)
     if executable is None:
         pytest.skip(f"{command} is not installed")
+    version = _cli_version(executable)
     workspace = tmp_path / f"live-{agent_type}"
     workspace.mkdir()
     agent = normalize_coding_agents(
@@ -68,12 +85,16 @@ async def test_a_real_cli_creates_the_requested_file(tmp_path, agent_type, comma
         ),
     )
 
-    assert result.status == coding_runner.STATUS_COMPLETED, result.detail
+    assert result.status == coding_runner.STATUS_COMPLETED, (
+        f"{agent_type} {version}: {result.detail}"
+    )
     assert (workspace / "live-probe.txt").read_text(
         encoding="utf-8"
     ).strip() == "live-ok"
     assert (workspace / "events.jsonl").is_file()
     assert (workspace / "run.json").is_file()
-    assert result.tool_call_count >= 1
-    assert result.usage
-    assert result.output
+    assert result.tool_call_count >= 1, (
+        f"{agent_type} {version} produced no normalized tool calls"
+    )
+    assert result.usage, f"{agent_type} {version} produced no usage"
+    assert result.output, f"{agent_type} {version} produced no final message"

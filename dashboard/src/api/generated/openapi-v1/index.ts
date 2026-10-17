@@ -370,6 +370,7 @@ export type {
   BtwDelegation,
   BtwDelegationEvent,
   BtwWorkSession,
+  BtwWorkSessionsEnvelope,
   BuiltinCommandBulkToggleRequest,
   BulkToggleBuiltinCommandsData,
   BulkToggleBuiltinCommandsResponse,

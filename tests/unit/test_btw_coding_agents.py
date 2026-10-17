@@ -511,9 +511,9 @@ def test_opencode_provider_is_an_inline_environment_layer(tmp_path):
     assert provider["options"]["baseURL"] == "https://gw.example/v1"
     assert provider["options"]["apiKey"] == "sk-secret"
     assert payload["model"] == "astrbot-btw-oc/glm-5"
-    # The inline layer owns the model; a second, un-namespaced --model would
-    # override the provider that was just configured.
-    assert "--model" not in invocation.argv
+    # Repeat the namespaced model last so an extra ``--model`` cannot override
+    # the provider that was just configured.
+    assert invocation.argv[-2:] == ("--model", "astrbot-btw-oc/glm-5")
     assert not (tmp_path / "coding-agents").exists()
 
 
@@ -540,7 +540,7 @@ def test_opencode_agent_model_is_namespaced_into_the_provider_layer(tmp_path):
 
     payload = json.loads(invocation.env["OPENCODE_CONFIG_CONTENT"])
     assert payload["model"] == "astrbot-btw-oc/claude-sonnet-4"
-    assert "--model" not in invocation.argv
+    assert invocation.argv[-2:] == ("--model", "astrbot-btw-oc/claude-sonnet-4")
 
 
 def test_opencode_model_is_still_a_flag_without_a_provider_layer(tmp_path):
@@ -552,6 +552,43 @@ def test_opencode_model_is_still_a_flag_without_a_provider_layer(tmp_path):
     payload = json.loads(invocation.env["OPENCODE_CONFIG_CONTENT"])
     assert "model" not in payload
     assert invocation.argv[invocation.argv.index("--model") + 1] == "gw/glm-5"
+
+
+def test_opencode_managed_flags_win_over_extra_args(tmp_path):
+    agent = ca.normalize_coding_agents(
+        [
+            {
+                "id": "oc",
+                "type": "opencode",
+                "enabled": True,
+                "model": "gateway/model-a",
+                "extra_args": [
+                    "--auto",
+                    "--format",
+                    "default",
+                    "--model",
+                    "other/model",
+                ],
+            }
+        ]
+    )[0]
+    invocation = ca.build_invocation(agent, workspace=tmp_path)
+
+    assert invocation.argv[:7] == (
+        "opencode",
+        "run",
+        "--auto",
+        "--format",
+        "default",
+        "--model",
+        "other/model",
+    )
+    assert invocation.argv[-4:] == (
+        "--format",
+        "json",
+        "--model",
+        "gateway/model-a",
+    )
 
 
 def test_opencode_project_dir_is_granted_through_external_directory(tmp_path):

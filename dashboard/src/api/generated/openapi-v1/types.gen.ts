@@ -271,12 +271,12 @@ export type BtwDelegation = {
   status: 'running' | 'completed' | 'failed' | 'timed_out' | 'cancelled';
   started_at: string;
   updated_at: string;
-  finished_at?: string | null;
+  finished_at: string | null;
   latest_action: string;
   event_count: number;
   tool_call_count: number;
-  exit_code?: number | null;
-  detail?: string;
+  exit_code: number | null;
+  detail: string;
   usage: {
     [key: string]: number;
   };
@@ -299,9 +299,17 @@ export type BtwWorkSession = {
     | 'unconfirmed';
   created_at: string;
   updated_at: string;
-  error?: string | null;
+  error: string | null;
   artifacts: Array<string>;
   delegations: Array<BtwDelegation>;
+};
+
+export type BtwWorkSessionsEnvelope = {
+  status: 'ok';
+  message: string | null;
+  data: {
+    sessions: Array<BtwWorkSession>;
+  };
 };
 
 export type CodingCliSwitchRequest = {
@@ -2092,9 +2100,9 @@ export type ListBtwWorkSessionsData = {
 
 export type ListBtwWorkSessionsResponses = {
   /**
-   * Standard AstrBot success response
+   * Retained BTW work sessions, newest first
    */
-  200: SuccessEnvelope;
+  200: BtwWorkSessionsEnvelope;
 };
 
 export type ListBtwWorkSessionsResponse =

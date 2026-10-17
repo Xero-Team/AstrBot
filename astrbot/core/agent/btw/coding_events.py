@@ -650,6 +650,10 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
             status = str(state_payload.get("status", ""))
             tool_input = state_payload.get("input")
             input_payload = tool_input if isinstance(tool_input, Mapping) else {}
+            # OpenCode v1 exposes the call id as ``callID``; v2 renamed the
+            # same field to ``id``.  Both streams report tools only after they
+            # finish, so losing this id also loses the tool-call count.
+            call_id = str(part_payload.get("callID") or part_payload.get("id") or "")
             if status in {"pending", "running", ""}:
                 events.append(
                     CodingAgentEvent(
@@ -657,7 +661,7 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
                         summary=_tool_summary(tool, input_payload),
                         detail=_tool_detail(input_payload),
                         tool=tool,
-                        call_id=str(part_payload.get("callID", "")),
+                        call_id=call_id,
                         status="running",
                     )
                 )
@@ -672,7 +676,7 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
                         ),
                         detail=output_text,
                         tool=tool,
-                        call_id=str(part_payload.get("callID", "")),
+                        call_id=call_id,
                         status="failed"
                         if status in {"error", "failed"}
                         else "completed",
@@ -688,7 +692,7 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
                             ),
                             paths=paths,
                             tool=tool,
-                            call_id=str(part_payload.get("callID", "")),
+                            call_id=call_id,
                             status="changed",
                         )
                     )

@@ -719,11 +719,16 @@ paths:
     get:
       tags: [BTW]
       summary: List BTW work sessions and coding-agent delegation progress
+      description: Requires an authenticated Dashboard session; developer API keys are not accepted for instance-wide run data.
       operationId: listBtwWorkSessions
       x-astrbot-scope: chat
       responses:
         '200':
-          $ref: '#/components/responses/Ok'
+          description: Retained BTW work sessions, newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BtwWorkSessionsEnvelope'
 
   /api/v1/config-routes:
     get:
@@ -5994,6 +5999,9 @@ components:
         - usage
         - artifacts
         - recent_events
+        - finished_at
+        - exit_code
+        - detail
       properties:
         run_id:
           type: string
@@ -6055,6 +6063,7 @@ components:
         - status
         - created_at
         - updated_at
+        - error
         - artifacts
         - delegations
       properties:
@@ -6088,6 +6097,26 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BtwDelegation'
+
+    BtwWorkSessionsEnvelope:
+      type: object
+      required: [status, message, data]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        message:
+          type: [string, 'null']
+        data:
+          type: object
+          required: [sessions]
+          additionalProperties: false
+          properties:
+            sessions:
+              type: array
+              items:
+                $ref: '#/components/schemas/BtwWorkSession'
 
     CodingCliSwitchRequest:
       type: object

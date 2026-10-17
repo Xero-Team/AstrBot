@@ -74,3 +74,24 @@ async def test_the_route_returns_an_empty_list_without_runtime_sessions(
 
     assert response.status_code == 200
     assert response.json()["data"]["sessions"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_chat_scope_api_key_cannot_read_internal_work_sessions(
+    asgi_client, fake_db, isolated_registry
+):
+    manager = WorkSessionManager()
+    await manager.create(
+        "telegram:GroupMessage:private-user",
+        "SECRET USER TASK",
+    )
+    isolated_registry.register("profile-a", manager)
+    raw_key = "abk_btw_work_sessions_chat_only"
+    fake_db.add_api_key(raw_key, scopes=["chat"])
+
+    response = await asgi_client.get(
+        "/api/v1/btw/work-sessions", headers={"X-API-Key": raw_key}
+    )
+
+    assert response.status_code == 403
+    assert "SECRET USER TASK" not in response.text

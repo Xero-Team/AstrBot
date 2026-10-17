@@ -388,46 +388,73 @@ def _codex_profile(agent: Mapping, provider: Mapping) -> tuple[Path, dict[str, s
     return path, {credential_env: str(provider.get("api_key", ""))}
 
 
-def _opencode_provider(agent: Mapping, provider: Mapping) -> dict[str, str]:
-    """Return an inline OpenCode config for one provider.
+def _opencode_project_dir(agent: Mapping, workspace: Path) -> Path | None:
+    """Return the extra write root OpenCode should be granted, if configured."""
+    value = str(agent.get("project_dir", "")).strip()
+    if not value:
+        return None
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = workspace / path
+    return path.resolve()
+
+
+def _opencode_config(
+    agent: Mapping,
+    *,
+    provider: Mapping | None,
+    workspace: Path,
+) -> dict:
+    """Return the inline OpenCode config for one non-interactive run.
 
     OpenCode accepts ``OPENCODE_CONFIG_CONTENT`` as an additional JSON config
     layer.  Keeping it in the child's environment means the credential never
     lands in a generated file, and the provider switch cannot affect a session
     the operator starts by hand.
+
+    The layer also carries the non-interactive policy: OpenCode has no
+    ``--add-dir`` flag, so a configured ``project_dir`` is granted through
+    ``external_directory``, and ``doom_loop`` is denied instead of prompting.
+    Other rules keep the operator's own configuration, including an explicit
+    ``ask`` rule, which needs ``--auto`` to run headless.
     """
-    base_url = str(provider.get("base_url", "")).strip()
-    api_key = str(provider.get("api_key", "")).strip()
-    model = (
-        str(provider.get("model", "")).strip() or str(agent.get("model", "")).strip()
-    )
-    provider_id = f"astrbot-btw-{agent_id_slug(agent.get('id'))}"
     config: dict = {"$schema": "https://opencode.ai/config.json"}
-    if base_url:
-        provider_config: dict = {
-            "npm": "@ai-sdk/openai-compatible",
-            "name": str(provider.get("name", "")) or "AstrBot BTW",
-            "options": {"baseURL": base_url},
-        }
-        if api_key:
-            provider_config["options"]["apiKey"] = api_key
+    if provider is not None:
+        base_url = str(provider.get("base_url", "")).strip()
+        api_key = str(provider.get("api_key", "")).strip()
+        model = (
+            str(provider.get("model", "")).strip()
+            or str(agent.get("model", "")).strip()
+        )
+        provider_id = f"astrbot-btw-{agent_id_slug(agent.get('id'))}"
+        if base_url:
+            provider_config: dict = {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": str(provider.get("name", "")) or "AstrBot BTW",
+                "options": {"baseURL": base_url},
+            }
+            if api_key:
+                provider_config["options"]["apiKey"] = api_key
+            if model:
+                provider_config["models"] = {model: {"name": model}}
+            config["provider"] = {provider_id: provider_config}
         if model:
-            provider_config["models"] = {model: {"name": model}}
-        config["provider"] = {provider_id: provider_config}
-    if model:
-        config["model"] = f"{provider_id}/{model}" if base_url else model
-    return {"OPENCODE_CONFIG_CONTENT": json.dumps(config, ensure_ascii=False)}
+            config["model"] = f"{provider_id}/{model}" if base_url else model
+
+    permission: dict = {"doom_loop": "deny"}
+    project_dir = _opencode_project_dir(agent, workspace)
+    if project_dir is not None:
+        permission["external_directory"] = {f"{project_dir.as_posix()}/**": "allow"}
+    config["permission"] = permission
+    return config
 
 
 def _settings_layer(
     agent: Mapping, provider: Mapping
 ) -> tuple[Path | None, dict[str, str]]:
     """Prepare the CLI config layer that makes one provider take effect."""
-    agent_type = agent.get("type")
-    if agent_type == "codex":
+    if agent.get("type") == "codex":
         return _codex_profile(agent, provider)
-    if agent_type == "opencode":
-        return None, _opencode_provider(agent, provider)
     return _claude_settings(agent, provider)
 
 
@@ -478,11 +505,10 @@ def build_invocation(
     agent_type = str(agent.get("type", ""))
     provider = active_provider(agent)
     settings_path: Path | None = None
-    if _provider_is_configured(agent, provider):
+    provider_env: dict[str, str] = {}
+    if agent_type != "opencode" and _provider_is_configured(agent, provider):
         assert provider is not None
         settings_path, provider_env = _settings_layer(agent, provider)
-    else:
-        provider_env = {}
     command = str(agent.get("command", ""))
     extra_args = [str(item) for item in agent.get("extra_args", [])]
     argv: list[str] = []
@@ -516,9 +542,18 @@ def build_invocation(
         if settings_path is not None:
             argv += ["--profile", codex_profile_name(agent)]
     elif agent_type == "opencode":
+        config = _opencode_config(
+            agent,
+            provider=provider if _provider_is_configured(agent, provider) else None,
+            workspace=workspace,
+        )
+        env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config, ensure_ascii=False)
         argv = [command, "run", "--format", "json"]
         argv += extra_args
-        if model := str(agent.get("model", "")):
+        # The inline layer owns the model whenever it set one.  Passing a
+        # second, agent-level ``--model`` would win over the provider that was
+        # just injected and its un-namespaced value would bypass it.
+        if "model" not in config and (model := str(agent.get("model", ""))):
             argv += ["--model", model]
     else:
         argv = [command]

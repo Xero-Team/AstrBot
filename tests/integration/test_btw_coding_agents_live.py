@@ -74,4 +74,6 @@ async def test_a_real_cli_creates_the_requested_file(tmp_path, agent_type, comma
     ).strip() == "live-ok"
     assert (workspace / "events.jsonl").is_file()
     assert (workspace / "run.json").is_file()
+    assert result.tool_call_count >= 1
+    assert result.usage
     assert result.output

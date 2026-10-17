@@ -28,11 +28,46 @@ def test_each_agent_stream_normalizes_to_the_same_event_model(case):
 
     types = {event.type for event in events}
     assert {"lifecycle", "message", "usage"} <= types
-    assert "tool_call" in types
     assert "tool_result" in types
     assert "file_change" in types
+    # The real ``opencode run --format json`` stream only reports tool calls
+    # once they finish, so a ``tool_call`` here would invent a running state.
+    if case.agent_type == "opencode":
+        assert "tool_call" not in types
+    else:
+        assert "tool_call" in types
     assert adapter.final_text == case.stream_final_text
     assert adapter.usage
+
+
+def test_opencode_completed_tool_calls_are_counted_and_keep_the_call_id():
+    adapter = adapter_for("opencode")
+    assert adapter is not None
+    events = []
+    for line in CASES[2].fixture.read_text(encoding="utf-8").splitlines():
+        events.extend(adapter.feed(line))
+
+    result = next(event for event in events if event.type == "tool_result")
+    assert result.tool == "write"
+    assert result.call_id == "call-1"
+    assert result.status == "completed"
+
+
+def test_opencode_usage_accumulates_across_steps():
+    adapter = adapter_for("opencode")
+    assert adapter is not None
+    for line in CASES[2].fixture.read_text(encoding="utf-8").splitlines():
+        adapter.feed(line)
+
+    assert adapter.usage == {
+        "total": 26085,
+        "input": 11480,
+        "output": 138,
+        "reasoning": 3,
+        "cache_write": 0,
+        "cache_read": 14464,
+        "cost": 0.03,
+    }
 
 
 def test_claude_tool_results_keep_the_call_id_separate_from_the_tool():
@@ -179,6 +214,9 @@ async def test_the_runner_parses_live_events_and_collects_the_result(
     assert result.output == case.result_final_text
     assert result.event_count == len(received)
     assert result.tool_call_count >= 1
+    if case.agent_type == "opencode":
+        assert result.usage["input"] == 11480
+        assert result.usage["cost"] == 0.03
     assert "report.md" in result.artifacts
     assert (workspace / "report.md").read_text(encoding="utf-8") == "write the report"
     assert (workspace / EVENTS_LOG_NAME).is_file()

@@ -560,6 +560,29 @@ class CodexStreamAdapter(CodingStreamAdapter):
 class OpenCodeStreamAdapter(CodingStreamAdapter):
     """Adapter for OpenCode ``run --format json`` events."""
 
+    def _add_usage(self, key: str, value: float) -> None:
+        current = _float(self.usage.get(key, 0)) or 0.0
+        total = current + value
+        self.usage[key] = int(total) if total.is_integer() else round(total, 6)
+
+    def _accumulate_usage(self, usage: Mapping[str, Any]) -> None:
+        """Add one step's usage to the run total.
+
+        OpenCode reports tokens and cost per ``step_finish`` instead of once
+        for the whole run, so each step is an increment; replacing the totals
+        would keep only the final step.
+        """
+        for key, value in usage.items():
+            if key == "cache" and isinstance(value, Mapping):
+                for cache_key, cache_value in value.items():
+                    number = _float(cache_value)
+                    if number is not None:
+                        self._add_usage(f"cache_{cache_key}", number)
+                continue
+            number = _float(value)
+            if number is not None:
+                self._add_usage(str(key), number)
+
     def feed(self, line: str) -> list[CodingAgentEvent]:
         payload = _json_payload(line)
         if payload is None:
@@ -582,16 +605,10 @@ class OpenCodeStreamAdapter(CodingStreamAdapter):
         if event_type == "step_finish":
             tokens = part_payload.get("tokens")
             if isinstance(tokens, Mapping):
-                self._merge_usage(tokens)
-                cache = tokens.get("cache")
-                if isinstance(cache, Mapping):
-                    for key, value in cache.items():
-                        number = _float(value)
-                        if number is not None:
-                            self.usage[f"cache_{key}"] = int(number)
+                self._accumulate_usage(tokens)
             cost = _float(part_payload.get("cost"))
             if cost is not None:
-                self.usage["cost"] = cost
+                self._add_usage("cost", cost)
             events.append(
                 CodingAgentEvent(
                     type="usage",

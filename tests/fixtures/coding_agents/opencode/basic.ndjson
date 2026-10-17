@@ -1,6 +1,6 @@
-{"type":"step_start","part":{}}
+{"type":"step_start","part":{"type":"step-start"}}
 {"type":"text","part":{"messageID":"message-1","type":"text","text":"I will inspect."}}
-{"type":"tool_use","part":{"tool":"write","state":{"status":"running","input":{"filePath":"report.md"}}}}
-{"type":"tool_use","part":{"tool":"write","state":{"status":"completed","input":{"filePath":"report.md"},"output":"written"}}}
+{"type":"tool_use","part":{"type":"tool","tool":"write","callID":"call-1","state":{"status":"completed","input":{"filePath":"report.md"},"output":"Wrote file successfully."}}}
 {"type":"text","part":{"messageID":"message-1","type":"text","text":"opencode final"}}
-{"type":"step_finish","part":{"type":"step-finish","tokens":{"input":5,"output":3,"reasoning":1,"cache":{"read":2,"write":0}},"cost":0.02}}
+{"type":"step_finish","part":{"type":"step-finish","tokens":{"total":13011,"input":11252,"output":95,"reasoning":0,"cache":{"write":0,"read":1664}},"cost":0.02}}
+{"type":"step_finish","part":{"type":"step-finish","tokens":{"total":13074,"input":228,"output":43,"reasoning":3,"cache":{"write":0,"read":12800}},"cost":0.01}}

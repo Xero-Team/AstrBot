@@ -1316,10 +1316,20 @@ async def test_fallback_provider_used_when_primary_raises(
 async def test_fallback_provider_stays_preferred_across_model_turns(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
+    class ModelRecordingProvider(MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.models: list[str | None] = []
+
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.models.append(kwargs.get("model"))
+            return await super().text_chat(**kwargs)
+
     primary_provider = MockFailingProvider()
-    fallback_provider = MockProvider()
+    fallback_provider = ModelRecordingProvider()
     fallback_provider.should_call_tools = True
     fallback_provider.max_calls_before_normal_response = 1
+    provider_request.model = "primary-only-model"
 
     await runner.reset(
         provider=primary_provider,
@@ -1340,6 +1350,7 @@ async def test_fallback_provider_stays_preferred_across_model_turns(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 2
+    assert fallback_provider.models == [None, None]
 
 
 @pytest.mark.asyncio

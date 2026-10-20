@@ -27,6 +27,7 @@ from astrbot.core.agent.loop_policy import (
     work_loop_is_read_only,
 )
 from astrbot.core.agent.message import TextPart
+from astrbot.core.agent.provider_plan import ProviderPlan
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
     cua_pixel_mode_from_settings,
@@ -1811,15 +1812,19 @@ def _select_request_provider(
     config: MainAgentBuildConfig,
 ) -> tuple[ChatModel, list[ChatModel]]:
     """Select an image-capable provider and preserve ordered fallbacks."""
-    fallbacks = _get_fallback_chat_providers(
-        provider, plugin_context, config.fallback_provider_ids
+    plan = ProviderPlan.from_candidates(
+        provider,
+        _get_fallback_chat_providers(
+            provider, plugin_context, config.fallback_provider_ids
+        ),
     )
-    selected = _select_image_chat_provider(provider, req, fallbacks)
+    selected = _select_image_chat_provider(provider, req, list(plan.fallbacks))
     if selected is provider:
-        return provider, fallbacks
+        return provider, list(plan.fallbacks)
     if req.model:
         req.model = None
-    return selected, [fallback for fallback in fallbacks if fallback is not selected]
+    plan = plan.with_primary(selected)
+    return plan.primary, list(plan.fallbacks)
 
 
 def _track_temp_image_path(event: AstrMessageEvent, media_path: str) -> None:

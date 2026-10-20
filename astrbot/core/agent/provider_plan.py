@@ -49,12 +49,12 @@ class ProviderPlan:
         return (self.primary, *self.fallbacks)
 
     def with_primary(self, primary: ChatModel) -> ProviderPlan:
-        """Return a plan whose primary is ``primary``."""
+        """Return a plan whose primary is ``primary``.
+
+        Re-normalizing removes a fallback with the same non-empty id as the
+        promoted provider, not just the same object, so a candidate is never
+        attempted twice.
+        """
         if primary is self.primary:
             return self
-        return ProviderPlan(
-            primary=primary,
-            fallbacks=tuple(
-                fallback for fallback in self.fallbacks if fallback is not primary
-            ),
-        )
+        return type(self).from_candidates(primary, self.fallbacks)

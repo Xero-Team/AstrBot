@@ -43,3 +43,17 @@ def test_with_primary_removes_the_new_primary_from_fallbacks():
     assert promoted_plan.primary is promoted
     assert promoted_plan.fallbacks == (other,)
     assert promoted_plan.candidates == (promoted, other)
+
+
+def test_with_primary_deduplicates_a_distinct_provider_with_the_same_id():
+    primary = _provider("primary")
+    promoted = _provider("promoted")
+    duplicate = _provider("promoted")
+    other = _provider("other")
+    plan = ProviderPlan.from_candidates(primary, [promoted, duplicate, other])
+
+    promoted_plan = plan.with_primary(duplicate)
+
+    assert promoted_plan.primary is duplicate
+    assert promoted_plan.fallbacks == (other,)
+    assert promoted_plan.candidates == (duplicate, other)

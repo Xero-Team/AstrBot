@@ -63,7 +63,9 @@ from ..message import (
     ToolCallMessageSegment,
     bind_checkpoint_messages,
 )
+from ..provider_plan import ProviderPlan
 from ..response import AgentResponseData, AgentResponseType, AgentStats
+from ..response_events import final_response_events, streaming_response_events
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from ..tool_history_compactor import compact_consumed_tool_history
@@ -292,18 +294,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.request_context_manager_config
         )
 
-        self.provider = provider
-        self.fallback_providers: list[ChatModel] = []
-        seen_provider_ids: set[str] = {str(provider.provider_config.get("id", ""))}
-        for fallback_provider in fallback_providers or []:
-            fallback_id = str(fallback_provider.provider_config.get("id", ""))
-            if fallback_provider is provider:
-                continue
-            if fallback_id and fallback_id in seen_provider_ids:
-                continue
-            self.fallback_providers.append(fallback_provider)
-            if fallback_id:
-                seen_provider_ids.add(fallback_id)
+        self.provider_plan = ProviderPlan.from_candidates(provider, fallback_providers)
+        self.provider = self.provider_plan.primary
+        self.fallback_providers = list(self.provider_plan.fallbacks)
         self.final_llm_resp = None
         self._state = AgentState.IDLE
         self.tool_executor = tool_executor
@@ -666,7 +659,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             return
 
-        candidates = [self.provider, *self.fallback_providers]
+        candidates = self.provider_plan.candidates
         total_candidates = len(candidates)
         last_exception: Exception | None = None
         last_err_response: LLMResponse | None = None
@@ -725,6 +718,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     break
 
                                 self._sanitize_malformed_tool_calls(resp)
+                                if resp.role != "err":
+                                    # A provider that answered becomes the preferred
+                                    # candidate for later calls, so a failed primary
+                                    # is not retried on every model turn.
+                                    if candidate is not self.provider_plan.primary:
+                                        # An explicit model belongs to the original
+                                        # primary provider; a promoted fallback keeps
+                                        # its own default model.
+                                        self.req.model = None
+                                    self.provider_plan = (
+                                        self.provider_plan.with_primary(candidate)
+                                    )
+                                    self.fallback_providers = list(
+                                        self.provider_plan.fallbacks
+                                    )
                                 yield resp
                                 return
 
@@ -962,38 +970,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
-    def _streaming_response_events(self, response: LLMResponse) -> list[AgentResponse]:
-        """Translate a provider stream chunk into agent output events."""
-        events: list[AgentResponse] = []
-        if response.reasoning_content:
-            events.append(
-                AgentResponse(
-                    type="streaming_delta",
-                    data=AgentResponseData(
-                        chain=MessageChain(type="reasoning").message(
-                            response.reasoning_content,
-                        ),
-                    ),
-                )
-            )
-        if response.result_chain:
-            events.append(
-                AgentResponse(
-                    type="streaming_delta",
-                    data=AgentResponseData(chain=response.result_chain),
-                )
-            )
-        elif response.completion_text:
-            events.append(
-                AgentResponse(
-                    type="streaming_delta",
-                    data=AgentResponseData(
-                        chain=MessageChain().message(response.completion_text),
-                    ),
-                )
-            )
-        return events
-
     def _record_final_response_usage(self, response: LLMResponse) -> None:
         """Update cumulative and current request usage from a final response."""
         self.stats.current_context_tokens = 0
@@ -1002,63 +978,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.stats.current_context_tokens = response.usage.input
             if self.req.conversation:
                 self.req.conversation.token_usage = response.usage.total
-
-    def _final_response_events(self, response: LLMResponse) -> list[AgentResponse]:
-        """Build source, reasoning, and final-content events for one response."""
-        events: list[AgentResponse] = []
-        if response.citations or response.sources:
-            events.append(
-                AgentResponse(
-                    type="llm_sources",
-                    data=AgentResponseData(
-                        chain=MessageChain(
-                            type="llm_sources",
-                            chain=[
-                                Json(
-                                    data={
-                                        "citations": [
-                                            citation.__dict__
-                                            for citation in response.citations
-                                        ],
-                                        "sources": [
-                                            source.__dict__
-                                            for source in response.sources
-                                        ],
-                                    }
-                                )
-                            ],
-                        )
-                    ),
-                )
-            )
-        if response.reasoning_content:
-            events.append(
-                AgentResponse(
-                    type="llm_result",
-                    data=AgentResponseData(
-                        chain=MessageChain(type="reasoning").message(
-                            response.reasoning_content,
-                        ),
-                    ),
-                )
-            )
-        if response.result_chain:
-            events.append(
-                AgentResponse(
-                    type="llm_result",
-                    data=AgentResponseData(chain=response.result_chain),
-                )
-            )
-        elif response.completion_text:
-            events.append(
-                AgentResponse(
-                    type="llm_result",
-                    data=AgentResponseData(
-                        chain=MessageChain().message(response.completion_text),
-                    ),
-                )
-            )
-        return events
 
     def _apply_step_budget_notices(
         self, tool_call_result_blocks: list[ToolCallMessageSegment]
@@ -1217,7 +1136,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             time.time() - self.stats.start_time
                         )
 
-                    for response_event in self._streaming_response_events(llm_response):
+                    for response_event in streaming_response_events(llm_response):
                         yield response_event
                     if self._is_stop_requested():
                         break
@@ -1277,7 +1196,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
 
-        for response_event in self._final_response_events(llm_resp):
+        for response_event in final_response_events(llm_resp):
             yield response_event
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
@@ -1293,29 +1212,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 logger.warning(
                     "skills_like tool re-query returned no tool calls; fallback to assistant response."
                 )
-                for response_event in self._final_response_events(resolved_response):
+                for response_event in final_response_events(resolved_response):
                     yield response_event
                 await self._complete_with_assistant_response(resolved_response)
                 if self.streaming:
-                    if resolved_response.reasoning_content:
-                        yield AgentResponse(
-                            type="streaming_delta",
-                            data=AgentResponseData(
-                                chain=MessageChain(type="reasoning").message(
-                                    resolved_response.reasoning_content,
-                                ),
-                            ),
-                        )
-                    chain = resolved_response.result_chain
-                    if not chain and resolved_response.completion_text:
-                        chain = MessageChain().message(
-                            resolved_response.completion_text
-                        )
-                    if chain:
-                        yield AgentResponse(
-                            type="streaming_delta",
-                            data=AgentResponseData(chain=chain),
-                        )
+                    for response_event in streaming_response_events(resolved_response):
+                        yield response_event
                 return
             llm_resp = resolved_response
 

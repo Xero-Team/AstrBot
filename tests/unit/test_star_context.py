@@ -473,7 +473,7 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
         "astrbot.core.execution_context.ToolLoopAgentRunner", lambda *_a, **_k: runner
     )
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.prepare_event_attachments", AsyncMock()
+        "astrbot.core.agent.request.attachments.prepare_event_attachments", AsyncMock()
     )
     monkeypatch.setattr(
         "astrbot.core.agent.request_preparation.prepare_provider_request",
@@ -555,7 +555,7 @@ async def test_tool_loop_agent_forwards_extra_user_content_parts(monkeypatch):
         "astrbot.core.execution_context.ToolLoopAgentRunner", lambda *_a, **_k: runner
     )
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent.prepare_event_attachments", AsyncMock()
+        "astrbot.core.agent.request.attachments.prepare_event_attachments", AsyncMock()
     )
     monkeypatch.setattr(
         "astrbot.core.agent.request_preparation.prepare_provider_request",

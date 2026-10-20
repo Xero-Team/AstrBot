@@ -7,8 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import astrbot.core.astr_main_agent as main_agent
 from astrbot.core.agent.llm_types import ProviderRequest
+from astrbot.core.agent.request import common as request_common
+from astrbot.core.agent.request.prompts import _append_skills_prompt
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.skills._skill_inventory import SkillInfo
@@ -64,7 +65,7 @@ def skill_context(tmp_path, monkeypatch):
         set_extra=lambda key, value: extras.__setitem__(key, value),
     )
     monkeypatch.setattr(
-        main_agent, "get_astrbot_workspaces_path", lambda: str(tmp_path)
+        request_common, "get_astrbot_workspaces_path", lambda: str(tmp_path)
     )
     return context, event, profile, extras
 
@@ -108,7 +109,7 @@ def test_skill_prompt_reader_and_tool_catalog_share_filtered_snapshot(
     profile["btw"] = {"enabled": enabled, "skill_routes": routes}
     extras["btw_loop"] = loop
     req = ProviderRequest(prompt="help")
-    snapshot = main_agent._append_skills_prompt(
+    snapshot = _append_skills_prompt(
         req, {"computer_use_runtime": "none"}, None, event, context
     )
     assert snapshot is extras[SKILL_SNAPSHOT_EXTRA_KEY]
@@ -165,7 +166,7 @@ def test_workspace_skill_requires_local_work_and_respects_prompt(
     context, event, profile, extras = skill_context
     profile["btw"]["enabled"] = enabled
     extras["btw_loop"] = loop
-    snapshot = main_agent._append_skills_prompt(
+    snapshot = _append_skills_prompt(
         ProviderRequest(prompt="help"),
         {"computer_use_runtime": runtime},
         prompt,

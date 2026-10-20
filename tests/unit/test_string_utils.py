@@ -7,6 +7,13 @@ ROOT = Path(__file__).resolve().parents[2]
 LLM_PLACEHOLDER_MODULES = (
     "astrbot/core/utils/string_utils.py",
     "astrbot/core/astr_main_agent.py",
+    "astrbot/core/agent/request/attachments.py",
+    "astrbot/core/agent/request/common.py",
+    "astrbot/core/agent/request/config.py",
+    "astrbot/core/agent/request/history.py",
+    "astrbot/core/agent/request/prompts.py",
+    "astrbot/core/agent/request/providers.py",
+    "astrbot/core/agent/request/tools.py",
     "astrbot/core/astr_main_agent_resources.py",
     "astrbot/core/cron/manager.py",
     "astrbot/core/astr_agent_tool_exec.py",

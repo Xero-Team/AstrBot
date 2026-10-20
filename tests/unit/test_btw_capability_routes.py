@@ -9,13 +9,11 @@ from mcp.types import Tool, ToolAnnotations
 
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.request.config import MainAgentBuildConfig
+from astrbot.core.agent.request.tools import _assemble_request_tool_catalog
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.astr_main_agent import (
-    MainAgentBuildConfig,
-    _assemble_request_tool_catalog,
-)
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.skills._skill_snapshot import SkillSnapshot
 from astrbot.core.tool_catalog import ToolCatalogInputs, assemble_tool_catalog

@@ -12,11 +12,46 @@ import pytest
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.message import Message, TextPart, dump_messages_with_checkpoints
+from astrbot.core.agent.request import attachments as request_attachments
+from astrbot.core.agent.request import common as request_common
+from astrbot.core.agent.request.attachments import (
+    _append_direct_attachments,
+    _request_img_caption,
+    append_message_component_context_to_prompt,
+    prepare_event_attachments,
+)
+from astrbot.core.agent.request.config import (
+    MainAgentBuildConfig,
+    local_agent_runtime_from_profile,
+)
+from astrbot.core.agent.request.history import (
+    _LOOP_HANDOFF_TURNS,
+    _get_session_conv,
+    _prepare_loop_contexts,
+)
+from astrbot.core.agent.request.prompts import (
+    _append_system_reminders,
+    _build_local_mode_prompt,
+    _ensure_prompt_and_skills,
+    _filter_skills_for_current_config,
+)
+from astrbot.core.agent.request.providers import (
+    _provider_supports_modality,
+    _select_provider,
+)
+from astrbot.core.agent.request.tools import (
+    LOCAL_NETWORK_POLICY_NOTICE,
+    WEB_SEARCH_CITATION_PROMPT,
+    _apply_llm_safety_mode,
+    _apply_sandbox_tools,
+    _assemble_request_tool_catalog,
+)
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
     prepare_provider_request,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_main_agent_resources import CHATUI_SPECIAL_DEFAULT_PROMPT
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.conversation_mgr import DIALOGUE_LOOP_SCOPE, WORK_LOOP_SCOPE
 from astrbot.core.conversation_models import Conversation
@@ -35,6 +70,7 @@ from astrbot.core.provider import Provider
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.tools.computer_tools import normalize_umo_for_workspace
 
 
 @pytest.mark.asyncio
@@ -65,7 +101,7 @@ async def test_btw_build_applies_runtime_before_request_preparation(
     mock_context.get_config.return_value = {
         "btw": {"enabled": enabled, "work_loop": {"computer_use_runtime": override}},
     }
-    config = ama.MainAgentBuildConfig(
+    config = MainAgentBuildConfig(
         tool_call_timeout=60,
         computer_use_runtime="local",
         provider_settings={
@@ -103,11 +139,11 @@ def test_btw_catalog_rejects_reintroduced_computer_tools(mock_event, mock_contex
     ]
     req = ProviderRequest(prompt="test", func_tool=ToolSet(tools))
 
-    ama._assemble_request_tool_catalog(
+    _assemble_request_tool_catalog(
         mock_event,
         req,
         mock_context,
-        ama.MainAgentBuildConfig(
+        MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="none",
             allow_computer_tools=False,
@@ -203,34 +239,36 @@ def test_provider_supports_modality_requires_explicit_list():
     provider = MagicMock(spec=Provider)
 
     provider.provider_config = {"modalities": ["text", "image"]}
-    assert ama._provider_supports_modality(provider, "image")
+    assert _provider_supports_modality(provider, "image")
 
     provider.provider_config = {"modalities": ["text"]}
-    assert not ama._provider_supports_modality(provider, "image")
+    assert not _provider_supports_modality(provider, "image")
 
     provider.provider_config = {}
-    assert not ama._provider_supports_modality(provider, "image")
+    assert not _provider_supports_modality(provider, "image")
 
     provider.provider_config = {"modalities": []}
-    assert not ama._provider_supports_modality(provider, "image")
+    assert not _provider_supports_modality(provider, "image")
 
     provider.provider_config = {"modalities": "image"}
-    assert not ama._provider_supports_modality(provider, "image")
+    assert not _provider_supports_modality(provider, "image")
 
 
 @pytest.mark.asyncio
 async def test_prepare_event_attachments_is_idempotent(mock_event, mock_context):
     req = ProviderRequest()
-    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+    config = MainAgentBuildConfig(tool_call_timeout=120)
     append_direct = AsyncMock()
     append_quoted = AsyncMock()
 
     with (
-        patch.object(ama, "_append_direct_attachments", append_direct),
-        patch.object(ama, "_append_quoted_reply_components", append_quoted),
+        patch.object(request_attachments, "_append_direct_attachments", append_direct),
+        patch.object(
+            request_attachments, "_append_quoted_reply_components", append_quoted
+        ),
     ):
-        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
-        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+        await prepare_event_attachments(mock_event, req, config, mock_context)
+        await prepare_event_attachments(mock_event, req, config, mock_context)
 
     append_direct.assert_awaited_once_with(mock_event, req, config)
     append_quoted.assert_not_awaited()
@@ -241,9 +279,9 @@ async def test_prepare_event_attachments_is_idempotent(mock_event, mock_context)
 async def test_prepare_event_attachments_adds_qq_face_context(mock_event, mock_context):
     mock_event.message_obj.message = [Face(id=111)]
     req = ProviderRequest()
-    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+    config = MainAgentBuildConfig(tool_call_timeout=120)
 
-    await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+    await prepare_event_attachments(mock_event, req, config, mock_context)
 
     expected = "<Message Components>\n[QQ Face: 可怜 (id: 111)]\n</Message Components>"
     assert req.message_component_context == expected
@@ -268,8 +306,10 @@ async def test_prepare_event_attachments_materializes_quoted_fallback_http(
         Reply(id="200", chain=None, message_str=""),
     ]
     req = ProviderRequest(prompt="what is this")
-    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
-    monkeypatch.setattr(ama, "get_astrbot_temp_path", lambda: str(tmp_path))
+    config = MainAgentBuildConfig(tool_call_timeout=120)
+    monkeypatch.setattr(
+        request_attachments, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
 
     async def _fake_convert(self):
         del self
@@ -277,16 +317,16 @@ async def test_prepare_event_attachments_materializes_quoted_fallback_http(
 
     with (
         patch(
-            "astrbot.core.astr_main_agent.extract_quoted_message_images",
+            "astrbot.core.agent.request.attachments.extract_quoted_message_images",
             AsyncMock(return_value=[http_url]),
         ),
         patch.object(Image, "convert_to_file_path", _fake_convert),
         patch(
-            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            "astrbot.core.agent.request.attachments._compress_image_for_provider",
             AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
-        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+        await prepare_event_attachments(mock_event, req, config, mock_context)
 
     assert req.image_urls == [str(local_path)]
     extra = "\n".join(part.text for part in req.extra_user_content_parts)
@@ -314,7 +354,7 @@ async def test_prepare_event_attachments_defers_jpeg_to_choke_point(
     PILImage.new("RGB", (8, 8), (1, 2, 3)).save(image_path)
     mock_event.message_obj.message = [Image(file=str(image_path))]
     req = ProviderRequest(prompt="look")
-    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+    config = MainAgentBuildConfig(tool_call_timeout=120)
     monkeypatch.setattr(
         media_utils, "get_astrbot_temp_path", lambda: str(tmp_path / "t")
     )
@@ -336,11 +376,11 @@ async def test_prepare_event_attachments_defers_jpeg_to_choke_point(
             _count_prepare,
         ),
         patch(
-            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            "astrbot.core.agent.request.attachments._compress_image_for_provider",
             AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
-        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+        await prepare_event_attachments(mock_event, req, config, mock_context)
         assert req.image_urls == [str(image_path)]
         assert calls == []
         prepared = await prepare_provider_request(req)
@@ -359,7 +399,7 @@ async def test_prepare_event_attachments_skips_quoted_fallback_http_on_convert_f
         Reply(id="200", chain=None, message_str=""),
     ]
     req = ProviderRequest(prompt="what is this")
-    config = ama.MainAgentBuildConfig(tool_call_timeout=120)
+    config = MainAgentBuildConfig(tool_call_timeout=120)
 
     async def _fail_convert(self):
         del self
@@ -367,12 +407,12 @@ async def test_prepare_event_attachments_skips_quoted_fallback_http_on_convert_f
 
     with (
         patch(
-            "astrbot.core.astr_main_agent.extract_quoted_message_images",
+            "astrbot.core.agent.request.attachments.extract_quoted_message_images",
             AsyncMock(return_value=[http_url]),
         ),
         patch.object(Image, "convert_to_file_path", _fail_convert),
     ):
-        await ama.prepare_event_attachments(mock_event, req, config, mock_context)
+        await prepare_event_attachments(mock_event, req, config, mock_context)
 
     assert req.image_urls == []
     extra = "\n".join(part.text for part in req.extra_user_content_parts)
@@ -390,10 +430,10 @@ async def test_prompt_only_component_context_excludes_unrelated_attachment_paths
         ],
     )
 
-    await ama.append_message_component_context_to_prompt(
+    await append_message_component_context_to_prompt(
         event,
         req,
-        ama.MainAgentBuildConfig(tool_call_timeout=120),
+        MainAgentBuildConfig(tool_call_timeout=120),
     )
 
     assert "[QQ Face: 可怜 (id: 111)]" in (req.prompt or "")
@@ -409,7 +449,7 @@ async def test_image_caption_prompt_sanitizes_untrusted_event_context(
     provider.text_chat = AsyncMock(return_value=MagicMock(completion_text="a cat"))
     mock_context.get_provider_by_id.return_value = provider
 
-    result = await ama._request_img_caption(
+    result = await _request_img_caption(
         mock_event,
         "caption-provider",
         {},
@@ -434,7 +474,7 @@ async def test_image_caption_normalizes_missing_completion_text(
     provider.text_chat = AsyncMock(return_value=MagicMock(completion_text=None))
     mock_context.get_provider_by_id.return_value = provider
 
-    result = await ama._request_img_caption(
+    result = await _request_img_caption(
         mock_event,
         "caption-provider",
         {},
@@ -448,8 +488,7 @@ async def test_image_caption_normalizes_missing_completion_text(
 @pytest.fixture
 def sample_config():
     """Create a sample MainAgentBuildConfig."""
-    module = ama
-    return module.MainAgentBuildConfig(
+    return MainAgentBuildConfig(
         tool_call_timeout=60,
         streaming_response=True,
     )
@@ -487,8 +526,8 @@ class _FixedDateTime(datetime.datetime):
 
 
 def _append_reminders_at_fixed_now(mock_event, req, cfg, timezone="UTC"):
-    with patch("astrbot.core.astr_main_agent.datetime.datetime", _FixedDateTime):
-        ama._append_system_reminders(mock_event, req, cfg, timezone)
+    with patch("astrbot.core.agent.request.prompts.datetime.datetime", _FixedDateTime):
+        _append_system_reminders(mock_event, req, cfg, timezone)
 
 
 def test_append_system_reminders_includes_weekday(mock_event):
@@ -605,13 +644,15 @@ async def test_datetime_reminder_not_persisted_in_history(mock_event):
 
 def test_local_mode_prompt_uses_windows_powershell_51():
     with (
-        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
         patch(
-            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            "astrbot.core.agent.request.prompts.platform.system", return_value="Windows"
+        ),
+        patch(
+            "astrbot.core.agent.request.prompts.resolve_windows_shell",
             return_value="powershell.exe",
         ),
     ):
-        prompt = ama._build_local_mode_prompt()
+        prompt = _build_local_mode_prompt()
 
     assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
     assert "PowerShell 7-only syntax" in prompt
@@ -620,13 +661,15 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 
 def test_local_mode_prompt_hints_pwsh_when_resolved():
     with (
-        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
         patch(
-            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            "astrbot.core.agent.request.prompts.platform.system", return_value="Windows"
+        ),
+        patch(
+            "astrbot.core.agent.request.prompts.resolve_windows_shell",
             return_value="C:/Program Files/PowerShell/7/pwsh.exe",
         ),
     ):
-        prompt = ama._build_local_mode_prompt()
+        prompt = _build_local_mode_prompt()
 
     assert "PowerShell 7 (pwsh.exe)" in prompt
     assert "Windows PowerShell 5.1" not in prompt
@@ -634,8 +677,10 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 
 
 def test_local_mode_prompt_ignores_windows_shell_on_non_windows():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
-        prompt = ama._build_local_mode_prompt()
+    with patch(
+        "astrbot.core.agent.request.prompts.platform.system", return_value="Linux"
+    ):
+        prompt = _build_local_mode_prompt()
 
     assert "Unix-like" in prompt
     assert "POSIX-compatible" in prompt
@@ -647,8 +692,7 @@ class TestMainAgentBuildConfig:
 
     def test_config_initialization(self):
         """Test MainAgentBuildConfig initialization with defaults."""
-        module = ama
-        config = module.MainAgentBuildConfig(tool_call_timeout=60)
+        config = MainAgentBuildConfig(tool_call_timeout=60)
         assert config.tool_call_timeout == 60
         assert config.tool_schema_mode == "full"
         assert config.streaming_response is True
@@ -659,8 +703,7 @@ class TestMainAgentBuildConfig:
 
     def test_config_with_custom_values(self):
         """Test MainAgentBuildConfig with custom values."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=120,
             tool_schema_mode="skills-like",
             streaming_response=False,
@@ -685,10 +728,7 @@ class TestSelectProvider:
         mock_event.set_extra("selected_provider", "session-model")
         mock_context.get_provider_by_id.return_value = mock_provider
 
-        assert (
-            ama._select_provider(mock_event, mock_context, "loop-model")
-            is mock_provider
-        )
+        assert _select_provider(mock_event, mock_context, "loop-model") is mock_provider
         mock_context.get_provider_by_id.assert_called_once_with("loop-model")
         mock_context.get_using_provider.assert_not_called()
         assert mock_event.get_extra("selected_provider") == "session-model"
@@ -701,10 +741,7 @@ class TestSelectProvider:
         mock_context.get_provider_by_id.return_value = provider
         mock_context.get_using_provider.return_value = mock_provider
 
-        assert (
-            ama._select_provider(mock_event, mock_context, "loop-model")
-            is mock_provider
-        )
+        assert _select_provider(mock_event, mock_context, "loop-model") is mock_provider
         mock_context.get_using_provider.assert_called_once_with(
             umo=mock_event.unified_msg_origin
         )
@@ -720,10 +757,7 @@ class TestSelectProvider:
             provider if provider_id == "loop-model" else mock_provider
         )
 
-        assert (
-            ama._select_provider(mock_event, mock_context, "loop-model")
-            is mock_provider
-        )
+        assert _select_provider(mock_event, mock_context, "loop-model") is mock_provider
         mock_context.get_using_provider.assert_not_called()
 
     @pytest.mark.parametrize("unusable", [None, "not-a-chat-provider"])
@@ -734,7 +768,7 @@ class TestSelectProvider:
         mock_event.set_extra("selected_provider", "session-model")
         mock_context.get_provider_by_id.return_value = unusable
 
-        assert ama._select_provider(mock_event, mock_context, "loop-model") is None
+        assert _select_provider(mock_event, mock_context, "loop-model") is None
         assert [
             call.args[0] for call in mock_context.get_provider_by_id.call_args_list
         ] == ["loop-model", "session-model"]
@@ -743,13 +777,12 @@ class TestSelectProvider:
 
     def test_select_provider_by_id(self, mock_event, mock_context, mock_provider):
         """Test selecting provider by ID from event extra."""
-        module = ama
         mock_event.get_extra.side_effect = lambda k: (
             "test-provider" if k == "selected_provider" else None
         )
         mock_context.get_provider_by_id.return_value = mock_provider
 
-        result = module._select_provider(mock_event, mock_context)
+        result = _select_provider(mock_event, mock_context)
 
         assert result == mock_provider
         mock_context.get_provider_by_id.assert_called_once_with("test-provider")
@@ -762,7 +795,7 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = None
 
-        result = module._select_provider(mock_event, mock_context)
+        result = _select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
@@ -778,7 +811,7 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = "not a provider"
 
-        result = module._select_provider(mock_event, mock_context)
+        result = _select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
@@ -792,7 +825,6 @@ class TestSelectProvider:
         mock_context,
     ):
         """A chat model must provide metadata used by Agent telemetry."""
-        module = ama
         mock_event.get_extra.side_effect = lambda key: (
             "incomplete" if key == "selected_provider" else None
         )
@@ -803,18 +835,17 @@ class TestSelectProvider:
             text_chat_stream=lambda **_: None,
         )
 
-        result = module._select_provider(mock_event, mock_context)
+        result = _select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_once()
 
     def test_select_provider_fallback(self, mock_event, mock_context, mock_provider):
         """Test provider selection fallback to using provider."""
-        module = ama
         mock_event.get_extra.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
 
-        result = module._select_provider(mock_event, mock_context)
+        result = _select_provider(mock_event, mock_context)
 
         assert result == mock_provider
         mock_context.get_using_provider.assert_called_once_with(
@@ -827,7 +858,7 @@ class TestSelectProvider:
         mock_event.get_extra.return_value = None
         mock_context.get_using_provider.side_effect = ValueError("Test error")
 
-        result = module._select_provider(mock_event, mock_context)
+        result = _select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
@@ -844,12 +875,11 @@ class TestGetSessionConv:
         self, mock_event, mock_context, mock_conversation
     ):
         """Test getting existing conversation."""
-        module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="existing-conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
 
-        result = await module._get_session_conv(mock_event, mock_context)
+        result = await _get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
         conv_mgr.get_curr_conversation_id.assert_called_once_with(
@@ -862,7 +892,6 @@ class TestGetSessionConv:
     @pytest.mark.asyncio
     async def test_get_session_conv_create_new(self, mock_event, mock_context):
         """Test creating new conversation when none exists."""
-        module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
@@ -872,7 +901,7 @@ class TestGetSessionConv:
         mock_conversation.history = "[]"
         conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
 
-        result = await module._get_session_conv(mock_event, mock_context)
+        result = await _get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
         conv_mgr.new_conversation.assert_called_once_with(
@@ -886,14 +915,11 @@ class TestGetSessionConv:
         self, mock_event, mock_context, mock_conversation
     ):
         """A work run resolves the work loop's conversation, not the chat's."""
-        module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="work-conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
 
-        result = await module._get_session_conv(
-            mock_event, mock_context, WORK_LOOP_SCOPE
-        )
+        result = await _get_session_conv(mock_event, mock_context, WORK_LOOP_SCOPE)
 
         assert result == mock_conversation
         conv_mgr.get_curr_conversation_id.assert_called_once_with(
@@ -906,7 +932,6 @@ class TestGetSessionConv:
     @pytest.mark.asyncio
     async def test_get_session_conv_retry(self, mock_event, mock_context):
         """Test retrying conversation creation after failure."""
-        module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value="conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=None)
@@ -917,7 +942,7 @@ class TestGetSessionConv:
         mock_conversation.history = "[]"
         conv_mgr.get_conversation.side_effect = [None, mock_conversation]
 
-        result = await module._get_session_conv(mock_event, mock_context)
+        result = await _get_session_conv(mock_event, mock_context)
 
         assert result == mock_conversation
         assert conv_mgr.new_conversation.call_count == 1
@@ -926,14 +951,13 @@ class TestGetSessionConv:
     @pytest.mark.asyncio
     async def test_get_session_conv_failure(self, mock_event, mock_context):
         """Test RuntimeError when conversation creation fails."""
-        module = ama
         conv_mgr = mock_context.conversation_manager
         conv_mgr.get_curr_conversation_id = AsyncMock(return_value=None)
         conv_mgr.new_conversation = AsyncMock(return_value="new-conv-id")
         conv_mgr.get_conversation = AsyncMock(return_value=None)
 
         with pytest.raises(RuntimeError, match="无法创建新的对话。"):
-            await module._get_session_conv(mock_event, mock_context)
+            await _get_session_conv(mock_event, mock_context)
 
 
 def _loop_conversation(*, cid: str, history: list[dict]) -> MagicMock:
@@ -984,7 +1008,7 @@ class TestPrepareLoopContexts:
             work=None,
         )
 
-        contexts = await ama._prepare_loop_contexts(
+        contexts = await _prepare_loop_contexts(
             mock_event,
             mock_context,
             conversation,
@@ -1011,7 +1035,7 @@ class TestPrepareLoopContexts:
             work=work,
         )
 
-        contexts = await ama._prepare_loop_contexts(
+        contexts = await _prepare_loop_contexts(
             mock_event,
             mock_context,
             work,
@@ -1041,7 +1065,7 @@ class TestPrepareLoopContexts:
             work=work,
         )
 
-        contexts = await ama._prepare_loop_contexts(
+        contexts = await _prepare_loop_contexts(
             mock_event,
             mock_context,
             dialogue,
@@ -1067,7 +1091,7 @@ class TestPrepareLoopContexts:
             work=None,
         )
 
-        contexts = await ama._prepare_loop_contexts(
+        contexts = await _prepare_loop_contexts(
             mock_event,
             mock_context,
             dialogue,
@@ -1096,7 +1120,7 @@ class TestPrepareLoopContexts:
         manager.get_conversation = AsyncMock(return_value=None)
         mock_context.conversation_manager = manager
 
-        contexts = await ama._prepare_loop_contexts(
+        contexts = await _prepare_loop_contexts(
             mock_event,
             mock_context,
             dialogue,
@@ -1128,7 +1152,7 @@ class TestPrepareLoopContexts:
             work=work,
         )
 
-        contexts = await ama._prepare_loop_contexts(
+        contexts = await _prepare_loop_contexts(
             mock_event,
             mock_context,
             dialogue,
@@ -1147,7 +1171,7 @@ class TestPrepareLoopContexts:
         own: list[dict] = []
         dialogue = _loop_conversation(cid="conv-chat", history=own)
         history: list[dict] = []
-        for index in range(ama._LOOP_HANDOFF_TURNS + 3):
+        for index in range(_LOOP_HANDOFF_TURNS + 3):
             history.append({"role": "user", "content": f"q{index}"})
             history.append({"role": "assistant", "content": f"a{index}"})
         work = _loop_conversation(cid="conv-work", history=history)
@@ -1156,7 +1180,7 @@ class TestPrepareLoopContexts:
             work=work,
         )
 
-        contexts = await ama._prepare_loop_contexts(
+        contexts = await _prepare_loop_contexts(
             mock_event,
             mock_context,
             dialogue,
@@ -1164,9 +1188,9 @@ class TestPrepareLoopContexts:
             dual_loop_enabled=True,
         )
 
-        assert len(contexts) == 2 * ama._LOOP_HANDOFF_TURNS
+        assert len(contexts) == 2 * _LOOP_HANDOFF_TURNS
         assert contexts[0]["content"] == "q3"
-        assert contexts[-1]["content"] == f"a{ama._LOOP_HANDOFF_TURNS + 2}"
+        assert contexts[-1]["content"] == f"a{_LOOP_HANDOFF_TURNS + 2}"
 
 
 class TestApplyKb:
@@ -1177,12 +1201,10 @@ class TestApplyKb:
         """Test applying knowledge base in non-agentic mode."""
         module = ama
         req = ProviderRequest(prompt="test question", system_prompt="System prompt")
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, kb_agentic_mode=False
-        )
+        config = MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
 
         with patch(
-            "astrbot.core.astr_main_agent.retrieve_knowledge_base",
+            "astrbot.core.agent.request.prompts.retrieve_knowledge_base",
             AsyncMock(return_value="KB result"),
         ):
             await module._apply_kb(mock_event, req, mock_context, config)
@@ -1209,10 +1231,10 @@ class TestApplyKb:
         tmgr.get_full_tool_set.return_value = ToolSet()
         tmgr.iter_builtin_tools.return_value = [kb_tool]
         req = ProviderRequest(prompt="test question")
-        config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
+        config = MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
 
         await module._apply_kb(mock_event, req, mock_context, config)
-        module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
+        _assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
         assert req.func_tool is not None
         assert "astr_kb_search" in req.func_tool.names()
@@ -1222,9 +1244,7 @@ class TestApplyKb:
         """Test applying knowledge base when prompt is None."""
         module = ama
         req = ProviderRequest(prompt=None, system_prompt="System")
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, kb_agentic_mode=False
-        )
+        config = MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
 
         await module._apply_kb(mock_event, req, mock_context, config)
 
@@ -1265,7 +1285,7 @@ async def test_memory_context_is_extra_user_part(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+    await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
     assert "Stable seed." in req.system_prompt
     assert "<memory>" not in req.system_prompt
@@ -1297,8 +1317,8 @@ async def test_memory_retrieval_tools_are_available_for_default_prompt(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
-    ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
+    await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+    _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
     assert {
@@ -1346,8 +1366,8 @@ async def test_memory_retrieval_builtin_tools_survive_empty_prompt_tools(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
-    ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
+    await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+    _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
     assert {
@@ -1391,8 +1411,8 @@ async def test_memory_retrieval_tool_can_be_enabled_by_explicit_prompt_tool(
 
     mock_context.memory_manager = MemoryManager()
 
-    await ama._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
-    ama._assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
+    await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+    _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
 
     assert req.func_tool is not None
     assert req.func_tool.names() == ["search_memory"]
@@ -1404,10 +1424,10 @@ async def test_apply_kb_blank_prompt(prompt, mock_event, mock_context):
     """Test applying knowledge base when prompt is blank."""
     module = ama
     req = ProviderRequest(prompt=prompt, system_prompt="System")
-    config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
+    config = MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
     retrieve = AsyncMock(return_value="KB result")
 
-    with patch("astrbot.core.astr_main_agent.retrieve_knowledge_base", retrieve):
+    with patch("astrbot.core.agent.request.prompts.retrieve_knowledge_base", retrieve):
         await module._apply_kb(mock_event, req, mock_context, config)
 
     retrieve.assert_not_awaited()
@@ -1419,10 +1439,10 @@ async def test_apply_kb_no_result(mock_event, mock_context):
     """Test applying knowledge base when no result is returned."""
     module = ama
     req = ProviderRequest(prompt="test", system_prompt="System")
-    config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
+    config = MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=False)
 
     with patch(
-        "astrbot.core.astr_main_agent.retrieve_knowledge_base",
+        "astrbot.core.agent.request.prompts.retrieve_knowledge_base",
         AsyncMock(return_value=None),
     ):
         await module._apply_kb(mock_event, req, mock_context, config)
@@ -1436,14 +1456,14 @@ async def test_apply_kb_with_existing_tools(mock_event, mock_context):
     module = ama
     existing_tools = ToolSet()
     req = ProviderRequest(prompt="test", func_tool=existing_tools)
-    config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
+    config = MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
 
     await module._apply_kb(mock_event, req, mock_context, config)
     kb_tool = _named_tool("astr_kb_search")
     tmgr = mock_context.get_llm_tool_manager.return_value
     tmgr.get_full_tool_set.return_value = ToolSet()
     tmgr.iter_builtin_tools.return_value = [kb_tool]
-    module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
+    _assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
     assert req.func_tool is not None
     assert "astr_kb_search" in req.func_tool.names()
@@ -1458,7 +1478,7 @@ def _catalog_config(**overrides):
         "sandbox_cfg": {},
     }
     values.update(overrides)
-    return ama.MainAgentBuildConfig(**values)
+    return MainAgentBuildConfig(**values)
 
 
 def _named_tool(
@@ -1490,7 +1510,7 @@ class TestBuiltinToolInjection:
                 },
             )
         }
-        ama._assemble_request_tool_catalog(
+        _assemble_request_tool_catalog(
             mock_event,
             req,
             mock_context,
@@ -1523,9 +1543,7 @@ class TestBuiltinToolInjection:
             }
         }
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_search") is search_tool
         assert req.func_tool.get_tool("web_fetch") is fetch_tool
@@ -1545,9 +1563,7 @@ class TestBuiltinToolInjection:
             }
         }
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_search") is search_tool
         assert req.func_tool.get_tool("web_fetch") is None
@@ -1567,9 +1583,7 @@ class TestBuiltinToolInjection:
             }
         }
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_fetch") is None
 
@@ -1589,9 +1603,7 @@ class TestBuiltinToolInjection:
             }
         }
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_fetch") is None
 
@@ -1613,9 +1625,7 @@ class TestBuiltinToolInjection:
             }
         }
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         for tool in serpapi_tools:
             assert req.func_tool.get_tool(tool.name) is tool
@@ -1633,9 +1643,7 @@ class TestBuiltinToolInjection:
             }
         }
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_search_serpapi") is None
 
@@ -1650,7 +1658,7 @@ class TestBuiltinToolInjection:
 
         module._apply_web_search_citation_prompt(mock_event, req)
 
-        assert module.WEB_SEARCH_CITATION_PROMPT in req.system_prompt
+        assert WEB_SEARCH_CITATION_PROMPT in req.system_prompt
 
     def test_apply_web_search_citation_prompt_is_idempotent(self, mock_event):
         module = ama
@@ -1664,7 +1672,7 @@ class TestBuiltinToolInjection:
         module._apply_web_search_citation_prompt(mock_event, req)
         module._apply_web_search_citation_prompt(mock_event, req)
 
-        assert req.system_prompt.count(module.WEB_SEARCH_CITATION_PROMPT) == 1
+        assert req.system_prompt.count(WEB_SEARCH_CITATION_PROMPT) == 1
 
     def test_apply_web_search_citation_prompt_requires_webchat(self, mock_event):
         module = ama
@@ -1677,7 +1685,7 @@ class TestBuiltinToolInjection:
 
         module._apply_web_search_citation_prompt(mock_event, req)
 
-        assert module.WEB_SEARCH_CITATION_PROMPT not in req.system_prompt
+        assert WEB_SEARCH_CITATION_PROMPT not in req.system_prompt
 
     def test_catalog_includes_cron_tool_when_enabled(self, mock_event, mock_context):
         future_task_tool = _named_tool("future_task")
@@ -1685,7 +1693,7 @@ class TestBuiltinToolInjection:
         tmgr.get_full_tool_set.return_value = ToolSet()
         tmgr.iter_builtin_tools.return_value = [future_task_tool]
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
+        _assemble_request_tool_catalog(
             mock_event,
             req,
             mock_context,
@@ -1699,7 +1707,6 @@ class TestEnsurePromptAndSkills:
     """Tests for _ensure_prompt_and_skills function."""
 
     def test_filter_plugin_skills_uses_current_config_plugin_set(self):
-        module = ama
         catalogs = RuntimeCatalogs()
         catalogs.plugins.publish(
             StarMetadata(
@@ -1737,7 +1744,7 @@ class TestEnsurePromptAndSkills:
             ),
         ]
 
-        filtered = module._filter_skills_for_current_config(
+        filtered = _filter_skills_for_current_config(
             skills,
             {"plugin_set": ["allowed_plugin"]},
             catalogs.plugins,
@@ -1748,7 +1755,6 @@ class TestEnsurePromptAndSkills:
     def test_filter_plugin_skills_skips_inactive_plugins_even_when_all_allowed(
         self,
     ):
-        module = ama
         catalogs = RuntimeCatalogs()
         catalogs.plugins.publish(
             StarMetadata(
@@ -1769,7 +1775,7 @@ class TestEnsurePromptAndSkills:
             )
         ]
 
-        filtered = module._filter_skills_for_current_config(
+        filtered = _filter_skills_for_current_config(
             skills,
             {"plugin_set": ["*"]},
             catalogs.plugins,
@@ -1780,7 +1786,6 @@ class TestEnsurePromptAndSkills:
     @pytest.mark.asyncio
     async def test_ensure_prompt_from_session(self, mock_event, mock_context):
         """Test applying prompt from session service config."""
-        module = ama
         prompt = {"name": "test-prompt", "prompt": "You are helpful."}
         mock_context.prompt_manager.runtime_prompts = [prompt]
         mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
@@ -1790,14 +1795,13 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+        await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
         assert "You are helpful." in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_ensure_prompt_from_conversation(self, mock_event, mock_context):
         """Test applying prompt from conversation setting."""
-        module = ama
         prompt = {"name": "conv-prompt", "prompt": "Custom prompt."}
         mock_context.prompt_manager.runtime_prompts = [prompt]
         mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
@@ -1806,14 +1810,13 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id="conv-prompt")
 
-        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+        await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
         assert "Custom prompt." in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_ensure_prompt_none_explicit(self, mock_event, mock_context):
         """Test that [%None] prompt is explicitly set to no prompt."""
-        module = ama
         mock_context.prompt_manager.runtime_prompts = []
         mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
             return_value=("[%None]", None, None, False)
@@ -1821,7 +1824,7 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id="[%None]")
 
-        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+        await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
         assert "Prompt Instructions" not in req.system_prompt
 
@@ -1830,23 +1833,21 @@ class TestEnsurePromptAndSkills:
         self, mock_event, mock_context
     ):
         """Test that ChatUI keeps its special default prompt when the flag is unset."""
-        module = ama
         mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
             return_value=("_chatui_default_", None, None, True)
         )
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+        await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
-        assert module.CHATUI_SPECIAL_DEFAULT_PROMPT in req.system_prompt
+        assert CHATUI_SPECIAL_DEFAULT_PROMPT in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_webchat_default_prompt_can_be_disabled(
         self, mock_event, mock_context
     ):
         """Test that a false enable_default_system_prompt skips the ChatUI prompt."""
-        module = ama
         mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
             return_value=("_chatui_default_", None, None, True)
         )
@@ -1854,9 +1855,9 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+        await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
-        assert module.CHATUI_SPECIAL_DEFAULT_PROMPT not in req.system_prompt
+        assert CHATUI_SPECIAL_DEFAULT_PROMPT not in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_ensure_skills_includes_workspace_skills(
@@ -1866,7 +1867,6 @@ class TestEnsurePromptAndSkills:
         mock_event,
         mock_context,
     ):
-        module = ama
         data_dir = tmp_path / "data"
         global_skills_dir = tmp_path / "global_skills"
         plugins_dir = tmp_path / "plugins"
@@ -1881,7 +1881,7 @@ class TestEnsurePromptAndSkills:
             encoding="utf-8",
         )
 
-        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
+        workspace_root = workspaces_dir / normalize_umo_for_workspace(
             mock_event.unified_msg_origin
         )
         workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
@@ -1892,7 +1892,7 @@ class TestEnsurePromptAndSkills:
         )
 
         monkeypatch.setattr(
-            module,
+            request_common,
             "get_astrbot_workspaces_path",
             lambda: str(workspaces_dir),
         )
@@ -1913,9 +1913,7 @@ class TestEnsurePromptAndSkills:
         req.conversation = MagicMock(prompt_id=None)
         runtime_config = {"computer_use_runtime": "local"}
 
-        await module._ensure_prompt_and_skills(
-            req, runtime_config, mock_context, mock_event
-        )
+        await _ensure_prompt_and_skills(req, runtime_config, mock_context, mock_event)
 
         assert "**workspace-skill**" in req.system_prompt
         assert "Workspace scoped skill." in req.system_prompt
@@ -1931,7 +1929,6 @@ class TestEnsurePromptAndSkills:
         mock_event,
         mock_context,
     ):
-        module = ama
         data_dir = tmp_path / "data"
         global_skills_dir = tmp_path / "global_skills"
         plugins_dir = tmp_path / "plugins"
@@ -1939,7 +1936,7 @@ class TestEnsurePromptAndSkills:
         for path in (data_dir, global_skills_dir, plugins_dir):
             path.mkdir(parents=True, exist_ok=True)
 
-        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
+        workspace_root = workspaces_dir / normalize_umo_for_workspace(
             mock_event.unified_msg_origin
         )
         workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
@@ -1950,7 +1947,7 @@ class TestEnsurePromptAndSkills:
         )
 
         monkeypatch.setattr(
-            module,
+            request_common,
             "get_astrbot_workspaces_path",
             lambda: str(workspaces_dir),
         )
@@ -1974,7 +1971,7 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id="no-skills")
 
-        await module._ensure_prompt_and_skills(
+        await _ensure_prompt_and_skills(
             req, {"computer_use_runtime": "local"}, mock_context, mock_event
         )
 
@@ -1994,7 +1991,6 @@ class TestEnsurePromptAndSkills:
         mock_event,
         mock_context,
     ):
-        module = ama
         data_dir = tmp_path / "data"
         global_skills_dir = tmp_path / "global_skills"
         plugins_dir = tmp_path / "plugins"
@@ -2002,7 +1998,7 @@ class TestEnsurePromptAndSkills:
         for path in (data_dir, global_skills_dir, plugins_dir):
             path.mkdir(parents=True, exist_ok=True)
 
-        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
+        workspace_root = workspaces_dir / normalize_umo_for_workspace(
             mock_event.unified_msg_origin
         )
         workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
@@ -2013,7 +2009,7 @@ class TestEnsurePromptAndSkills:
         )
 
         monkeypatch.setattr(
-            module,
+            request_common,
             "get_astrbot_workspaces_path",
             lambda: str(workspaces_dir),
         )
@@ -2033,7 +2029,7 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_prompt_and_skills(
+        await _ensure_prompt_and_skills(
             req,
             runtime_settings,
             mock_context,
@@ -2046,7 +2042,6 @@ class TestEnsurePromptAndSkills:
     @pytest.mark.asyncio
     async def test_ensure_tools_from_prompt(self, mock_event, mock_context):
         """Test applying tools from prompt."""
-        module = ama
         mock_tool = FunctionTool(
             name="test_tool",
             description="test",
@@ -2070,9 +2065,9 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id="prompt")
 
-        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
-        config = module.MainAgentBuildConfig(tool_call_timeout=60)
-        module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
+        await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+        config = MainAgentBuildConfig(tool_call_timeout=60)
+        _assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
         assert req.func_tool is not None
         assert "test_tool" in req.func_tool.names()
@@ -2096,7 +2091,7 @@ class TestEnsurePromptAndSkills:
                 "websearch_route": ["baidu_ai_search"],
             }
         }
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             provider_settings={
                 "web_search": True,
@@ -2175,7 +2170,7 @@ class TestEnsurePromptAndSkills:
                 },
             }
         }
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="local",
             add_cron_tools=False,
@@ -2187,6 +2182,10 @@ class TestEnsurePromptAndSkills:
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
             patch(
                 "astrbot.core.astr_main_agent.AstrAgentContext",
+                return_value=SimpleNamespace(context=mock_context, event=mock_event),
+            ),
+            patch(
+                "astrbot.core.agent.request.tools.AstrAgentContext",
                 return_value=SimpleNamespace(context=mock_context, event=mock_event),
             ),
         ):
@@ -2209,7 +2208,7 @@ class TestEnsurePromptAndSkills:
             assert "astrbot_execute_shell" not in tool_names
             assert "astrbot_execute_python" not in tool_names
             assert result.provider_request.system_prompt.count(
-                module.LOCAL_NETWORK_POLICY_NOTICE
+                LOCAL_NETWORK_POLICY_NOTICE
             ) == int(
                 allow_execution and not allow_network and isolation_status == "detected"
             )
@@ -2223,7 +2222,7 @@ class TestEnsurePromptAndSkills:
     ):
         module = ama
         mock_event.platform_meta.support_proactive_message = False
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             add_cron_tools=False,
         )
@@ -2261,14 +2260,14 @@ class TestEnsurePromptAndSkills:
                 result.reset_coro.close()
 
     def test_local_agent_runtime_from_profile_defaults_missing_runtime_to_none(self):
-        config, _ = ama.local_agent_runtime_from_profile({})
+        config, _ = local_agent_runtime_from_profile({})
         assert config.computer_use_runtime == "none"
         assert config.llm_safety_mode is True
 
     def test_local_agent_runtime_from_profile_keeps_explicit_local_and_safety_mode(
         self,
     ):
-        config, _ = ama.local_agent_runtime_from_profile(
+        config, _ = local_agent_runtime_from_profile(
             {
                 "provider_settings": {"computer_use_runtime": "local"},
                 "agent_runner": {"config": {"safety_mode": False}},
@@ -2278,7 +2277,7 @@ class TestEnsurePromptAndSkills:
         assert config.llm_safety_mode is False
 
     def test_local_agent_runtime_from_profile_reads_grouped_kb_agentic_mode(self):
-        config, _ = ama.local_agent_runtime_from_profile(
+        config, _ = local_agent_runtime_from_profile(
             {"knowledge_base": {"agentic_mode": True}}
         )
         assert config.kb_agentic_mode is True
@@ -2288,7 +2287,6 @@ class TestEnsurePromptAndSkills:
         self, mock_event, mock_context
     ):
         """Test dedupe uses resolved default prompt tools in subagent mode."""
-        module = ama
         mock_context.prompt_manager.resolve_selected_prompt = AsyncMock(
             return_value=(None, None, None, False)
         )
@@ -2334,9 +2332,9 @@ class TestEnsurePromptAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(prompt_id=None)
 
-        await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
-        config = module.MainAgentBuildConfig(tool_call_timeout=60)
-        module._assemble_request_tool_catalog(mock_event, req, mock_context, config)
+        await _ensure_prompt_and_skills(req, {}, mock_context, mock_event)
+        config = MainAgentBuildConfig(tool_call_timeout=60)
+        _assemble_request_tool_catalog(mock_event, req, mock_context, config)
 
         assert req.func_tool is not None
         assert "transfer_to_planner" in req.func_tool.names()
@@ -2365,7 +2363,7 @@ class TestDecorateLlmRequest:
         """Test LLM request decoration with prompt prefix."""
         module = ama
         req = ProviderRequest(prompt="Hello")
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60, provider_settings={"prompt_prefix": "AI: "}
         )
 
@@ -2383,7 +2381,7 @@ class TestDecorateLlmRequest:
         """Test prompt prefix with {{prompt}} placeholder."""
         module = ama
         req = ProviderRequest(prompt="Hello")
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             provider_settings={"prompt_prefix": "AI {{prompt}} - Please respond:"},
         )
@@ -2401,7 +2399,7 @@ class TestDecorateLlmRequest:
     ):
         module = ama
         req = ProviderRequest(prompt="Hello")
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             provider_settings={"prompt_prefix": "{{prompt}} {{nope}}"},
         )
@@ -2419,7 +2417,7 @@ class TestDecorateLlmRequest:
     ):
         module = ama
         req = ProviderRequest(prompt=None)
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             provider_settings={"prompt_prefix": "AI {{prompt}}:"},
         )
@@ -2437,7 +2435,7 @@ class TestDecorateLlmRequest:
     ):
         module = ama
         req = ProviderRequest(prompt=None)
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             provider_settings={"prompt_prefix": "AI: "},
         )
@@ -2455,7 +2453,7 @@ class TestDecorateLlmRequest:
         module = ama
         req = ProviderRequest(prompt="Hello")
         req.conversation = None
-        config = module.MainAgentBuildConfig(tool_call_timeout=60)
+        config = MainAgentBuildConfig(tool_call_timeout=60)
 
         with patch.object(mock_context, "get_config") as mock_get_config:
             mock_get_config.return_value = {}
@@ -2473,9 +2471,7 @@ class TestPluginToolFilter:
     ):
         mock_event.plugins_name = None
         req = ProviderRequest(func_tool=ToolSet())
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
 
     def test_catalog_keeps_enabled_plugin_tools(self, mock_event, mock_context):
@@ -2490,9 +2486,7 @@ class TestPluginToolFilter:
             StarMetadata(name="test_plugin", module_path="plugin.test_plugin")
         )
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         assert "plugin_tool" in req.func_tool.names()
 
@@ -2505,9 +2499,7 @@ class TestPluginToolFilter:
         tmgr.iter_builtin_tools.return_value = []
         mock_event.plugins_name = ["other_plugin"]
         req = ProviderRequest()
-        ama._assemble_request_tool_catalog(
-            mock_event, req, mock_context, _catalog_config()
-        )
+        _assemble_request_tool_catalog(mock_event, req, mock_context, _catalog_config())
         assert req.func_tool is not None
         assert "transfer_to_demo_agent" in req.func_tool.names()
 
@@ -2521,7 +2513,7 @@ class TestPluginToolFilter:
             metadata={},
         )
         req = ProviderRequest(func_tool=ToolSet([shell]))
-        ama._assemble_request_tool_catalog(
+        _assemble_request_tool_catalog(
             mock_event,
             req,
             mock_context,
@@ -2542,7 +2534,7 @@ class TestPluginToolFilter:
         )
         mock_event.subject = SimpleNamespace(kind="dashboard-account")
         req = ProviderRequest(func_tool=ToolSet([shell, python]))
-        ama._assemble_request_tool_catalog(
+        _assemble_request_tool_catalog(
             mock_event,
             req,
             mock_context,
@@ -2567,7 +2559,7 @@ class TestPluginToolFilter:
         )
         mock_event.subject = SimpleNamespace(kind="im")
         req = ProviderRequest(func_tool=ToolSet([shell]))
-        ama._assemble_request_tool_catalog(
+        _assemble_request_tool_catalog(
             mock_event,
             req,
             mock_context,
@@ -2588,10 +2580,10 @@ async def test_unavailable_voice_attachment_degrades_to_text(monkeypatch):
 
     monkeypatch.setattr(Record, "convert_to_file_path", unavailable)
 
-    await ama._append_direct_attachments(
+    await _append_direct_attachments(
         event,
         request,
-        ama.MainAgentBuildConfig(tool_call_timeout=60),
+        MainAgentBuildConfig(tool_call_timeout=60),
     )
 
     assert request.audio_urls == []
@@ -2612,10 +2604,10 @@ async def test_voice_attachment_propagates_cancellation(monkeypatch):
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await ama._append_direct_attachments(
+        await _append_direct_attachments(
             event,
             ProviderRequest(),
-            ama.MainAgentBuildConfig(tool_call_timeout=60),
+            MainAgentBuildConfig(tool_call_timeout=60),
         )
 
 
@@ -2646,7 +2638,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
@@ -2675,7 +2667,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     max_context_length=7,
                 ),
@@ -2709,7 +2701,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_id_override="sukaka/not-loaded",
                 ),
@@ -2729,7 +2721,7 @@ class TestBuildMainAgent:
         result = await module.build_main_agent(
             event=mock_event,
             plugin_context=mock_context,
-            config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            config=MainAgentBuildConfig(tool_call_timeout=60),
         )
 
         assert result is None
@@ -2759,7 +2751,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
@@ -2787,7 +2779,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
@@ -2830,7 +2822,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={"image_compress_enabled": True},
                 ),
@@ -2877,7 +2869,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={"image_compress_enabled": True},
                 ),
@@ -2937,7 +2929,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
                         "default_image_caption_provider_id": "caption-provider",
@@ -3004,7 +2996,7 @@ class TestBuildMainAgent:
                 AsyncMock(return_value="/tmp/quoted.jpg"),
             ),
             patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
+                "astrbot.core.agent.request.attachments._compress_image_for_provider",
                 AsyncMock(side_effect=lambda path, _settings: [path]),
             ),
         ):
@@ -3015,7 +3007,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
                         "default_image_caption_provider_id": "caption-provider",
@@ -3075,7 +3067,7 @@ class TestBuildMainAgent:
                 AsyncMock(return_value="/tmp/quoted.jpg"),
             ),
             patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
+                "astrbot.core.agent.request.attachments._compress_image_for_provider",
                 AsyncMock(side_effect=lambda path, _settings: [path]),
             ),
         ):
@@ -3086,7 +3078,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
                         "default_image_caption_provider_id": "caption-provider",
@@ -3147,7 +3139,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     llm_safety_mode=False,
                     computer_use_runtime="none",
@@ -3203,7 +3195,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
+                config=MainAgentBuildConfig(
                     tool_call_timeout=60,
                     llm_safety_mode=False,
                     computer_use_runtime="none",
@@ -3252,7 +3244,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
@@ -3293,7 +3285,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
@@ -3333,9 +3325,9 @@ class TestBuildMainAgent:
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
             patch("astrbot.core.astr_main_agent.AstrAgentContext"),
-            patch("astrbot.core.astr_main_agent.logger") as mock_logger,
+            patch("astrbot.core.agent.request.attachments.logger") as mock_logger,
             patch(
-                "astrbot.core.astr_main_agent.retrieve_knowledge_base",
+                "astrbot.core.agent.request.prompts.retrieve_knowledge_base",
                 AsyncMock(return_value=None),
             ),
             patch.object(
@@ -3351,7 +3343,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
@@ -3392,7 +3384,7 @@ class TestBuildMainAgent:
         result = await module.build_main_agent(
             event=mock_event,
             plugin_context=mock_context,
-            config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            config=MainAgentBuildConfig(tool_call_timeout=60),
         )
 
         assert result is None
@@ -3406,7 +3398,7 @@ class TestBuildMainAgent:
         mock_event.message_str = ""
         mock_event.message_obj.message = [Json(data=card_data)]
         req = ProviderRequest(prompt="")
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             llm_safety_mode=False,
             computer_use_runtime="none",
@@ -3436,7 +3428,7 @@ class TestBuildMainAgent:
         mock_event.message_str = ""
         mock_event.message_obj.message = []
         req = ProviderRequest(prompt="")
-        config = module.MainAgentBuildConfig(tool_call_timeout=60)
+        config = MainAgentBuildConfig(tool_call_timeout=60)
 
         ok = await module._prepare_request_for_agent(
             mock_event,
@@ -3475,7 +3467,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
             )
 
         assert result is not None
@@ -3506,7 +3498,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
                 apply_reset=False,
             )
 
@@ -3537,7 +3529,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
                 provider=mock_provider,
                 req=existing_req,
             )
@@ -3587,7 +3579,7 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=MainAgentBuildConfig(tool_call_timeout=60),
                 provider=mock_provider,
             )
 
@@ -3625,7 +3617,7 @@ class TestBuildMainAgent:
         result = await module.build_main_agent(
             event=mock_event,
             plugin_context=mock_context,
-            config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            config=MainAgentBuildConfig(tool_call_timeout=60),
             provider=mock_provider,
         )
 
@@ -3880,57 +3872,53 @@ class TestApplyLlmSafetyMode:
 
     def test_apply_llm_safety_mode_system_prompt_strategy(self):
         """Test applying safety mode with system_prompt strategy."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             llm_safety_mode=True,
             safety_mode_strategy="system_prompt",
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_llm_safety_mode(config, req)
+        _apply_llm_safety_mode(config, req)
 
         assert "You are running in Safe Mode" in req.system_prompt
         assert "Original prompt" in req.system_prompt
 
     def test_apply_llm_safety_mode_prepends_safety_prompt(self):
         """Test that safety prompt is prepended before original system prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             safety_mode_strategy="system_prompt",
         )
         req = ProviderRequest(prompt="Test", system_prompt="My custom prompt")
 
-        module._apply_llm_safety_mode(config, req)
+        _apply_llm_safety_mode(config, req)
 
         assert req.system_prompt.startswith("You are running in Safe Mode")
         assert "My custom prompt" in req.system_prompt
 
     def test_apply_llm_safety_mode_with_none_system_prompt(self):
         """Test applying safety mode when original system_prompt is None."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             safety_mode_strategy="system_prompt",
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_llm_safety_mode(config, req)
+        _apply_llm_safety_mode(config, req)
 
         assert "You are running in Safe Mode" in req.system_prompt
 
     def test_apply_llm_safety_mode_unsupported_strategy(self):
         """Test that unsupported strategy logs warning and does nothing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             safety_mode_strategy="unsupported_strategy",
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original")
 
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_llm_safety_mode(config, req)
+        with patch("astrbot.core.agent.request.tools.logger") as mock_logger:
+            _apply_llm_safety_mode(config, req)
 
         mock_logger.warning.assert_called_once()
         assert (
@@ -3941,14 +3929,13 @@ class TestApplyLlmSafetyMode:
 
     def test_apply_llm_safety_mode_empty_system_prompt(self):
         """Test applying safety mode when original system_prompt is empty."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             safety_mode_strategy="system_prompt",
         )
         req = ProviderRequest(prompt="Test", system_prompt="")
 
-        module._apply_llm_safety_mode(config, req)
+        _apply_llm_safety_mode(config, req)
 
         assert "You are running in Safe Mode" in req.system_prompt
 
@@ -3958,15 +3945,14 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_creates_toolset_if_none(self, mock_context):
         """Test that ToolSet is created when func_tool is None."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={},
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",
@@ -3978,15 +3964,14 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_does_not_hang_computer_tools(self, mock_context):
         """Sandbox prompts stay, but tools come from catalog assembly."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={},
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",
@@ -3998,15 +3983,14 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
         """Test that sandbox mode prompt is added to system_prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={},
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",
@@ -4017,15 +4001,14 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
         """Test that CUA sandbox guidance nudges reliable GUI workflows."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={"booter": "cua"},
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",
@@ -4045,8 +4028,7 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_with_shipyard_neo_adds_path_rule(self, mock_context):
         """Test Shipyard Neo sandbox guidance adds workspace path rule."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={
@@ -4055,7 +4037,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None, system_prompt="Original")
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",
@@ -4068,8 +4050,7 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={},
@@ -4080,7 +4061,7 @@ class TestApplySandboxTools:
         existing_toolset.add_tool(existing_tool)
         req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",
@@ -4092,15 +4073,14 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_appends_to_existing_system_prompt(self, mock_context):
         """Test that sandbox prompt is appended to existing system prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={},
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",
@@ -4112,15 +4092,14 @@ class TestApplySandboxTools:
 
     def test_apply_sandbox_tools_with_none_system_prompt(self, mock_context):
         """Test that sandbox prompt is applied when system_prompt is None."""
-        module = ama
-        config = module.MainAgentBuildConfig(
+        config = MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
             sandbox_cfg={},
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_sandbox_tools(
+        _apply_sandbox_tools(
             config,
             req,
             "session-123",

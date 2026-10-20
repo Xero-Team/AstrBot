@@ -741,11 +741,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         summary_name: str,
         extra_result_fields: dict[str, T.Any] | None = None,
     ) -> None:
-        from astrbot.core.astr_main_agent import (
-            _get_session_conv,
-            build_main_agent,
+        from astrbot.core.agent.request.config import (
             local_agent_runtime_from_profile,
         )
+        from astrbot.core.agent.request.history import _get_session_conv
+        from astrbot.core.astr_main_agent import build_main_agent
 
         event = run_context.context.event
         ctx = run_context.context.context

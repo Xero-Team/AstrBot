@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from astrbot.core.agent.message import TextPart
-from astrbot.core.astr_main_agent import MainAgentBuildConfig
+from astrbot.core.agent.request.config import MainAgentBuildConfig
 from astrbot.core.message.components import File, Json, Reply
 from tests.unit.agent_sub_stage_support import *  # noqa: F403
 

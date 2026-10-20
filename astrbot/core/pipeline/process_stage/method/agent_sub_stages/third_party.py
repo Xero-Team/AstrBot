@@ -4,6 +4,11 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from astrbot import logger
+from astrbot.core.agent.request.attachments import (
+    append_message_component_context_to_prompt,
+    prepare_event_attachments,
+)
+from astrbot.core.agent.request.config import MainAgentBuildConfig
 from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
@@ -14,11 +19,6 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MainAgentHooks
-from astrbot.core.astr_main_agent import (
-    MainAgentBuildConfig,
-    append_message_component_context_to_prompt,
-    prepare_event_attachments,
-)
 from astrbot.core.message.json_card import coalesce_prompt_with_json_cards
 from astrbot.core.message.message_event_result import (
     MessageChain,

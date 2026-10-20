@@ -718,6 +718,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     break
 
                                 self._sanitize_malformed_tool_calls(resp)
+                                # A provider that answered becomes the preferred
+                                # candidate for later calls, so a failed primary is
+                                # not retried on every model turn.
+                                self.provider_plan = self.provider_plan.with_primary(
+                                    candidate
+                                )
+                                self.fallback_providers = list(
+                                    self.provider_plan.fallbacks
+                                )
                                 yield resp
                                 return
 

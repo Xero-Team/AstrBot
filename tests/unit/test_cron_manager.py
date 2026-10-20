@@ -797,7 +797,7 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                "astrbot.core.agent.request.history._get_session_conv",
                 AsyncMock(return_value=conv),
             ),
             patch(
@@ -882,7 +882,7 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                "astrbot.core.agent.request.history._get_session_conv",
                 AsyncMock(return_value=MagicMock(history="[]")),
             ),
             patch(
@@ -940,7 +940,7 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                "astrbot.core.agent.request.history._get_session_conv",
                 AsyncMock(return_value=MagicMock(history="[]")),
             ),
             patch(
@@ -1013,7 +1013,7 @@ class TestRunActiveAgentJob:
 
         with (
             patch(
-                "astrbot.core.astr_main_agent._get_session_conv",
+                "astrbot.core.agent.request.history._get_session_conv",
                 AsyncMock(return_value=conv),
             ),
             patch(

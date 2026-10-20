@@ -45,7 +45,7 @@ async def test_discord_reply_body_reaches_model_request(source):
         source: Where the referenced Discord message is available.
     """
     from astrbot.core.agent.llm_types import ProviderRequest
-    from astrbot.core.astr_main_agent import _process_quote_message
+    from astrbot.core.agent.request.attachments import _process_quote_message
 
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
     adapter.bot_self_id = "1"

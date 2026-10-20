@@ -421,11 +421,11 @@ class CronJobManager:
         delivery_session_str: str = "",
     ) -> None:
         """Woke the main agent to handle the cron job message."""
-        from astrbot.core.astr_main_agent import (
-            _get_session_conv,
-            build_main_agent,
+        from astrbot.core.agent.request.config import (
             local_agent_runtime_from_profile,
         )
+        from astrbot.core.agent.request.history import _get_session_conv
+        from astrbot.core.astr_main_agent import build_main_agent
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
             PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT,

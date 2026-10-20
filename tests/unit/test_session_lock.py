@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from astrbot.core.astr_main_agent import MainAgentBuildConfig
+from astrbot.core.agent.request.config import MainAgentBuildConfig
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils.session_lock import SessionLockManager

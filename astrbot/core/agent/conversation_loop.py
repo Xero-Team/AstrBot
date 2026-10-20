@@ -192,7 +192,10 @@ class ConversationLoop:
         )
 
     async def _classify(self, event: AstrMessageEvent, settings: dict) -> RoutingResult:
-        from astrbot.core.astr_main_agent import _is_chat_model, _select_provider
+        from astrbot.core.agent.request.providers import (
+            _is_chat_model,
+            _select_provider,
+        )
 
         try:
             threshold = settings.get("confidence_threshold", 0.85)

@@ -10,11 +10,6 @@ from typing import TYPE_CHECKING
 
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.agent.loop_policy import LOOP_WORK, resolve_computer_runtime
-from astrbot.core.astr_main_agent import (
-    _append_skills_prompt,
-    _assemble_request_tool_catalog,
-    local_agent_runtime_from_profile,
-)
 from astrbot.core.conversation_mgr import DIALOGUE_LOOP_SCOPE, WORK_LOOP_SCOPE
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -31,6 +26,10 @@ async def resolve_btw_capabilities(
     the main Agent. The returned allowlist contains no schemas or host paths;
     callers must redact its free-text fields before sending them off-device.
     """
+    from astrbot.core.agent.request.config import local_agent_runtime_from_profile
+    from astrbot.core.agent.request.prompts import _append_skills_prompt
+    from astrbot.core.agent.request.tools import _assemble_request_tool_catalog
+
     profile = plugin_context.get_config(umo=event.unified_msg_origin)
     config, _ = local_agent_runtime_from_profile(profile)
     capabilities = {}

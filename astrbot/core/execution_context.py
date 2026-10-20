@@ -426,6 +426,8 @@ class CoreExecutionContext:
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
+        from astrbot.core.agent.request.attachments import prepare_event_attachments
+        from astrbot.core.agent.request.config import MainAgentBuildConfig
         from astrbot.core.agent.request_preparation import (
             cua_pixel_mode_from_settings,
             image_compress_args_from_settings,
@@ -436,10 +438,6 @@ class CoreExecutionContext:
             AstrAgentContext,
         )
         from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-        from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
-            prepare_event_attachments,
-        )
         from astrbot.core.tools.computer_tools import (
             LOCAL_NETWORK_POLICY_NOTICE,
             get_local_permission_policy,

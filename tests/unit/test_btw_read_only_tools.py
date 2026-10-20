@@ -7,12 +7,12 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 from astrbot.core.agent.loop_policy import work_loop_is_read_only
-from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_main_agent import (
+from astrbot.core.agent.request.tools import (
     WORK_LOOP_DELEGATION_PROMPT,
     WORK_LOOP_READ_ONLY_PROMPT,
     _apply_btw_work_loop_prompt,
 )
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.auth.models import WEBCHAT_INSTANCE_TOOL_ACTIONS
 from astrbot.core.skills._skill_snapshot import SkillSnapshot
 from astrbot.core.tool_catalog import (

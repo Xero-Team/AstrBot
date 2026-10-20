@@ -3,8 +3,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.llm_types import ProviderRequest
+from astrbot.core.agent.request.attachments import _append_message_component_context
+from astrbot.core.agent.request.config import MainAgentBuildConfig
 from astrbot.core.message.components import (
     Face,
     File,
@@ -400,7 +401,7 @@ async def test_append_message_component_context_makes_forward_only_request_valid
     )
     event = _make_event([Forward(id="mock-forward")], client)
     req = ProviderRequest(prompt="")
-    config = ama.MainAgentBuildConfig(tool_call_timeout=60)
+    config = MainAgentBuildConfig(tool_call_timeout=60)
     local_path = "/tmp/mock-agent-forward.jpg"
 
     with (
@@ -410,11 +411,11 @@ async def test_append_message_component_context_makes_forward_only_request_valid
             AsyncMock(return_value=local_path),
         ),
         patch(
-            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            "astrbot.core.agent.request.attachments._compress_image_for_provider",
             AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
-        await ama._append_message_component_context(event, req, config)
+        await _append_message_component_context(event, req, config)
 
     assert any(
         "Mock Sender: hello" in part.text for part in req.extra_user_content_parts
@@ -457,7 +458,7 @@ async def test_append_message_component_context_caps_forwarded_image_refs():
     client = _NapCatContextClient(_forward_payload_with_image_urls(image_urls))
     event = _make_event([Forward(id="mock-forward")], client)
     req = ProviderRequest(prompt="")
-    config = ama.MainAgentBuildConfig(tool_call_timeout=60)
+    config = MainAgentBuildConfig(tool_call_timeout=60)
     convert_calls: list[str] = []
 
     async def _fake_convert(self):
@@ -468,11 +469,11 @@ async def test_append_message_component_context_caps_forwarded_image_refs():
     with (
         patch.object(Image, "convert_to_file_path", _fake_convert),
         patch(
-            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            "astrbot.core.agent.request.attachments._compress_image_for_provider",
             AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
-        await ama._append_message_component_context(event, req, config)
+        await _append_message_component_context(event, req, config)
 
     assert convert_calls == image_urls[:20]
     assert req.image_urls == [
@@ -480,7 +481,7 @@ async def test_append_message_component_context_caps_forwarded_image_refs():
     ]
 
     zero_req = ProviderRequest(prompt="")
-    zero_config = ama.MainAgentBuildConfig(
+    zero_config = MainAgentBuildConfig(
         tool_call_timeout=60,
         max_quoted_fallback_images=0,
     )
@@ -490,11 +491,11 @@ async def test_append_message_component_context_caps_forwarded_image_refs():
     with (
         patch.object(Image, "convert_to_file_path", _fake_convert),
         patch(
-            "astrbot.core.astr_main_agent._compress_image_for_provider",
+            "astrbot.core.agent.request.attachments._compress_image_for_provider",
             AsyncMock(side_effect=AssertionError("chat path must not compress")),
         ),
     ):
-        await ama._append_message_component_context(zero_event, zero_req, zero_config)
+        await _append_message_component_context(zero_event, zero_req, zero_config)
 
     assert convert_calls == []
     assert zero_req.image_urls == []

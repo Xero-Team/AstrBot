@@ -754,7 +754,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         return SimpleNamespace(agent_runner=_DoneRunner())
 
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent._get_session_conv",
+        "astrbot.core.agent.request.history._get_session_conv",
         _fake_get_session_conv,
     )
     monkeypatch.setattr(
@@ -864,7 +864,7 @@ async def test_background_wakeup_honors_explicit_runtime_and_safety_mode(
         return SimpleNamespace(agent_runner=_DoneRunner())
 
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent._get_session_conv",
+        "astrbot.core.agent.request.history._get_session_conv",
         _fake_get_session_conv,
     )
     monkeypatch.setattr(
@@ -954,7 +954,7 @@ async def test_background_wakeup_applies_max_agent_step(
         return SimpleNamespace(agent_runner=runner)
 
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent._get_session_conv",
+        "astrbot.core.agent.request.history._get_session_conv",
         _fake_get_session_conv,
     )
     monkeypatch.setattr(
@@ -1071,7 +1071,7 @@ async def test_background_wakeup_warns_when_result_is_not_sent_to_user(
         return SimpleNamespace(agent_runner=_Runner(kwargs["event"]))
 
     monkeypatch.setattr(
-        "astrbot.core.astr_main_agent._get_session_conv",
+        "astrbot.core.agent.request.history._get_session_conv",
         _fake_get_session_conv,
     )
     monkeypatch.setattr(

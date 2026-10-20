@@ -19,6 +19,14 @@ from astrbot.core.agent.message import (
     Message,
     dump_messages_with_checkpoints,
 )
+from astrbot.core.agent.request.common import (
+    LLM_ERROR_MESSAGE_EXTRA_KEY,
+    _set_llm_error_message,
+)
+from astrbot.core.agent.request.config import (
+    MainAgentBuildResult,
+    local_agent_runtime_from_profile,
+)
 from astrbot.core.agent.request_preparation import (
     cua_pixel_mode_from_settings,
     image_compress_args_from_settings,
@@ -33,13 +41,7 @@ from astrbot.core.assistant_history import (
     build_pending_assistant_history,
     make_projection,
 )
-from astrbot.core.astr_main_agent import (
-    LLM_ERROR_MESSAGE_EXTRA_KEY,
-    MainAgentBuildResult,
-    _set_llm_error_message,
-    build_main_agent,
-    local_agent_runtime_from_profile,
-)
+from astrbot.core.astr_main_agent import build_main_agent
 from astrbot.core.conversation_mgr import load_sanitized_history
 from astrbot.core.group_sender_concurrency import (
     ConcurrentTurn,

@@ -1,15 +1,12 @@
 from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from astrbot.core.agent.chat_model import ChatModel
 from astrbot.core.agent.llm_types import ProviderRequest
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.config.agent_runner import coerce_provider_ids
 from astrbot.core.utils.config_number import coerce_int_config
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass(slots=True)

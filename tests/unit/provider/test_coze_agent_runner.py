@@ -118,7 +118,7 @@ async def test_coze_builds_history_by_auto_save_setting_and_skips_checkpoints(
         "content": "text history",
         "content_type": "text",
     }
-    assert messages[2]["content"] == [
+    assert json.loads(messages[2]["content"]) == [
         {"type": "text", "text": "multimodal history"},
         {"type": "file", "file_id": "id-ok-image", "file_url": "ok-image"},
     ]

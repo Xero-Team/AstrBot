@@ -91,6 +91,7 @@ class SatoriPlatformAdapter(Platform):
         self.running = False
         self.heartbeat_task: asyncio.Task | None = None
         self.ready_received = False
+        self._ready_received_since_attempt = False
         self._event_tasks: set[asyncio.Task[None]] = set()
 
     async def send_by_session(
@@ -131,14 +132,19 @@ class SatoriPlatformAdapter(Platform):
         max_retries = 10
 
         while self.running:
+            self._ready_received_since_attempt = False
             try:
                 await self.connect_websocket()
                 retry_count = 0
             except websockets.exceptions.ConnectionClosed as e:
                 logger.warning(f"Satori WebSocket 连接关闭: {e}")
+                if self._ready_received_since_attempt:
+                    retry_count = 0
                 retry_count += 1
             except Exception as e:
                 logger.error(f"Satori WebSocket 连接失败: {e}")
+                if self._ready_received_since_attempt:
+                    retry_count = 0
                 retry_count += 1
 
             if not self.running:
@@ -271,6 +277,7 @@ class SatoriPlatformAdapter(Platform):
             if op == 4:  # READY
                 self.logins = body.get("logins", [])
                 self.ready_received = True
+                self._ready_received_since_attempt = True
 
                 # 输出连接成功的bot信息
                 if self.logins:

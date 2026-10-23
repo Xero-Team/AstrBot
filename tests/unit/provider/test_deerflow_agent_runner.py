@@ -172,3 +172,21 @@ def test_delta_stream_updates_full_text_baseline():
     assert state.prev_text_for_streaming == "hello world"
     assert len(responses) == 1
     assert responses[0].data["chain"].chain[0].text == " world"
+
+
+def test_values_baseline_accepts_human_role_history():
+    runner = DeerFlowAgentRunner()
+    state = runner._StreamState()
+
+    runner._handle_values_event(
+        {
+            "messages": [
+                {"id": "h1", "role": "human", "content": "old"},
+                {"id": "a1", "role": "assistant", "content": "old answer"},
+                {"id": "h2", "role": "human", "content": "new"},
+            ],
+        },
+        state,
+    )
+
+    assert [message["id"] for message in state.run_values_messages] == ["h2"]

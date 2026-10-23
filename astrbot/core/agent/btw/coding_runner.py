@@ -13,7 +13,6 @@ that would keep writing to the host after their parent was stopped.
 
 import asyncio
 import codecs
-import contextlib
 import os
 import re
 import sys
@@ -79,6 +78,7 @@ MAX_SCANNED_ENTRIES = 20_000
 # run wrote can read as older than the run.  The boundary therefore leans
 # outward -- one of the operator's files attributed to the run is a smaller
 # error than the run's own output going unreported.
+DRAIN_TIMEOUT_SECONDS = 5.0
 MTIME_TOLERANCE_SECONDS = 0.05
 
 STATUS_COMPLETED = "completed"
@@ -196,9 +196,14 @@ def task_folder_name(session_id: str, agent_id: str, run_id: str = "") -> str:
     profile, so the joined name is sanitized rather than trusted: a configured
     id must not be able to place the folder outside the configured root.
     """
-    parts = [str(session_id), str(agent_id), str(run_id)]
-    raw = "-".join(part for part in parts if part)
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip("-.")
+    session_part = str(session_id)
+    agent_part = str(agent_id)
+    run_part = str(run_id)
+    prefix_budget = max(0, 96 - len(run_part) - 1)
+    prefix = "-".join(part for part in (session_part, agent_part) if part)
+    prefix = re.sub(r"[^A-Za-z0-9_.-]+", "-", prefix).strip("-.")[:prefix_budget]
+    pieces = [piece for piece in (prefix, run_part) if piece]
+    safe = "-".join(pieces)
     return safe[:96] or "task"
 
 
@@ -289,8 +294,15 @@ async def _terminate_guarded(
     tree: ProcessTree, process: asyncio.subprocess.Process
 ) -> None:
     """Stop a tree without letting a second cancellation interrupt cleanup."""
-    with contextlib.suppress(asyncio.CancelledError):
-        await asyncio.shield(_terminate(tree, process))
+    task = asyncio.ensure_future(_terminate(tree, process))
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            continue
+    exception = task.exception()
+    if exception is not None:
+        raise exception
 
 
 async def _drain(stream: asyncio.StreamReader | None, log) -> str:
@@ -500,13 +512,14 @@ async def snapshot_artifacts(project_dir: Path | None) -> ArtifactBaseline:
 def _listed_artifacts(root: Path) -> list[str]:
     """Return the files a plain task folder holds, minus this module's own."""
     artifacts: list[str] = []
-    for path in sorted(root.rglob("*")):
+    for path in root.rglob("*"):
         if not path.is_file():
             continue
         relative = path.relative_to(root)
         if relative.parts[0] in TASK_BOOKKEEPING_FILES:
             continue
         artifacts.append(relative.as_posix())
+    artifacts.sort()
     return artifacts
 
 
@@ -521,7 +534,7 @@ def _files_written_since(root: Path, since: float) -> list[str]:
     boundary = since - MTIME_TOLERANCE_SECONDS
     artifacts: list[str] = []
     visited = 0
-    for path in sorted(root.rglob("*")):
+    for path in root.rglob("*"):
         visited += 1
         if visited > MAX_SCANNED_ENTRIES:
             logger.warning(
@@ -542,6 +555,7 @@ def _files_written_since(root: Path, since: float) -> list[str]:
         except OSError:
             continue
         artifacts.append(relative.as_posix())
+    artifacts.sort()
     return artifacts
 
 
@@ -728,9 +742,17 @@ async def run_coding_task(
                         timeout_seconds=int(agent.get("timeout_seconds", 0)) or 1,
                         stop_requested=is_stopped,
                     )
-                    stdout_text, _stderr_text = await asyncio.gather(
-                        stream_tasks[0], stream_tasks[1]
-                    )
+                    try:
+                        stdout_text, _stderr_text = await asyncio.wait_for(
+                            asyncio.gather(stream_tasks[0], stream_tasks[1]),
+                            timeout=DRAIN_TIMEOUT_SECONDS,
+                        )
+                    except TimeoutError:
+                        logger.warning(
+                            "Coding agent output did not close after the process "
+                            "exited; continuing with the captured tail."
+                        )
+                        stdout_text = ""
                     # A child that exits without reading stdin closes the pipe;
                     # that failure is not the run's failure.
                     await asyncio.gather(stream_tasks[2], return_exceptions=True)

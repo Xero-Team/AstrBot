@@ -30,9 +30,6 @@ class EstimateTokenCounter:
     def count_tokens(
         self, messages: list[Message], trusted_token_usage: int = 0
     ) -> int:
-        if trusted_token_usage > 0:
-            return trusted_token_usage
-
         total = 0
         for msg in messages:
             content = msg.content
@@ -54,7 +51,7 @@ class EstimateTokenCounter:
                     tc_str = json.dumps(tc if isinstance(tc, dict) else tc.model_dump())
                     total += self._estimate_tokens(tc_str)
 
-        return total
+        return max(total, trusted_token_usage)
 
     def _estimate_tokens(self, text: str) -> int:
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])

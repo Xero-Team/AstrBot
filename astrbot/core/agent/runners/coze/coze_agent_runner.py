@@ -147,7 +147,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 messages.append(
                     {
                         "role": ctx["role"],
-                        "content": processed_content,
+                        "content": json.dumps(processed_content, ensure_ascii=False),
                         "content_type": "object_string",
                     }
                 )

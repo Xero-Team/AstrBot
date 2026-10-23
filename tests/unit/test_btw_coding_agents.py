@@ -374,7 +374,7 @@ def test_a_codex_run_without_a_provider_writes_no_profile(isolated_paths, tmp_pa
     assert not (Path(isolated_paths) / "codex").exists()
 
 
-def test_a_codex_provider_with_only_a_model_still_writes_a_profile(
+def test_a_codex_provider_with_only_a_model_uses_the_official_login(
     isolated_paths, tmp_path
 ):
     agent = ca.normalize_coding_agents(
@@ -390,8 +390,7 @@ def test_a_codex_provider_with_only_a_model_still_writes_a_profile(
         ]
     )[0]
     invocation = ca.build_invocation(agent, workspace=tmp_path)
-    assert invocation.settings_path is not None
-    assert 'model = "o3"' in invocation.settings_path.read_text(encoding="utf-8")
+    assert invocation.settings_path is None
 
 
 def test_a_custom_agent_runs_its_own_command_line(isolated_paths, tmp_path):

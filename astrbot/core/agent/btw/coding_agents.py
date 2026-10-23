@@ -477,11 +477,7 @@ def _provider_is_configured(agent: Mapping, provider: Mapping | None) -> bool:
     """
     if provider is None or agent.get("type") == "custom":
         return False
-    if str(provider.get("base_url", "")) or str(provider.get("api_key", "")):
-        return True
-    if agent.get("type") in {"codex", "opencode"}:
-        return bool(provider.get("model")) or bool(agent.get("model"))
-    return False
+    return bool(str(provider.get("base_url", "")) or str(provider.get("api_key", "")))
 
 
 def build_invocation(

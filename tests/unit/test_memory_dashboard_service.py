@@ -292,3 +292,5 @@ def test_memory_confidence_parser_keeps_zero_and_rejects_non_finite():
         MemoryService._parse_confidence(float("nan"), 0.6)
     with pytest.raises(MemoryServiceError):
         MemoryService._parse_confidence(math.inf, 0.6)
+    with pytest.raises(MemoryServiceError):
+        MemoryService._parse_confidence(10**400, 0.6)

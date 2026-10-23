@@ -578,8 +578,10 @@ class BackupService:
             missing="缺少参数 filename",
         )
         file_path = os.path.join(self.backup_dir, filename)
-        if self._active_import_path and os.path.samefile(
-            file_path, self._active_import_path
+        if (
+            self._active_import_path
+            and os.path.exists(file_path)
+            and os.path.samefile(file_path, self._active_import_path)
         ):
             raise BackupServiceError("该备份正在导入，无法删除")
         if not os.path.exists(file_path):

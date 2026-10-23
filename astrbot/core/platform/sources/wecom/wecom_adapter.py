@@ -31,6 +31,7 @@ from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
@@ -632,7 +633,7 @@ class WecomPlatformAdapter(Platform):
             await asyncio.gather(*callback_tasks, return_exceptions=True)
         try:
             await self.server.server.shutdown()
-        except Exception:
+        except Exception as exc:
             # Shutdown is best-effort; the webhook server may already be down.
-            pass
+            logger.debug("企业微信 webhook 关闭失败: %s", safe_error("", exc))
         logger.info("企业微信 适配器已被关闭")

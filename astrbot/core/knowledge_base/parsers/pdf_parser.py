@@ -31,7 +31,13 @@ class PDFParser(BaseParser):
 
     @staticmethod
     def _resolve_image_format(filter_type: object) -> tuple[str, str] | None:
-        filters = filter_type if isinstance(filter_type, list) else [filter_type]
+        if isinstance(filter_type, str):
+            filters: list[object] = [filter_type]
+        else:
+            try:
+                filters = list(filter_type)  # type: ignore[arg-type]
+            except TypeError:
+                filters = [filter_type]
         if "/DCTDecode" in filters:
             return "jpg", "image/jpeg"
         if "/JPXDecode" in filters:

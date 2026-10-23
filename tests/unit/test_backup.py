@@ -1693,3 +1693,30 @@ async def test_main_database_import_skips_a_row_that_fails_on_flush(tmp_path):
 
     assert imported["platform_stats"] == 1
     assert result.warnings == ["导入 platform_stats 记录失败，该行已跳过"]
+
+
+def test_import_directories_warns_when_existing_directory_cannot_be_backed_up(
+    tmp_path, monkeypatch
+):
+    from astrbot.core.backup import _importer_files
+
+    archive = tmp_path / "backup.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("directories/plugins/demo/main.py", "print('x')\n")
+
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        _importer_files,
+        "backup_existing_directory",
+        lambda _target: (_ for _ in ()).throw(OSError("locked")),
+    )
+
+    with zipfile.ZipFile(archive) as zf:
+        stats = _importer_files.import_directories(
+            zf,
+            {"version": "1.1", "directories": ["plugins"]},
+            warnings.append,
+        )
+
+    assert stats["plugins"] == 0
+    assert "导入目录失败" in warnings

@@ -33,12 +33,14 @@ from .discord_platform_event import DiscordPlatformEvent
 
 def _discord_platform_member_role(raw_message: Any) -> str:
     guild = getattr(raw_message, "guild", None)
-    author = getattr(raw_message, "author", None)
+    author = getattr(raw_message, "author", None) or getattr(raw_message, "user", None)
     author_id = getattr(author, "id", None)
     if guild is not None and author_id is not None:
         if getattr(guild, "owner_id", None) == author_id:
             return "owner"
     member = getattr(raw_message, "member", None)
+    if member is None and getattr(author, "guild_permissions", None) is not None:
+        member = author
     if member is None:
         return "unknown"
     permissions = getattr(member, "guild_permissions", None)

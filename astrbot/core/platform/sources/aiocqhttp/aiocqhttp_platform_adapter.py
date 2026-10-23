@@ -580,8 +580,6 @@ class AiocqhttpAdapter(Platform):
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )
 
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
         logging.getLogger("aiocqhttp").setLevel(logging.ERROR)
         self.shutdown_event = asyncio.Event()
         await coro

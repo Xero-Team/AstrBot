@@ -748,6 +748,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     attempt.retry_state.attempt_number,
                                     self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
                                 )
+                            if has_visible_stream_output:
+                                return
                             raise
             except AgentStopRequested:
                 raise
@@ -1800,6 +1802,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             except AgentStopRequested:
                 interrupted.set()
+            except Exception as exc:
+                outcomes[index] = _ParallelToolOutcome(
+                    tool_name=call[0],
+                    tool_call_id=call[2],
+                    tool_call_streak=call_streaks[index],
+                    content=f"Error: {safe_error('', exc)}",
+                )
 
         async with asyncio.TaskGroup() as task_group:
             for index, call in enumerate(calls):

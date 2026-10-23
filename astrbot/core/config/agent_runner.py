@@ -156,14 +156,14 @@ def _normalize_value(value: Any, default: Any) -> Any:
             return default
         try:
             return int(value)
-        except TypeError, ValueError:
+        except OverflowError, TypeError, ValueError:
             return default
     if isinstance(default, float):
         if isinstance(value, bool):
             return default
         try:
             return float(value)
-        except TypeError, ValueError:
+        except OverflowError, TypeError, ValueError:
             return default
     if isinstance(default, str):
         return value if isinstance(value, str) else default

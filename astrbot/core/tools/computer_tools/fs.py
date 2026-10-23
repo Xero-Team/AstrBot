@@ -479,6 +479,8 @@ class FileEditTool(FunctionTool):
         old: str = kwargs["old"]
         new: str = kwargs["new"]
         replace_all: bool = kwargs.get("replace_all", False)
+        if not old:
+            return "Error: `old` must be a non-empty string."
         if permission_error := await check_local_file_permission(context):
             return permission_error
         umo = str(context.context.event.unified_msg_origin)

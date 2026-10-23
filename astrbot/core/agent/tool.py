@@ -429,7 +429,12 @@ class ToolSet:
                 ):
                     result["format"] = schema["format"]
             else:
-                result["type"] = "null"
+                if "properties" in schema:
+                    result["type"] = "object"
+                elif "items" in schema:
+                    result["type"] = "array"
+                else:
+                    result["type"] = "string"
 
             support_fields = {
                 "title",

@@ -1,6 +1,7 @@
 """Tests for running a coding agent inside its own task folder."""
 
 import asyncio
+import io
 import os
 import sys
 import time
@@ -365,6 +366,33 @@ async def test_both_roots_are_read_for_artifacts(tmp_path):
         "a.txt",
         "b.txt",
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_timed_out_drain_keeps_the_captured_tail():
+    """An abandoned stream must still contribute the output it already read."""
+    stream = asyncio.StreamReader()
+    stream.feed_data(b"partial output\n")
+    snapshot: list[str] = []
+
+    task = asyncio.create_task(
+        cr._drain_stdout(
+            stream,
+            io.StringIO(),
+            adapter=None,
+            observer=object(),
+            snapshot=snapshot,
+        )
+    )
+    for _ in range(10):
+        if snapshot:
+            break
+        await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert snapshot == ["partial output\n"]
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 import asyncio
-from typing import Any, cast
 import os
+from typing import Any, cast
 
 from wechatpy.enterprise import WeChatClient
 from wechatpy.exceptions import WeChatClientException

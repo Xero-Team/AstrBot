@@ -180,6 +180,13 @@ class WecomServer:
             logger.error("企业微信 webhook 回调任务失败: %s", exc, exc_info=exc)
 
 
+def _wecom_message_send_time(item: dict) -> int:
+    try:
+        return int(item.get("send_time", 0))
+    except TypeError, ValueError:
+        return 0
+
+
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
 class WecomPlatformAdapter(Platform):
     WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS = 15
@@ -211,6 +218,8 @@ class WecomPlatformAdapter(Platform):
         self.server = WecomServer(self._event_queue, self.config)
         self.agent_id: str | None = None
         self._wechat_kf_seen_text_messages: dict[str, float] = {}
+        self._wechat_kf_cursors: dict[str, str] = {}
+        self._wechat_kf_lock = asyncio.Lock()
 
         self.client = WeChatClient(
             self.config["corpid"].strip(),
@@ -239,21 +248,37 @@ class WecomPlatformAdapter(Platform):
                 if not token or not kfid:
                     logger.warning("微信客服事件缺少 Token 或 OpenKfId，已忽略")
                     return
-                msg_items = await asyncio.get_running_loop().run_in_executor(
-                    None,
-                    self._latest_wechat_kf_messages,
-                    token,
-                    kfid,
-                )
-                for msg_new in msg_items:
-                    await self.convert_wechat_kf_message(msg_new)
+                try:
+                    since = int(msg._data.get("CreateTime", 0)) - 60
+                except TypeError, ValueError:
+                    # A callback token is valid for ten minutes; bound replay
+                    # even if the event omitted CreateTime.
+                    since = int(time.time()) - 600
+                # Serialize pulls so overlapping callbacks do not both replay
+                # the same cursor window.
+                async with self._wechat_kf_lock:
+                    msg_items = await asyncio.get_running_loop().run_in_executor(
+                        None,
+                        self._latest_wechat_kf_messages,
+                        token,
+                        kfid,
+                        since,
+                    )
+                    for msg_new in msg_items:
+                        await self.convert_wechat_kf_message(msg_new)
                 return
             await self.convert_message(msg)
 
         self.server.callback = callback
 
-    def _latest_wechat_kf_messages(self, token: str, kfid: str) -> list[dict]:
-        cursor = ""
+    def _latest_wechat_kf_messages(
+        self,
+        token: str,
+        kfid: str,
+        since: int | None = None,
+    ) -> list[dict]:
+        cursor = self._wechat_kf_cursors.get(kfid, "")
+        first_pull = not cursor
         collected: list[dict] = []
         while True:
             ret = self.wechat_kf_api.sync_msg(token, kfid, cursor)
@@ -262,8 +287,20 @@ class WecomPlatformAdapter(Platform):
             collected.extend(ret.get("msg_list") or [])
             next_cursor = ret.get("next_cursor") or ""
             if not ret.get("has_more") or not next_cursor or next_cursor == cursor:
+                if next_cursor:
+                    self._wechat_kf_cursors[kfid] = next_cursor
                 break
             cursor = next_cursor
+            self._wechat_kf_cursors[kfid] = cursor
+
+        if not first_pull:
+            return collected
+        # An empty cursor starts three days back. On the first pull only keep
+        # messages around the callback event instead of replaying that window.
+        if since is not None:
+            return [
+                item for item in collected if _wecom_message_send_time(item) >= since
+            ]
         return collected
 
     def _is_duplicate_wechat_kf_text_message(self, session_id: str, text: str) -> bool:

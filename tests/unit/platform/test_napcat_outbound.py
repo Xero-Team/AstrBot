@@ -1355,19 +1355,16 @@ async def test_napcat_event_send_streaming_fallback_sends_components_incremental
     assert isinstance(result, PlatformSendResult)
     assert result.status == "unknown"
     assert result.success is False
-    assert event.send.await_count == 4
+    assert event.send.await_count == 3
     first_chain = event.send.await_args_list[0].args[0]
     second_chain = event.send.await_args_list[1].args[0]
     third_chain = event.send.await_args_list[2].args[0]
-    fourth_chain = event.send.await_args_list[3].args[0]
-    assert [type(component).__name__ for component in first_chain.chain] == ["Plain"]
-    assert first_chain.chain[0].text == "hello"
+    assert [type(component).__name__ for component in first_chain.chain] == ["Face"]
     assert [type(component).__name__ for component in second_chain.chain] == ["Face"]
-    assert second_chain.chain[0].id == 1
     assert [type(component).__name__ for component in third_chain.chain] == ["Plain"]
-    assert third_chain.chain[0].text == "world"
-    assert [type(component).__name__ for component in fourth_chain.chain] == ["Face"]
-    assert fourth_chain.chain[0].id == 2
+    assert first_chain.chain[0].id == 1
+    assert second_chain.chain[0].id == 2
+    assert third_chain.chain[0].text == "hello world"
     assert sleep_mock.await_count == 2
     assert event._has_send_oper is True
 

@@ -245,10 +245,20 @@ class LineMessageEvent(AstrMessageEvent):
         if reply_token:
             sent = await self.line_api.reply_message(reply_token, messages)
 
+        pushed = False
         if not sent:
             target_id = self.get_group_id() or self.get_sender_id()
             if target_id:
-                await self.line_api.push_message(target_id, messages)
+                pushed = await self.line_api.push_message(target_id, messages)
+        if not sent and not pushed:
+            return PlatformSendResult(
+                platform_id=self.platform_meta.id,
+                success=False,
+                target=self.get_group_id() or self.get_sender_id(),
+                message_count=len(messages),
+                error_message="LINE reply and push both failed",
+                status="failed",
+            )
 
         return await super().send(message)
 

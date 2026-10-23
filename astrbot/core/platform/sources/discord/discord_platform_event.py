@@ -110,9 +110,19 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     if embeds:
                         kwargs["embeds"] = embeds
                     if reference_message_id and not self.interaction_followup_webhook:
-                        kwargs["reference"] = self._client.get_message(
-                            int(reference_message_id)
-                        )
+                        try:
+                            reference_id = int(reference_message_id)
+                        except TypeError, ValueError:
+                            logger.warning("[Discord] Ignoring a non-numeric reply id")
+                        else:
+                            reference = self._client.get_message(reference_id)
+                            if reference is not None:
+                                kwargs["reference"] = reference
+                            else:
+                                logger.debug(
+                                    "[Discord] Referenced message is not cached; "
+                                    "sending without a quote"
+                                )
                 if not kwargs:
                     continue
                 if message.use_markdown_ is False:

@@ -1311,6 +1311,7 @@ class LarkMessageEvent(AstrMessageEvent):
             text_changed.set()
             if sender_task:
                 await sender_task
+            await _flush_and_close_card()
 
         # If no text was produced at all, no card was created
         if card_id is None:
@@ -1322,8 +1323,6 @@ class LarkMessageEvent(AstrMessageEvent):
                 )
                 self._has_send_oper = True
             return
-
-        await _flush_and_close_card()
 
         # 内联父类 send_streaming 的副作用
         self._schedule_metric(

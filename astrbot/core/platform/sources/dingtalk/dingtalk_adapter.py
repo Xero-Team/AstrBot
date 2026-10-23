@@ -869,16 +869,17 @@ class DingtalkPlatformAdapter(Platform):
                 should_cancel_task = False
                 start_time = time.monotonic()
                 try:
-                    self._shutdown_event.clear()
+                    round_event = threading.Event()
                     if self._terminated_event.is_set():
                         return
                     task = asyncio.run_coroutine_threadsafe(self.client_.start(), loop)
-                    # 当 task 完成时唤醒线程（无论是正常退出还是异常退出）
-                    task.add_done_callback(lambda _: self._shutdown_event.set())
+                    # Bind this round's event so a late callback from the previous
+                    # task cannot wake the new round.
+                    task.add_done_callback(lambda _, event=round_event: event.set())
                     if self._terminated_event.is_set():
                         should_cancel_task = True
-                        self._shutdown_event.set()
-                    self._shutdown_event.wait()
+                        round_event.set()
+                    round_event.wait()
                     if self._terminated_event.is_set():
                         return
                     if task.done():

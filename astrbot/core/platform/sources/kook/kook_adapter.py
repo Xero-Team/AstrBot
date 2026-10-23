@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import time
 
 from astrbot import logger
 from astrbot.core.message.components import (
@@ -149,9 +150,12 @@ class KookPlatformAdapter(Platform):
                 logger.info("[KOOK] 尝试连接KOOK服务器...")
 
                 # 尝试连接
+                started_at = time.monotonic()
                 await self.client.get_bot_info()
                 self._roles_cache.set_bot_id(self.client.bot_id)
                 success = await self.client.connect()
+                if success and time.monotonic() - started_at < 5:
+                    success = False
 
                 if success:
                     logger.info("[KOOK] 连接成功，开始监听消息")
@@ -275,20 +279,25 @@ class KookPlatformAdapter(Platform):
                                     name=role_mention_name,  # 保留角色名称
                                 )
                             )
+                            cursor = match.end()
                             continue
                 if not mention_target.isdigit() and role_id == 0:
+                    cursor = match.end()
                     continue
 
                 role_id = role_id or int(mention_target)
                 if not guild_id:
+                    cursor = match.end()
                     continue
 
                 if not guild_id.isdigit():
+                    cursor = match.end()
                     continue
 
                 if not await self._roles_cache.has_role_in_channel(
                     role_id, int(guild_id)
                 ):
+                    cursor = match.end()
                     continue
 
                 components.append(

@@ -91,7 +91,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         """
         sort_options = ["score", "task_count", "created_at"]
         async with AsyncClient(
-            base_url=self.api_base.replace("/v1", ""),
+            base_url=self.api_base.removesuffix("/v1"),
             proxy=self.proxy if self.proxy else None,
         ) as client:
             for sort_by in sort_options:

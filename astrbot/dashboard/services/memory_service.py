@@ -107,7 +107,7 @@ class MemoryService:
             return default
         try:
             confidence = float(value)
-        except (TypeError, ValueError) as exc:
+        except (OverflowError, TypeError, ValueError) as exc:
             raise MemoryServiceError("confidence must be a number") from exc
         if not math.isfinite(confidence) or confidence < 0 or confidence > 1:
             raise MemoryServiceError("confidence must be between 0 and 1")

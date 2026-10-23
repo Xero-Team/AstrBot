@@ -53,10 +53,11 @@ def import_attachments(
 
     for name in list_directory_archive_files(zf, "files/attachments/"):
         try:
-            target_path = attachment_targets.get(
-                Path(name).stem,
-                attachments_dir / Path(name).name,
+            original_path = attachment_targets.get(Path(name).stem)
+            target_name = (
+                original_path.name if original_path is not None else Path(name).name
             )
+            target_path = attachments_dir / target_name
             if not validate_path_within(target_path, attachments_dir):
                 logger.warning("附件路径越界，已跳过")
                 continue

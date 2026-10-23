@@ -54,7 +54,7 @@ class FollowUpCoordinator:
         self._active_runners: dict[str | tuple[str, str], Any] = {}
         self._order_states: dict[str | tuple[str, str], dict[str, object]] = {}
         self._monitor_tasks: set[asyncio.Task[None]] = set()
-        self._pending_tickets: set[FollowUpTicket] = set()
+        self._pending_tickets: list[FollowUpTicket] = []
         self._terminated = False
 
     def register_active_runner(
@@ -112,7 +112,7 @@ class FollowUpCoordinator:
         ticket = runner.follow_up(message_text=self._event_follow_up_text(event))
         if ticket is None:
             return None
-        self._pending_tickets.add(ticket)
+        self._pending_tickets.append(ticket)
         order_seq = self._allocate_order(order_key)
         monitor_task = asyncio.create_task(
             self._monitor_ticket(order_key, ticket, order_seq),
@@ -141,7 +141,11 @@ class FollowUpCoordinator:
     async def prepare_capture(self, capture: FollowUpCapture) -> tuple[bool, bool]:
         """Wait for a captured ticket and reserve its ordered continuation slot."""
         await capture.ticket.resolved.wait()
-        self._pending_tickets.discard(capture.ticket)
+        self._pending_tickets = [
+            pending
+            for pending in self._pending_tickets
+            if pending is not capture.ticket
+        ]
         if self._terminated:
             return True, False
         if capture.ticket.consumed:
@@ -293,6 +297,8 @@ class FollowUpCoordinator:
         try:
             await ticket.resolved.wait()
         finally:
-            self._pending_tickets.discard(ticket)
+            self._pending_tickets = [
+                pending for pending in self._pending_tickets if pending is not ticket
+            ]
         if ticket.consumed:
             await self._mark_consumed(key, order_seq)

@@ -802,11 +802,6 @@ class _FakeNoticeResponse:
                 status=self.status,
             )
 
-    async def json(self) -> object:
-        if self.error:
-            raise self.error
-        return self.data
-
     async def __aenter__(self):
         return self
 
@@ -918,7 +913,7 @@ async def test_help_notice_query_valid_string_and_truncation(monkeypatch):
         ),
         # Network errors and timeouts
         (None, aiohttp.ClientConnectionError("Connection refused")),
-        (None, aiohttp.ClientTimeout()),
+        (None, TimeoutError("timed out")),
     ],
 )
 @pytest.mark.asyncio

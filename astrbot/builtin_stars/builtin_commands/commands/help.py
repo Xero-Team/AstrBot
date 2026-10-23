@@ -29,8 +29,8 @@ class HelpCommand:
                         and int(content_length) > _MAX_NOTICE_BYTES
                     ):
                         logger.debug(
-                            "AstrBot remote notice Content-Length exceeds limit: %s",
-                            content_length,
+                            "AstrBot remote notice Content-Length exceeds %s bytes",
+                            _MAX_NOTICE_BYTES,
                         )
                         return ""
 
@@ -40,7 +40,7 @@ class HelpCommand:
                         total += len(chunk)
                         if total > _MAX_NOTICE_BYTES:
                             logger.debug(
-                                "AstrBot remote notice response exceeded size limit of %s bytes",
+                                "AstrBot remote notice response exceeded %s bytes",
                                 _MAX_NOTICE_BYTES,
                             )
                             return ""
@@ -55,7 +55,10 @@ class HelpCommand:
                         return ""
                     return notice[:2000]
         except Exception as exc:
-            logger.debug("Failed to query AstrBot remote notice: %s", exc)
+            logger.debug(
+                "Failed to query AstrBot remote notice (%s)",
+                type(exc).__name__,
+            )
             return ""
 
     async def _build_reserved_commands(self) -> list[tuple[str, str]]:
@@ -222,11 +225,7 @@ class HelpCommand:
 
     async def help(self, event: AstrMessageEvent, image: bool = False) -> None:
         """Show help for enabled built-in commands."""
-        notice = ""
-        try:
-            notice = await self._query_astrbot_notice()
-        except Exception:
-            pass
+        notice = await self._query_astrbot_notice()
 
         dashboard_version = await self.context.runtime_info.dashboard_version()
         commands = await self._build_reserved_commands()

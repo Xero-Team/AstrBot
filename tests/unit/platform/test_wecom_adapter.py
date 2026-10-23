@@ -43,6 +43,7 @@ def _adapter() -> WecomPlatformAdapter:
     )
     adapter.agent_id = None
     adapter._wechat_kf_seen_text_messages = {}
+    adapter._wechat_kf_cursors = {}
     adapter.handle_msg = AsyncMock()
     return adapter
 
@@ -941,3 +942,82 @@ def test_wecom_kf_sync_tolerates_error_responses_and_stops_on_repeated_cursor():
         {"msgid": "b"},
     ]
     assert calls == ["", "same"]
+
+
+class _FakeWecomKfApi:
+    def __init__(self, pages: dict[str, object]) -> None:
+        self.pages = pages
+        self.calls: list[tuple[str, str, str]] = []
+
+    def sync_msg(self, token: str, kfid: str, cursor: str):
+        self.calls.append((token, kfid, cursor))
+        return self.pages.get(
+            cursor, {"has_more": 0, "next_cursor": "", "msg_list": []}
+        )
+
+
+def test_wecom_kf_first_pull_skips_historical_messages():
+    adapter = _adapter()
+    adapter._wechat_kf_cursors = {}
+    adapter.wechat_kf_api = _FakeWecomKfApi(
+        {
+            "": {
+                "has_more": 1,
+                "next_cursor": "c1",
+                "msg_list": [{"msgid": "old", "send_time": 100}],
+            },
+            "c1": {
+                "has_more": 0,
+                "next_cursor": "c2",
+                "msg_list": [{"msgid": "new", "send_time": 200}],
+            },
+        }
+    )
+
+    items = adapter._latest_wechat_kf_messages("token", "kfid", since=150)
+
+    assert [item["msgid"] for item in items] == ["new"]
+    assert adapter._wechat_kf_cursors["kfid"] == "c2"
+
+
+def test_wecom_kf_subsequent_pull_uses_stored_cursor():
+    adapter = _adapter()
+    adapter._wechat_kf_cursors = {"kfid": "c2"}
+    api = _FakeWecomKfApi(
+        {
+            "c2": {
+                "has_more": 0,
+                "next_cursor": "c3",
+                "msg_list": [{"msgid": "newer", "send_time": 300}],
+            }
+        }
+    )
+    adapter.wechat_kf_api = api
+
+    items = adapter._latest_wechat_kf_messages("token", "kfid", since=999)
+
+    assert [item["msgid"] for item in items] == ["newer"]
+    assert api.calls == [("token", "kfid", "c2")]
+    assert adapter._wechat_kf_cursors["kfid"] == "c3"
+
+
+def test_wecom_kf_first_pull_without_event_time_keeps_every_message():
+    adapter = _adapter()
+    adapter._wechat_kf_cursors = {}
+    adapter.wechat_kf_api = _FakeWecomKfApi(
+        {
+            "": {
+                "has_more": 0,
+                "next_cursor": "c1",
+                "msg_list": [
+                    {"msgid": "first", "send_time": 100},
+                    {"msgid": "last", "send_time": 200},
+                ],
+            }
+        }
+    )
+
+    items = adapter._latest_wechat_kf_messages("token", "kfid")
+
+    assert [item["msgid"] for item in items] == ["first", "last"]
+    assert adapter._wechat_kf_cursors["kfid"] == "c1"

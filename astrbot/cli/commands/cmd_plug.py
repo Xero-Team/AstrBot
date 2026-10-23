@@ -115,22 +115,25 @@ def new(name: str) -> None:
         count=1,
         flags=re.MULTILINE,
     )
+
+    def _rewrite_star_import(match: re.Match[str]) -> str:
+        names = [
+            part.strip()
+            for part in match.group(1).split(",")
+            if part.strip() and part.strip() != "register"
+        ]
+        return f"from astrbot.api.star import {', '.join(names)}\n" if names else ""
+
     new_content = re.sub(
-        r"from astrbot\.api\.star import ([^\n]*?)\bregister\b,?\s*",
+        r"^from astrbot\.api\.star import \(?([^)\n]*)\)?[ \t]*$\n?",
         lambda match: (
-            "from astrbot.api.star import "
-            + ", ".join(
-                part.strip()
-                for part in match.group(1).split(",")
-                if part.strip() and part.strip() != "register"
-            )
+            _rewrite_star_import(match)
+            if re.search(r"\bregister\b", match.group(1))
+            else match.group(0)
         ),
         new_content,
         count=1,
-    )
-    new_content = new_content.replace(
-        "from astrbot.api.star import \n",
-        "",
+        flags=re.MULTILINE,
     )
 
     with open(plug_path / "main.py", "w", encoding="utf-8") as f:

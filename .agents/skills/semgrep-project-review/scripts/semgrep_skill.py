@@ -212,6 +212,15 @@ def explicit_output_dir(repo: Path, raw: str | None) -> Path:
     path = Path(raw).expanduser()
     if not path.is_absolute():
         path = repo / path
+    resolved = path.resolve()
+    repository = repo.resolve()
+    if resolved == repository or (
+        resolved.is_relative_to(repository)
+        and not resolved.is_relative_to(repository / ".tmp")
+    ):
+        raise SkillError(
+            "--out-dir must not be the repository root or an in-repo path outside .tmp"
+        )
     if path.exists() and (path / "findings.json").exists():
         print(
             f"warning: {path} already contains findings; reusing it explicitly",
@@ -762,6 +771,7 @@ def prepare_mirror(repo: Path, out: Path) -> tuple[Path, int]:
         shutil.rmtree(mirror)
     mirror.mkdir(parents=True)
     rewritten = 0
+    out_resolved = out.resolve()
     for root, dirs, files in os.walk(repo):
         current = Path(root)
         relative_dir = current.relative_to(repo)
@@ -770,6 +780,7 @@ def prepare_mirror(repo: Path, out: Path) -> tuple[Path, int]:
             for name in dirs
             if name not in SKIP_DIRS
             and not should_skip((relative_dir / name).as_posix())
+            and not (current / name).resolve().is_relative_to(out_resolved)
         )
         for name in sorted(files):
             source = current / name
@@ -791,10 +802,10 @@ def prepare_mirror(repo: Path, out: Path) -> tuple[Path, int]:
 
 def materialize_config(config: str, repo: Path, scan_root: Path) -> str:
     candidate = Path(config).expanduser()
-    if not candidate.exists():
-        return config
     if not candidate.is_absolute():
         candidate = repo / candidate
+    if not candidate.exists():
+        return config
     resolved = candidate.resolve()
     repository = repo.resolve()
     if resolved.is_relative_to(repository):
@@ -1456,9 +1467,12 @@ def cmd_issues(args: argparse.Namespace) -> int:
             security.append(finding)
             continue
         title = issue_title(finding)
-        if title in seen_titles:
+        finding_key = (
+            f"{finding.get('path', '')}:{finding.get('start_line', '')}:{title}"
+        )
+        if finding_key in seen_titles:
             continue
-        seen_titles.add(title)
+        seen_titles.add(finding_key)
         candidates = discover_candidates(gh, title) if gh else []
         existing = exact_match(candidates, title)
         if existing:

@@ -250,3 +250,24 @@ async def test_pipeline_continues_past_generator_without_yields():
     await scheduler._process_stages(event)
 
     assert "after" in event.stage_trace
+
+
+class FinalizingStage(Stage):
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent):
+        try:
+            yield
+        finally:
+            event.stage_trace.append("finalized")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_closes_stage_generator_when_event_stops_after_yield():
+    scheduler = _scheduler([FinalizingStage(), TraceStage("stopper", stop=True)])
+    event = PipelineEvent()
+
+    await scheduler._process_stages(event)
+
+    assert event.stage_trace[:2] == ["stopper", "finalized"]

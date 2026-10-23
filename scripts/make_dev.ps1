@@ -183,8 +183,16 @@ function Stop-FromPidFile {
     }
 
     $pidValue = Get-Content $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($pidValue -and $pidValue -match "^\d+$") {
-        $targetPid = [int]$pidValue
+    if ($pidValue -and $pidValue -match "^(\d+)(?:\|(.+))?$") {
+        $targetPid = [int]$matches[1]
+        $expectedName = $matches[2]
+        if ($expectedName) {
+            $liveProcess = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
+            if (-not $liveProcess -or $liveProcess.ProcessName -ne $expectedName) {
+                Remove-IfExists $PidFile
+                return
+            }
+        }
         try {
             if ($IsWindows) {
                 Invoke-TaskKill -TargetPid $targetPid
@@ -200,6 +208,20 @@ function Stop-FromPidFile {
         }
     }
     Remove-IfExists $PidFile
+}
+
+function Test-ProjectProcess {
+    param([int]$ProcId)
+
+    if ($IsWindows) {
+        $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcId" -ErrorAction SilentlyContinue
+        $commandLine = if ($processInfo) { [string]$processInfo.CommandLine } else { "" }
+    }
+    else {
+        $psCommand = Get-ApplicationCommandPath -Names @("ps")
+        $commandLine = if ($psCommand) { (& $psCommand "-o" "command=" "-p" $ProcId 2>$null) -join " " } else { "" }
+    }
+    return ($commandLine -and $commandLine.Contains($repoRoot))
 }
 
 function Stop-ByPort {
@@ -254,6 +276,10 @@ function Stop-ByPort {
 
     $pids = $pids | Where-Object { $_ } | Select-Object -Unique
     foreach ($procId in $pids) {
+        if (-not (Test-ProjectProcess -ProcId ([int]$procId))) {
+            Write-Warning "Port $Port is held by PID $procId, which does not belong to this checkout; leaving it running."
+            continue
+        }
         try {
             if ($IsWindows) {
                 Stop-Process -Id $procId -Force -ErrorAction Stop
@@ -323,7 +349,7 @@ function Start-ManagedProcess {
 
     $proc = Start-Process @startProcessParams
 
-    Set-Content -Path $PidFile -Value $proc.Id
+    Set-Content -Path $PidFile -Value "$($proc.Id)|$($proc.ProcessName)"
     Start-Sleep -Seconds $WarmupSeconds
 }
 

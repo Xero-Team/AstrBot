@@ -86,12 +86,12 @@ catch {
     throw "Generated Python models could not be read: $temporaryOutputPath"
 }
 
-& uv run ruff check --fix $temporaryOutputPath
+& uv run --project $repoRoot ruff check --fix $temporaryOutputPath
 if ($LASTEXITCODE -ne 0) {
     throw "ruff check --fix failed for generated models: $temporaryOutputPath"
 }
 
-& uv run ruff format $temporaryOutputPath
+& uv run --project $repoRoot ruff format $temporaryOutputPath
 if ($LASTEXITCODE -ne 0) {
     throw "ruff format failed for generated models: $temporaryOutputPath"
 }

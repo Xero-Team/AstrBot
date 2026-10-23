@@ -20,8 +20,13 @@ if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
     exit 0
 }
 
-$settings = Join-Path (Split-Path -Parent $PSScriptRoot) 'PSScriptAnalyzerSettings.psd1'
-$files = @(git ls-files '*.ps1' | Where-Object {
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$settings = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
+$trackedFiles = @(git -C $repoRoot ls-files '*.ps1')
+if ($LASTEXITCODE -ne 0) {
+    throw 'git ls-files failed while collecting PowerShell files.'
+}
+$files = @($trackedFiles | ForEach-Object { Join-Path $repoRoot $_ } | Where-Object {
         Test-Path -LiteralPath $_ -PathType Leaf
     })
 
@@ -33,7 +38,7 @@ if (-not $files) {
 if ($Fix) {
     foreach ($p in $files) {
         $orig = Get-Content -Raw $p
-        $fmt = Invoke-Formatter -ScriptDefinition $orig -Settings $settings
+        $fmt = Invoke-Formatter -ScriptDefinition $orig
         if ($fmt -ne $orig) {
             Set-Content -Path $p -Value $fmt -NoNewline
             Write-Host "formatted: $p"

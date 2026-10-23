@@ -11,13 +11,20 @@ if (-not $repoRoot) {
 Push-Location $repoRoot
 try {
     $changedFiles = [System.Collections.Generic.List[string]]::new()
-    foreach ($entry in git ls-files --eol) {
+    $eolEntries = @(git ls-files --eol)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'git ls-files --eol failed.'
+    }
+    foreach ($entry in $eolEntries) {
         $parts = $entry -split "`t", 2
         if ($parts.Count -ne 2 -or $parts[0] -notmatch 'attr/text(?:=auto)?') {
             continue
         }
 
         $path = Join-Path $repoRoot $parts[1]
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            continue
+        }
         $bytes = [System.IO.File]::ReadAllBytes($path)
         if (-not ($bytes -contains [byte]13)) {
             continue

@@ -153,6 +153,13 @@ if ($currentRevision.Trim() -ne $Revision) {
     if ($LASTEXITCODE -ne 0) {
         throw "git checkout failed for revision $Revision in $cloneDir"
     }
+    $verifiedRevision = git -C $cloneDir rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) {
+        throw "git rev-parse failed after checkout in $cloneDir"
+    }
+    if ($verifiedRevision.Trim() -ne $Revision) {
+        throw "NapCat checkout did not reach $Revision (HEAD is $verifiedRevision)"
+    }
 }
 Ensure-Directory -Path $outputDir
 

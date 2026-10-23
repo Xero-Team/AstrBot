@@ -95,6 +95,8 @@ def test_a_folder_name_cannot_escape_the_root():
     assert cr.task_folder_name("../..", "x/y") == "x-y"
     assert cr.task_folder_name("///", "") == "task"
     assert cr.task_folder_name("abc", "agent", "run1") == "abc-agent-run1"
+    assert cr.task_folder_name("abc", "agent", "../evil") == "abc-agent-evil"
+    assert cr.task_folder_name("abc", "agent", "..") == "abc-agent"
 
 
 def test_a_workspace_is_created_inside_the_root(tmp_path):

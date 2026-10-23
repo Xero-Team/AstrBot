@@ -198,7 +198,7 @@ def task_folder_name(session_id: str, agent_id: str, run_id: str = "") -> str:
     """
     session_part = str(session_id)
     agent_part = str(agent_id)
-    run_part = str(run_id)
+    run_part = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(run_id)).strip("-.")
     prefix_budget = max(0, 96 - len(run_part) - 1)
     prefix = "-".join(part for part in (session_part, agent_part) if part)
     prefix = re.sub(r"[^A-Za-z0-9_.-]+", "-", prefix).strip("-.")[:prefix_budget]

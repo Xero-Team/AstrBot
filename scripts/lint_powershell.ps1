@@ -22,7 +22,7 @@ if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $settings = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
-$trackedFiles = @(git -C $repoRoot ls-files '*.ps1')
+$trackedFiles = @(git -C $repoRoot -c core.quotePath=false ls-files '*.ps1')
 if ($LASTEXITCODE -ne 0) {
     throw 'git ls-files failed while collecting PowerShell files.'
 }

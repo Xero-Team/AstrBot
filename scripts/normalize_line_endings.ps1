@@ -11,7 +11,7 @@ if (-not $repoRoot) {
 Push-Location $repoRoot
 try {
     $changedFiles = [System.Collections.Generic.List[string]]::new()
-    $eolEntries = @(git ls-files --eol)
+    $eolEntries = @(git -c core.quotePath=false ls-files --eol)
     if ($LASTEXITCODE -ne 0) {
         throw 'git ls-files --eol failed.'
     }

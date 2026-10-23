@@ -622,6 +622,7 @@ class WecomPlatformAdapter(Platform):
             await asyncio.gather(*callback_tasks, return_exceptions=True)
         try:
             await self.server.server.shutdown()
-        except Exception as _:
+        except Exception:
+            # Shutdown is best-effort; the webhook server may already be down.
             pass
         logger.info("企业微信 适配器已被关闭")

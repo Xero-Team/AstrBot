@@ -365,7 +365,7 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.15.0" },
     { name = "pykatex", specifier = ">=0.1.1" },
     { name = "pyotp", specifier = ">=2.10.0" },
-    { name = "pypdf", specifier = ">=6.19.0" },
+    { name = "pypdf", specifier = ">=6.21.2" },
     { name = "python-docx", specifier = ">=1.2.0" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "python-pptx", specifier = ">=1.0.2" },

@@ -1628,6 +1628,7 @@ def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
 
     assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")
 
+
 def test_convert_datetime_fields_rejects_unparseable_values():
     importer = AstrBotImporter(main_db=MagicMock())
     row = {

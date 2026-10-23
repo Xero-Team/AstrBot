@@ -178,25 +178,18 @@ def _decode_bytes_with_fallback(
 
 
 def _trim_incomplete_utf8(data: bytes) -> bytes:
-    """Drop a trailing incomplete UTF-8 sequence so the next poll can finish it."""
+    """Drop a trailing incomplete multibyte sequence so the next poll finishes it."""
     if not data:
         return data
-    for offset in range(1, min(4, len(data)) + 1):
-        byte = data[-offset]
-        if byte & 0x80 == 0:
+    encodings = ["utf-8", locale.getpreferredencoding(False)]
+    for encoding in dict.fromkeys(encodings):
+        try:
+            data.decode(encoding)
             return data
-        if byte & 0xC0 == 0xC0:
-            if byte >> 5 == 0x6:
-                needed = 2
-            elif byte >> 4 == 0xE:
-                needed = 3
-            elif byte >> 3 == 0x1E:
-                needed = 4
-            else:
-                return data
-            if offset < needed:
-                return data[:-offset]
-            return data
+        except (LookupError, UnicodeDecodeError) as exc:
+            if isinstance(exc, UnicodeDecodeError) and exc.end >= len(data):
+                return data[: exc.start]
+            continue
     return data
 
 

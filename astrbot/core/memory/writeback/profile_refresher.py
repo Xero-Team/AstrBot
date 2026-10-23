@@ -13,6 +13,11 @@ class MemoryProfileRefresher:
             limit=20,
         )
         if not facts:
+            await self.db.upsert_memory_profile(
+                person_id=person_id,
+                chat_scope=chat_scope,
+                profile_text="",
+            )
             return None
         lines = [f"- {fact.fact_text}" for fact in facts[:8]]
         profile_text = "Known user profile in this isolated chat:\n" + "\n".join(lines)

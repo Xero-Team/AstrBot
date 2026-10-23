@@ -564,3 +564,23 @@ async def test_memory_tuning_probe_records_real_retrieval_metrics(temp_db):
         "User likes retrieval probes."
     )
     assert task.evaluation_result["samples"][1]["top_fact"] is None
+
+
+def test_memory_extractor_splits_preference_clauses():
+    from astrbot.core.memory.writeback.fact_extractor import MemoryFactExtractor
+
+    facts = MemoryFactExtractor().extract("I like tea, but I hate coffee")
+    texts = {fact.fact_text for fact in facts}
+
+    assert "User likes tea." in texts
+    assert "User dislikes coffee." in texts
+    assert all("but" not in text for text in texts)
+
+
+def test_frozenset_round_trip_keeps_tuple_members_hashable():
+    from astrbot.core.catalog_values import freeze_catalog_value, thaw_catalog_value
+
+    frozen = freeze_catalog_value({("a", 1), ("b", 2)})
+    thawed = thaw_catalog_value(frozen)
+
+    assert thawed == {("a", 1), ("b", 2)}

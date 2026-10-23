@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import tempfile
@@ -72,6 +73,13 @@ class EmbeddingStorage:
         self.index = None
         if path and os.path.exists(path):
             self.index = self._read_index(path)
+            loaded_dimension = int(getattr(self.index, "d", dimension))
+            if dimension and loaded_dimension != dimension:
+                raise ValueError(
+                    "嵌入向量维度与已有索引不一致: "
+                    f"configured={dimension}, index={loaded_dimension}"
+                )
+            self.dimension = loaded_dimension
         else:
             if dimension <= 0:
                 raise ValueError(
@@ -184,4 +192,4 @@ class EmbeddingStorage:
         """保存索引（兼容含非 ASCII 字符的 Windows 路径）"""
         if self.index is None or not self.path:
             return
-        self._write_index(self.index, self.path)
+        await asyncio.to_thread(self._write_index, self.index, self.path)

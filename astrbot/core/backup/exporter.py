@@ -99,7 +99,9 @@ class AstrBotExporter:
             progress_callback, "main_db", 0, 100, "正在导出主数据库..."
         )
         main_data = await self._export_main_database()
-        self._write_json_entry(zf, "databases/main_db.json", main_data)
+        await asyncio.to_thread(
+            self._write_json_entry, zf, "databases/main_db.json", main_data
+        )
         await self._report_progress(
             progress_callback, "main_db", 100, 100, "主数据库导出完成"
         )
@@ -122,7 +124,9 @@ class AstrBotExporter:
             progress_callback, "kb_metadata", 0, 100, "正在导出知识库元数据..."
         )
         kb_meta_data = await self._export_kb_metadata()
-        self._write_json_entry(zf, "databases/kb_metadata.json", kb_meta_data)
+        await asyncio.to_thread(
+            self._write_json_entry, zf, "databases/kb_metadata.json", kb_meta_data
+        )
         await self._report_progress(
             progress_callback, "kb_metadata", 100, 100, "知识库元数据导出完成"
         )
@@ -138,7 +142,12 @@ class AstrBotExporter:
                 f"正在导出知识库 {kb_helper.kb.kb_name} 的文档数据...",
             )
             doc_data = await self._export_kb_documents(kb_helper)
-            self._write_json_entry(zf, f"databases/kb_{kb_id}/documents.json", doc_data)
+            await asyncio.to_thread(
+                self._write_json_entry,
+                zf,
+                f"databases/kb_{kb_id}/documents.json",
+                doc_data,
+            )
             await self._export_kb_vector_index(zf, kb_helper, kb_id)
             await self._export_kb_media_files(zf, kb_helper, kb_id)
             await self._export_kb_source_files(zf, kb_helper, kb_id)
@@ -163,12 +172,14 @@ class AstrBotExporter:
         if os.path.exists(self.config_path):
             with open(self.config_path, encoding="utf-8") as f:
                 config_content = f.read()
-            zf.writestr("config/cmd_config.json", config_content)
+            await asyncio.to_thread(
+                zf.writestr, "config/cmd_config.json", config_content
+            )
             self._add_checksum("config/cmd_config.json", config_content)
         mcp_config_path = Path(get_astrbot_data_path()) / "mcp_server.json"
         if mcp_config_path.is_file():
             mcp_content = mcp_config_path.read_bytes()
-            zf.writestr("config/mcp_server.json", mcp_content)
+            await asyncio.to_thread(zf.writestr, "config/mcp_server.json", mcp_content)
             self._add_checksum("config/mcp_server.json", mcp_content)
         await self._report_progress(
             progress_callback, "config", 100, 100, "配置文件导出完成"
@@ -214,7 +225,11 @@ class AstrBotExporter:
             progress_callback, "manifest", 0, 100, "正在生成清单..."
         )
         manifest = self._generate_manifest(main_data, kb_meta_data, dir_stats)
-        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        await asyncio.to_thread(
+            zf.writestr,
+            "manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+        )
         await self._report_progress(
             progress_callback, "manifest", 100, 100, "清单生成完成"
         )
@@ -304,7 +319,7 @@ class AstrBotExporter:
                         table_name,
                         safe_error("", exc),
                     )
-                    export_data[table_name] = []
+                    raise RuntimeError(f"导出表 {table_name} 失败") from exc
 
         return export_data
 
@@ -374,7 +389,7 @@ class AstrBotExporter:
                 if not index_path.exists():
                     continue
                 archive_path = f"databases/kb_{kb_id}/{filename}"
-                zf.write(str(index_path), archive_path)
+                await asyncio.to_thread(zf.write, str(index_path), archive_path)
                 logger.debug("已导出知识库向量索引: %s", filename)
         except asyncio.CancelledError:
             raise
@@ -396,7 +411,7 @@ class AstrBotExporter:
                     # 计算相对路径
                     rel_path = file_path.relative_to(kb_helper.kb_dir)
                     archive_path = f"files/kb_media/{kb_id}/{rel_path}"
-                    zf.write(str(file_path), archive_path)
+                    await asyncio.to_thread(zf.write, str(file_path), archive_path)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -421,7 +436,7 @@ class AstrBotExporter:
                     if file_path.name.endswith(".replacing.tmp"):
                         continue
                     archive_path = f"files/kb_files/{kb_id}/{rel_path.as_posix()}"
-                    zf.write(str(file_path), archive_path)
+                    await asyncio.to_thread(zf.write, str(file_path), archive_path)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -462,7 +477,9 @@ class AstrBotExporter:
                             # 计算相对路径
                             rel_path = file_path.relative_to(full_path)
                             archive_path = f"directories/{dir_name}/{rel_path}"
-                            zf.write(str(file_path), archive_path)
+                            await asyncio.to_thread(
+                                zf.write, str(file_path), archive_path
+                            )
                             file_count += 1
                             total_size += file_path.stat().st_size
                         except asyncio.CancelledError:
@@ -494,7 +511,7 @@ class AstrBotExporter:
                     attachment_id = attachment.get("attachment_id", "")
                     ext = os.path.splitext(file_path)[1]
                     archive_path = f"files/attachments/{attachment_id}{ext}"
-                    zf.write(file_path, archive_path)
+                    await asyncio.to_thread(zf.write, file_path, archive_path)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

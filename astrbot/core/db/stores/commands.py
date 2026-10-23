@@ -274,7 +274,7 @@ class CommandStoreMixin(DatabaseStoreMixin):
             else:
                 self._apply_updates(
                     record,
-                    config_id=scope_id,
+                    config_id=config_id,
                     command_id=resolved_id or None,
                     plugin_name=plugin_name,
                     handler_full_name=handler_full_name,

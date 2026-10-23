@@ -8,12 +8,13 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { format as formatCss, resolveConfig } from 'prettier';
+import { execFileSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const subsetFont = require('subset-font');
@@ -427,13 +428,7 @@ export async function updateFonts() {
     }
     outputs.set('LICENSE-NotoSansSC.txt', notoLicense);
     outputs.set('LICENSE-MapleMono.txt', mapleLicense);
-    const cssPath = join(FONT_ROOT, 'fonts.css');
-    const cssOptions = await resolveConfig(cssPath);
-    const cssText = await formatCss(buildCss(notoFiles), {
-      ...cssOptions,
-      parser: 'css',
-    });
-    outputs.set('fonts.css', Buffer.from(cssText));
+    outputs.set('fonts.css', Buffer.from(buildCss(notoFiles)));
 
     const outputFiles = new Set(outputs.keys());
     try {
@@ -445,6 +440,21 @@ export async function updateFonts() {
       }
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
+    }
+
+    const prettierBin = join(
+      DASHBOARD_ROOT,
+      '..',
+      'node_modules',
+      'prettier',
+      'bin',
+      'prettier.cjs',
+    );
+    if (existsSync(prettierBin)) {
+      execFileSync(process.execPath, [prettierBin, '--write', join(FONT_ROOT, 'fonts.css')], {
+        cwd: join(DASHBOARD_ROOT, '..'),
+      });
+      outputs.set('fonts.css', await readFile(join(FONT_ROOT, 'fonts.css')));
     }
 
     const generated = [];

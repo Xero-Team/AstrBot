@@ -146,7 +146,7 @@ class ResultDecorateStage(Stage):
         is_stream = result.result_content_type == ResultContentType.STREAMING_FINISH
         async for _ in self._check_content_safety(event, result, is_stream):
             yield
-        if event.is_stopped():
+        if event.is_stopped() and event.get_result() is None:
             return
         if not await self._run_decorating_hooks(event, is_stream):
             return
@@ -181,6 +181,7 @@ class ResultDecorateStage(Stage):
             yield item
 
     async def _run_decorating_hooks(self, event, is_stream: bool) -> bool:
+        was_stopped = event.is_stopped()
         for handler in self.ctx.handlers.get_handlers_by_event_type(
             EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
         ):
@@ -210,13 +211,15 @@ class ResultDecorateStage(Stage):
                 raise
             except Exception:
                 logger.error(traceback.format_exc())
-            if event.is_stopped():
+            now_stopped = event.is_stopped()
+            if now_stopped and not was_stopped:
                 logger.info(
                     "%s - %s 终止了事件传播。",
                     plugin_name,
                     handler.handler_name,
                 )
                 return False
+            was_stopped = now_stopped
         return True
 
     def _apply_prefix(self, result) -> None:

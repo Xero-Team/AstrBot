@@ -2123,3 +2123,22 @@ async def test_gemini_stream_sends_conversation_header_per_request(monkeypatch):
 
     assert responses[-1].completion_text == "ok"
     assert configs[-1][1]["conversation_id"] == "conversation-1"
+
+
+@pytest.mark.asyncio
+async def test_gemini_handle_api_error_tolerates_key_outside_key_list(monkeypatch):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.chosen_api_key = "rotated-elsewhere"
+    provider.provider_config = {}
+    provider.set_key = lambda key: setattr(provider, "chosen_api_key", key)
+
+    monkeypatch.setattr(gemini_source_module.random, "choice", lambda keys: keys[-1])
+    monkeypatch.setattr(gemini_source_module.asyncio, "sleep", AsyncMock())
+
+    should_retry = await provider._handle_api_error(
+        APIError(429, {"message": "API key not valid"}),
+        ["good-key"],
+    )
+
+    assert should_retry is True
+    assert provider.chosen_api_key == "good-key"

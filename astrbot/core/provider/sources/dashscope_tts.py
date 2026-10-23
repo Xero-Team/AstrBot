@@ -23,6 +23,7 @@ from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
 _REQUEST_ERROR = "Dashscope TTS audio generation failed"
+MAX_AUDIO_DOWNLOAD_BYTES = 50 * 1024 * 1024
 
 
 @register_provider_adapter(
@@ -142,7 +143,19 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response,
             ):
-                return await response.read()
+                response.raise_for_status()
+                content_type = response.headers.get("Content-Type", "")
+                if "audio" not in content_type.lower():
+                    logger.warning(
+                        "[Dashscope TTS] Audio download returned unexpected content type: %s",
+                        content_type,
+                    )
+                    return None
+                data = await response.content.read(MAX_AUDIO_DOWNLOAD_BYTES + 1)
+                if len(data) > MAX_AUDIO_DOWNLOAD_BYTES:
+                    logger.warning("[Dashscope TTS] Audio download exceeded size limit")
+                    return None
+                return data
         except asyncio.CancelledError:
             raise
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:

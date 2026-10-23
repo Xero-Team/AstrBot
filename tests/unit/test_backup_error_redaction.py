@@ -257,11 +257,7 @@ async def test_importer_database_clear_failure_hides_internal_cause(
     with zipfile.ZipFile(backup_path, "w") as archive:
         archive.writestr("manifest.json", f'{{"astrbot_version": "{VERSION}"}}')
         archive.writestr("databases/main_db.json", "{}")
-    session = MagicMock()
-    session.begin.return_value = _AsyncContext(None)
-    main_db = MagicMock()
-    main_db.get_db.return_value = _AsyncContext(session)
-    importer = AstrBotImporter(main_db=main_db)
+    importer = AstrBotImporter(main_db=MagicMock())
     importer._clear_main_db = AsyncMock(
         side_effect=DatabaseClearError(_SENSITIVE_ERROR)
     )

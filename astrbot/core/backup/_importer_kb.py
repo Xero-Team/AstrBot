@@ -97,9 +97,7 @@ async def import_kb_metadata_tables(
                             for key, value in normalized_row.items()
                             if key in allowed
                         }
-                        async with session.begin_nested():
-                            session.add(model_class(**normalized_row))
-                            await session.flush()
+                        session.add(model_class(**normalized_row))
                         count += 1
                     except asyncio.CancelledError:
                         raise

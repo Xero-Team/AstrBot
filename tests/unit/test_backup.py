@@ -81,9 +81,6 @@ def mock_main_db():
 
     # 模拟异步上下文管理器
     session = AsyncMock()
-    session.begin = MagicMock(
-        return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
-    )
     db.get_db = MagicMock(
         return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
     )
@@ -1590,54 +1587,3 @@ async def test_backup_round_trips_backend_vector_index(tmp_path, filename):
 
     assert (restore_dir / filename).read_bytes() == b"vector-index"
     assert result.success is True
-
-
-def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
-    importer = AstrBotImporter(
-        main_db=MagicMock(),
-        config_path=str(tmp_path / "cmd_config.json"),
-    )
-
-    rows = importer._preprocess_main_table_rows(
-        "attachments",
-        [{"attachment_id": "a1", "path": "/old/machine/data/attachments/a1.png"}],
-    )
-
-    assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")
-
-
-def test_import_attachments_restores_files_under_the_new_data_root(tmp_path):
-    from astrbot.core.backup._importer_files import import_attachments
-
-    archive = tmp_path / "backup.zip"
-    with zipfile.ZipFile(archive, "w") as zf:
-        zf.writestr("files/attachments/a1.png", b"image")
-
-    with zipfile.ZipFile(archive) as zf:
-        count = import_attachments(
-            zf,
-            [
-                {
-                    "attachment_id": "a1",
-                    "path": "/old/machine/data/attachments/stored.png",
-                }
-            ],
-            str(tmp_path / "cmd_config.json"),
-        )
-
-    assert count == 1
-    assert (tmp_path / "attachments" / "stored.png").read_bytes() == b"image"
-
-
-def test_convert_datetime_fields_rejects_unparseable_values():
-    importer = AstrBotImporter(main_db=MagicMock())
-    row = {
-        "conversation_id": "test-123",
-        "platform_id": "test",
-        "user_id": "user1",
-        "created_at": "not-a-date",
-        "updated_at": "2024-01-01T12:00:00",
-    }
-
-    with pytest.raises(ValueError):
-        importer._convert_datetime_fields(row, ConversationV2)

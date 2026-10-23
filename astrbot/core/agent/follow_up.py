@@ -173,6 +173,12 @@ class FollowUpCoordinator:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._monitor_tasks.clear()
         self._active_runners.clear()
+        for state in list(self._order_states.values()):
+            condition = state["condition"]
+            assert isinstance(condition, asyncio.Condition)
+            async with condition:
+                state["closed"] = True
+                condition.notify_all()
         self._order_states.clear()
 
     @staticmethod
@@ -250,7 +256,7 @@ class FollowUpCoordinator:
             assert isinstance(statuses, dict)
             if sequence in statuses:
                 statuses[sequence] = "active"
-            while state["next_turn"] != sequence:
+            while state["next_turn"] != sequence and not state.get("closed"):
                 await condition.wait()
 
     async def _finish(self, key: str | tuple[str, str], sequence: int) -> None:

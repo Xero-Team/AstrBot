@@ -334,6 +334,32 @@ class CronJobManager:
         ignore_enabled: bool = False,
         delete_run_once: bool = True,
     ) -> None:
+        running = getattr(self, "_running_job_ids", None)
+        if running is None:
+            running = set()
+            self._running_job_ids = running
+        if job_id in running:
+            logger.warning(
+                "Cron job %s is already running; skipping duplicate run", job_id
+            )
+            return
+        running.add(job_id)
+        try:
+            await self._run_job_once(
+                job_id,
+                ignore_enabled=ignore_enabled,
+                delete_run_once=delete_run_once,
+            )
+        finally:
+            running.discard(job_id)
+
+    async def _run_job_once(
+        self,
+        job_id: str,
+        *,
+        ignore_enabled: bool,
+        delete_run_once: bool,
+    ) -> None:
         job = await self.db.get_cron_job(job_id)
         if not job or (not job.enabled and not ignore_enabled):
             return

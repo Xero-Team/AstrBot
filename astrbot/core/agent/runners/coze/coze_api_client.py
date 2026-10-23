@@ -1,4 +1,5 @@
 import asyncio
+import codecs
 import io
 import json
 from collections.abc import AsyncGenerator
@@ -196,10 +197,11 @@ class CozeAPIClient:
                 buffer = ""
                 event_type = None
                 event_data = None
+                decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
                 async for chunk in response.content:
                     if chunk:
-                        buffer += chunk.decode("utf-8", errors="ignore")
+                        buffer += decoder.decode(chunk)
                         lines = buffer.split("\n")
                         buffer = lines[-1]
 
@@ -220,6 +222,19 @@ class CozeAPIClient:
                                         event_data = json.loads(data_str)
                                     except json.JSONDecodeError:
                                         event_data = {"content": data_str}
+
+                tail = decoder.decode(b"", final=True)
+                if tail:
+                    buffer += tail
+                if buffer.strip().startswith("data:"):
+                    data_str = buffer.strip()[5:].strip()
+                    if data_str and data_str != "[DONE]":
+                        try:
+                            event_data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            event_data = {"content": data_str}
+                if event_type and event_data:
+                    yield {"event": event_type, "data": event_data}
 
         except TimeoutError:
             raise Exception(f"Coze API 流式请求超时 ({timeout_seconds}秒)")

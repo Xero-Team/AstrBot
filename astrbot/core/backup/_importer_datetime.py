@@ -4,6 +4,8 @@ from typing import Any
 from sqlalchemy import DateTime
 from sqlalchemy import inspect as sa_inspect
 
+from astrbot import logger
+
 
 def convert_datetime_fields(
     row: dict[str, Any],
@@ -31,6 +33,13 @@ def convert_datetime_fields(
         if value is None or not isinstance(value, str):
             continue
         if isinstance(column.type, DateTime):
-            converted[column.name] = datetime.fromisoformat(value)
+            try:
+                converted[column.name] = datetime.fromisoformat(value)
+            except TypeError, ValueError:
+                logger.warning(
+                    "保留无法解析的日期字段 %s.%s",
+                    getattr(model_class, "__name__", model_class),
+                    column.name,
+                )
 
     return converted

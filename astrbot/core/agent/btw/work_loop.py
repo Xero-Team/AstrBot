@@ -260,9 +260,10 @@ class WorkLoop:
                     session_id,
                     WorkSessionStatus.RUNNING,
                 )
-                async for progress in self.executor.process(event):
-                    produced = True
-                    yield progress
+                async with aclosing(self.executor.process(event)) as progress_iter:
+                    async for progress in progress_iter:
+                        produced = True
+                        yield progress
         except asyncio.CancelledError:
             await self.sessions.update_status(
                 session_id,

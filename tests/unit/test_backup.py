@@ -1604,3 +1604,19 @@ def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
     )
 
     assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")
+
+
+def test_convert_datetime_fields_keeps_unparseable_values():
+    importer = AstrBotImporter(main_db=MagicMock())
+    row = {
+        "conversation_id": "test-123",
+        "platform_id": "test",
+        "user_id": "user1",
+        "created_at": "not-a-date",
+        "updated_at": "2024-01-01T12:00:00",
+    }
+
+    result = importer._convert_datetime_fields(row, ConversationV2)
+
+    assert result["created_at"] == "not-a-date"
+    assert isinstance(result["updated_at"], datetime)

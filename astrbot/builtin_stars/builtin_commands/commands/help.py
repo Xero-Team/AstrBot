@@ -1,4 +1,5 @@
 from html import escape
+from typing import Any, cast
 
 import aiohttp
 
@@ -233,7 +234,7 @@ class HelpCommand:
             try:
                 publish_owned = getattr(self.context.files, "publish_owned", None)
                 if callable(publish_owned):
-                    token = await publish_owned(rendered_image, event)
+                    token = await cast(Any, publish_owned)(rendered_image, event)
                 else:
                     token = await self.context.files.publish(rendered_image)
                 image_url = f"{callback_base}/api/v1/files/tokens/{token}"

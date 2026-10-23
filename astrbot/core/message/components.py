@@ -473,7 +473,7 @@ class Video(DeferredMediaSourceComponent):
     async def to_dict(self) -> dict:
         """Serialize the video after resolving its public file reference."""
         await self._resolve_deferred_source()
-        url_or_path = self.file or self.url or self.path
+        url_or_path = self.file or self.url or self.path or ""
         if url_or_path.startswith("http"):
             payload_file = url_or_path
         elif self._callback_api_base and self._file_token_service:

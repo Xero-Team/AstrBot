@@ -1021,3 +1021,34 @@ def test_wecom_kf_first_pull_without_event_time_keeps_every_message():
 
     assert [item["msgid"] for item in items] == ["first", "last"]
     assert adapter._wechat_kf_cursors["kfid"] == "c1"
+
+
+def test_wecom_event_since_bounds_missing_or_invalid_create_time(monkeypatch):
+    monkeypatch.setattr(wecom_adapter.time, "time", lambda: 1000)
+
+    assert wecom_adapter._wecom_event_since({"CreateTime": 500}) == 440
+    assert wecom_adapter._wecom_event_since({}) == 400
+    assert wecom_adapter._wecom_event_since({"CreateTime": "bad"}) == 400
+
+
+def test_wecom_kf_sync_failure_does_not_advance_cursor():
+    adapter = _adapter()
+    calls: list[str] = []
+
+    def sync_msg(token, kfid, cursor=""):
+        calls.append(cursor)
+        if not cursor:
+            return {
+                "has_more": 1,
+                "next_cursor": "cursor-1",
+                "msg_list": [{"msgid": "a"}],
+            }
+        raise RuntimeError("network")
+
+    adapter.wechat_kf_api = SimpleNamespace(sync_msg=sync_msg)
+
+    with pytest.raises(RuntimeError, match="network"):
+        adapter._latest_wechat_kf_messages("token", "kf")
+
+    assert calls == ["", "cursor-1"]
+    assert adapter._wechat_kf_cursors == {}

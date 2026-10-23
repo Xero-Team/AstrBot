@@ -451,10 +451,12 @@ export async function updateFonts() {
       'prettier.cjs',
     );
     if (existsSync(prettierBin)) {
-      execFileSync(process.execPath, [prettierBin, '--write', join(FONT_ROOT, 'fonts.css')], {
+      const cssPath = join(FONT_ROOT, 'fonts.css');
+      await writeAtomic(cssPath, outputs.get('fonts.css'));
+      execFileSync(process.execPath, [prettierBin, '--write', cssPath], {
         cwd: join(DASHBOARD_ROOT, '..'),
       });
-      outputs.set('fonts.css', await readFile(join(FONT_ROOT, 'fonts.css')));
+      outputs.set('fonts.css', await readFile(cssPath));
     }
 
     const generated = [];

@@ -275,6 +275,31 @@ def _managed_block(base_url: str, model: str, env_key: str) -> str:
     return "\n".join(lines)
 
 
+def _split_managed_block(block: str) -> tuple[str, str]:
+    """Split the managed block into top-level keys and the provider table."""
+    marker = f"[model_providers.{CODEX_PROVIDER_ID}]"
+    head, separator, tail = block.partition(marker)
+    if not separator:
+        return block, ""
+    return head.rstrip(), marker + tail
+
+
+def _strip_top_level_keys(text: str, keys: set[str]) -> str:
+    """Remove conflicting top-level keys before the first TOML table."""
+    lines: list[str] = []
+    in_table = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_table = True
+        if not in_table:
+            match = re.match(r"^\s*([A-Za-z0-9_-]+)\s*=", line)
+            if match and match.group(1) in keys:
+                continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _managed_bounds(text: str) -> tuple[int, int] | None:
     """Return where AstrBot's section starts and ends past the end marker."""
     start = text.find(CODEX_MANAGED_BEGIN)
@@ -434,8 +459,13 @@ def apply_provider(cli: str, provider: Mapping) -> ManagedFile:
     env_key = credential_env_name(provider_id)
     _back_up_once(path)
     block = _managed_block(base_url, model, env_key if api_key else "")
-    rest = _strip_managed_block(existing)
-    _atomic_write(path, f"{block}\n" + (f"\n{rest}" if rest else ""), private=False)
+    top_level, table = _split_managed_block(block)
+    rest = _strip_top_level_keys(
+        _strip_managed_block(existing),
+        {"model", "model_provider"},
+    )
+    parts = [part.strip("\n") for part in (top_level, rest, table) if part.strip()]
+    _atomic_write(path, "\n\n".join(parts) + "\n", private=False)
 
     _apply_codex_credential(env_key, api_key)
     return read_state(cli)

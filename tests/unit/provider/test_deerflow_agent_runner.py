@@ -106,3 +106,69 @@ async def test_build_payload_resolved_supports_local_image_path(tmp_path, monkey
     assert content[0] == {"type": "text", "text": "look"}
     assert content[1]["type"] == "image_url"
     assert content[1]["image_url"]["url"] == f"data:image/png;base64,{image_base64}"
+
+
+def test_values_baseline_ignores_reused_thread_history():
+    runner = DeerFlowAgentRunner()
+    state = runner._StreamState()
+
+    runner._handle_values_event(
+        {
+            "messages": [
+                {"id": "u1", "role": "user", "content": "old question"},
+                {"id": "a1", "role": "assistant", "content": "old answer"},
+                {"id": "u2", "role": "user", "content": "new question"},
+            ],
+        },
+        state,
+    )
+
+    assert [message["id"] for message in state.run_values_messages] == ["u2"]
+    assert state.latest_text == ""
+    assert state.clarification_text == ""
+
+
+def test_values_baseline_keeps_current_turn_messages():
+    runner = DeerFlowAgentRunner()
+    runner.streaming = False
+    state = runner._StreamState()
+
+    runner._handle_values_event(
+        {
+            "messages": [
+                {"id": "u1", "role": "user", "content": "old question"},
+                {"id": "a1", "role": "assistant", "content": "old answer"},
+                {"id": "u2", "role": "user", "content": "new question"},
+            ],
+        },
+        state,
+    )
+    runner._handle_values_event(
+        {
+            "messages": [
+                {"id": "u1", "role": "user", "content": "old question"},
+                {"id": "a1", "role": "assistant", "content": "old answer"},
+                {"id": "u2", "role": "user", "content": "new question"},
+                {"id": "a2", "role": "assistant", "content": "new answer"},
+            ],
+        },
+        state,
+    )
+
+    assert state.latest_text == "new answer"
+
+
+def test_delta_stream_updates_full_text_baseline():
+    runner = DeerFlowAgentRunner()
+    runner.streaming = True
+    state = runner._StreamState()
+
+    runner._update_text_and_maybe_stream(state=state, delta_text="hello")
+    responses = runner._update_text_and_maybe_stream(
+        state=state,
+        new_full_text="hello world",
+    )
+
+    assert state.prev_text_for_streaming == "hello world"
+    assert len(responses) == 1
+    assert responses[0].data["chain"].chain[0].text == " world"

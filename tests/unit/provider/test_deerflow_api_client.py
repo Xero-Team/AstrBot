@@ -48,3 +48,31 @@ async def test_delete_thread_raises_api_error_with_thread_context():
     assert exc_info.value.thread_id == "thread-123"
     assert "/api/threads/thread-123" in str(exc_info.value)
     assert "thread cleanup failed" in str(exc_info.value)
+
+
+class _ChunkedContent:
+    def __init__(self, chunks: list[bytes]):
+        self._chunks = chunks
+
+    async def iter_chunked(self, size: int):
+        _ = size
+        for chunk in self._chunks:
+            yield chunk
+
+
+class _StreamResponse:
+    def __init__(self, chunks: list[bytes]):
+        self.content = _ChunkedContent(chunks)
+
+
+@pytest.mark.asyncio
+async def test_stream_sse_normalizes_crlf_split_across_chunks():
+    from astrbot.core.agent.runners.deerflow.deerflow_api_client import _stream_sse
+
+    response = _StreamResponse(
+        [b"event: values\r", b'\ndata: {"a": 1}\n\n'],
+    )
+
+    events = [event async for event in _stream_sse(response)]
+
+    assert events == [{"event": "values", "data": {"a": 1}}]

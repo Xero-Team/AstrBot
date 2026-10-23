@@ -127,9 +127,11 @@ def test_codex_keeps_the_users_comments_and_keys(homes):
     state = cg.apply_provider("codex", PROVIDER)
 
     text = path.read_text(encoding="utf-8")
-    # The user's file survives, byte for byte, with AstrBot's section above it.
+    # The user's comments and unrelated tables survive; the selected provider's
+    # model replaces the user's top-level model without creating duplicate keys.
     assert "# my own settings" in text
-    assert 'model = "gpt-5"' in text
+    assert 'model = "gpt-5"' not in text
+    assert 'model = "opus"' in text
     assert "[mcp_servers.mine]" in text
     assert text.index(cg.CODEX_MANAGED_BEGIN) < text.index("# my own settings")
     assert cg.CODEX_MANAGED_BEGIN in text and cg.CODEX_MANAGED_END in text
@@ -279,3 +281,26 @@ def test_a_missing_file_reports_absent_rather_than_raising(homes):
     assert state.exists is False
     assert state.managed is False
     assert state.has_credential is False
+
+
+def test_codex_managed_block_keeps_user_toml_parseable(homes):
+    import tomllib
+
+    path = cg.target_path("codex")
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        'model = "gpt-5"\nmodel_provider = "openai"\n\n'
+        '[mcp_servers.mine]\ncommand = "npx"\n',
+        encoding="utf-8",
+    )
+
+    cg.apply_provider("codex", PROVIDER)
+
+    text = path.read_text(encoding="utf-8")
+    parsed = tomllib.loads(text)
+    assert parsed["model_provider"] == cg.CODEX_PROVIDER_ID
+    assert parsed["model_providers"][cg.CODEX_PROVIDER_ID]["base_url"] == (
+        "https://gw.example"
+    )
+    assert parsed["mcp_servers"]["mine"]["command"] == "npx"
+    assert text.count("model_provider =") == 1

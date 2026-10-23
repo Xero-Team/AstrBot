@@ -74,8 +74,6 @@ class UnixSandboxProcess:
         Args:
             signal: Unix signal number to send.
         """
-        if self._process.returncode is not None:
-            return
         try:
             os.killpg(self.pid, signal)
         except ProcessLookupError, PermissionError:

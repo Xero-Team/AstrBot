@@ -333,13 +333,13 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         elif isinstance(output, list):
             # 主要适配 Dify 的 HTTP 请求结点的多模态输出
             for item in output:
-                # handle Array[File]
                 if (
-                    not isinstance(item, dict)
-                    or item.get("dify_model_identity", "") != "__dify__file__"
+                    isinstance(item, dict)
+                    and item.get("dify_model_identity", "") == "__dify__file__"
                 ):
-                    chains.append(Comp.Plain(str(output)))
-                    break
+                    chains.append(await parse_file(item))
+                else:
+                    chains.append(Comp.Plain(str(item)))
         else:
             chains.append(Comp.Plain(str(output)))
 

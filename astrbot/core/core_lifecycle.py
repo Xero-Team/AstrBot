@@ -754,10 +754,8 @@ class AstrBotCoreLifecycle:
             if not self._cleanup_stack_closed:
                 for scheduler in self.pipeline_scheduler_mapping.values():
                     self._register_cleanup("pipeline work tasks", scheduler.close)
-                try:
-                    await self._cleanup_stack.aclose()
-                finally:
-                    self._cleanup_stack_closed = True
+                await self._cleanup_stack.aclose()
+                self._cleanup_stack_closed = True
 
             from astrbot.core.utils.trace_store import close_trace_store
 

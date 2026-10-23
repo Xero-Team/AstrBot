@@ -191,8 +191,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
                 raise click.ClickException(str(exc)) from exc
             namelist = z.namelist()
             root_dir = Path(namelist[0]).parts[0] if namelist else ""
-            if target_path.exists():
-                shutil.rmtree(target_path)
+            _cleanup_local_plugin_target(target_path)
             shutil.move(temp_dir / root_dir, target_path)
     finally:
         if temp_dir.exists():

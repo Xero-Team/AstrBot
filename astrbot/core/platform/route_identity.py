@@ -10,6 +10,9 @@ class PlatformRouteIdentity:
     platform_id: str
     message_type: MessageType
     target_id: str
+    origin: str = ""
 
     def as_origin(self) -> str:
+        if self.origin:
+            return self.origin
         return f"{self.platform_id}:{self.message_type.value}:{self.target_id}"

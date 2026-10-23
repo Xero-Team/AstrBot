@@ -187,6 +187,7 @@ class AstrMessageEvent(abc.ABC):
                 message_type=message_type,
                 session_id=session_id,
             ),
+            origin=str(self.session),
         )
         # self.unified_msg_origin = str(self.session)
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
@@ -725,6 +726,9 @@ class AstrMessageEvent(abc.ABC):
                                 await sleep(component_delay)
                             text_buffer = text_buffer[match.end() :]
                 else:
+                    if text_buffer.strip():
+                        await send_text(text_buffer.strip())
+                        text_buffer = ""
                     attempts.append(
                         await self._send_streaming_fragment(
                             MessageChain(chain=[component]),

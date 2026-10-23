@@ -328,3 +328,45 @@ async def test_anthropic_stream_keeps_tool_call_with_empty_input(
         assert response.tools_call_name == ["get_time"]
         assert response.tools_call_args == [expected_args]
         assert response.tools_call_ids == ["toolu_01"]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_query_accumulates_text_blocks_and_honors_max_tokens():
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+            "max_tokens": 1234,
+        },
+        provider_settings={},
+    )
+    captured: dict[str, object] = {}
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return Message(
+                id="msg_1",
+                content=[
+                    TextBlock(text="first", type="text"),
+                    TextBlock(text=" second", type="text"),
+                ],
+                model="claude-test",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=1, output_tokens=1),
+            )
+
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    response = await provider._query(
+        {"model": "claude-test", "messages": []},
+        None,
+    )
+
+    assert response.completion_text == "first second"
+    assert captured["max_tokens"] == 1234

@@ -36,5 +36,15 @@ def thaw_catalog_value(value: Any) -> Any:
     if isinstance(value, tuple):
         return [thaw_catalog_value(item) for item in value]
     if isinstance(value, frozenset):
-        return {thaw_catalog_value(item) for item in value}
+        return {_thaw_hashable(item) for item in value}
+    return copy.deepcopy(value)
+
+
+def _thaw_hashable(value: Any) -> Any:
+    if isinstance(value, tuple):
+        return tuple(_thaw_hashable(item) for item in value)
+    if isinstance(value, frozenset):
+        return frozenset(_thaw_hashable(item) for item in value)
+    if isinstance(value, (list, dict, set)):
+        return tuple(sorted(map(str, value)))
     return copy.deepcopy(value)

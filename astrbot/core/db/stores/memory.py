@@ -63,6 +63,8 @@ class MemoryStoreMixin(DatabaseStoreMixin):
                             evidence.append(message_id)
                     fact.evidence_message_ids = evidence
                     fact.confidence = max(float(fact.confidence), confidence)
+                    fact.status = status
+                    fact.scope_id = scope_id
                     fact.updated_at = datetime.now(UTC)
                 await session.flush()
                 await session.refresh(fact)

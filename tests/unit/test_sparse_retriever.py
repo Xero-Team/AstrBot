@@ -240,3 +240,19 @@ async def test_bm25_fallback_invalidate_rebuilds_only_that_kb():
 
     assert storage_a.get_documents_calls == 2
     assert storage_b.get_documents_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_sparse_retriever_returns_empty_for_stopword_only_query(monkeypatch):
+    from astrbot.core.knowledge_base.retrieval.sparse_retriever import (
+        SparseRetriever,
+    )
+
+    retriever = SparseRetriever.__new__(SparseRetriever)
+    retriever.hit_stopwords = {"the"}
+    monkeypatch.setattr(
+        "astrbot.core.knowledge_base.retrieval.sparse_retriever.tokenize_text",
+        lambda *_args, **_kwargs: [],
+    )
+
+    assert await retriever._retrieve_with_bm25("the", ["kb"], {}) == []

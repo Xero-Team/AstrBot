@@ -31,12 +31,18 @@ class MemoryWritebackWorker:
 
     async def stop(self) -> None:
         self._stopping.set()
-        if self._task:
+        if not self._task:
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(self._task), timeout=30)
+        except TimeoutError:
             self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+        except asyncio.CancelledError:
+            self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
 
     async def enqueue(self, item: MemoryWritebackItem) -> bool:
         try:
@@ -50,8 +56,16 @@ class MemoryWritebackWorker:
             return False
 
     async def run(self) -> None:
-        while not self._stopping.is_set():
-            item = await self.queue.get()
+        while True:
+            if self._stopping.is_set() and self.queue.empty():
+                break
+            try:
+                item = await asyncio.wait_for(
+                    self.queue.get(),
+                    timeout=0.5 if self._stopping.is_set() else None,
+                )
+            except TimeoutError:
+                continue
             try:
                 await self.process(item)
             except Exception as exc:  # noqa: BLE001

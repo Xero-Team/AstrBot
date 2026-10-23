@@ -183,7 +183,7 @@ class WecomServer:
 def _wecom_message_send_time(item: dict) -> int:
     try:
         return int(item.get("send_time", 0))
-    except TypeError, ValueError:
+    except OverflowError, TypeError, ValueError:
         return 0
 
 
@@ -250,7 +250,7 @@ class WecomPlatformAdapter(Platform):
                     return
                 try:
                     since = int(msg._data.get("CreateTime", 0)) - 60
-                except TypeError, ValueError:
+                except OverflowError, TypeError, ValueError:
                     # A callback token is valid for ten minutes; bound replay
                     # even if the event omitted CreateTime.
                     since = int(time.time()) - 600

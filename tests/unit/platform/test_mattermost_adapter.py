@@ -500,8 +500,9 @@ async def test_mattermost_event_send_streaming_fallback_flushes_sentences_and_me
     assert result is None
     assert event.send.await_args_list == [
         call(MessageChain([Comp.Plain("第一句。")])),
+        call(MessageChain([Comp.Plain("第二句")])),
         call(MessageChain(chain=[Comp.Image(file="/tmp/image.png")])),
-        call(MessageChain([Comp.Plain("第二句第三句！")])),
+        call(MessageChain([Comp.Plain("第三句！")])),
     ]
     parent_send_streaming.assert_awaited_once()
 

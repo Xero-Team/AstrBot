@@ -196,7 +196,7 @@ export function renderLegend({ entries, layout, renderSwatch, locale }) {
   const measured = measureLegend(entries, layout);
   if (!measured) return '';
   const hasInteractiveEntries = measured.entries.some((entry) => entry.interactive);
-  const renderedFontSize = measured.fontSize < 8 ? measured.fontSize + 0.5 : measured.fontSize + 2;
+  const renderedFontSize = measured.fontSize;
   const rootAttributes = hasInteractiveEntries ? ' data-legend="" data-legend-bridge=""' : ' data-legend=""';
   const parts = [
     `        <g${rootAttributes}>`,
@@ -209,7 +209,7 @@ export function renderLegend({ entries, layout, renderSwatch, locale }) {
       : '';
     parts.push(`          <g data-legend-semantic-kind="${esc(entry.kind)}"${interactive} data-legend-x="${entry.x}" data-legend-baseline="${entry.baseline}" data-legend-width="${entry.width}">`);
     parts.push(`            ${renderSwatch(entry)}`);
-    parts.push(`            <text x="${entry.x + (entry.swatchWidth ?? 14) + (entry.swatchGap ?? DEFAULT_SWATCH_GAP)}" y="${entry.baseline}" class="t-muted" font-size="${renderedFontSize}" font-weight="500">${esc(entry.label)}</text>`);
+    parts.push(`            <text x="${entry.x + (entry.swatchWidth ?? 14) + (entry.swatchGap ?? layout.swatchGap ?? DEFAULT_SWATCH_GAP)}" y="${entry.baseline}" class="t-muted" font-size="${renderedFontSize}" font-weight="500">${esc(entry.label)}</text>`);
     parts.push('          </g>');
   }
   parts.push('        </g>');

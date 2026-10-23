@@ -313,10 +313,15 @@ function compareCommitError(message, code, details = {}) {
 }
 
 function commitComparePair({ htmlCandidate, receiptCandidate, outputPath, receiptPath, stagingDirectory }) {
+  const backupRoot = path.join(
+    path.dirname(stagingDirectory),
+    `.archify-previous-${process.pid}-${Date.now()}`,
+  );
   const targets = [
-    { label: 'HTML artifact', target: outputPath, candidate: htmlCandidate, backup: path.join(stagingDirectory, '.previous-output') },
-    { label: 'receipt', target: receiptPath, candidate: receiptCandidate, backup: path.join(stagingDirectory, '.previous-receipt') },
+    { label: 'HTML artifact', target: outputPath, candidate: htmlCandidate, backup: path.join(backupRoot, '.previous-output') },
+    { label: 'receipt', target: receiptPath, candidate: receiptCandidate, backup: path.join(backupRoot, '.previous-receipt') },
   ];
+  fs.mkdirSync(backupRoot, { recursive: true });
 
   // Preflight the whole pair before moving either trusted target. This avoids
   // replacing the HTML and only then discovering that its receipt destination
@@ -378,6 +383,7 @@ function commitComparePair({ htmlCandidate, receiptCandidate, outputPath, receip
       },
     );
   }
+  fs.rmSync(backupRoot, { recursive: true, force: true });
 }
 
 function renderValidatedArchitecture(inputPath, outputPath, quality, repoRoot) {

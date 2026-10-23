@@ -349,6 +349,7 @@ export class ChromeVisualBrowser {
     const url = new URL(pathToFileURL(artifactPath).href);
     url.searchParams.set('theme', theme);
     const loaded = this.cdp.waitFor('Page.loadEventFired', sessionId);
+    loaded.catch(() => {});
     const navigation = await this.cdp.send('Page.navigate', { url: url.href }, sessionId);
     if (navigation.errorText) throw new Error(`Chrome navigation failed: ${navigation.errorText}`);
     await loaded;

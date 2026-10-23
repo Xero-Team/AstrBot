@@ -10,6 +10,7 @@ them to Trace and the work-session progress record.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -839,16 +840,19 @@ class CodingRunObserver:
             return True
         return event.type == "tool_call"
 
+    def _persist_event(self, payload: dict) -> None:
+        self._events_file.write(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+        )
+        self._events_file.flush()
+
     async def record(self, event: CodingAgentEvent) -> None:
         """Persist one event and forward it to the live consumers."""
         self._sequence += 1
         payload = sanitize_log_payload(event.as_dict())
         payload["seq"] = self._sequence
         try:
-            self._events_file.write(
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
-            )
-            self._events_file.flush()
+            await asyncio.to_thread(self._persist_event, payload)
         except OSError as exc:
             logger.debug("Could not write coding run event: %s", safe_error("", exc))
 
@@ -858,7 +862,7 @@ class CodingRunObserver:
         if event.type == "usage":
             self.usage.update(event.usage)
         self.latest_action = event.summary or event.type
-        self._write_summary()
+        await asyncio.to_thread(self._write_summary)
 
         self._trace(
             "coding_agent_event",

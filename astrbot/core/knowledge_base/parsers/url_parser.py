@@ -109,6 +109,9 @@ class URLExtractor:
 
 
 # 为了向后兼容，提供一个简单的函数接口
+_EXTRACTOR_CACHE: dict[tuple[str, ...], URLExtractor] = {}
+
+
 async def extract_text_from_url(
     url: str,
     tavily_keys: list[str],
@@ -125,7 +128,11 @@ async def extract_text_from_url(
     Returns:
         提取的文本内容
     """
-    extractor = URLExtractor(tavily_keys)
+    cache_key = tuple(tavily_keys)
+    extractor = _EXTRACTOR_CACHE.get(cache_key)
+    if extractor is None:
+        extractor = URLExtractor(tavily_keys)
+        _EXTRACTOR_CACHE[cache_key] = extractor
     return await extractor.extract_text_from_url(
         url,
         max_response_bytes=max_response_bytes,

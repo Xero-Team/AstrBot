@@ -109,10 +109,13 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any]]:
                 "flushing oversized block to prevent unbounded memory growth.",
                 SSE_MAX_BUFFER_CHARS,
             )
-            parsed = _parse_sse_block(buffer)
-            if parsed is not None:
-                yield parsed
             buffer = ""
+            raise DeerFlowAPIError(
+                operation="SSE stream",
+                status=0,
+                body="buffer exceeded its limit before a delimiter",
+                url="",
+            )
 
     # flush any remaining buffered text
     buffer += _normalize_sse_newlines(pending_cr + decoder.decode(b"", final=True))

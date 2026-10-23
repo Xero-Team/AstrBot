@@ -432,3 +432,30 @@ class TestContextTruncator:
         # 多 user 场景下截断后仍有 user
         roles = [m.role for m in result_before]
         assert "user" in roles
+
+
+def test_truncate_by_turns_uses_user_boundaries_with_tool_calls():
+    from astrbot.core.agent.message import ToolCall
+
+    truncator = ContextTruncator()
+    messages = [
+        Message(role="user", content="first"),
+        Message(
+            role="assistant",
+            content="",
+            tool_calls=[
+                ToolCall(
+                    id="c1",
+                    function=ToolCall.FunctionBody(name="lookup", arguments="{}"),
+                )
+            ],
+        ),
+        Message(role="tool", content="result", tool_call_id="c1"),
+        Message(role="assistant", content="first answer"),
+        Message(role="user", content="second"),
+        Message(role="assistant", content="second answer"),
+    ]
+
+    result = truncator.truncate_by_turns(messages, keep_most_recent_turns=1)
+
+    assert [message.content for message in result] == ["second", "second answer"]

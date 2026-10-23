@@ -177,6 +177,29 @@ def _decode_bytes_with_fallback(
     return output.decode("utf-8", errors="replace")
 
 
+def _trim_incomplete_utf8(data: bytes) -> bytes:
+    """Drop a trailing incomplete UTF-8 sequence so the next poll can finish it."""
+    if not data:
+        return data
+    for offset in range(1, min(4, len(data)) + 1):
+        byte = data[-offset]
+        if byte & 0x80 == 0:
+            return data
+        if byte & 0xC0 == 0xC0:
+            if byte >> 5 == 0x6:
+                needed = 2
+            elif byte >> 4 == 0xE:
+                needed = 3
+            elif byte >> 3 == 0x1E:
+                needed = 4
+            else:
+                return data
+            if offset < needed:
+                return data[:-offset]
+            return data
+    return data
+
+
 def _decode_shell_output(output: bytes | str | None) -> str:
     # Normalize CRLF so tool text output is identical across platforms.
     return _decode_bytes_with_fallback(output, preferred_encoding="utf-8").replace(
@@ -540,7 +563,8 @@ class LocalShellComponent(ShellComponent):
                         return b"", read_cursor, read_cursor
                     start = min(read_cursor, size)
                     session.output_file.seek(start)
-                    data = session.output_file.read(max_output_chars)
+                    data = session.output_file.read(max(1, max_output_chars))
+                data = _trim_incomplete_utf8(data)
                 return data, start + len(data), size
 
             return await asyncio.to_thread(_read)

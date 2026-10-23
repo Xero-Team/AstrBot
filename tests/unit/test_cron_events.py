@@ -71,3 +71,10 @@ async def test_none_message_does_not_send(cron_event):
 
     assert event._has_send_oper is False
     send.assert_not_awaited()
+
+
+def test_cron_event_uses_sender_identity_for_the_sender(cron_event):
+    event, _send = cron_event
+
+    assert event.get_self_id() == ""
+    assert event.get_sender_id() == "astrbot"

@@ -76,7 +76,7 @@ class ContextManager:
             return result
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
-            return messages
+            return result
 
     async def _run_compression(
         self, messages: list[Message], prev_tokens: int

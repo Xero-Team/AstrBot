@@ -49,7 +49,7 @@ _FALLBACK_LOCALE = "zh-CN"
 
 
 def resolve_event_locale(event) -> str:
-    """Return the locale for an event (extra first, then the stored session)."""
+    """Return the locale from the event extras, or the zh-CN fallback."""
     getter = getattr(event, "get_extra", None)
     if callable(getter):
         try:

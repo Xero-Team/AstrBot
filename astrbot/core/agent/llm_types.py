@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -19,6 +20,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.conversation_models import Conversation
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import MediaResolver
 
 
@@ -181,10 +183,16 @@ class ProviderRequest:
 
         if self.image_urls:
             for image_url in self.image_urls:
-                image_data = await MediaResolver(
-                    image_url,
-                    media_type="image",
-                ).to_base64_data()
+                try:
+                    image_data = await MediaResolver(
+                        image_url,
+                        media_type="image",
+                    ).to_base64_data()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("图片预处理失败，将忽略: %s", safe_error("", exc))
+                    continue
                 if not image_data:
                     logger.warning("图片预处理结果为空，将忽略。")
                     continue

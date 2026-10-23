@@ -77,7 +77,11 @@ class DifyAPIClient:
             url,
             json=payload,
             headers=self.headers,
-            timeout=ClientTimeout(total=timeout_seconds),
+            timeout=ClientTimeout(
+                total=None,
+                sock_connect=timeout_seconds,
+                sock_read=timeout_seconds,
+            ),
             proxy=self._request_proxy(),
         ) as resp:
             if resp.status != 200:
@@ -107,7 +111,11 @@ class DifyAPIClient:
             url,
             json=payload,
             headers=self.headers,
-            timeout=ClientTimeout(total=timeout_seconds),
+            timeout=ClientTimeout(
+                total=None,
+                sock_connect=timeout_seconds,
+                sock_read=timeout_seconds,
+            ),
             proxy=self._request_proxy(),
         ) as resp:
             if resp.status != 200:

@@ -1610,3 +1610,17 @@ def test_import_attachments_restores_files_under_the_new_data_root(tmp_path):
 
     assert count == 1
     assert (tmp_path / "attachments" / "stored.png").read_bytes() == b"image"
+
+
+def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
+    importer = AstrBotImporter(
+        main_db=MagicMock(),
+        config_path=str(tmp_path / "cmd_config.json"),
+    )
+
+    rows = importer._preprocess_main_table_rows(
+        "attachments",
+        [{"attachment_id": "a1", "path": "/old/machine/data/attachments/a1.png"}],
+    )
+
+    assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")

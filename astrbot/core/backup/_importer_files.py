@@ -57,10 +57,11 @@ def import_attachments(
 
     for name in list_directory_archive_files(zf, "files/attachments/"):
         try:
-            target_path = attachment_targets.get(
-                Path(name).stem,
-                attachments_dir / Path(name).name,
+            original_path = attachment_targets.get(Path(name).stem)
+            target_name = (
+                original_path.name if original_path is not None else Path(name).name
             )
+            target_path = attachments_dir / target_name
             if not validate_path_within(target_path, attachments_dir):
                 logger.warning("附件路径越界，已跳过")
                 continue
@@ -108,6 +109,7 @@ def import_directories(
 
         target_dir = Path(target_dir_str)
         backup_path = backup_existing_directory(target_dir)
+        keep_backup = False
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
             file_count = extract_directory_files(
@@ -126,10 +128,19 @@ def import_directories(
             if backup_path is not None and backup_path.exists():
                 if target_dir.exists():
                     shutil.rmtree(target_dir, ignore_errors=True)
-                shutil.move(str(backup_path), str(target_dir))
-                backup_path = None
+                try:
+                    shutil.move(str(backup_path), str(target_dir))
+                except OSError as restore_exc:
+                    keep_backup = True
+                    logger.error(
+                        "恢复原目录失败，备份保留在 %s: %s",
+                        backup_path,
+                        safe_error("", restore_exc),
+                    )
+                else:
+                    backup_path = None
         finally:
-            if backup_path is not None and backup_path.exists():
+            if not keep_backup and backup_path is not None and backup_path.exists():
                 shutil.rmtree(backup_path, ignore_errors=True)
 
     return dir_stats

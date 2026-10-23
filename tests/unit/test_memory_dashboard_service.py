@@ -273,3 +273,22 @@ async def test_memory_api_returns_503_when_authorization_service_is_unavailable(
 
     assert unauthenticated.status_code == 401
     assert unavailable.status_code == 503
+
+
+def test_memory_confidence_parser_keeps_zero_and_rejects_non_finite():
+    import math
+
+    import pytest
+
+    from astrbot.dashboard.services.memory_service import (
+        MemoryService,
+        MemoryServiceError,
+    )
+
+    assert MemoryService._parse_confidence(None, 0.6) == 0.6
+    assert MemoryService._parse_confidence(0, 0.6) == 0.0
+    assert MemoryService._parse_confidence("0", 0.6) == 0.0
+    with pytest.raises(MemoryServiceError):
+        MemoryService._parse_confidence(float("nan"), 0.6)
+    with pytest.raises(MemoryServiceError):
+        MemoryService._parse_confidence(math.inf, 0.6)

@@ -12,13 +12,21 @@ class HelpCommand:
     def __init__(self, context: star.PluginContext) -> None:
         self.context = context
 
-    async def _query_astrbot_notice(self):
+    async def _query_astrbot_notice(self) -> str:
         try:
             timeout = aiohttp.ClientTimeout(total=2)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get("https://astrbot.app/notice.json") as resp:
-                    return (await resp.json())["notice"]
-        except Exception:
+                    resp.raise_for_status()
+                    payload = await resp.json()
+                    notice = (
+                        payload.get("notice") if isinstance(payload, dict) else None
+                    )
+                    if not isinstance(notice, str):
+                        return ""
+                    return notice[:2000]
+        except Exception as exc:
+            logger.debug("Failed to query AstrBot remote notice: %s", exc)
             return ""
 
     async def _build_reserved_commands(self) -> list[tuple[str, str]]:

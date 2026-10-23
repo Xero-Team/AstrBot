@@ -71,7 +71,7 @@ class BrowserExecTool(FunctionTool):
         **kwargs: Any,
     ) -> ToolExecResult:
         cmd: str = kwargs["cmd"]
-        timeout_seconds: int = kwargs.get("timeout_seconds", 30)
+        timeout_seconds: int = kwargs.get("timeout", 30)
         description: str | None = kwargs.get("description", None)
         tags: str | None = kwargs.get("tags", None)
         learn: bool = kwargs.get("learn", False)
@@ -137,7 +137,7 @@ class BrowserBatchExecTool(FunctionTool):
         **kwargs: Any,
     ) -> ToolExecResult:
         commands: list[str] = kwargs["commands"]
-        timeout_seconds: int = kwargs.get("timeout_seconds", 60)
+        timeout_seconds: int = kwargs.get("timeout", 60)
         stop_on_error: bool = kwargs.get("stop_on_error", True)
         description: str | None = kwargs.get("description", None)
         tags: str | None = kwargs.get("tags", None)
@@ -189,7 +189,7 @@ class RunBrowserSkillTool(FunctionTool):
         **kwargs: Any,
     ) -> ToolExecResult:
         skill_key: str = kwargs["skill_key"]
-        timeout_seconds: int = kwargs.get("timeout_seconds", 60)
+        timeout_seconds: int = kwargs.get("timeout", 60)
         stop_on_error: bool = kwargs.get("stop_on_error", True)
         include_trace: bool = kwargs.get("include_trace", False)
         description: str | None = kwargs.get("description", None)

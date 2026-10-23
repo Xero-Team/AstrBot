@@ -60,3 +60,20 @@ async def test_recursive_chunker_never_exceeds_chunk_size_with_overlap():
     )
 
     assert all(len(chunk) <= 10 for chunk in chunks)
+
+
+def test_overlap_state_never_exceeds_chunk_size():
+    from astrbot.core.knowledge_base.chunking.recursive import (
+        RecursiveCharacterChunker,
+    )
+
+    chunker = RecursiveCharacterChunker(chunk_size=10, chunk_overlap=9)
+    parts, length = chunker._build_overlap_state(
+        combined_text="a" * 7,
+        split="b" * 6,
+        overlap=9,
+        chunk_size=10,
+    )
+
+    assert length <= 10
+    assert len("".join(parts)) <= 10

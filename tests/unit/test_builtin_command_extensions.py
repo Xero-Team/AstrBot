@@ -1,10 +1,13 @@
+import json
 from types import SimpleNamespace
 from typing import Annotated
 from unittest.mock import AsyncMock, MagicMock
 
+import aiohttp
 import pytest
 
 from astrbot.api.event.filter import option
+from astrbot.builtin_stars.builtin_commands.commands import help as help_cmd_module
 from astrbot.builtin_stars.builtin_commands.commands.admin import AdminCommands
 from astrbot.builtin_stars.builtin_commands.commands.bot import (
     BotCommands,
@@ -731,6 +734,373 @@ async def test_help_command_uses_file_token_for_local_image_when_callback_is_ava
     assert event.temporary_files == [
         "D:/Documents/Github/AstrBot/data/temp/help-card.png"
     ]
+
+
+class _FakeContentStream:
+    def __init__(
+        self,
+        chunks: list[bytes] | None = None,
+        raw: bytes = b"",
+        stream_error: Exception | None = None,
+    ) -> None:
+        self.chunks = chunks
+        self.raw = raw
+        self.stream_error = stream_error
+        self.iterated_chunks: list[bytes] = []
+
+    async def iter_chunked(self, chunk_size: int):
+        if self.stream_error:
+            raise self.stream_error
+        if self.chunks is not None:
+            for chunk in self.chunks:
+                self.iterated_chunks.append(chunk)
+                yield chunk
+            return
+        for i in range(0, len(self.raw), chunk_size):
+            chunk = self.raw[i : i + chunk_size]
+            self.iterated_chunks.append(chunk)
+            yield chunk
+
+
+class _FakeNoticeResponse:
+    def __init__(
+        self,
+        data: object = None,
+        raw_body: bytes | None = None,
+        chunks: list[bytes] | None = None,
+        headers: dict[str, str] | None = None,
+        status: int = 200,
+        error: Exception | None = None,
+        stream_error: Exception | None = None,
+    ) -> None:
+        self.data = data
+        self.headers = headers or {}
+        self.status = status
+        self.error = error
+        if raw_body is not None:
+            raw = raw_body
+        elif data is not None:
+            if isinstance(data, (bytes, bytearray)):
+                raw = bytes(data)
+            elif isinstance(data, str):
+                raw = data.encode("utf-8")
+            else:
+                raw = json.dumps(data).encode("utf-8")
+        else:
+            raw = b""
+        self.content = _FakeContentStream(
+            chunks=chunks, raw=raw, stream_error=stream_error
+        )
+
+    def raise_for_status(self) -> None:
+        if self.error:
+            raise self.error
+        if self.status >= 400:
+            raise aiohttp.ClientResponseError(
+                request_info=MagicMock(),
+                history=(),
+                status=self.status,
+            )
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args) -> None:
+        pass
+
+
+class _FakeNoticeSession:
+    def __init__(
+        self,
+        response: _FakeNoticeResponse | None = None,
+        get_error: Exception | None = None,
+    ) -> None:
+        self.response = response or _FakeNoticeResponse()
+        self.get_error = get_error
+
+    def get(self, url: str, **kwargs) -> _FakeNoticeResponse:
+        if self.get_error:
+            raise self.get_error
+        return self.response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args) -> None:
+        pass
+
+
+def _patch_notice_session(
+    monkeypatch,
+    *,
+    response: _FakeNoticeResponse | None = None,
+    get_error: Exception | None = None,
+) -> _FakeNoticeSession:
+    session = _FakeNoticeSession(response=response, get_error=get_error)
+    monkeypatch.setattr(
+        help_cmd_module.aiohttp,
+        "ClientSession",
+        lambda **kwargs: session,
+    )
+    return session
+
+
+@pytest.mark.asyncio
+async def test_help_notice_query_valid_string_and_truncation(monkeypatch):
+    command = HelpCommand(MagicMock())
+
+    # Valid string under 2000 chars is returned as-is
+    _patch_notice_session(
+        monkeypatch,
+        response=_FakeNoticeResponse(data={"notice": "AstrBot is running smoothly."}),
+    )
+    assert await command._query_astrbot_notice() == "AstrBot is running smoothly."
+
+    # Excessive string is truncated at 2000 chars
+    long_notice = "A" * 3000
+    _patch_notice_session(
+        monkeypatch,
+        response=_FakeNoticeResponse(data={"notice": long_notice}),
+    )
+    truncated = await command._query_astrbot_notice()
+    assert len(truncated) == 2000
+    assert truncated == "A" * 2000
+
+
+@pytest.mark.parametrize(
+    ("response_kwargs", "get_error"),
+    [
+        # Missing or empty notice values
+        ({"data": {"notice": ""}}, None),
+        ({"data": {}}, None),
+        ({"data": {"other_field": "val"}}, None),
+        # Non-string types in notice field
+        ({"data": {"notice": {"nested": "dict"}}}, None),
+        ({"data": {"notice": ["item1", "item2"]}}, None),
+        ({"data": {"notice": 12345}}, None),
+        ({"data": {"notice": 3.14}}, None),
+        ({"data": {"notice": True}}, None),
+        ({"data": {"notice": False}}, None),
+        ({"data": {"notice": None}}, None),
+        # Non-dict payload structures
+        ({"data": [{"notice": "array_root"}]}, None),
+        ({"data": "string_root"}, None),
+        ({"data": 123}, None),
+        ({"data": None}, None),
+        # Malformed non-JSON payloads
+        ({"raw_body": b"<html>502 Bad Gateway</html>"}, None),
+        ({"raw_body": b"not valid json {"}, None),
+        # Stream read failure
+        (
+            {
+                "stream_error": aiohttp.ClientPayloadError(
+                    "Premature end of chunked stream"
+                )
+            },
+            None,
+        ),
+        # HTTP error status codes (404, 500)
+        ({"data": {"notice": "error"}, "status": 404}, None),
+        ({"data": {"notice": "error"}, "status": 500}, None),
+        # JSON decode / content type errors
+        (
+            {
+                "error": aiohttp.ContentTypeError(
+                    request_info=MagicMock(), history=(), message="Not JSON"
+                )
+            },
+            None,
+        ),
+        # Network errors and timeouts
+        (None, aiohttp.ClientConnectionError("Connection refused")),
+        (None, TimeoutError("timed out")),
+    ],
+)
+@pytest.mark.asyncio
+async def test_help_notice_query_invalid_or_error_scenarios(
+    monkeypatch, response_kwargs, get_error
+):
+    command = HelpCommand(MagicMock())
+    response = _FakeNoticeResponse(**response_kwargs) if response_kwargs else None
+    _patch_notice_session(monkeypatch, response=response, get_error=get_error)
+    assert await command._query_astrbot_notice() == ""
+
+
+@pytest.mark.asyncio
+async def test_help_notice_query_body_size_limits(monkeypatch):
+    command = HelpCommand(MagicMock())
+
+    # 1. Body exactly at the size limit of 64 KiB (65,536 bytes)
+    prefix = b'{"notice": "ok", "pad": "'
+    suffix = b'"}'
+    target_len = 64 * 1024  # 65,536
+    pad_len = target_len - len(prefix) - len(suffix)
+    exact_body = prefix + (b"a" * pad_len) + suffix
+    assert len(exact_body) == target_len
+
+    response_at_limit = _FakeNoticeResponse(raw_body=exact_body)
+    _patch_notice_session(monkeypatch, response=response_at_limit)
+    assert await command._query_astrbot_notice() == "ok"
+    assert sum(len(c) for c in response_at_limit.content.iterated_chunks) == target_len
+
+    # 2. Body exceeding the size limit by 1 byte (65,537 bytes)
+    oversized_body = exact_body + b"!"
+    response_over_by_one = _FakeNoticeResponse(raw_body=oversized_body)
+    _patch_notice_session(monkeypatch, response=response_over_by_one)
+    assert await command._query_astrbot_notice() == ""
+
+    # 3. Streamed chunks exceeding size limit: proves reading stops immediately without buffering the rest
+    chunk1 = b"x" * (40 * 1024)
+    chunk2 = b"x" * (30 * 1024)
+    chunk3 = b"x" * (50 * 1024)
+    streaming_response = _FakeNoticeResponse(chunks=[chunk1, chunk2, chunk3])
+    _patch_notice_session(monkeypatch, response=streaming_response)
+
+    assert await command._query_astrbot_notice() == ""
+    # Only the first two chunks were read before immediately aborting; chunk3 was never consumed
+    assert len(streaming_response.content.iterated_chunks) == 2
+    assert chunk3 not in streaming_response.content.iterated_chunks
+
+    # 4. Content-Length header exceeding limit: rejects immediately without reading any chunks
+    header_response = _FakeNoticeResponse(
+        headers={"Content-Length": str(70 * 1024)},
+        chunks=[b"x" * 1000],
+    )
+    _patch_notice_session(monkeypatch, response=header_response)
+    assert await command._query_astrbot_notice() == ""
+    assert len(header_response.content.iterated_chunks) == 0
+
+    # 5. Content-Length header is smaller than limit (or missing) but actual stream exceeds limit
+    mismatched_response = _FakeNoticeResponse(
+        headers={"Content-Length": "100"},
+        chunks=[chunk1, chunk2, chunk3],
+    )
+    _patch_notice_session(monkeypatch, response=mismatched_response)
+    assert await command._query_astrbot_notice() == ""
+    assert len(mismatched_response.content.iterated_chunks) == 2
+
+
+@pytest.mark.asyncio
+async def test_help_command_displays_notice_in_plain_text(monkeypatch):
+    _patch_notice_session(
+        monkeypatch,
+        response=_FakeNoticeResponse(data={"notice": "Important update available."}),
+    )
+
+    async def fake_list_commands():
+        return [
+            {
+                "reserved": True,
+                "enabled": True,
+                "effective_command": "prompt",
+                "description": "View or switch prompt",
+            }
+        ]
+
+    async def fake_dashboard_version():
+        return "test-ui"
+
+    command = HelpCommand(
+        SimpleNamespace(
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
+        )
+    )
+    event = DummyEvent(message_str="help")
+    await command.help(event, image=False)
+    text = _plain_text(event.result)
+    assert "Important update available." in text
+
+
+@pytest.mark.asyncio
+async def test_help_command_displays_notice_in_image_mode(monkeypatch):
+    _patch_notice_session(
+        monkeypatch,
+        response=_FakeNoticeResponse(data={"notice": "Image notice announcement."}),
+    )
+    render_calls: list[dict[str, object]] = []
+
+    async def fake_render(text: str, *, template_name: str | None = None) -> str:
+        render_calls.append({"text": text, "template_name": template_name})
+        return "https://example.com/rendered-help.png"
+
+    async def fake_list_commands():
+        return []
+
+    async def fake_dashboard_version():
+        return "test-ui"
+
+    command = HelpCommand(
+        SimpleNamespace(
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
+            config=SimpleNamespace(get=lambda umo=None: {}),
+            rendering=SimpleNamespace(text_to_image=fake_render),
+            files=SimpleNamespace(publish=AsyncMock()),
+        )
+    )
+    event = DummyEvent(message_str="help --image")
+    await command.help(event, image=True)
+
+    assert len(render_calls) == 1
+    assert "notice-box" in render_calls[0]["text"]
+    assert "Image notice announcement." in render_calls[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_help_command_malformed_remote_notice_does_not_crash(monkeypatch):
+    _patch_notice_session(
+        monkeypatch,
+        response=_FakeNoticeResponse(data={"notice": {"nested": "value"}}),
+    )
+
+    async def fake_list_commands():
+        return [
+            {
+                "reserved": True,
+                "enabled": True,
+                "effective_command": "prompt",
+                "description": "View or switch prompt",
+            }
+        ]
+
+    async def fake_dashboard_version():
+        return "test-ui"
+
+    async def fake_render(text: str, *, template_name: str | None = None) -> str:
+        return "https://example.com/help.png"
+
+    command = HelpCommand(
+        SimpleNamespace(
+            runtime_info=SimpleNamespace(
+                commands=fake_list_commands,
+                version="9.9.9",
+                dashboard_version=fake_dashboard_version,
+            ),
+            i18n=FakeI18n(),
+            config=SimpleNamespace(get=lambda umo=None: {}),
+            rendering=SimpleNamespace(text_to_image=fake_render),
+            files=SimpleNamespace(publish=AsyncMock()),
+        )
+    )
+
+    text_event = DummyEvent(message_str="help")
+    await command.help(text_event, image=False)
+    text = _plain_text(text_event.result)
+    assert "AstrBot v" in text
+    assert "/prompt - View or switch prompt" in text
+
+    image_event = DummyEvent(message_str="help --image")
+    await command.help(image_event, image=True)
+    assert image_event.result.chain[0].file == "https://example.com/help.png"
 
 
 @pytest.mark.asyncio

@@ -1720,3 +1720,23 @@ def test_import_directories_warns_when_existing_directory_cannot_be_backed_up(
 
     assert stats["plugins"] == 0
     assert "导入目录失败" in warnings
+
+
+@pytest.mark.asyncio
+async def test_export_kb_metadata_fails_the_backup_on_table_error():
+    class _Context:
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, *_args):
+            return None
+
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=RuntimeError("db down"))
+    kb_manager = SimpleNamespace(
+        kb_db=SimpleNamespace(get_db=lambda: _Context()),
+    )
+    exporter = AstrBotExporter(main_db=MagicMock(), kb_manager=kb_manager)
+
+    with pytest.raises(RuntimeError, match="导出知识库表"):
+        await exporter._export_kb_metadata()

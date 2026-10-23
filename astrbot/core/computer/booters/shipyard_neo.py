@@ -245,6 +245,12 @@ class NeoFileSystemComponent(FileSystemComponent):
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
         _ = encoding
+        if not old_string:
+            return {
+                "success": False,
+                "error": "old string must not be empty",
+                "replacements": 0,
+            }
         content = await self._sandbox.filesystem.read_file(path)
         occurrences = content.count(old_string)
         if occurrences == 0:

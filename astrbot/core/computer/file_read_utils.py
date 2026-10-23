@@ -799,6 +799,11 @@ async def read_file_tool_result(
                 local_file_descriptor,
             )
         else:
+            if probe.size_bytes > _MAX_LOCAL_DOCUMENT_BYTES:
+                return (
+                    f"Error reading file: image is {probe.size_bytes} bytes; "
+                    f"the limit is {_MAX_LOCAL_DOCUMENT_BYTES} bytes."
+                )
             image_payload = await _exec_python_json(
                 booter,
                 _build_image_read_script(path),

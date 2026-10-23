@@ -49,15 +49,28 @@ def _content_to_text(content: Any) -> str:
 
 def _segment_content(seg: RoundSegment) -> Any:
     if isinstance(seg, Message):
+        parts: list[Any] = []
         if seg.content is not None:
-            return seg.content
+            parts.append(seg.content)
         if seg.tool_calls:
-            return [
+            parts.extend(
                 tc.model_dump() if isinstance(tc, ToolCall) else tc
                 for tc in seg.tool_calls
-            ]
-        return ""
-    return seg.get("content") or seg.get("tool_calls") or ""
+            )
+        if not parts:
+            return ""
+        return parts[0] if len(parts) == 1 else parts
+    content = seg.get("content")
+    tool_calls = seg.get("tool_calls")
+    if content is None:
+        return tool_calls if tool_calls is not None else ""
+    if tool_calls is None:
+        return content
+    return (
+        [content, *tool_calls]
+        if isinstance(tool_calls, list)
+        else [content, tool_calls]
+    )
 
 
 def rounds_to_text(rounds: list[list[RoundSegment]]) -> str:

@@ -120,7 +120,11 @@ class TurnWindowManager:
 
     @staticmethod
     def _take_temporary_files(window: TurnWindow, event: AstrMessageEvent) -> None:
-        for path in list(getattr(event, "_temporary_local_files", [])):
+        paths = list(getattr(event, "_temporary_local_files", []))
+        for path in getattr(event.message_obj, "temporary_file_paths", []) or []:
+            if path not in paths:
+                paths.append(path)
+        for path in paths:
             if event.transfer_temporary_local_file(path):
                 window.temporary_files.append(path)
 
@@ -153,6 +157,7 @@ class TurnWindowManager:
         for key in empty:
             window = self._windows.pop(key)
             self._cancel_window_task(window)
+            self._delete_temporary_files(window)
 
     def pause_typing(self, typing_key: str) -> None:
         """Pause flush for a typing-start notice."""
@@ -196,6 +201,7 @@ class TurnWindowManager:
         for key in list(self._windows):
             window = self._windows.pop(key)
             self._cancel_window_task(window)
+            self._delete_temporary_files(window)
             for fragment in window.fragments:
                 fragment.cleanup_temporary_local_files()
         for task in self._typing_tasks.values():
@@ -232,6 +238,9 @@ class TurnWindowManager:
         flush_event = self._build_flush_event(window)
         if not self._enqueue(flush_event):
             logger.warning("Failed to enqueue turn flush for %s", key)
+            # ``_build_flush_event`` transferred the window-owned files to the
+            # flush event; clean that lease as well as any fragment-owned ones.
+            flush_event.cleanup_temporary_local_files()
             for fragment in window.fragments:
                 fragment.cleanup_temporary_local_files()
 

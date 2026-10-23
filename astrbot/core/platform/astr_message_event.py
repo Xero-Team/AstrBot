@@ -462,10 +462,15 @@ class AstrMessageEvent(abc.ABC):
 
     def transfer_temporary_local_file(self, path: str) -> bool:
         """Transfer one temporary artifact to another runtime-owned lease."""
-        if path not in self._temporary_local_files:
-            return False
-        self._temporary_local_files.remove(path)
-        return True
+        transferred = False
+        if path in self._temporary_local_files:
+            self._temporary_local_files.remove(path)
+            transferred = True
+        message_paths = getattr(self.message_obj, "temporary_file_paths", None)
+        if isinstance(message_paths, list) and path in message_paths:
+            message_paths.remove(path)
+            transferred = True
+        return transferred
 
     def untrack_temporary_local_file(self, path: str) -> None:
         """Stop owning a temporary file so it can outlive this event."""

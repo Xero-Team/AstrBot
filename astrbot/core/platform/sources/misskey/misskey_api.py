@@ -728,13 +728,19 @@ class MisskeyAPI:
         return None
 
     async def _download_file_bytes(self, url: str) -> bytes | None:
+        ssl_verify = not self.allow_insecure_downloads
         try:
-            return await self._download_with_existing_session(
+            data = await self._download_with_existing_session(
                 url,
-                ssl_verify=True,
-            ) or await self._download_with_temp_session(url, ssl_verify=True)
-        except Exception as ssl_error:
-            raise ssl_error
+                ssl_verify=ssl_verify,
+            )
+            if data is not None:
+                return data
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.debug("Misskey authenticated download failed; retrying")
+        return await self._download_with_temp_session(url, ssl_verify=ssl_verify)
 
     async def upload_and_find_file(
         self,

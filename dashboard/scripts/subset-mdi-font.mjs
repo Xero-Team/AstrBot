@@ -159,7 +159,7 @@ function buildFallbackCss() {
         .replace(/url\("\.\.\/fonts\/materialdesignicons-webfont\.(woff2?)\?[^"]*"\)/g,
             (_, ext) => `url("./materialdesignicons-webfont-subset.${ext}")`)
         // Remove legacy eot/ttf sources
-        .replace(/url\("\.\.\/fonts\/materialdesignicons-webfont\.(eot|ttf)\?[^"]*"\)[^,]*/g, "")
+        .replace(/url\("\.\.\/fonts\/materialdesignicons-webfont\.(eot|ttf)\?[^"]*"\)(?:\s*format\([^)]*\))?\s*,?/g, "")
         // Clean up dangling commas/separators
         .replace(/src:\s*,/g, "src:")
         .replace(/,\s*;/g, ";");

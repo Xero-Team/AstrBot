@@ -220,6 +220,11 @@ class KookRolesRecord:
                     asyncio.shield(pending),
                     timeout=wait_timeout,
                 )
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                raise
+            return False
         except TimeoutError:
             logger.info(
                 '[KOOK] 频道"%s"角色缓存查询超时(%.2fs)，本条消息跳过 role mention 命中判定，等待后台缓存补齐。',

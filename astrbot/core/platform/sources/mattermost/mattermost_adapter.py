@@ -94,6 +94,8 @@ class MattermostPlatformAdapter(Platform):
         while self._running:
             try:
                 await self._ws_connect_and_listen()
+                if self._running:
+                    await asyncio.sleep(self.reconnect_delay)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

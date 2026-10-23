@@ -455,9 +455,10 @@ async def _sync_skills_to_sandbox(
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
-    zip_base = temp_dir / "skills_bundle"
+    bundle_id = uuid.uuid4().hex
+    zip_base = temp_dir / f"skills_bundle_{bundle_id}"
     zip_path = zip_base.with_suffix(".zip")
-    bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
+    bundle_root = temp_dir / f"skills_bundle_{bundle_id}"
 
     try:
         if sync_skill_dirs:
@@ -546,21 +547,27 @@ class ComputerRuntime:
                 if state is None or state.expires_at != expires_at:
                     return
 
-                booter = self._session_booters.get(session_id)
-                if booter is not None:
-                    try:
-                        await booter.shutdown()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as shutdown_err:  # noqa: BLE001
-                        logger.warning(
-                            "[Computer] Failed to shutdown idle CUA sandbox for session %s: %s",
-                            session_id,
-                            shutdown_err,
-                        )
-                    finally:
-                        self._session_booters.pop(session_id, None)
-                        self._session_booter_types.pop(session_id, None)
+                lock = self._session_booter_locks.setdefault(session_id, asyncio.Lock())
+                async with lock:
+                    state = self._cua_idle_states.get(session_id)
+                    if state is None or state.expires_at != expires_at:
+                        return
+                    booter = self._session_booters.get(session_id)
+                    if booter is not None:
+                        try:
+                            await booter.shutdown()
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as shutdown_err:  # noqa: BLE001
+                            logger.warning(
+                                "[Computer] Failed to shutdown idle CUA sandbox for session %s: %s",
+                                session_id,
+                                shutdown_err,
+                            )
+                        finally:
+                            if self._session_booters.get(session_id) is booter:
+                                self._session_booters.pop(session_id, None)
+                                self._session_booter_types.pop(session_id, None)
             except asyncio.CancelledError:
                 raise
             finally:

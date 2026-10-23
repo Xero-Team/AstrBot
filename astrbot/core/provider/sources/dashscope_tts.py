@@ -4,7 +4,6 @@ import uuid
 from pathlib import Path
 
 import aiohttp
-import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
 try:
@@ -42,7 +41,6 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
         self.set_model(provider_config["model"])
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
-        dashscope.api_key = self.chosen_api_key
 
     async def get_audio(self, text: str) -> str:
         model = self.get_model()

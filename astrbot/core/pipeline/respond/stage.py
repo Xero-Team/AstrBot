@@ -126,7 +126,10 @@ class RespondStage(Stage):
             ]["interval"]
             interval_str_ls = interval_str.replace(" ", "").split(",")
             try:
-                self.interval = [float(t) for t in interval_str_ls]
+                parsed_interval = [float(t) for t in interval_str_ls]
+                if len(parsed_interval) < 2:
+                    raise ValueError("interval requires two values")
+                self.interval = parsed_interval
             except Exception as e:
                 logger.error(f"解析分段回复的间隔时间失败。{e}")
             logger.info(f"分段回复间隔时间：{self.interval}")

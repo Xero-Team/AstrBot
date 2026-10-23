@@ -1,4 +1,5 @@
 from html import escape
+from typing import Any, cast
 
 import aiohttp
 
@@ -224,13 +225,18 @@ class HelpCommand:
             reply_image_url(event, rendered_image)
             return
 
-        if hasattr(event, "track_temporary_local_file"):
-            event.track_temporary_local_file(rendered_image)
-
         callback_base = self._get_callback_base(event)
+        temporary_tracked = False
         if callback_base:
+            if hasattr(event, "track_temporary_local_file"):
+                event.track_temporary_local_file(rendered_image)
+                temporary_tracked = True
             try:
-                token = await self.context.files.publish(rendered_image)
+                publish_owned = getattr(self.context.files, "publish_owned", None)
+                if callable(publish_owned):
+                    token = await cast(Any, publish_owned)(rendered_image, event)
+                else:
+                    token = await self.context.files.publish(rendered_image)
                 image_url = f"{callback_base}/api/v1/files/tokens/{token}"
                 reply_image_url(event, image_url)
                 return
@@ -239,6 +245,9 @@ class HelpCommand:
                     "Failed to expose local help image via file token: %s", exc
                 )
 
+        track_file = getattr(event, "track_temporary_local_file", None)
+        if not temporary_tracked and callable(track_file):
+            track_file(rendered_image)
         logger.debug(
             "Sending local help image without a callback URL: %s",
             rendered_image,

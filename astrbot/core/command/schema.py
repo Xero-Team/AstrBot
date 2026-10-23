@@ -192,12 +192,9 @@ def compile_command_schema(handler: Any) -> CommandSchema:
     seen_options: set[str] = set()
     seen_greedy = False
     for parameter in parameters[2:]:
-        if parameter.kind not in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        ):
+        if parameter.kind is not inspect.Parameter.POSITIONAL_OR_KEYWORD:
             raise _schema_error(
-                f"parameter '{parameter.name}' cannot be variadic or keyword-only"
+                f"parameter '{parameter.name}' must be positional-or-keyword"
             )
         annotation = hints.get(parameter.name, parameter.annotation)
         annotation, option_spec = _unwrap_annotated(annotation)

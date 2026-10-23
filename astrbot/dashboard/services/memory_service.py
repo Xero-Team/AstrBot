@@ -1,3 +1,4 @@
+import math
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -100,6 +101,18 @@ class MemoryService:
             "operation_logs": [self._row(log) for log in logs],
         }
 
+    @staticmethod
+    def _parse_confidence(value: Any, default: float) -> float:
+        if value is None:
+            return default
+        try:
+            confidence = float(value)
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise MemoryServiceError("confidence must be a number") from exc
+        if not math.isfinite(confidence) or confidence < 0 or confidence > 1:
+            raise MemoryServiceError("confidence must be between 0 and 1")
+        return confidence
+
     async def create_fact(self, data: object, *, operator: str) -> tuple[dict, str]:
         payload = self._payload(data)
         person_id = str(payload.get("person_id") or "").strip()
@@ -111,9 +124,7 @@ class MemoryService:
             raise MemoryServiceError("chat_id is required")
         if not fact_text:
             raise MemoryServiceError("fact_text is required")
-        confidence = float(payload.get("confidence") or 0.6)
-        if confidence < 0 or confidence > 1:
-            raise MemoryServiceError("confidence must be between 0 and 1")
+        confidence = self._parse_confidence(payload.get("confidence"), 0.6)
         source_message_id = (
             str(payload.get("source_message_id") or "").strip()
             or f"dashboard:{uuid.uuid4()}"
@@ -170,9 +181,10 @@ class MemoryService:
             if not updates["fact_type"]:
                 raise MemoryServiceError("fact_type cannot be empty")
         if updates["confidence"] is not None:
-            updates["confidence"] = float(updates["confidence"])
-            if updates["confidence"] < 0 or updates["confidence"] > 1:
-                raise MemoryServiceError("confidence must be between 0 and 1")
+            updates["confidence"] = self._parse_confidence(
+                updates["confidence"],
+                0.6,
+            )
         fact = await self.db.update_memory_fact(
             fact_id,
             fact_text=updates["fact_text"],

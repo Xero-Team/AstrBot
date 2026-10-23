@@ -1410,3 +1410,37 @@ async def test_list_chunks_validates_kb_and_doc_and_delegates():
         limit=5,
     )
     kb_helper.get_chunk_count_by_doc_id.assert_awaited_once_with("doc-1")
+
+
+@pytest.mark.asyncio
+async def test_list_chunks_clamps_page_and_page_size():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from astrbot.dashboard.services.knowledge_base_service import (
+        KnowledgeBaseService,
+    )
+
+    helper = SimpleNamespace(
+        get_chunks_by_doc_id=AsyncMock(return_value=[]),
+        get_chunk_count_by_doc_id=AsyncMock(return_value=0),
+    )
+    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
+    service.get_kb_manager = lambda: SimpleNamespace(
+        get_kb=AsyncMock(return_value=helper)
+    )
+
+    result = await service.list_chunks(
+        kb_id="kb",
+        doc_id="doc",
+        page=0,
+        page_size=10**9,
+    )
+
+    helper.get_chunks_by_doc_id.assert_awaited_once_with(
+        doc_id="doc",
+        offset=0,
+        limit=1000,
+    )
+    assert result["page"] == 1
+    assert result["page_size"] == 1000

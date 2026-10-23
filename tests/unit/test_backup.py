@@ -754,7 +754,7 @@ class TestSecureFilename:
         assert result.startswith("backup_")
         assert result.endswith(".zip")
         # 应包含时间戳格式 YYYYMMDD_HHMMSS
-        assert re.search(r"backup_\d{8}_\d{6}\.zip", result)
+        assert re.search(r"backup_\d{8}_\d{6}_[0-9a-f]{8}\.zip", result)
 
     def test_generate_unique_filename_with_complex_name(self):
         """测试复杂文件名生成唯一文件名"""
@@ -762,7 +762,7 @@ class TestSecureFilename:
         # 应在原文件名后添加时间戳
         assert result.startswith("my_backup_file_")
         assert result.endswith(".zip")
-        assert re.search(r"my_backup_file_\d{8}_\d{6}\.zip", result)
+        assert re.search(r"my_backup_file_\d{8}_\d{6}_[0-9a-f]{8}\.zip", result)
 
 
 class TestVersionComparison:

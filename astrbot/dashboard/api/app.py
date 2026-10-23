@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from pathlib import Path
 from types import SimpleNamespace
@@ -78,6 +79,8 @@ from .router import API_V1_PREFIX, build_api_router
 from .static_files import router as static_files_router
 
 CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
+
+_MANAGED_CONFIG_LOCK = asyncio.Lock()
 
 
 def _build_observability(runtime: CoreRuntime) -> Observability:
@@ -233,21 +236,26 @@ def create_dashboard_asgi_app(
                     )
                 raise RuntimeError("MCP configuration reload failed") from exc
             return
-        previous = copy.deepcopy(dict(runtime.astrbot_config))
-        committed = await save_config_async(
-            next_config, runtime.astrbot_config, is_core=True
-        )
-        if not committed:
-            raise RuntimeError("Configuration save was superseded")
-        try:
-            await core_control.reload_pipeline_scheduler("default")
-        except Exception:
+        async with _MANAGED_CONFIG_LOCK:
+            previous = copy.deepcopy(dict(runtime.astrbot_config))
+            committed = await save_config_async(
+                next_config, runtime.astrbot_config, is_core=True
+            )
+            if not committed:
+                raise RuntimeError("Configuration save was superseded")
             try:
-                await save_config_async(previous, runtime.astrbot_config, is_core=True)
                 await core_control.reload_pipeline_scheduler("default")
             except Exception:
-                logger.error("Failed to roll back managed Dashboard configuration")
-            raise
+                try:
+                    await save_config_async(
+                        previous,
+                        runtime.astrbot_config,
+                        is_core=True,
+                    )
+                    await core_control.reload_pipeline_scheduler("default")
+                except Exception:
+                    logger.error("Failed to roll back managed Dashboard configuration")
+                raise
 
     computer_runtime_info = detect_local_runtime_info(probe=True)
     app.state.services = SimpleNamespace(

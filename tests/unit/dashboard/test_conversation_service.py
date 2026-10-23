@@ -100,3 +100,19 @@ async def test_export_continues_after_conversation_lookup_failure():
         '"content": [{"role": "user", "content": "hello"}]}'
     )
     assert get_conversation.await_count == 2
+
+
+def test_normalize_history_rejects_non_message_json_payloads():
+    import pytest
+
+    from astrbot.dashboard.services.conversation_service import (
+        ConversationService,
+        ConversationServiceError,
+    )
+
+    assert ConversationService._normalize_history('[{"role": "user"}]') == [
+        {"role": "user"}
+    ]
+    for invalid in ("5", "true", '{"a": 1}', "[1, 2]"):
+        with pytest.raises(ConversationServiceError):
+            ConversationService._normalize_history(invalid)

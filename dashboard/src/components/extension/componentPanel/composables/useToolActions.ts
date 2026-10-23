@@ -14,6 +14,8 @@ export function useToolActions(
 ) {
   const toolSearch = ref('');
   const showBuiltinTools = ref(true);
+  const pendingToolActions = new Set<string>();
+  let parallelExecutionPending = false;
 
   const filteredTools = computed(() => {
     let result = tools.value;
@@ -62,6 +64,8 @@ export function useToolActions(
       toast(readonlyMessage, 'info');
       return;
     }
+    if (pendingToolActions.has(tool.name)) return;
+    pendingToolActions.add(tool.name);
     const previous = tool.active;
     tool.active = !tool.active;
     try {
@@ -75,24 +79,30 @@ export function useToolActions(
     } catch (error) {
       tool.active = previous;
       toast(resolveErrorMessage(error, errorMessage), 'error');
+    } finally {
+      pendingToolActions.delete(tool.name);
     }
   };
 
   const toggleToolParallel = async (
     tool: ToolItem,
     enabled: boolean,
+    successMessage: string,
     errorMessage: string,
   ) => {
     if (!tool.parallel_eligible || !tool.tool_id) {
       toast(tool.parallel_blocked_reason || errorMessage, 'info');
       return;
     }
+    const actionKey = `parallel:${tool.tool_id}`;
+    if (pendingToolActions.has(actionKey)) return;
+    pendingToolActions.add(actionKey);
     const previous = tool.parallel_enabled;
     tool.parallel_enabled = enabled;
     try {
       const res = await toolApi.setParallel(tool.tool_id, enabled);
       if (res.data.status === 'ok') {
-        toast(res.data.message || errorMessage);
+        toast(res.data.message || successMessage);
       } else {
         tool.parallel_enabled = previous;
         toast(res.data.message || errorMessage, 'error');
@@ -100,25 +110,32 @@ export function useToolActions(
     } catch (error) {
       tool.parallel_enabled = previous;
       toast(resolveErrorMessage(error, errorMessage), 'error');
+    } finally {
+      pendingToolActions.delete(actionKey);
     }
   };
 
   const toggleParallelExecution = async (
     enabled: boolean,
+    successMessage: string,
     errorMessage: string,
   ) => {
+    if (parallelExecutionPending) return;
+    parallelExecutionPending = true;
     try {
       const res = await toolApi.setParallelEnabled(enabled);
       if (res.data.status === 'ok') {
         tools.value.forEach((tool) => {
           tool.parallel_execution_enabled = enabled;
         });
-        toast(res.data.message || errorMessage);
+        toast(res.data.message || successMessage);
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
     } catch (error) {
       toast(resolveErrorMessage(error, errorMessage), 'error');
+    } finally {
+      parallelExecutionPending = false;
     }
   };
 

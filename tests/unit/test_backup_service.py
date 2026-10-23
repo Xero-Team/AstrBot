@@ -20,6 +20,8 @@ def _make_service(tmp_path: Path) -> BackupService:
         ensure_cleanup_task_started=lambda: None,
     )
     service._background_tasks = set()
+    service._active_data_task = None
+    service._active_import_path = None
     return service
 
 
@@ -87,3 +89,15 @@ def test_import_backup_schedules_tracked_task(monkeypatch, tmp_path: Path) -> No
     assert result["task_id"] in service.backup_tasks
     assert service.backup_tasks[result["task_id"]]["status"] == "pending"
     assert scheduled_calls == [(result["task_id"], str(backup_path))]
+
+
+def test_delete_missing_backup_while_another_import_is_active(tmp_path: Path) -> None:
+    import pytest
+
+    from astrbot.dashboard.services.backup_service import BackupServiceError
+
+    service = _make_service(tmp_path)
+    service._active_import_path = str(tmp_path / "active.zip")
+
+    with pytest.raises(BackupServiceError, match="备份文件不存在"):
+        service.delete_backup({"filename": "missing.zip"})

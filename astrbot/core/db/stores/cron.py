@@ -86,6 +86,11 @@ class CronStoreMixin(DatabaseStoreMixin):
                         continue
                     updates[key] = val
 
+                if not updates:
+                    result = await session.execute(
+                        select(CronJob).where(col(CronJob.job_id) == job_id)
+                    )
+                    return result.scalar_one_or_none()
                 stmt = (
                     update(CronJob)
                     .where(col(CronJob.job_id) == job_id)

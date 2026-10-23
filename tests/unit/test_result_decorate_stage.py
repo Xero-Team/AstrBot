@@ -257,3 +257,122 @@ async def test_result_decorate_regex_with_capture_groups_uses_string_parts():
     await _consume(stage, _make_event(result))
 
     assert [component.text for component in result.chain] == ["one。", "two。"]
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_decorates_stopped_pending_result():
+    stage = _make_stage(use_file_service=False, callback_api_base="")
+    stage.reply_prefix = "[P] "
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
+    result = MessageEventResult(chain=[Plain("hello")]).stop_event()
+
+    await _consume(stage, _make_event(result, is_stopped=lambda: True))
+
+    assert result.chain[0].text == "[P] hello"
+    stage.ctx.html_renderer.render_t2i.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_runs_hooks_for_stopped_pending_result():
+    stage = _make_stage(use_file_service=False, callback_api_base="")
+    stage.reply_prefix = "[P] "
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
+    calls: list[str] = []
+
+    async def hook(_event) -> None:
+        calls.append("hook")
+
+    stage.ctx.handlers = SimpleNamespace(
+        get_handlers_by_event_type=lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                handler=hook,
+                handler_module_path="plugin.demo",
+                handler_name="decorate",
+            ),
+        ],
+    )
+    result = MessageEventResult(chain=[Plain("hello")]).stop_event()
+
+    await _consume(stage, _make_event(result, is_stopped=lambda: True))
+
+    assert calls == ["hook"]
+    assert result.chain[0].text == "[P] hello"
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_aborts_when_hook_stops_a_running_event():
+    stage = _make_stage(use_file_service=False, callback_api_base="")
+    stage.reply_prefix = "[P] "
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
+    calls: list[str] = []
+    stopped = {"value": False}
+
+    async def stop_hook(_event) -> None:
+        calls.append("stop")
+        stopped["value"] = True
+
+    async def later_hook(_event) -> None:
+        calls.append("later")
+
+    stage.ctx.handlers = SimpleNamespace(
+        get_handlers_by_event_type=lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                handler=stop_hook,
+                handler_module_path="plugin.demo",
+                handler_name="stop",
+            ),
+            SimpleNamespace(
+                handler=later_hook,
+                handler_module_path="plugin.demo",
+                handler_name="later",
+            ),
+        ],
+    )
+    result = MessageEventResult(chain=[Plain("hello")])
+
+    await _consume(stage, _make_event(result, is_stopped=lambda: stopped["value"]))
+
+    assert calls == ["stop"]
+    assert result.chain[0].text == "hello"
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_suppresses_pending_result_on_hook_stop():
+    stage = _make_stage(use_file_service=False, callback_api_base="")
+    stage.reply_prefix = "[P] "
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
+    calls: list[str] = []
+
+    async def stop_hook(event) -> None:
+        calls.append("stop")
+        event.stop_event()
+
+    async def later_hook(_event) -> None:
+        calls.append("later")
+
+    stage.ctx.handlers = SimpleNamespace(
+        get_handlers_by_event_type=lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                handler=stop_hook,
+                handler_module_path="plugin.demo",
+                handler_name="stop",
+            ),
+            SimpleNamespace(
+                handler=later_hook,
+                handler_module_path="plugin.demo",
+                handler_name="later",
+            ),
+        ],
+    )
+    result = MessageEventResult(chain=[Plain("hello")]).stop_event()
+    state = {"result": result}
+    event = _make_event(result, is_stopped=lambda: True)
+    event.get_result = lambda: state["result"]
+    event.clear_result = lambda: state.__setitem__("result", None)
+    event._force_stopped = False
+    event.stop_event = lambda: setattr(event, "_force_stopped", True)
+
+    await _consume(stage, event)
+
+    assert calls == ["stop"]
+    assert state["result"] is None

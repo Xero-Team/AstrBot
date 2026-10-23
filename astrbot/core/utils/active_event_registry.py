@@ -131,6 +131,9 @@ class ActiveEventRegistry:
     ) -> int:
         """终止指定 UMO 的所有活跃事件。
 
+        取消操作不应投递被取消事件里尚未发送的回复。停止后再清空结果，
+        使调度器把事件视为无待发送内容，也避免流式结果在取消后继续输出。
+
         Args:
             umo: 统一消息来源标识符。
             exclude: 需要排除的事件（通常是发起 reset 的事件本身）。
@@ -141,6 +144,7 @@ class ActiveEventRegistry:
         for event in self._events_for_umo(umo):
             if event is not exclude:
                 event.stop_event()
+                event.clear_result()
         return self.request_agent_stop_all(umo, exclude)
 
     def request_agent_stop_all(

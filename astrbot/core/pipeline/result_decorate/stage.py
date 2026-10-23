@@ -146,7 +146,7 @@ class ResultDecorateStage(Stage):
         is_stream = result.result_content_type == ResultContentType.STREAMING_FINISH
         async for _ in self._check_content_safety(event, result, is_stream):
             yield
-        if event.is_stopped():
+        if event.is_stopped() and event.get_result() is None:
             return
         if not await self._run_decorating_hooks(event, is_stream):
             return
@@ -181,6 +181,9 @@ class ResultDecorateStage(Stage):
             yield item
 
     async def _run_decorating_hooks(self, event, is_stream: bool) -> bool:
+        was_stopped = event.is_stopped()
+        initially_stopped = was_stopped
+        was_force_stopped = getattr(event, "_force_stopped", False)
         for handler in self.ctx.handlers.get_handlers_by_event_type(
             EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
         ):
@@ -210,13 +213,23 @@ class ResultDecorateStage(Stage):
                 raise
             except Exception:
                 logger.error(traceback.format_exc())
-            if event.is_stopped():
+            now_stopped = event.is_stopped()
+            now_force_stopped = getattr(event, "_force_stopped", False)
+            new_force_stop = now_force_stopped and not was_force_stopped
+            if new_force_stop and initially_stopped:
+                # A decorating hook that force-stops a pending result
+                # suppresses the reply. Running results keep the historical
+                # behavior: the hook only aborts further decoration.
+                event.clear_result()
+            if new_force_stop or (now_stopped and not was_stopped):
                 logger.info(
                     "%s - %s 终止了事件传播。",
                     plugin_name,
                     handler.handler_name,
                 )
                 return False
+            was_stopped = now_stopped
+            was_force_stopped = now_force_stopped
         return True
 
     def _apply_prefix(self, result) -> None:

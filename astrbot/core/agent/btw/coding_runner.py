@@ -300,8 +300,9 @@ async def _terminate_guarded(
             await asyncio.shield(task)
         except asyncio.CancelledError:
             continue
-    if task.exception() is not None:
-        raise task.exception()
+    exception = task.exception()
+    if exception is not None:
+        raise exception
 
 
 async def _drain(stream: asyncio.StreamReader | None, log) -> str:

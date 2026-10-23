@@ -54,6 +54,8 @@ class FollowUpCoordinator:
         self._active_runners: dict[str | tuple[str, str], Any] = {}
         self._order_states: dict[str | tuple[str, str], dict[str, object]] = {}
         self._monitor_tasks: set[asyncio.Task[None]] = set()
+        self._pending_tickets: set[FollowUpTicket] = set()
+        self._terminated = False
 
     def register_active_runner(
         self,
@@ -110,6 +112,7 @@ class FollowUpCoordinator:
         ticket = runner.follow_up(message_text=self._event_follow_up_text(event))
         if ticket is None:
             return None
+        self._pending_tickets.add(ticket)
         order_seq = self._allocate_order(order_key)
         monitor_task = asyncio.create_task(
             self._monitor_ticket(order_key, ticket, order_seq),
@@ -138,6 +141,9 @@ class FollowUpCoordinator:
     async def prepare_capture(self, capture: FollowUpCapture) -> tuple[bool, bool]:
         """Wait for a captured ticket and reserve its ordered continuation slot."""
         await capture.ticket.resolved.wait()
+        self._pending_tickets.discard(capture.ticket)
+        if self._terminated:
+            return True, False
         if capture.ticket.consumed:
             await self._mark_consumed(capture._state_key(), capture.order_seq)
             return True, False
@@ -166,6 +172,10 @@ class FollowUpCoordinator:
 
     async def terminate(self) -> None:
         """Cancel pending monitors and discard state held by this runtime."""
+        self._terminated = True
+        for ticket in list(self._pending_tickets):
+            ticket.resolved.set()
+        self._pending_tickets.clear()
         tasks = list(self._monitor_tasks)
         for task in tasks:
             task.cancel()
@@ -280,6 +290,9 @@ class FollowUpCoordinator:
         ticket: FollowUpTicket,
         order_seq: int,
     ) -> None:
-        await ticket.resolved.wait()
+        try:
+            await ticket.resolved.wait()
+        finally:
+            self._pending_tickets.discard(ticket)
         if ticket.consumed:
             await self._mark_consumed(key, order_seq)

@@ -49,8 +49,9 @@ async def initialize_astrbot(
     }
 
     for name, path in paths.items():
+        existed = path.exists()
         path.mkdir(parents=True, exist_ok=True)
-        click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
+        click.echo(f"{'Directory exists' if existed else 'Created'}: {path}")
 
     _initialize_config_from_env(astrbot_root)
 

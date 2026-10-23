@@ -1,14 +1,15 @@
 import re
-import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
 import click
+import yaml
 
 from ..utils.basic import check_astrbot_root, get_astrbot_root
 from ..utils.plugin import (
     PluginRecord,
     PluginStatus,
+    _cleanup_local_plugin_target,
     build_plug_list,
     get_git_repo,
     install_local_plugin,
@@ -88,14 +89,15 @@ def new(name: str) -> None:
 
     click.echo("Rewriting plugin metadata...")
     # Rewrite metadata.yaml
+    metadata = {
+        "name": name,
+        "desc": desc,
+        "version": version,
+        "author": author,
+        "repo": repo,
+    }
     with open(plug_path / "metadata.yaml", "w", encoding="utf-8") as f:
-        f.write(
-            f"name: {name}\n"
-            f"desc: {desc}\n"
-            f"version: {version}\n"
-            f"author: {author}\n"
-            f"repo: {repo}\n",
-        )
+        yaml.safe_dump(metadata, f, allow_unicode=True, sort_keys=False)
 
     # Rewrite README.md
     with open(plug_path / "README.md", "w", encoding="utf-8") as f:
@@ -234,7 +236,7 @@ def remove(name: str) -> None:
     )
 
     try:
-        shutil.rmtree(plugin_path)
+        _cleanup_local_plugin_target(Path(plugin_path))
         click.echo(f"Plugin {name} has been uninstalled")
     except Exception as e:
         raise click.ClickException(f"Failed to uninstall plugin {name}: {e}")

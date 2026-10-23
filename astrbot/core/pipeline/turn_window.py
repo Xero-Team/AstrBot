@@ -7,6 +7,7 @@ import copy
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -31,6 +32,7 @@ class TurnWindow:
     typing_key: str = ""
     flush_task: asyncio.Task | None = None
     typing_paused: bool = False
+    temporary_files: list[str] = field(default_factory=list)
 
 
 class TurnWindowManager:
@@ -112,8 +114,15 @@ class TurnWindowManager:
             dropped = window.fragments.pop(0)
             logger.warning("Turn window %s dropped oldest fragment", key)
             dropped.cleanup_temporary_local_files()
+        self._take_temporary_files(window, event)
         window.fragments.append(event)
         self._arm_flush(window)
+
+    @staticmethod
+    def _take_temporary_files(window: TurnWindow, event: AstrMessageEvent) -> None:
+        for path in list(getattr(event, "_temporary_local_files", [])):
+            if event.transfer_temporary_local_file(path):
+                window.temporary_files.append(path)
 
     def discard(self, event: AstrMessageEvent, *, group: bool = False) -> None:
         """Drop an open window without flushing to the LLM."""
@@ -122,6 +131,7 @@ class TurnWindowManager:
         if window is None:
             return
         self._cancel_window_task(window)
+        self._delete_temporary_files(window)
         for fragment in window.fragments:
             fragment.cleanup_temporary_local_files()
         logger.info("Discarded turn window %s on command", key)
@@ -262,10 +272,9 @@ class TurnWindowManager:
                 resource=last.resource,
                 context=last.auth_context,
             )
-        for fragment in window.fragments:
-            for path in list(getattr(fragment, "_temporary_local_files", [])):
-                if fragment.transfer_temporary_local_file(path):
-                    flush.track_temporary_local_file(path)
+        for path in window.temporary_files:
+            flush.track_temporary_local_file(path)
+        window.temporary_files.clear()
         flush.set_extra("should_run_command", False)
         flush.set_extra("should_run_llm", True)
         flush.set_extra("route_kind", "turn_flush")
@@ -282,11 +291,21 @@ class TurnWindowManager:
         if task is not None and not task.done():
             task.cancel()
 
+    @staticmethod
+    def _delete_temporary_files(window: TurnWindow) -> None:
+        for path in window.temporary_files:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except OSError:
+                logger.warning("Failed to remove buffered temporary file")
+        window.temporary_files.clear()
+
     def _evict_oldest_window(self) -> None:
         while len(self._windows) >= self._max_windows:
             key, window = self._windows.popitem(last=False)
             self._cancel_window_task(window)
             logger.warning("Evicted oldest turn window %s", key)
+            self._delete_temporary_files(window)
             for fragment in window.fragments:
                 fragment.cleanup_temporary_local_files()
 

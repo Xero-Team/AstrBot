@@ -55,3 +55,12 @@ def test_max_chunks_degrades() -> None:
     result = split_platform_text("a" * 8000, limit)
     assert len(result.parts) == 2
     assert result.truncated is True
+
+
+def test_long_fenced_single_line_still_makes_progress() -> None:
+    text = "```\n" + ("A" * 10000) + "\n```"
+    result = split_platform_text(text, DISCORD_TEXT_LIMIT)
+
+    assert len(result.parts) < 20
+    assert all(len(part) <= 2000 for part in result.parts)
+    assert any("A" in part for part in result.parts)

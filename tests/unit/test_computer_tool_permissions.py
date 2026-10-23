@@ -52,6 +52,8 @@ class _FakeSandbox:
 def _make_run_context(
     role: str = "member",
     computer_runtime: object | None = None,
+    *,
+    tool_call_timeout: int = 120,
 ) -> ContextWrapper:
     config_holder = SimpleNamespace(
         get_config=lambda umo: {  # noqa: ARG005
@@ -71,7 +73,7 @@ def _make_run_context(
         "extension.manage",
     )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
-    return ContextWrapper(context=astr_ctx)
+    return ContextWrapper(context=astr_ctx, tool_call_timeout=tool_call_timeout)
 
 
 @pytest.mark.asyncio
@@ -112,6 +114,29 @@ async def test_browser_tools_forward_declared_timeout():
 
     assert [name for name, _ in browser.calls] == ["exec", "exec_batch", "run_skill"]
     assert [kwargs["timeout_seconds"] for _, kwargs in browser.calls] == [7, 8, 9]
+
+
+@pytest.mark.asyncio
+async def test_browser_tools_cap_declared_timeout_at_tool_call_deadline():
+    browser = _RecordingBrowser()
+
+    async def _fake_get_booter(_ctx, _session_id):
+        return SimpleNamespace(browser=browser)
+
+    context = _make_run_context(
+        computer_runtime=SimpleNamespace(get_booter=_fake_get_booter),
+        tool_call_timeout=10,
+    )
+
+    await BrowserExecTool().call(context, cmd="open https://example.com", timeout=30)
+    await BrowserBatchExecTool().call(
+        context,
+        commands=["open https://example.com"],
+        timeout=60,
+    )
+    await RunBrowserSkillTool().call(context, skill_key="demo", timeout=60)
+
+    assert [kwargs["timeout_seconds"] for _, kwargs in browser.calls] == [10, 10, 10]
 
 
 @pytest.mark.asyncio

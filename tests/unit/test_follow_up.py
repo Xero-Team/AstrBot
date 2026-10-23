@@ -176,3 +176,22 @@ def test_follow_up_coordinators_do_not_share_active_runner_state() -> None:
 
     assert first._active_runners["umo-1"] is runner
     assert second._active_runners == {}
+
+
+@pytest.mark.asyncio
+async def test_terminate_wakes_a_pending_ticket(coordinator: FollowUpCoordinator):
+    ticket = FollowUpTicket(seq=1, text="pending")
+    capture = FollowUpCapture(
+        umo="umo-1",
+        ticket=ticket,
+        order_seq=coordinator._allocate_order("umo-1"),
+        monitor_task=asyncio.create_task(asyncio.sleep(30)),
+    )
+    coordinator._pending_tickets.append(ticket)
+    waiter = asyncio.create_task(coordinator.prepare_capture(capture))
+    await asyncio.sleep(0)
+    await coordinator.terminate()
+    capture.monitor_task.cancel()
+    await asyncio.gather(capture.monitor_task, return_exceptions=True)
+
+    assert await waiter == (True, False)

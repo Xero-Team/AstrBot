@@ -28,7 +28,7 @@ class WecomPlatformEvent(AstrMessageEvent):
         self._client = client
 
     async def split_plain(self, plain: str) -> list[str]:
-        """将长文本分割成多个小文本, 每个小文本长度不超过 2048 字符
+        """将长文本按 UTF-8 字节上限分割成多个小文本。
 
         Args:
             plain (str): 要分割的长文本
@@ -36,37 +36,34 @@ class WecomPlatformEvent(AstrMessageEvent):
             list[str]: 分割后的文本列表
 
         """
-        if len(plain) <= 2048:
+        byte_limit = 2048
+        if len(plain.encode("utf-8")) <= byte_limit:
             return [plain]
-        result = []
+
+        punctuation = {"。", "！", "？", ".", "!", "?", "\n", ";", "；"}
+        result: list[str] = []
         start = 0
-        while start < len(plain):
-            # 剩下的字符串长度<2048时结束
-            if start + 2048 >= len(plain):
+        length = len(plain)
+        while start < length:
+            end = start
+            bytes_used = 0
+            while end < length:
+                char_bytes = len(plain[end].encode("utf-8"))
+                if bytes_used + char_bytes > byte_limit:
+                    break
+                bytes_used += char_bytes
+                end += 1
+            if end <= start:
+                end = start + 1
+            if end >= length:
                 result.append(plain[start:])
                 break
 
-            # 向前搜索分割标点符号
-            end = min(start + 2048, len(plain))
             cut_position = end
             for i in range(end, start, -1):
-                if i < len(plain) and plain[i - 1] in [
-                    "。",
-                    "！",
-                    "？",
-                    ".",
-                    "!",
-                    "?",
-                    "\n",
-                    ";",
-                    "；",
-                ]:
+                if plain[i - 1] in punctuation:
                     cut_position = i
                     break
-
-            # 没找到合适的位置分割, 直接切分
-            if cut_position == end and end < len(plain):
-                cut_position = end
 
             result.append(plain[start:cut_position])
             start = cut_position
@@ -83,10 +80,20 @@ class WecomPlatformEvent(AstrMessageEvent):
         """Send split text through the selected WeCom messaging mode."""
         for chunk in await self.split_plain(text):
             if kf_message_api is None:
-                self._client.message.send_text(sender_id, recipient_id, chunk)
+                await asyncio.to_thread(
+                    self._client.message.send_text,
+                    sender_id,
+                    recipient_id,
+                    chunk,
+                )
             else:
                 try:
-                    kf_message_api.send_text(recipient_id, sender_id, chunk)
+                    await asyncio.to_thread(
+                        kf_message_api.send_text,
+                        recipient_id,
+                        sender_id,
+                        chunk,
+                    )
                 except WeChatClientException as exc:
                     if getattr(exc, "errcode", None) != 40096:
                         raise
@@ -95,7 +102,12 @@ class WecomPlatformEvent(AstrMessageEvent):
                         "message API",
                         recipient_id,
                     )
-                    self._client.message.send_text(sender_id, recipient_id, chunk)
+                    await asyncio.to_thread(
+                        self._client.message.send_text,
+                        sender_id,
+                        recipient_id,
+                        chunk,
+                    )
             await asyncio.sleep(0.5)
 
     async def _send_upload_error(
@@ -131,8 +143,11 @@ class WecomPlatformEvent(AstrMessageEvent):
             "video": "视频",
         }[media_type]
         try:
-            with open(path, "rb") as media_file:
-                response = self._client.media.upload(media_type, media_file)
+            response = await asyncio.to_thread(
+                self._upload_media_file,
+                path,
+                media_type,
+            )
         except Exception as exc:
             error_text = f"{mode_label}上传{media_label}失败: {exc}"
             logger.error(error_text)
@@ -150,26 +165,25 @@ class WecomPlatformEvent(AstrMessageEvent):
             logger.debug(f"{mode_label}上传{media_label}返回: {response}")
         media_id = response["media_id"]
         if kf_message_api:
-            match media_type:
-                case "image":
-                    kf_message_api.send_image(recipient_id, sender_id, media_id)
-                case "voice":
-                    kf_message_api.send_voice(recipient_id, sender_id, media_id)
-                case "file":
-                    kf_message_api.send_file(recipient_id, sender_id, media_id)
-                case _:
-                    kf_message_api.send_video(recipient_id, sender_id, media_id)
+            sender = {
+                "image": kf_message_api.send_image,
+                "voice": kf_message_api.send_voice,
+                "file": kf_message_api.send_file,
+            }.get(media_type, kf_message_api.send_video)
+            await asyncio.to_thread(sender, recipient_id, sender_id, media_id)
         else:
-            match media_type:
-                case "image":
-                    self._client.message.send_image(sender_id, recipient_id, media_id)
-                case "voice":
-                    self._client.message.send_voice(sender_id, recipient_id, media_id)
-                case "file":
-                    self._client.message.send_file(sender_id, recipient_id, media_id)
-                case _:
-                    self._client.message.send_video(sender_id, recipient_id, media_id)
+            sender = {
+                "image": self._client.message.send_image,
+                "voice": self._client.message.send_voice,
+                "file": self._client.message.send_file,
+            }.get(media_type, self._client.message.send_video)
+            await asyncio.to_thread(sender, sender_id, recipient_id, media_id)
         return True
+
+    def _upload_media_file(self, path: str, media_type: str):
+        """Upload one media file without blocking the event loop."""
+        with open(path, "rb") as media_file:
+            return self._client.media.upload(media_type, media_file)
 
     async def _send_media(
         self,

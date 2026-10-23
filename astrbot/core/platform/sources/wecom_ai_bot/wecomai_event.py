@@ -186,6 +186,18 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         ):
             if self.only_use_webhook_url_to_send and self.webhook_client and message:
                 await self.webhook_client.send_message_chain(message)
+                await self.long_connection_sender(
+                    req_id,
+                    {
+                        "msgtype": "stream",
+                        "stream": {
+                            "id": stream_id,
+                            "finish": True,
+                            "content": self._extract_plain_text_from_chain(message),
+                        },
+                    },
+                )
+                await self._mark_stream_complete(stream_id)
                 return await super().send(message)
 
             if self.webhook_client and message:

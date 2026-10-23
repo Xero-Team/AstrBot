@@ -971,7 +971,8 @@ class QQOfficialPlatformAdapter(Platform):
             botpy.message.DirectMessage,
         ):
             if isinstance(message, botpy.message.Message):
-                abm.self_id = str(message.mentions[0].id)
+                mentions = message.mentions or []
+                abm.self_id = str(mentions[0].id) if mentions else "unknown_selfid"
             else:
                 abm.self_id = ""
 

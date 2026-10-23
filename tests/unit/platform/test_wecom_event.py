@@ -58,7 +58,8 @@ async def test_wecom_event_split_plain_prefers_punctuation_boundaries():
 
     chunks = await event.split_plain(text)
 
-    assert chunks == [("a" * 2047) + "。", "b" * 10]
+    assert chunks == ["a" * 2047, "。" + ("b" * 10)]
+    assert all(len(chunk.encode("utf-8")) <= 2048 for chunk in chunks)
 
 
 @pytest.mark.asyncio

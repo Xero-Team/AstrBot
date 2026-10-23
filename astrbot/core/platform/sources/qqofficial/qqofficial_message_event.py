@@ -410,8 +410,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return None
         if isinstance(ret, dict):
             ret_id = ret.get("id")
-            return str(ret_id) if ret_id is not None else None
-        ret_id = getattr(ret, "id", None)
+        else:
+            ret_id = getattr(ret, "message_id", None)
+            if ret_id is None:
+                ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
     @staticmethod

@@ -895,13 +895,13 @@ def test_wecom_kf_sync_uses_next_cursor_until_done():
         )
     )
 
-    latest = adapter._latest_wechat_kf_message("token", "kf")
+    messages = adapter._latest_wechat_kf_messages("token", "kf")
 
-    assert latest == {"msgid": "c"}
+    assert messages == [{"msgid": "a"}, {"msgid": "b"}, {"msgid": "c"}]
     assert calls == ["", "cursor-1", "cursor-2"]
 
 
-def test_wecom_kf_sync_keeps_the_last_message_when_the_terminal_page_is_empty():
+def test_wecom_kf_sync_keeps_every_message_when_the_terminal_page_is_empty():
     responses = [
         {"has_more": 1, "next_cursor": "cursor-1", "msg_list": [{"msgid": "a"}]},
         {"has_more": 0, "next_cursor": "", "msg_list": []},
@@ -914,7 +914,7 @@ def test_wecom_kf_sync_keeps_the_last_message_when_the_terminal_page_is_empty():
         )
     )
 
-    assert adapter._latest_wechat_kf_message("token", "kf") == {"msgid": "a"}
+    assert adapter._latest_wechat_kf_messages("token", "kf") == [{"msgid": "a"}]
     assert calls == ["", "cursor-1"]
 
 
@@ -923,7 +923,7 @@ def test_wecom_kf_sync_tolerates_error_responses_and_stops_on_repeated_cursor():
     adapter.wechat_kf_api = SimpleNamespace(
         sync_msg=lambda *args: {"errcode": 40000, "errmsg": "invalid"}
     )
-    assert adapter._latest_wechat_kf_message("token", "kf") is None
+    assert adapter._latest_wechat_kf_messages("token", "kf") == []
 
     responses = [
         {"has_more": 1, "next_cursor": "same", "msg_list": [{"msgid": "a"}]},
@@ -936,5 +936,8 @@ def test_wecom_kf_sync_tolerates_error_responses_and_stops_on_repeated_cursor():
         )
     )
 
-    assert adapter._latest_wechat_kf_message("token", "kf") == {"msgid": "b"}
+    assert adapter._latest_wechat_kf_messages("token", "kf") == [
+        {"msgid": "a"},
+        {"msgid": "b"},
+    ]
     assert calls == ["", "same"]

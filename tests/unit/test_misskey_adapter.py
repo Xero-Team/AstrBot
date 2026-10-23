@@ -224,3 +224,23 @@ async def test_misskey_room_owner_role_stays_in_current_session(tmp_path):
     finally:
         await service.close()
         await db.close()
+
+
+def test_process_at_mention_requires_a_username_boundary():
+    from astrbot.core.platform.astrbot_message import AstrBotMessage
+    from astrbot.core.platform.sources.misskey.misskey_utils import (
+        process_at_mention,
+    )
+
+    message = AstrBotMessage()
+    message.message = []
+
+    parts, remaining = process_at_mention(
+        message,
+        "@alice_bob hi",
+        "alice",
+        "bot-1",
+    )
+
+    assert parts == ["@alice_bob hi"]
+    assert remaining == "@alice_bob hi"

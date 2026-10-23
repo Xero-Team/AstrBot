@@ -229,39 +229,42 @@ class WecomPlatformAdapter(Platform):
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
         async def callback(msg: BaseMessage) -> None:
-            if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
-
-                def get_latest_msg_item() -> dict | None:
-                    token = msg._data["Token"]
-                    kfid = msg._data["OpenKfId"]
-                    return self._latest_wechat_kf_message(token, kfid)
-
-                msg_new = await asyncio.get_running_loop().run_in_executor(
+            if (
+                msg.type == "unknown"
+                and msg._data.get("Event") == "kf_msg_or_event"
+                and hasattr(self, "wechat_kf_api")
+            ):
+                token = msg._data.get("Token")
+                kfid = msg._data.get("OpenKfId")
+                if not token or not kfid:
+                    logger.warning("微信客服事件缺少 Token 或 OpenKfId，已忽略")
+                    return
+                msg_items = await asyncio.get_running_loop().run_in_executor(
                     None,
-                    get_latest_msg_item,
+                    self._latest_wechat_kf_messages,
+                    token,
+                    kfid,
                 )
-                if msg_new:
+                for msg_new in msg_items:
                     await self.convert_wechat_kf_message(msg_new)
                 return
             await self.convert_message(msg)
 
         self.server.callback = callback
 
-    def _latest_wechat_kf_message(self, token: str, kfid: str) -> dict | None:
+    def _latest_wechat_kf_messages(self, token: str, kfid: str) -> list[dict]:
         cursor = ""
-        latest: dict | None = None
+        collected: list[dict] = []
         while True:
             ret = self.wechat_kf_api.sync_msg(token, kfid, cursor)
             if not isinstance(ret, dict):
-                return latest
-            page = ret.get("msg_list") or []
-            if page:
-                latest = page[-1]
+                return collected
+            collected.extend(ret.get("msg_list") or [])
             next_cursor = ret.get("next_cursor") or ""
             if not ret.get("has_more") or not next_cursor or next_cursor == cursor:
                 break
             cursor = next_cursor
-        return latest
+        return collected
 
     def _is_duplicate_wechat_kf_text_message(self, session_id: str, text: str) -> bool:
         normalized_text = text.strip()
@@ -370,6 +373,7 @@ class WecomPlatformAdapter(Platform):
                     open_kfid = acc.get("open_kfid", None)
                     if not open_kfid:
                         logger.error("获取微信客服失败，open_kfid 为空。")
+                        continue
                     logger.debug(f"Found open_kfid: {open_kfid!s}")
                     kf_url = (
                         await loop.run_in_executor(
@@ -382,6 +386,7 @@ class WecomPlatformAdapter(Platform):
                     logger.info(
                         f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
                     )
+                    break
             except Exception as e:
                 logger.error(e)
 

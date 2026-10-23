@@ -388,7 +388,17 @@
         );
       }, REQUEST_TIMEOUT_MS);
       pending.set(requestId, { resolve, reject, timer });
-      port.postMessage(message);
+      try {
+        port.postMessage(message);
+      } catch (error) {
+        pending.delete(requestId);
+        clearTimeout(timer);
+        reject(publicError({
+          code: 'internal',
+          message: 'Plugin request could not be sent',
+          retryable: false,
+        }));
+      }
     });
   };
 

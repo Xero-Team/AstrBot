@@ -157,8 +157,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
 
     // 如果组已展开，添加匹配的子指令
     if (!expandedGroups.value.has(cmd.command_id)) return;
-    const subsToShow = query ? matchingSubCmds : cmd.sub_commands || [];
-    for (const sub of subsToShow) {
+    for (const sub of matchingSubCmds) {
       bucketCommand(buckets, sub);
     }
   };

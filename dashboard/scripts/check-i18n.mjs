@@ -174,7 +174,7 @@ export function keysFromCallArgument(arg) {
 function parseBindings(source) {
   const bindings = new Map();
   const pattern =
-    /(?:const|let|var)\s*\{([^}]+)\}\s*=\s*(use(?:Module)?I18n)\(\s*(?:(['"])([^'"]*)\3\s*)?\)/g;
+    /(?:const|let|var)\s*\{([^}]+)\}\s*=\s*(use(?:Module)?I18n)(?:<[^>]*>)?\(\s*(?:(['"])([^'"]*)\3\s*,?\s*)?\)/g;
 
   for (const match of source.matchAll(pattern)) {
     const callee = match[2];

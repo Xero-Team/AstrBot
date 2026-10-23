@@ -81,6 +81,9 @@ def mock_main_db():
 
     # 模拟异步上下文管理器
     session = AsyncMock()
+    session.begin = MagicMock(
+        return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
+    )
     db.get_db = MagicMock(
         return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
     )
@@ -1587,3 +1590,17 @@ async def test_backup_round_trips_backend_vector_index(tmp_path, filename):
 
     assert (restore_dir / filename).read_bytes() == b"vector-index"
     assert result.success is True
+
+
+def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
+    importer = AstrBotImporter(
+        main_db=MagicMock(),
+        config_path=str(tmp_path / "cmd_config.json"),
+    )
+
+    rows = importer._preprocess_main_table_rows(
+        "attachments",
+        [{"attachment_id": "a1", "path": "/old/machine/data/attachments/a1.png"}],
+    )
+
+    assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")

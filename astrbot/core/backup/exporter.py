@@ -304,7 +304,7 @@ class AstrBotExporter:
                         table_name,
                         safe_error("", exc),
                     )
-                    export_data[table_name] = []
+                    raise RuntimeError(f"导出表 {table_name} 失败") from exc
 
         return export_data
 

@@ -20,6 +20,8 @@ def _make_service(tmp_path: Path) -> BackupService:
         ensure_cleanup_task_started=lambda: None,
     )
     service._background_tasks = set()
+    service._active_data_task = None
+    service._active_import_path = None
     return service
 
 

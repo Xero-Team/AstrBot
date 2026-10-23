@@ -48,21 +48,21 @@
     "css": {
       "file": "fonts.css",
       "kind": "support",
-      "sha256": "6bc33e19104514bc8132a8fa25ce27f1bf8d4950af132fce4186e75a958625cb",
-      "bytes": 4897
+      "sha256": "4dcc35bcd191961c58528f9b41e4195ad86a070ff7d4b6a412c0069e48d69401",
+      "bytes": 9836
     },
     "files": [
       {
         "file": "files/astrbot-ui-regular.woff2",
         "kind": "font",
-        "sha256": "769824a75173bd62263cc50db7bebf84a5b5993022d09712559936e656951ec6",
-        "bytes": 210580
+        "sha256": "e67482b016199e851f4b9e8b262addee8ebebf1db140c0d0b1b93bcb8f9df0dc",
+        "bytes": 220224
       },
       {
         "file": "files/astrbot-ui-bold.woff2",
         "kind": "font",
-        "sha256": "d5f6352fd9672176f7d34573078688f812c83e3e6bbf3fb88499a5807900e5ee",
-        "bytes": 215468
+        "sha256": "a71d2d6a267f4e9566b2d4db8d01ed11d6b5822a7ab6d5eff6650ff699e5c918",
+        "bytes": 224784
       },
       {
         "file": "files/astrbot-noto-sans-sc-00-regular.woff2",
@@ -79,83 +79,215 @@
       {
         "file": "files/astrbot-noto-sans-sc-01-regular.woff2",
         "kind": "font",
-        "sha256": "f32dd647a93896f92c84ce15408a48a8b4a57f57702ea4fb016c5d4f1105b4a8",
-        "bytes": 1739804
+        "sha256": "23360429e3aa09597d8fcc3c08293750f6abdf4cd5873599d67afb48f6a16968",
+        "bytes": 384976
       },
       {
         "file": "files/astrbot-noto-sans-sc-01-bold.woff2",
         "kind": "font",
-        "sha256": "8bb4cea5e8fd50a906c076e593cf9caccc3e6be8cb1aba783b5afcc74737aa44",
-        "bytes": 1820760
+        "sha256": "b975c387383e2f696c11febc45fdc79bb5ac51ca22a19c944b3508633adc54cf",
+        "bytes": 395060
       },
       {
         "file": "files/astrbot-noto-sans-sc-02-regular.woff2",
         "kind": "font",
-        "sha256": "3833956358f5ff52da6826fdac999a95298cb8dad603a784b436b32a60a796d8",
-        "bytes": 1692928
+        "sha256": "e5e5b7a70dcb6dab7e96a515bc0f4f7729637f04c67443bd3fc8e3d259529ecc",
+        "bytes": 491952
       },
       {
         "file": "files/astrbot-noto-sans-sc-02-bold.woff2",
         "kind": "font",
-        "sha256": "bd887de9be346302f35b18d0b788668d73f53eaede89661088e2b2d3be82e072",
-        "bytes": 1752584
+        "sha256": "4a5474311b229dd53767c45f4dc4877427fd34dc22c19633da22ef03995afcf5",
+        "bytes": 508900
       },
       {
         "file": "files/astrbot-noto-sans-sc-03-regular.woff2",
         "kind": "font",
-        "sha256": "9b6418c74d5ebb45e6fae33c6f323a4fd5f0989bbacf4ad97280ca01a6c7c293",
-        "bytes": 2822152
+        "sha256": "d83b108a10e351fbba98ec9c3462bd459de2a8044787ec5c8a0de985e8018776",
+        "bytes": 513976
       },
       {
         "file": "files/astrbot-noto-sans-sc-03-bold.woff2",
         "kind": "font",
-        "sha256": "1e3cc1dbc3cb7c221588803856280ad4426517903a767019bba460bfd5a7f46e",
-        "bytes": 2965152
+        "sha256": "820915b8246cb79d380aac1d81db8fe1df8a6a4aa211efff9af752d0f1a58a8c",
+        "bytes": 531076
       },
       {
         "file": "files/astrbot-noto-sans-sc-04-regular.woff2",
+        "kind": "font",
+        "sha256": "fcc4b27c17f3bb8cd61b5759c67f1e0ddb984f925813748e082e6a485a6ef48f",
+        "bytes": 495692
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-04-bold.woff2",
+        "kind": "font",
+        "sha256": "53d9dc7a0a78e070f2c7b1d3bfbe1c5cf0616c98c823c54c63bd22f7b5a36b83",
+        "bytes": 516784
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-05-regular.woff2",
+        "kind": "font",
+        "sha256": "12e4ff1e867817e219b39ec2a45deebe373fe5942b5e933e2f3743648c1b5322",
+        "bytes": 392812
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-05-bold.woff2",
+        "kind": "font",
+        "sha256": "6fd76d83863306271c1be0ef6e37a0d53d0f7a88bee1d4fd45b523c5737a9c1c",
+        "bytes": 403020
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-06-regular.woff2",
+        "kind": "font",
+        "sha256": "a80be17fbcb75fbe2938cca07eae586ccc7579bb133f40941c853ed87f4943d7",
+        "bytes": 440356
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-06-bold.woff2",
+        "kind": "font",
+        "sha256": "d9e40d4bbf925df9e8afee97dd4b539f2cd111eebb426e87a92037e424ae81d2",
+        "bytes": 451832
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-07-regular.woff2",
+        "kind": "font",
+        "sha256": "1adf5c5c0e143c8c3451eae6e7e478dde1d587e5b2ab75712681336a24c1e74a",
+        "bytes": 445032
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-07-bold.woff2",
+        "kind": "font",
+        "sha256": "955aecb08e7745317dec3be465084376ce4a0a2af54df2ea6cc4b9584a08abbf",
+        "bytes": 456092
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-08-regular.woff2",
+        "kind": "font",
+        "sha256": "33c9710c37f056dd859ebccf0a8c9ca8a3a190d55ad7fb590ae4d0f18891943d",
+        "bytes": 458004
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-08-bold.woff2",
+        "kind": "font",
+        "sha256": "0a95e0caff3901788d73735fc8a39e37feb92f13ddf600435020ae1792736b17",
+        "bytes": 471868
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-09-regular.woff2",
+        "kind": "font",
+        "sha256": "99ad32e3fe2448625cbf0b08d42a16c224c4d07c942ea4c5bed9d56fddd0e914",
+        "bytes": 472956
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-09-bold.woff2",
+        "kind": "font",
+        "sha256": "c39364bca18c5cedc4c877fea1288c7f1a99840e0a230f4bd732fb29b504bde0",
+        "bytes": 485668
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-10-regular.woff2",
+        "kind": "font",
+        "sha256": "c882f35fac2ab16678b1471e904e8dfbb53e61b7edd16c90303b152d68977a1b",
+        "bytes": 500480
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-10-bold.woff2",
+        "kind": "font",
+        "sha256": "818ce2b6fdeab40858eae4dec5fcacf772ec634240661619b023c2c657e8e21e",
+        "bytes": 527140
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-11-regular.woff2",
+        "kind": "font",
+        "sha256": "c07cfce19311386058debee2b05114c57a8957a0ee3d9057226fbffe5f20941b",
+        "bytes": 467748
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-11-bold.woff2",
+        "kind": "font",
+        "sha256": "5da01cc9fd4031160e2b6a56586a1ebf2a4a79629fdddecd0358992b869ddaf2",
+        "bytes": 485876
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-12-regular.woff2",
+        "kind": "font",
+        "sha256": "6726e8f9e4b1f208d4ed656ec28d57ec24ea60b036fe984a61936a251c5d3718",
+        "bytes": 482080
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-12-bold.woff2",
+        "kind": "font",
+        "sha256": "f79dfc71a6ae350c4ac3f7478f59a5bce66af28137b3cdc0a0bb578f1d2b1ecf",
+        "bytes": 499316
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-13-regular.woff2",
+        "kind": "font",
+        "sha256": "128923dd4431962b20219b9495df1d76c8ed896267cb6f4928dda29c76898c9c",
+        "bytes": 496620
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-13-bold.woff2",
+        "kind": "font",
+        "sha256": "1186daa0ade53b2685493af4f59cf61d394dc62fb4bddec74b52f29ed17afd06",
+        "bytes": 523160
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-14-regular.woff2",
+        "kind": "font",
+        "sha256": "1b99a02d5fb7b992d6d9c3c5452bbd16f2e9f54b7d5efd1cc1e2bfb07c387324",
+        "bytes": 577140
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-14-bold.woff2",
+        "kind": "font",
+        "sha256": "4f2bcdb110064e1ff76b6a5ffcc900c58b00b7e01dab089616a7ff6281bd8812",
+        "bytes": 601432
+      },
+      {
+        "file": "files/astrbot-noto-sans-sc-26-regular.woff2",
         "kind": "font",
         "sha256": "d66656d800f01da6652b0679c9c10b8428abea149c15c26c63ac07383b2937c0",
         "bytes": 76424
       },
       {
-        "file": "files/astrbot-noto-sans-sc-04-bold.woff2",
+        "file": "files/astrbot-noto-sans-sc-26-bold.woff2",
         "kind": "font",
         "sha256": "b6ec0737d81aa6e343e1c609ee894d5271b3373c4218cfdc6bf2e0a174255661",
         "bytes": 77356
       },
       {
-        "file": "files/astrbot-noto-sans-sc-05-regular.woff2",
+        "file": "files/astrbot-noto-sans-sc-27-regular.woff2",
         "kind": "font",
         "sha256": "4a4daae5c7d568cce3fb874a4a988e932573fc957edb91e1dc3653da36ece258",
         "bytes": 25900
       },
       {
-        "file": "files/astrbot-noto-sans-sc-05-bold.woff2",
+        "file": "files/astrbot-noto-sans-sc-27-bold.woff2",
         "kind": "font",
         "sha256": "fd0243fb00272d9f17a3c551249c09d1b82bc49151f99e9041d550b6b6870ab9",
         "bytes": 26144
       },
       {
-        "file": "files/astrbot-noto-sans-sc-06-regular.woff2",
+        "file": "files/astrbot-noto-sans-sc-28-regular.woff2",
         "kind": "font",
         "sha256": "61f80301cc239743c71c3f8762df586d90ead9541942389145ce1da6cdb933be",
         "bytes": 54644
       },
       {
-        "file": "files/astrbot-noto-sans-sc-06-bold.woff2",
+        "file": "files/astrbot-noto-sans-sc-28-bold.woff2",
         "kind": "font",
         "sha256": "936dbb38cc93186d4ed467bd4347945e11ce805da3fe064a6300d43402628706",
         "bytes": 55460
       },
       {
-        "file": "files/astrbot-noto-sans-sc-07-regular.woff2",
+        "file": "files/astrbot-noto-sans-sc-29-regular.woff2",
         "kind": "font",
         "sha256": "01ec30c007197364c9e07571c737bf9f6e33ca42fad9822391b03e1fd6808722",
         "bytes": 4260
       },
       {
-        "file": "files/astrbot-noto-sans-sc-07-bold.woff2",
+        "file": "files/astrbot-noto-sans-sc-29-bold.woff2",
         "kind": "font",
         "sha256": "87615a9bdc8caee03868de0d9dc39b3039db9056f431c9029b49ad5141cdee9c",
         "bytes": 4248
@@ -288,6 +420,8 @@
       "7D",
       "7E",
       "B7",
+      "D7",
+      "2013",
       "2014",
       "201C",
       "201D",
@@ -358,7 +492,6 @@
       "4EE3",
       "4EE4",
       "4EE5",
-      "4EEA",
       "4EEC",
       "4EF6",
       "4EFB",
@@ -431,6 +564,7 @@
       "521D",
       "5220",
       "5224",
+      "5229",
       "522B",
       "5230",
       "5236",
@@ -447,6 +581,8 @@
       "52A9",
       "52B1",
       "52BF",
+      "52FE",
+      "52FF",
       "5305",
       "5316",
       "5317",
@@ -507,6 +643,7 @@
       "547D",
       "548C",
       "54C1",
+      "54C8",
       "54CD",
       "54EA",
       "5524",
@@ -533,6 +670,7 @@
       "57DF",
       "57FA",
       "5806",
+      "585E",
       "586B",
       "5883",
       "589E",
@@ -577,18 +715,18 @@
       "5BA3",
       "5BB3",
       "5BB9",
+      "5BBF",
       "5BC6",
       "5BCC",
-      "5BF8",
       "5BF9",
       "5BFC",
       "5C06",
       "5C0F",
       "5C11",
+      "5C14",
       "5C1A",
       "5C1D",
       "5C31",
-      "5C3A",
       "5C3D",
       "5C3E",
       "5C40",
@@ -604,6 +742,7 @@
       "5DE5",
       "5DE6",
       "5DEE",
+      "5DF1",
       "5DF2",
       "5E02",
       "5E03",
@@ -614,6 +753,7 @@
       "5E27",
       "5E2E",
       "5E38",
+      "5E42",
       "5E73",
       "5E74",
       "5E76",
@@ -664,6 +804,7 @@
       "6089",
       "609F",
       "60A8",
+      "60AC",
       "60C5",
       "60E9",
       "60F3",
@@ -680,6 +821,7 @@
       "624B",
       "624D",
       "6253",
+      "6258",
       "6267",
       "6269",
       "626B",
@@ -692,8 +834,12 @@
       "6280",
       "628A",
       "6295",
+      "6298",
+      "629B",
       "62A4",
       "62A5",
+      "62BD",
+      "62C6",
       "62C9",
       "62D2",
       "62D6",
@@ -703,6 +849,7 @@
       "62EC",
       "62FC",
       "62FD",
+      "62FF",
       "6301",
       "6302",
       "6307",
@@ -713,6 +860,7 @@
       "6377",
       "6388",
       "6392",
+      "63A2",
       "63A5",
       "63A7",
       "63A8",
@@ -720,6 +868,7 @@
       "63D0",
       "63D2",
       "641C",
+      "6458",
       "64A4",
       "64AD",
       "64B0",
@@ -756,6 +905,7 @@
       "666F",
       "667A",
       "6682",
+      "66B4",
       "66F4",
       "66FF",
       "6700",
@@ -778,13 +928,14 @@
       "6765",
       "677E",
       "677F",
-      "6781",
       "6784",
       "6790",
       "679A",
       "679C",
+      "67B6",
       "67D0",
       "67D3",
+      "67D4",
       "67E5",
       "6807",
       "6808",
@@ -799,6 +950,7 @@
       "6848",
       "684C",
       "6863",
+      "6865",
       "6876",
       "68C0",
       "6982",
@@ -815,14 +967,18 @@
       "6BCD",
       "6BCF",
       "6BD4",
+      "6BDB",
       "6BEB",
       "6C14",
+      "6C34",
       "6C38",
       "6C42",
+      "6C47",
       "6C60",
       "6C99",
       "6CA1",
       "6CB3",
+      "6CBF",
       "6CD5",
       "6CE8",
       "6D17",
@@ -832,6 +988,7 @@
       "6D45",
       "6D4B",
       "6D4F",
+      "6D6E",
       "6D77",
       "6D88",
       "6D89",
@@ -844,11 +1001,15 @@
       "6E29",
       "6E32",
       "6E90",
+      "6ED1",
       "6EDA",
+      "6EE1",
       "6EE4",
       "6F14",
+      "6F84",
       "6FC0",
       "706B",
+      "7070",
       "70B9",
       "70BC",
       "70C8",
@@ -867,7 +1028,9 @@
       "7387",
       "73AF",
       "73B0",
+      "73BB",
       "7406",
+      "7483",
       "751F",
       "7528",
       "7531",
@@ -879,7 +1042,6 @@
       "7565",
       "758F",
       "767B",
-      "767D",
       "767E",
       "7684",
       "76D1",
@@ -916,8 +1078,10 @@
       "7A0D",
       "7A20",
       "7A33",
+      "7A3F",
       "7A7A",
       "7A81",
+      "7A84",
       "7A97",
       "7ACB",
       "7AD6",
@@ -944,9 +1108,11 @@
       "7CFB",
       "7D20",
       "7D22",
+      "7D27",
       "7D2F",
       "7EA6",
       "7EA7",
+      "7EAF",
       "7EB5",
       "7EB8",
       "7EBF",
@@ -956,6 +1122,7 @@
       "7ECF",
       "7ED1",
       "7ED3",
+      "7ED5",
       "7ED9",
       "7EDC",
       "7EDD",
@@ -997,9 +1164,11 @@
       "82E5",
       "82F1",
       "8303",
+      "8349",
       "8350",
       "8389",
       "83B7",
+      "83DC",
       "853D",
       "85CF",
       "8651",
@@ -1039,6 +1208,7 @@
       "8BC4",
       "8BC6",
       "8BC9",
+      "8BCA",
       "8BCD",
       "8BD5",
       "8BDD",
@@ -1055,6 +1225,8 @@
       "8C28",
       "8C61",
       "8D1F",
+      "8D22",
+      "8D23",
       "8D25",
       "8D26",
       "8D28",
@@ -1071,6 +1243,7 @@
       "8D8B",
       "8DB3",
       "8DC3",
+      "8DD1",
       "8DDF",
       "8DE8",
       "8DEF",
@@ -1116,6 +1289,7 @@
       "9017",
       "901A",
       "901F",
+      "903B",
       "9047",
       "9053",
       "9065",
@@ -1145,6 +1319,7 @@
       "952E",
       "955C",
       "957F",
+      "95E8",
       "95ED",
       "95EE",
       "95F2",
@@ -1153,7 +1328,9 @@
       "9608",
       "961F",
       "9632",
+      "9634",
       "9636",
+      "963B",
       "963F",
       "9644",
       "9645",
@@ -1165,6 +1342,7 @@
       "968F",
       "9690",
       "9694",
+      "969C",
       "96C6",
       "9700",
       "9732",
@@ -1184,6 +1362,7 @@
       "989D",
       "98CE",
       "98DE",
+      "9971",
       "9996",
       "99A8",
       "9A71",
@@ -1193,10 +1372,10 @@
       "9AA8",
       "9AD8",
       "9C81",
+      "9ED1",
       "9ED8",
       "9F13",
       "9F20",
-      "9F50",
       "9F84",
       "FF01",
       "FF08",
@@ -1207,6 +1386,6 @@
       "FF1F",
       "FF5C"
     ],
-    "notoChunkCount": 8
+    "notoChunkCount": 19
   }
 }

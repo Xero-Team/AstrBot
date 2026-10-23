@@ -514,7 +514,7 @@ class ProviderAnthropic(Provider):
     def _default_max_tokens(self) -> int:
         configured = self.provider_config.get("max_tokens")
         try:
-            value = int(configured)
+            value = int(str(configured))
         except TypeError, ValueError:
             return 4096
         return value if value > 0 else 4096

@@ -1627,8 +1627,6 @@ def test_import_attachments_restores_files_under_the_new_data_root(tmp_path):
 
     assert count == 1
     assert (tmp_path / "attachments" / "stored.png").read_bytes() == b"image"
-
-
 def test_convert_datetime_fields_rejects_unparseable_values():
     importer = AstrBotImporter(main_db=MagicMock())
     row = {
@@ -1641,4 +1639,3 @@ def test_convert_datetime_fields_rejects_unparseable_values():
 
     with pytest.raises(ValueError):
         importer._convert_datetime_fields(row, ConversationV2)
-

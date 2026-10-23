@@ -1627,3 +1627,55 @@ def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
     )
 
     assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")
+
+
+@pytest.mark.asyncio
+async def test_main_database_import_skips_a_row_that_fails_on_flush(tmp_path):
+    importer = AstrBotImporter(main_db=MagicMock())
+
+    class _Nested:
+        async def __aenter__(self):
+            return None
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class _Session:
+        def __init__(self):
+            self.added = []
+
+        def begin_nested(self):
+            return _Nested()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def flush(self):
+            if len(self.added) >= 2:
+                raise ValueError("constraint violation")
+
+    result = ImportResult()
+    session = _Session()
+    imported = await importer._import_main_database_rows(
+        {
+            "platform_stats": [
+                {
+                    "timestamp": "2026-01-01T00:00:00+00:00",
+                    "platform_id": "p1",
+                    "platform_type": "t1",
+                    "count": 1,
+                },
+                {
+                    "timestamp": "2026-01-01T01:00:00+00:00",
+                    "platform_id": "p2",
+                    "platform_type": "t2",
+                    "count": 1,
+                },
+            ]
+        },
+        session,
+        result,
+    )
+
+    assert imported["platform_stats"] == 1
+    assert result.warnings == ["导入 platform_stats 记录失败，该行已跳过"]

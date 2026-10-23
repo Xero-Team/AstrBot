@@ -75,21 +75,33 @@ if (!globalThis.IntersectionObserver) {
     IntersectionObserverMock as typeof IntersectionObserver;
 }
 
-if (!window.matchMedia) {
-  Object.defineProperty(window, 'matchMedia', {
-    writable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  });
+function evaluateMediaQuery(query: string): boolean {
+  const minWidth = /min-width:\s*([\d.]+)px/.exec(query);
+  const maxWidth = /max-width:\s*([\d.]+)px/.exec(query);
+  if (!minWidth && !maxWidth) {
+    return false;
+  }
+  const width = window.innerWidth;
+  return (
+    (!minWidth || width >= Number(minWidth[1])) &&
+    (!maxWidth || width <= Number(maxWidth[1]))
+  );
 }
+
+Object.defineProperty(window, 'matchMedia', {
+  configurable: true,
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: evaluateMediaQuery(query),
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
 
 if (!window.CSS) {
   Object.defineProperty(window, 'CSS', {

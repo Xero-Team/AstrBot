@@ -77,3 +77,20 @@ def test_overlap_state_never_exceeds_chunk_size():
 
     assert length <= 10
     assert len("".join(parts)) <= 10
+
+
+@pytest.mark.asyncio
+async def test_markdown_heading_context_never_exceeds_chunk_size():
+    from astrbot.core.knowledge_base.chunking.markdown import MarkdownChunker
+
+    chunker = MarkdownChunker(
+        chunk_size=30,
+        chunk_overlap=5,
+        include_heading_context=True,
+    )
+    text = "# " + ("VeryLongHeading" * 4) + "\n\n" + ("body " * 20)
+
+    chunks = await chunker.chunk(text)
+
+    assert chunks
+    assert all(len(chunk) <= 30 for chunk in chunks)

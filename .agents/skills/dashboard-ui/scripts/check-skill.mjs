@@ -7,11 +7,30 @@ const skillDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(skillDir, '..', '..', '..');
 const skillName = 'dashboard-ui';
 
-const read = (path) => readFileSync(join(repoRoot, path), 'utf8');
 const errors = [];
 
+function read(path) {
+  try {
+    return readFileSync(join(repoRoot, path), 'utf8');
+  } catch (error) {
+    errors.push(`cannot read ${path}: ${error.message}`);
+    return '';
+  }
+}
+
+function readJson(path) {
+  const text = read(path);
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    errors.push(`cannot parse ${path}: ${error.message}`);
+    return {};
+  }
+}
+
 const skillMd = read('.agents/skills/dashboard-ui/SKILL.md');
-const pkg = JSON.parse(read('dashboard/package.json'));
+const pkg = readJson('dashboard/package.json');
 
 const frontmatter = skillMd.match(/^---\n([\s\S]*?)\n---/);
 if (!frontmatter) {

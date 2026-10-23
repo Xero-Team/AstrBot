@@ -7,6 +7,8 @@ bundling heavy extraction models. The parser sends the raw file to the server's
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
 
 from astrbot.core.knowledge_base.parsers.base import BaseParser, ParseResult
@@ -38,7 +40,7 @@ class TikaParser(BaseParser):
         headers = {
             "Accept": "text/plain",
             "Content-Type": "application/octet-stream",
-            "Content-Disposition": f'attachment; filename="{_safe_name(file_name)}"',
+            "Content-Disposition": _content_disposition(_safe_name(file_name)),
         }
         try:
             async with httpx.AsyncClient(
@@ -60,4 +62,15 @@ class TikaParser(BaseParser):
 
 
 def _safe_name(file_name: str) -> str:
-    return file_name.replace('"', "").replace("\r", "").replace("\n", "")[:200]
+    return (
+        file_name.replace('"', "")
+        .replace("\\", "")
+        .replace("\r", "")
+        .replace("\n", "")[:200]
+    )
+
+
+def _content_disposition(file_name: str) -> str:
+    fallback = file_name.encode("ascii", "replace").decode("ascii").replace("?", "_")
+    encoded = quote(file_name, safe="")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"

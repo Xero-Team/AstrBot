@@ -133,7 +133,10 @@ def normalize_platform_stats_entry(
 
 def normalize_platform_stats_timestamp(value: Any) -> str | None:
     if isinstance(value, datetime):
-        return _normalize_datetime(value).isoformat()
+        try:
+            return _normalize_datetime(value).isoformat()
+        except OverflowError, ValueError:
+            return None
     if not isinstance(value, str):
         return None
 
@@ -145,7 +148,7 @@ def normalize_platform_stats_timestamp(value: Any) -> str | None:
 
     try:
         return _normalize_datetime(datetime.fromisoformat(timestamp)).isoformat()
-    except ValueError:
+    except OverflowError, ValueError:
         return None
 
 
@@ -179,7 +182,7 @@ def _normalize_platform_stats_count(
     raw_count = normalized_row.get("count", 0)
     try:
         count = int(raw_count)
-    except TypeError, ValueError:
+    except OverflowError, TypeError, ValueError:
         warn_limiter.warn_invalid_count(
             raw_count,
             (

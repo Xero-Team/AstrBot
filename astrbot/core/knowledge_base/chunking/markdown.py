@@ -142,11 +142,16 @@ class MarkdownChunker(BaseChunker):
                 # 扣除前缀长度，确保添加前缀后不超过 chunk_size
                 prefix_len = self._estimate_prefix_length(heading_path)
                 effective_chunk_size = max(chunk_size // 4, chunk_size - prefix_len)
+                effective_chunk_size = max(effective_chunk_size, 1)
+                effective_overlap = min(
+                    chunk_overlap,
+                    max(0, effective_chunk_size - 1),
+                )
 
                 sub_chunks = await self._fallback_chunker.chunk(
                     section_text,
                     chunk_size=effective_chunk_size,
-                    chunk_overlap=chunk_overlap,
+                    chunk_overlap=effective_overlap,
                 )
                 for i, sub_chunk in enumerate(sub_chunks):
                     chunk_text = self._apply_heading_context(
@@ -345,7 +350,7 @@ class MarkdownChunker(BaseChunker):
         fenced_ranges: list[tuple[int, int]],
     ) -> list[_Heading]:
         heading_pattern = re.compile(
-            r"^(#{1," + str(self.max_heading_depth) + r"})\s*(.+)$",
+            r"^(#{1," + str(self.max_heading_depth) + r"})(?:[ \t]+(.+))?[ \t]*$",
             re.MULTILINE,
         )
         headings: list[_Heading] = []
@@ -355,7 +360,7 @@ class MarkdownChunker(BaseChunker):
             headings.append(
                 {
                     "level": len(match.group(1)),
-                    "title": match.group(2).strip(),
+                    "title": (match.group(2) or "").strip(),
                     "start": match.start(),
                     "end": match.end(),
                 }

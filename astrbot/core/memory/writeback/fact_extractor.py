@@ -6,22 +6,22 @@ from astrbot.core.memory.models import ExtractedMemoryFact
 class MemoryFactExtractor:
     _PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
         (
-            re.compile(r"\b(?:i like|i love)\s+([^.!?\n]{2,80})", re.I),
+            re.compile(r"\b(?:i like|i love)\s+([^.!?\n,;]{2,80})", re.I),
             "preference",
             "User likes {value}.",
         ),
         (
-            re.compile(r"\b(?:i dislike|i hate)\s+([^.!?\n]{2,80})", re.I),
+            re.compile(r"\b(?:i dislike|i hate)\s+([^.!?\n,;]{2,80})", re.I),
             "preference",
             "User dislikes {value}.",
         ),
         (
-            re.compile(r"\bmy name is\s+([^.!?\n]{2,60})", re.I),
+            re.compile(r"\bmy name is\s+([^.!?\n,;]{2,60})", re.I),
             "identity",
             "User name is {value}.",
         ),
         (
-            re.compile(r"我(?:喜欢|爱)\s*([^。！？\n]{1,40})"),
+            re.compile(r"我(?:喜欢|爱(?!人|好))\s*([^。！？\n，,；;、]{1,40})"),
             "preference",
             "用户喜欢{value}。",
         ),

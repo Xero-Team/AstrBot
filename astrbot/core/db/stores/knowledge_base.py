@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, desc, select
 
@@ -56,24 +56,29 @@ class KnowledgeBaseTaskStoreMixin(DatabaseStoreMixin):
         async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():
-                query = await session.execute(
+                values: dict[str, object] = {
+                    "status": status,
+                    "error": error,
+                    "updated_at": datetime.now(UTC),
+                }
+                if progress is not None:
+                    values["progress"] = progress
+                if result is not None:
+                    values["result"] = result
+                statement = update(KnowledgeBaseTask).where(
+                    col(KnowledgeBaseTask.task_id) == task_id
+                )
+                if status in _ACTIVE_TASK_STATUSES:
+                    statement = statement.where(
+                        col(KnowledgeBaseTask.status).in_(_ACTIVE_TASK_STATUSES)
+                    )
+                await session.execute(statement.values(**values))
+                result = await session.execute(
                     select(KnowledgeBaseTask).where(
                         col(KnowledgeBaseTask.task_id) == task_id
                     )
                 )
-                task = query.scalar_one_or_none()
-                if task is None:
-                    return None
-                task.status = status
-                if progress is not None:
-                    task.progress = progress
-                if result is not None:
-                    task.result = result
-                task.error = error
-                task.updated_at = datetime.now(UTC)
-                await session.flush()
-                await session.refresh(task)
-                return task
+                return result.scalar_one_or_none()
 
     async def interrupt_active_knowledge_base_tasks(self) -> int:
         """Mark abandoned active tasks as interrupted without replaying work."""

@@ -83,6 +83,7 @@ class RecursiveCharacterChunker(BaseChunker):
         split: str,
         overlap: int,
     ) -> tuple[list[str], int]:
+        overlap = min(overlap, max(0, len(split) - 1))
         overlap_start = max(0, len(combined_text) - overlap)
         if overlap_start <= 0:
             return [split], self.length_function(split)

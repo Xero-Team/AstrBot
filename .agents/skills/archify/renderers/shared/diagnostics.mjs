@@ -32,8 +32,15 @@ function normalizedDiagnostic(diagnostic) {
 export function recordDiagnostic(diagnostic) {
   if (!DIAGNOSTIC_MODE || recordingSuppressionDepth > 0) return;
   const normalized = normalizedDiagnostic(diagnostic);
-  if (recordedMessages.has(normalized.message)) return;
-  recordedMessages.add(normalized.message);
+  const key = JSON.stringify([
+    normalized.code,
+    normalized.severity,
+    normalized.message,
+    normalized.subject,
+    normalized.evidence,
+  ]);
+  if (recordedMessages.has(key)) return;
+  recordedMessages.add(key);
   recorded.push(normalized);
 }
 
@@ -101,7 +108,9 @@ function rendererFailure(error) {
   const attached = Array.isArray(error?.archifyDiagnostics)
     ? error.archifyDiagnostics.map(normalizedDiagnostic)
     : [];
-  const diagnostics = recorded.length ? recorded : (attached.length ? attached : [fallbackDiagnostic(error)]);
+  const diagnostics = attached.length
+    ? attached
+    : (recorded.length ? recorded : [fallbackDiagnostic(error)]);
   return {
     schemaVersion: 1,
     ok: false,

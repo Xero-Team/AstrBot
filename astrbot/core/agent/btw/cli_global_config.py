@@ -284,7 +284,6 @@ def _split_managed_block(block: str) -> tuple[str, str]:
     return head.rstrip(), marker + tail
 
 
-
 def _strip_top_level_keys(text: str, keys: set[str]) -> str:
     """Remove conflicting top-level keys before the first TOML table."""
     lines: list[str] = []

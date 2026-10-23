@@ -17,10 +17,19 @@ const TARGETS = [
   ['architecture', 'web-app.architecture.json', 'web-app-rendered.html'],
 ];
 
+const failures = [];
 for (const [mode, input, output] of TARGETS) {
-  execFileSync(process.execPath, [
-    path.join(skillRoot, `renderers/${mode}/render-${mode}.mjs`),
-    path.join(skillRoot, 'examples', input),
-    path.join(outputRoot, output),
-  ], { stdio: 'inherit' });
+  try {
+    execFileSync(process.execPath, [
+      path.join(skillRoot, `renderers/${mode}/render-${mode}.mjs`),
+      path.join(skillRoot, 'examples', input),
+      path.join(outputRoot, output),
+    ], { stdio: 'inherit', timeout: 10 * 60 * 1000 });
+  } catch (error) {
+    failures.push(`${mode}: ${input} -> ${output}: ${error.message}`);
+  }
+}
+if (failures.length) {
+  process.stderr.write(`${failures.join('\n')}\n`);
+  process.exitCode = 1;
 }

@@ -1140,8 +1140,8 @@ async def test_bot_leave_reports_failure_without_leaving_result():
         supported_actions=("leave_group",),
     )
     await command.leave(event, confirm=True)
-    assert "Leaving" in event.sent[0].chain[0].text
-    assert "Failed to leave" in event.sent[1].chain[0].text
+    assert len(event.sent) == 1
+    assert "Failed to leave" in event.sent[0].chain[0].text
     assert event.stopped is True
     assert event.result is None
 
@@ -1581,3 +1581,38 @@ async def test_provider_model_commands_list_and_switch_by_index():
     await command.set_model(switch_event, "2")
     assert provider.model == "model-b"
     assert "Switched model." in _plain_text(switch_event.result)
+
+
+@pytest.mark.asyncio
+async def test_bot_enable_clears_blocked_state_after_authorization():
+    settings = {"session_blocked": True, "session_enabled": False}
+
+    async def session_get(umo: str, key: str, default: dict) -> dict:
+        return dict(settings)
+
+    async def session_put(umo: str, key: str, value: dict) -> None:
+        settings.clear()
+        settings.update(value)
+
+    async def authorize_target_session(event, *, action: str, umo: str):
+        assert action == "session.block"
+        return SimpleNamespace(allowed=True)
+
+    command = BotCommands(
+        SimpleNamespace(
+            preferences=SimpleNamespace(
+                session_get=session_get,
+                session_put=session_put,
+            ),
+            authz=SimpleNamespace(
+                authorize_target_session=authorize_target_session,
+            ),
+            i18n=FakeI18n(),
+        )
+    )
+    event = DummyEvent(message_str="bot enable")
+
+    await command.set_enabled(event, True)
+
+    assert settings["session_enabled"] is True
+    assert settings["session_blocked"] is False

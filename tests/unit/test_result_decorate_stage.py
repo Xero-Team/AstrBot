@@ -242,3 +242,18 @@ async def test_result_decorate_adds_mention_then_quote():
     assert isinstance(result.chain[0], Reply)
     assert isinstance(result.chain[1], Mention)
     assert result.chain[2].text == "\nhello"
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_regex_with_capture_groups_uses_string_parts():
+    stage = _make_stage(use_file_service=False, callback_api_base="")
+    stage.enable_segmented_reply = True
+    stage.split_mode = "regex"
+    stage.regex = r"(.*?[。？！])"
+    stage.words_count_threshold = 100
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
+    result = MessageEventResult(chain=[Plain("one。two。")])
+
+    await _consume(stage, _make_event(result))
+
+    assert [component.text for component in result.chain] == ["one。", "two。"]

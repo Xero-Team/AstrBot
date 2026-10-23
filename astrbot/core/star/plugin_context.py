@@ -1035,6 +1035,20 @@ class FileCapability:
         """Publish a local file and return its short-lived token."""
         return await self._file_token_service.register_file(file_path, ttl_seconds)
 
+    async def publish_owned(
+        self,
+        file_path: str,
+        event: object,
+        *,
+        ttl_seconds: float | None = None,
+    ) -> str:
+        """Publish a file owned by ``event`` and transfer its cleanup ownership."""
+        return await self._file_token_service.register_owned_file(
+            file_path,
+            event,
+            ttl_seconds,
+        )
+
 
 class SessionCapability:
     """Read and update UMO aliases without exposing a database session."""

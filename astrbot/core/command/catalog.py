@@ -167,6 +167,8 @@ class CommandCatalog:
                 index += 1
             if index >= len(source):
                 break
+            if source[index] in "\r\n":
+                break
             start = index
             while index < len(source) and source[index] not in " \t\r\n":
                 index += 1

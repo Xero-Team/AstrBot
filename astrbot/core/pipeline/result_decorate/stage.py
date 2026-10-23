@@ -182,6 +182,7 @@ class ResultDecorateStage(Stage):
 
     async def _run_decorating_hooks(self, event, is_stream: bool) -> bool:
         was_stopped = event.is_stopped()
+        initially_stopped = was_stopped
         was_force_stopped = getattr(event, "_force_stopped", False)
         for handler in self.ctx.handlers.get_handlers_by_event_type(
             EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
@@ -214,9 +215,13 @@ class ResultDecorateStage(Stage):
                 logger.error(traceback.format_exc())
             now_stopped = event.is_stopped()
             now_force_stopped = getattr(event, "_force_stopped", False)
-            if (now_stopped and not was_stopped) or (
-                now_force_stopped and not was_force_stopped
-            ):
+            new_force_stop = now_force_stopped and not was_force_stopped
+            if new_force_stop and initially_stopped:
+                # A decorating hook that force-stops a pending result
+                # suppresses the reply. Running results keep the historical
+                # behavior: the hook only aborts further decoration.
+                event.clear_result()
+            if new_force_stop or (now_stopped and not was_stopped):
                 logger.info(
                     "%s - %s 终止了事件传播。",
                     plugin_name,

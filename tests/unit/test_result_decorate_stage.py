@@ -322,7 +322,7 @@ async def test_result_decorate_aborts_when_hook_stops_a_running_event():
 
 
 @pytest.mark.asyncio
-async def test_result_decorate_aborts_when_hook_stops_a_pending_result():
+async def test_result_decorate_suppresses_pending_result_on_hook_stop():
     stage = _make_stage(use_file_service=False, callback_api_base="")
     stage.reply_prefix = "[P] "
     stage.ctx.astrbot_config["t2i"] = {"enable": False}
@@ -350,11 +350,14 @@ async def test_result_decorate_aborts_when_hook_stops_a_pending_result():
         ],
     )
     result = MessageEventResult(chain=[Plain("hello")]).stop_event()
+    state = {"result": result}
     event = _make_event(result, is_stopped=lambda: True)
+    event.get_result = lambda: state["result"]
+    event.clear_result = lambda: state.__setitem__("result", None)
     event._force_stopped = False
     event.stop_event = lambda: setattr(event, "_force_stopped", True)
 
     await _consume(stage, event)
 
     assert calls == ["stop"]
-    assert result.chain[0].text == "hello"
+    assert state["result"] is None

@@ -102,7 +102,7 @@ class MemoryService:
         }
 
     @staticmethod
-    def _parse_confidence(value: object, default: float) -> float:
+    def _parse_confidence(value: Any, default: float) -> float:
         if value is None:
             return default
         try:

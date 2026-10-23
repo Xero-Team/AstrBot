@@ -183,8 +183,21 @@ class WecomServer:
 def _wecom_message_send_time(item: dict) -> int:
     try:
         return int(item.get("send_time", 0))
-    except TypeError, ValueError:
+    except OverflowError, TypeError, ValueError:
         return 0
+
+
+def _wecom_event_since(item: dict) -> int:
+    """Return the lower bound for the first kefu sync pull."""
+    try:
+        create_time = int(item.get("CreateTime", 0))
+    except OverflowError, TypeError, ValueError:
+        create_time = 0
+    if create_time <= 0:
+        # A callback token is valid for ten minutes; bound replay when the
+        # event omits CreateTime.
+        return int(time.time()) - 600
+    return create_time - 60
 
 
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
@@ -248,12 +261,7 @@ class WecomPlatformAdapter(Platform):
                 if not token or not kfid:
                     logger.warning("微信客服事件缺少 Token 或 OpenKfId，已忽略")
                     return
-                try:
-                    since = int(msg._data.get("CreateTime", 0)) - 60
-                except TypeError, ValueError:
-                    # A callback token is valid for ten minutes; bound replay
-                    # even if the event omitted CreateTime.
-                    since = int(time.time()) - 600
+                since = _wecom_event_since(msg._data)
                 # Serialize pulls so overlapping callbacks do not both replay
                 # the same cursor window.
                 async with self._wechat_kf_lock:
@@ -280,18 +288,20 @@ class WecomPlatformAdapter(Platform):
         cursor = self._wechat_kf_cursors.get(kfid, "")
         first_pull = not cursor
         collected: list[dict] = []
+        next_cursor = cursor
         while True:
             ret = self.wechat_kf_api.sync_msg(token, kfid, cursor)
             if not isinstance(ret, dict):
                 return collected
             collected.extend(ret.get("msg_list") or [])
-            next_cursor = ret.get("next_cursor") or ""
+            next_cursor = ret.get("next_cursor") or cursor
             if not ret.get("has_more") or not next_cursor or next_cursor == cursor:
-                if next_cursor:
-                    self._wechat_kf_cursors[kfid] = next_cursor
                 break
             cursor = next_cursor
-            self._wechat_kf_cursors[kfid] = cursor
+        # Advance only after every page was fetched, so a transient failure
+        # does not skip the pages already collected before it.
+        if next_cursor:
+            self._wechat_kf_cursors[kfid] = next_cursor
 
         if not first_pull:
             return collected

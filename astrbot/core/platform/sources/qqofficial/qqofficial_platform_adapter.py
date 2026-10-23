@@ -44,9 +44,7 @@ from ...register import register_platform_adapter
 from .provisioning import provision_qqofficial_registration
 from .qqofficial_message_event import QQOfficialMessageEvent
 
-# remove logger handler
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
+logging.getLogger("botpy").setLevel(logging.ERROR)
 
 
 def _patch_group_message_author(
@@ -479,7 +477,7 @@ class QQOfficialPlatformAdapter(Platform):
                 "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
                 "msg_type": 2,
             }
-        if msg_id and not allow_group_proactive_send:
+        if msg_id:
             payload["msg_id"] = msg_id
         ret: Any = None
         send_helper = SimpleNamespace(bot=self.client, _bot=self.client)

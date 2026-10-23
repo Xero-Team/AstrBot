@@ -74,7 +74,9 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             # 调用适配器的 send_by_session 方法
             if hasattr(self._client, "send_by_session"):
                 logger.debug("[MisskeyEvent] 调用适配器的 send_by_session 方法")
-                await self._client.send_by_session(session, message)
+                result = await self._client.send_by_session(session, message)
+                if isinstance(result, PlatformSendResult) and not result.success:
+                    return result
             else:
                 # 回退到原来的简化发送逻辑
                 content, has_at = serialize_message_chain(message.chain)

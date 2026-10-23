@@ -431,7 +431,7 @@ async def test_ws_group_send_by_session_strips_unique_session_suffix():
 
 
 @pytest.mark.asyncio
-async def test_ws_group_send_by_session_with_cached_msg_id_still_omits_msg_id():
+async def test_ws_group_send_by_session_with_cached_msg_id_reuses_the_passive_reply():
     adapter = QQOfficialPlatformAdapter(
         {
             "id": "qq-official-test",
@@ -461,7 +461,7 @@ async def test_ws_group_send_by_session_with_cached_msg_id_still_omits_msg_id():
     assert kwargs["markdown"]["content"] == "proactive with cache"
     assert kwargs["msg_type"] == 2
     assert "content" not in kwargs
-    assert "msg_id" not in kwargs
+    assert kwargs["msg_id"] == "stale-msg-id"
     assert "msg_seq" in kwargs
 
 

@@ -28,9 +28,7 @@ from ..qqofficial.qqofficial_platform_adapter import (
 from .qo_webhook_event import QQOfficialWebhookMessageEvent
 from .qo_webhook_server import QQOfficialWebhook
 
-# remove logger handler
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
+logging.getLogger("botpy").setLevel(logging.ERROR)
 
 
 # QQ 机器人官方框架

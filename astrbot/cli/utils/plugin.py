@@ -312,19 +312,17 @@ def _get_plugin_target_paths(
 def _prepare_plugin_backup(target_path: Path, backup_path: Path | None) -> None:
     if backup_path is None:
         return
-    if backup_path.exists():
-        shutil.rmtree(backup_path)
+    _cleanup_local_plugin_target(backup_path)
     shutil.copytree(target_path, backup_path)
 
 
 def _cleanup_plugin_backup(backup_path: Path | None) -> None:
-    if backup_path is not None and backup_path.exists():
-        shutil.rmtree(backup_path)
+    if backup_path is not None:
+        _cleanup_local_plugin_target(backup_path)
 
 
 def _restore_plugin_backup(target_path: Path, backup_path: Path | None) -> None:
-    if target_path.exists():
-        shutil.rmtree(target_path, ignore_errors=True)
+    _cleanup_local_plugin_target(target_path)
     if backup_path is not None and backup_path.exists():
         shutil.move(backup_path, target_path)
 
@@ -464,6 +462,10 @@ def manage_plugin(
     if is_update and not target_path.exists():
         raise click.ClickException(
             f"Plugin {plugin_name} is not installed and cannot be updated"
+        )
+    if is_update and target_path.is_symlink():
+        raise click.ClickException(
+            f"Plugin {plugin_name} is an editable install and cannot be updated in place"
         )
 
     _prepare_plugin_backup(target_path, backup_path)

@@ -33,16 +33,21 @@ class MemoryWritebackWorker:
         self._stopping.set()
         if not self._task:
             return
+        cancelled = False
         try:
             await asyncio.wait_for(asyncio.shield(self._task), timeout=30)
         except TimeoutError:
             self._task.cancel()
         except asyncio.CancelledError:
             self._task.cancel()
+            cancelled = True
         try:
             await self._task
         except asyncio.CancelledError:
+            # The worker was cancelled as part of this shutdown path.
             pass
+        if cancelled:
+            raise asyncio.CancelledError
 
     async def enqueue(self, item: MemoryWritebackItem) -> bool:
         try:
@@ -60,10 +65,9 @@ class MemoryWritebackWorker:
             if self._stopping.is_set() and self.queue.empty():
                 break
             try:
-                item = await asyncio.wait_for(
-                    self.queue.get(),
-                    timeout=0.5 if self._stopping.is_set() else None,
-                )
+                # Poll even while running so ``stop()`` can observe the stop
+                # flag without waiting for a queued item that may never arrive.
+                item = await asyncio.wait_for(self.queue.get(), timeout=0.5)
             except TimeoutError:
                 continue
             try:

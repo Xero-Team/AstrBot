@@ -557,7 +557,10 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             turn_start = 0
             for idx in range(len(values_messages) - 1, -1, -1):
                 msg = values_messages[idx]
-                if isinstance(msg, dict) and msg.get("role") == "user":
+                if isinstance(msg, dict) and str(msg.get("role", "")).lower() in {
+                    "user",
+                    "human",
+                }:
                     turn_start = idx
                     break
             for idx, msg in enumerate(values_messages):

@@ -212,3 +212,10 @@ def test_get_prompt_id_reads_local_and_third_party_fields():
     assert get_prompt_id({"runner_type": "dify", "config": {"prompt_id": ""}}) == (
         "default"
     )
+
+
+def test_float_defaults_reject_non_finite_values():
+    from astrbot.core.config.agent_runner import _normalize_value
+
+    assert _normalize_value(float("inf"), 1.5) == 1.5
+    assert _normalize_value(float("nan"), 1.5) == 1.5

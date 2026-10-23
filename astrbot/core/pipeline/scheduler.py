@@ -104,7 +104,8 @@ class PipelineScheduler:
                 agen = cast(AsyncGenerator[None], coroutine)
                 async for _ in agen:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
-                    if event.is_stopped():
+                    was_stopped = event.is_stopped()
+                    if was_stopped and event.get_result() is None:
                         logger.debug(
                             f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )
@@ -114,7 +115,7 @@ class PipelineScheduler:
                     await self._process_stages(event, i + 1)
 
                     # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
-                    if event.is_stopped():
+                    if was_stopped or event.is_stopped():
                         logger.debug(
                             f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )

@@ -242,3 +242,16 @@ async def test_result_decorate_adds_mention_then_quote():
     assert isinstance(result.chain[0], Reply)
     assert isinstance(result.chain[1], Mention)
     assert result.chain[2].text == "\nhello"
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_decorates_stopped_pending_result():
+    stage = _make_stage(use_file_service=False, callback_api_base="")
+    stage.reply_prefix = "[P] "
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
+    result = MessageEventResult(chain=[Plain("hello")]).stop_event()
+
+    await _consume(stage, _make_event(result, is_stopped=lambda: True))
+
+    assert result.chain[0].text == "[P] hello"
+    stage.ctx.html_renderer.render_t2i.assert_not_awaited()

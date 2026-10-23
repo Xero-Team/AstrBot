@@ -327,6 +327,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
         return await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
+        send_failure: PlatformSendResult | None = None
         try:
             content_parts = []
 
@@ -336,7 +337,12 @@ class SatoriPlatformEvent(AstrMessageEvent):
                         if content_parts:
                             content = "".join(content_parts)
                             temp_chain = MessageChain([Plain(text=content)])
-                            await self.send(temp_chain)
+                            result = await self.send(temp_chain)
+                            if (
+                                isinstance(result, PlatformSendResult)
+                                and not result.success
+                            ):
+                                send_failure = result
                             content_parts = []
                         continue
 
@@ -355,13 +361,14 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                 )
                                 if image_data_url:
                                     img_chain = MessageChain(
-                                        [
-                                            Plain(
-                                                text=f'<img src="{image_data_url}"/>',
-                                            ),
-                                        ],
+                                        [Image(file=image_data_url)]
                                     )
-                                    await self.send(img_chain)
+                                    result = await self.send(img_chain)
+                                    if (
+                                        isinstance(result, PlatformSendResult)
+                                        and not result.success
+                                    ):
+                                        send_failure = result
                             except Exception as e:
                                 logger.error(f"图片转换为base64失败: {e}")
                         else:
@@ -370,7 +377,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if content_parts:
                 content = "".join(content_parts)
                 temp_chain = MessageChain([Plain(text=content)])
-                await self.send(temp_chain)
+                result = await self.send(temp_chain)
+                if isinstance(result, PlatformSendResult) and not result.success:
+                    send_failure = result
 
         except Exception as e:
             logger.error(f"Satori 流式消息发送异常: {e}")
@@ -378,6 +387,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
             result.status = "unknown"
             return result
 
+        if send_failure is not None:
+            return send_failure
         return await self._record_streaming_send()
 
     async def _convert_component_to_satori(self, component) -> str:

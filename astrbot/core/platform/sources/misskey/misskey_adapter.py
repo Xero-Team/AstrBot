@@ -561,7 +561,7 @@ class MisskeyPlatformAdapter(Platform):
         if reply and isinstance(reply, dict):
             reply_user_id = str(reply.get("user", {}).get("id", ""))
             if reply_user_id == self.bot_self_id:
-                return bool(self._bot_username and f"@{self._bot_username}" in text)
+                return True
 
         return False
 

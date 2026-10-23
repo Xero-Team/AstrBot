@@ -42,7 +42,6 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
         self.set_model(provider_config["model"])
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
-        dashscope.api_key = self.chosen_api_key
 
     async def get_audio(self, text: str) -> str:
         model = self.get_model()
@@ -169,14 +168,22 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         model: str,
         text: str,
     ) -> tuple[bytes | None, str]:
-        synthesizer = SpeechSynthesizer(
-            headers={
-                name.lower(): value for name, value in self.request_headers.items()
-            },
-            model=model,
-            voice=self.voice,
-            format=AudioFormat.WAV_24000HZ_MONO_16BIT,
-        )
+        # The SDK copies ``dashscope.api_key`` into the synthesizer instance at
+        # construction time. Swap it only for that synchronous window so several
+        # providers can keep different credentials without leaving a global key.
+        previous_api_key = dashscope.api_key
+        dashscope.api_key = self.chosen_api_key
+        try:
+            synthesizer = SpeechSynthesizer(
+                headers={
+                    name.lower(): value for name, value in self.request_headers.items()
+                },
+                model=model,
+                voice=self.voice,
+                format=AudioFormat.WAV_24000HZ_MONO_16BIT,
+            )
+        finally:
+            dashscope.api_key = previous_api_key
         loop = asyncio.get_running_loop()
         audio_bytes = await loop.run_in_executor(
             None,

@@ -669,6 +669,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         elif isinstance(source, botpy.message.Message):
             if media.image_path:
                 payload["file_image"] = media.image_path
+            elif media.image_base64:
+                payload["file_image"] = media.image_base64
             payload.pop("msg_type", None)
             ret = await self._send_with_markdown_fallback(
                 send_func=lambda retry_payload: self._bot.api.post_message(
@@ -682,6 +684,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             if media.image_path:
                 payload["file_image"] = media.image_path
+            elif media.image_base64:
+                payload["file_image"] = media.image_base64
             payload.pop("msg_type", None)
             ret = await self._send_with_markdown_fallback(
                 send_func=lambda retry_payload: self._bot.api.post_dms(

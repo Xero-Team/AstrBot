@@ -39,6 +39,12 @@ test.describe('Dashboard keyboard and responsive interactions', () => {
     await dialogActivator.focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('.version-dialog-card')).toBeVisible();
+    // Vuetify resolves close-on-Escape after the overlay enters the global
+    // stack, which happens asynchronously. Wait for the enter transition so
+    // the keypress is not swallowed by the overlay that is still settling.
+    await expect(
+      page.locator('.v-overlay__content.dialog-transition-enter-active'),
+    ).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page.locator('.version-dialog-card')).toBeHidden();
     await expect(dialogActivator).toBeFocused();
@@ -139,6 +145,9 @@ test.describe('Dashboard keyboard and responsive interactions', () => {
         (element) => getComputedStyle(element).backgroundColor,
       ),
     ).not.toMatch(/^rgba\(/);
+    await expect(
+      page.locator('.v-overlay__content.dialog-transition-enter-active'),
+    ).toHaveCount(0);
 
     await page.keyboard.press('Escape');
     await expect(changelogDialog).toBeHidden();

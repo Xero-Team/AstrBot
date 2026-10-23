@@ -1303,3 +1303,23 @@ async def test_platform_manager_cancellation_still_reclaims_adapter_run_task(
         if termination is not None:
             await asyncio.gather(termination, return_exceptions=True)
         await _cleanup_lifecycle_manager(manager, instances)
+
+
+@pytest.mark.asyncio
+async def test_task_wrapper_marks_platform_stopped_on_normal_return():
+    from astrbot.core.platform.platform import PlatformStatus
+
+    manager = _make_manager()
+    platform = SimpleNamespace(
+        status=PlatformStatus.RUNNING,
+        config={"id": "bot"},
+        meta=lambda: SimpleNamespace(id="bot", name="fake"),
+        record_error=MagicMock(),
+    )
+
+    async def _finish() -> None:
+        return None
+
+    await manager._task_wrapper(asyncio.create_task(_finish()), platform)
+
+    assert platform.status is PlatformStatus.STOPPED

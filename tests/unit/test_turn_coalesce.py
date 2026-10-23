@@ -172,3 +172,21 @@ async def test_flush_clones_webchat_event_without_reinvoking_constructor():
     assert flush.message_str == "hello"
     assert is_manager_flush(flush._extras) is True
     await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_accept_takes_ownership_of_temporary_files(tmp_path: Path):
+    queued: list[AstrMessageEvent] = []
+    manager = TurnWindowManager(lambda event: queued.append(event) or True)
+    temp_file = tmp_path / "media.bin"
+    temp_file.write_bytes(b"data")
+    fragment = _event("with media", message_id="media-1")
+    fragment.track_temporary_local_file(str(temp_file))
+
+    manager.accept(fragment, wait_seconds=0.01, max_total_seconds=1)
+    assert fragment.has_temporary_local_file(str(temp_file)) is False
+
+    await asyncio.sleep(0.05)
+    assert len(queued) == 1
+    assert queued[0].has_temporary_local_file(str(temp_file)) is True
+    assert temp_file.exists()

@@ -73,8 +73,12 @@ class KnowledgeBaseTaskStoreMixin(DatabaseStoreMixin):
                         col(KnowledgeBaseTask.status).in_(_ACTIVE_TASK_STATUSES)
                     )
                 await session.execute(statement.values(**values))
-                task = await session.get(KnowledgeBaseTask, task_id)
-                return task
+                result = await session.execute(
+                    select(KnowledgeBaseTask).where(
+                        col(KnowledgeBaseTask.task_id) == task_id
+                    )
+                )
+                return result.scalar_one_or_none()
 
     async def interrupt_active_knowledge_base_tasks(self) -> int:
         """Mark abandoned active tasks as interrupted without replaying work."""

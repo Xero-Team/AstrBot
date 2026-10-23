@@ -182,6 +182,7 @@ class ResultDecorateStage(Stage):
 
     async def _run_decorating_hooks(self, event, is_stream: bool) -> bool:
         was_stopped = event.is_stopped()
+        was_force_stopped = getattr(event, "_force_stopped", False)
         for handler in self.ctx.handlers.get_handlers_by_event_type(
             EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
         ):
@@ -212,7 +213,10 @@ class ResultDecorateStage(Stage):
             except Exception:
                 logger.error(traceback.format_exc())
             now_stopped = event.is_stopped()
-            if now_stopped and not was_stopped:
+            now_force_stopped = getattr(event, "_force_stopped", False)
+            if (now_stopped and not was_stopped) or (
+                now_force_stopped and not was_force_stopped
+            ):
                 logger.info(
                     "%s - %s 终止了事件传播。",
                     plugin_name,
@@ -220,6 +224,7 @@ class ResultDecorateStage(Stage):
                 )
                 return False
             was_stopped = now_stopped
+            was_force_stopped = now_force_stopped
         return True
 
     def _apply_prefix(self, result) -> None:

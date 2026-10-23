@@ -319,3 +319,42 @@ async def test_result_decorate_aborts_when_hook_stops_a_running_event():
 
     assert calls == ["stop"]
     assert result.chain[0].text == "hello"
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_aborts_when_hook_stops_a_pending_result():
+    stage = _make_stage(use_file_service=False, callback_api_base="")
+    stage.reply_prefix = "[P] "
+    stage.ctx.astrbot_config["t2i"] = {"enable": False}
+    calls: list[str] = []
+
+    async def stop_hook(event) -> None:
+        calls.append("stop")
+        event.stop_event()
+
+    async def later_hook(_event) -> None:
+        calls.append("later")
+
+    stage.ctx.handlers = SimpleNamespace(
+        get_handlers_by_event_type=lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                handler=stop_hook,
+                handler_module_path="plugin.demo",
+                handler_name="stop",
+            ),
+            SimpleNamespace(
+                handler=later_hook,
+                handler_module_path="plugin.demo",
+                handler_name="later",
+            ),
+        ],
+    )
+    result = MessageEventResult(chain=[Plain("hello")]).stop_event()
+    event = _make_event(result, is_stopped=lambda: True)
+    event._force_stopped = False
+    event.stop_event = lambda: setattr(event, "_force_stopped", True)
+
+    await _consume(stage, event)
+
+    assert calls == ["stop"]
+    assert result.chain[0].text == "hello"

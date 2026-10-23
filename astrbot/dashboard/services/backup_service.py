@@ -580,6 +580,15 @@ class BackupService:
             raise BackupServiceError("备份文件不存在")
         return BackupDownload(path=file_path, filename=filename)
 
+    def _is_active_import(self, file_path: str) -> bool:
+        active = self._active_import_path
+        if not active:
+            return False
+        try:
+            return os.path.samefile(file_path, active)
+        except OSError:
+            return False
+
     def delete_backup(self, data: object) -> tuple[dict | None, str | None]:
         payload = self._payload(data)
         filename = self._validate_backup_filename(
@@ -587,11 +596,7 @@ class BackupService:
             missing="缺少参数 filename",
         )
         file_path = os.path.join(self.backup_dir, filename)
-        if (
-            self._active_import_path
-            and os.path.exists(file_path)
-            and os.path.samefile(file_path, self._active_import_path)
-        ):
+        if self._is_active_import(file_path):
             raise BackupServiceError("该备份正在导入，无法删除")
         if not os.path.exists(file_path):
             raise BackupServiceError("备份文件不存在")
@@ -621,9 +626,7 @@ class BackupService:
             raise BackupServiceError("备份文件不存在")
 
         new_path = os.path.join(self.backup_dir, new_filename)
-        if self._active_import_path and os.path.samefile(
-            old_path, self._active_import_path
-        ):
+        if self._is_active_import(old_path):
             raise BackupServiceError("该备份正在导入，无法重命名")
         if os.path.exists(new_path):
             raise BackupServiceError(f"文件名 '{new_filename}' 已存在")

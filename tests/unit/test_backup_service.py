@@ -3,7 +3,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from astrbot.dashboard.services.backup_service import BackupService
+import pytest
+
+from astrbot.dashboard.services.backup_service import (
+    BackupService,
+    BackupServiceError,
+)
 
 
 def _make_service(tmp_path: Path) -> BackupService:
@@ -92,12 +97,38 @@ def test_import_backup_schedules_tracked_task(monkeypatch, tmp_path: Path) -> No
 
 
 def test_delete_missing_backup_while_another_import_is_active(tmp_path: Path) -> None:
-    import pytest
-
-    from astrbot.dashboard.services.backup_service import BackupServiceError
-
     service = _make_service(tmp_path)
     service._active_import_path = str(tmp_path / "active.zip")
 
     with pytest.raises(BackupServiceError, match="备份文件不存在"):
         service.delete_backup({"filename": "missing.zip"})
+
+
+def test_active_import_backup_cannot_be_deleted_or_renamed(tmp_path: Path) -> None:
+    service = _make_service(tmp_path)
+    active_path = tmp_path / "active.zip"
+    active_path.write_bytes(b"zip")
+    service._active_import_path = str(active_path)
+
+    with pytest.raises(BackupServiceError, match="正在导入"):
+        service.delete_backup({"filename": "active.zip"})
+    with pytest.raises(BackupServiceError, match="正在导入"):
+        service.rename_backup({"filename": "active.zip", "new_name": "renamed.zip"})
+
+
+def test_stale_active_import_path_does_not_block_other_backups(
+    tmp_path: Path,
+) -> None:
+    service = _make_service(tmp_path)
+    other_path = tmp_path / "other.zip"
+    other_path.write_bytes(b"zip")
+    service._active_import_path = str(tmp_path / "gone.zip")
+
+    assert service.delete_backup({"filename": "other.zip"}) == (
+        None,
+        "删除备份成功",
+    )
+
+    other_path.write_bytes(b"zip")
+    result = service.rename_backup({"filename": "other.zip", "new_name": "renamed.zip"})
+    assert result == {"old_filename": "other.zip", "new_filename": "renamed.zip"}

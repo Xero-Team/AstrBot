@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any, cast
 import os
 
 from wechatpy.enterprise import WeChatClient
@@ -170,14 +171,18 @@ class WecomPlatformEvent(AstrMessageEvent):
                 "voice": kf_message_api.send_voice,
                 "file": kf_message_api.send_file,
             }.get(media_type, kf_message_api.send_video)
-            await asyncio.to_thread(sender, recipient_id, sender_id, media_id)
+            await asyncio.to_thread(
+                cast(Any, sender), recipient_id, sender_id, media_id
+            )
         else:
             sender = {
                 "image": self._client.message.send_image,
                 "voice": self._client.message.send_voice,
                 "file": self._client.message.send_file,
             }.get(media_type, self._client.message.send_video)
-            await asyncio.to_thread(sender, sender_id, recipient_id, media_id)
+            await asyncio.to_thread(
+                cast(Any, sender), sender_id, recipient_id, media_id
+            )
         return True
 
     def _upload_media_file(self, path: str, media_type: str):

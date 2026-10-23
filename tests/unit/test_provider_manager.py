@@ -1602,3 +1602,32 @@ async def test_terminate_deduplicates_shared_instance_and_swallows_disable_mcp_e
 
     shared.terminate.assert_awaited_once()
     manager.tool_manager.disable_mcp_server.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_terminate_provider_cleans_map_when_classifier_list_missing_and_terminate_fails(
+    monkeypatch,
+):
+    manager = _build_manager()
+    _register_provider(
+        manager, "test_classifier", DummyClassifierProvider, ProviderType.CLASSIFIER
+    )
+    monkeypatch.setattr(manager, "dynamic_import_provider", lambda _: None)
+    monkeypatch.setenv("TEST_JEV_KEY", "test-key")
+    await manager.load_provider(
+        {
+            "id": "jev",
+            "type": "test_classifier",
+            "provider_type": "classifier",
+            "enable": True,
+            "key": ["$TEST_JEV_KEY"],
+        }
+    )
+    instance = manager.inst_map["jev"]
+    manager.classifier_provider_insts.clear()
+    instance.terminate = AsyncMock(side_effect=RuntimeError("boom"))
+
+    with pytest.raises(RuntimeError):
+        await manager.terminate_provider("jev")
+
+    assert "jev" not in manager.inst_map

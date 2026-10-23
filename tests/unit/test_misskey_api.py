@@ -17,17 +17,20 @@ async def test_download_file_bytes_does_not_retry_insecure_when_disabled():
     )
     api._download_with_temp_session = AsyncMock(return_value=None)
 
-    with pytest.raises(RuntimeError, match="ssl failed"):
-        await api._download_file_bytes("https://files.example/test.png")
+    assert await api._download_file_bytes("https://files.example/test.png") is None
 
     api._download_with_existing_session.assert_awaited_once_with(
+        "https://files.example/test.png",
+        ssl_verify=True,
+    )
+    api._download_with_temp_session.assert_awaited_once_with(
         "https://files.example/test.png",
         ssl_verify=True,
     )
 
 
 @pytest.mark.asyncio
-async def test_download_file_bytes_never_retries_insecure_when_enabled():
+async def test_download_file_bytes_uses_insecure_tls_only_when_enabled():
     api = MisskeyAPI(
         "https://misskey.example",
         "token",
@@ -38,11 +41,13 @@ async def test_download_file_bytes_never_retries_insecure_when_enabled():
     )
     api._download_with_temp_session = AsyncMock(return_value=None)
 
-    with pytest.raises(RuntimeError, match="ssl failed"):
-        await api._download_file_bytes("https://files.example/test.png")
+    assert await api._download_file_bytes("https://files.example/test.png") is None
 
     api._download_with_existing_session.assert_awaited_once_with(
         "https://files.example/test.png",
-        ssl_verify=True,
+        ssl_verify=False,
     )
-    api._download_with_temp_session.assert_not_awaited()
+    api._download_with_temp_session.assert_awaited_once_with(
+        "https://files.example/test.png",
+        ssl_verify=False,
+    )

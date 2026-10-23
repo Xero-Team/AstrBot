@@ -601,9 +601,11 @@ class AstrBotImporter:
                     # 转换 datetime 字符串为 datetime 对象
                     row = self._convert_datetime_fields(row, model_class)
                     obj = model_class(**row)
-                    session.add(obj)
-                    if isinstance(obj, ApiKey):
-                        self._restore_api_key_capabilities(session, obj)
+                    async with session.begin_nested():
+                        session.add(obj)
+                        if isinstance(obj, ApiKey):
+                            self._restore_api_key_capabilities(session, obj)
+                        await session.flush()
                     count += 1
                 except asyncio.CancelledError:
                     raise

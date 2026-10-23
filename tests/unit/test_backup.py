@@ -1589,7 +1589,7 @@ async def test_backup_round_trips_backend_vector_index(tmp_path, filename):
     assert result.success is True
 
 
-def test_convert_datetime_fields_keeps_unparseable_values():
+def test_convert_datetime_fields_rejects_unparseable_values():
     importer = AstrBotImporter(main_db=MagicMock())
     row = {
         "conversation_id": "test-123",
@@ -1599,7 +1599,5 @@ def test_convert_datetime_fields_keeps_unparseable_values():
         "updated_at": "2024-01-01T12:00:00",
     }
 
-    result = importer._convert_datetime_fields(row, ConversationV2)
-
-    assert result["created_at"] == "not-a-date"
-    assert isinstance(result["updated_at"], datetime)
+    with pytest.raises(ValueError):
+        importer._convert_datetime_fields(row, ConversationV2)

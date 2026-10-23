@@ -108,9 +108,10 @@ def import_directories(
             continue
 
         target_dir = Path(target_dir_str)
-        backup_path = backup_existing_directory(target_dir)
+        backup_path = None
         keep_backup = False
         try:
+            backup_path = backup_existing_directory(target_dir)
             target_dir.mkdir(parents=True, exist_ok=True)
             file_count = extract_directory_files(
                 zf,

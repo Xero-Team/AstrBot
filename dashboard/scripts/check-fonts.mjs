@@ -63,6 +63,9 @@ export async function checkFonts() {
         .map((record) => unicodeCoverage(record.file)),
     )
   ).flat();
+  if (notoRanges.length === 0) {
+    throw new Error('No Noto Sans SC subset coverage was found; fonts are stale');
+  }
   const expectedCodePoints = new Set(
     (await collectUiCharacters())
       .map((character) => character.codePointAt(0))

@@ -116,6 +116,7 @@ const handleToggleToolParallel = async (tool: ToolItem, enabled: boolean) => {
   await toggleToolParallel(
     tool,
     enabled,
+    tmTool('functionTools.parallel.updated'),
     tmTool('functionTools.parallel.blocked'),
   );
 };
@@ -123,6 +124,7 @@ const handleToggleToolParallel = async (tool: ToolItem, enabled: boolean) => {
 const handleToggleParallelExecution = async (enabled: boolean) => {
   await toggleParallelExecution(
     enabled,
+    tmTool('messages.updateParallelExecutionSuccess'),
     tmTool('messages.updateParallelExecutionFailed'),
   );
 };

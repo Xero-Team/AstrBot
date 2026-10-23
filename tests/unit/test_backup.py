@@ -81,6 +81,9 @@ def mock_main_db():
 
     # 模拟异步上下文管理器
     session = AsyncMock()
+    session.begin = MagicMock(
+        return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
+    )
     db.get_db = MagicMock(
         return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
     )
@@ -754,7 +757,7 @@ class TestSecureFilename:
         assert result.startswith("backup_")
         assert result.endswith(".zip")
         # 应包含时间戳格式 YYYYMMDD_HHMMSS
-        assert re.search(r"backup_\d{8}_\d{6}\.zip", result)
+        assert re.search(r"backup_\d{8}_\d{6}_[0-9a-f]{8}\.zip", result)
 
     def test_generate_unique_filename_with_complex_name(self):
         """测试复杂文件名生成唯一文件名"""
@@ -762,7 +765,7 @@ class TestSecureFilename:
         # 应在原文件名后添加时间戳
         assert result.startswith("my_backup_file_")
         assert result.endswith(".zip")
-        assert re.search(r"my_backup_file_\d{8}_\d{6}\.zip", result)
+        assert re.search(r"my_backup_file_\d{8}_\d{6}_[0-9a-f]{8}\.zip", result)
 
 
 class TestVersionComparison:
@@ -1587,3 +1590,33 @@ async def test_backup_round_trips_backend_vector_index(tmp_path, filename):
 
     assert (restore_dir / filename).read_bytes() == b"vector-index"
     assert result.success is True
+
+
+def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
+    importer = AstrBotImporter(
+        main_db=MagicMock(),
+        config_path=str(tmp_path / "cmd_config.json"),
+    )
+
+    rows = importer._preprocess_main_table_rows(
+        "attachments",
+        [{"attachment_id": "a1", "path": "/old/machine/data/attachments/a1.png"}],
+    )
+
+    assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")
+
+
+def test_convert_datetime_fields_keeps_unparseable_values():
+    importer = AstrBotImporter(main_db=MagicMock())
+    row = {
+        "conversation_id": "test-123",
+        "platform_id": "test",
+        "user_id": "user1",
+        "created_at": "not-a-date",
+        "updated_at": "2024-01-01T12:00:00",
+    }
+
+    result = importer._convert_datetime_fields(row, ConversationV2)
+
+    assert result["created_at"] == "not-a-date"
+    assert isinstance(result["updated_at"], datetime)

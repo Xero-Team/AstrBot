@@ -53,6 +53,8 @@ def _backup_service() -> BackupService:
     service.backup_dir = "backups"
     service.backup_tasks = {}
     service.backup_progress = {}
+    service._active_data_task = None
+    service._active_import_path = None
     return service
 
 

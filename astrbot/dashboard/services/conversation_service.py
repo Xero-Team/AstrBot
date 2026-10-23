@@ -410,17 +410,22 @@ class ConversationService:
 
     @staticmethod
     def _normalize_history(history):
-        try:
-            if isinstance(history, list):
-                history = json.dumps(history)
-            else:
-                json.loads(history)
-        except json.JSONDecodeError as exc:
-            raise ConversationServiceError(
-                "history 必须是有效的 JSON 字符串或数组"
-            ) from exc
-
-        return json.loads(history) if isinstance(history, str) else history
+        if isinstance(history, list):
+            parsed = history
+        elif isinstance(history, (str, bytes)):
+            try:
+                parsed = json.loads(history)
+            except (json.JSONDecodeError, TypeError) as exc:
+                raise ConversationServiceError(
+                    "history 必须是有效的 JSON 字符串或数组"
+                ) from exc
+        else:
+            raise ConversationServiceError("history 必须是有效的 JSON 字符串或数组")
+        if not isinstance(parsed, list) or not all(
+            isinstance(item, dict) for item in parsed
+        ):
+            raise ConversationServiceError("history 必须是消息数组")
+        return parsed
 
     @staticmethod
     def _payload(data: object) -> dict:

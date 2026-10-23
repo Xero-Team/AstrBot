@@ -194,3 +194,25 @@ def test_build_plug_list_falls_back_after_fetch_error(monkeypatch, tmp_path):
     plugins = build_plug_list(tmp_path)
     assert "remote-only" in {plugin["name"] for plugin in plugins}
     assert calls[1].startswith("https://raw.githubusercontent.com/")
+
+
+def test_manage_plugin_refuses_to_update_a_symlinked_editable_install(tmp_path: Path):
+    from astrbot.cli.utils.plugin import manage_plugin
+
+    source = tmp_path / "source"
+    source.mkdir()
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    target = plugins / "demo"
+    target.symlink_to(source, target_is_directory=True)
+
+    with pytest.raises(click.ClickException, match="editable"):
+        manage_plugin(
+            {
+                "name": "demo",
+                "repo": "https://example.test/demo",
+                "local_path": str(target),
+            },  # type: ignore[arg-type]
+            plugins,
+            is_update=True,
+        )

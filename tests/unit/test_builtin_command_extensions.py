@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import Annotated
 from unittest.mock import AsyncMock, MagicMock
@@ -735,16 +736,61 @@ async def test_help_command_uses_file_token_for_local_image_when_callback_is_ava
     ]
 
 
+class _FakeContentStream:
+    def __init__(
+        self,
+        chunks: list[bytes] | None = None,
+        raw: bytes = b"",
+        stream_error: Exception | None = None,
+    ) -> None:
+        self.chunks = chunks
+        self.raw = raw
+        self.stream_error = stream_error
+        self.iterated_chunks: list[bytes] = []
+
+    async def iter_chunked(self, chunk_size: int):
+        if self.stream_error:
+            raise self.stream_error
+        if self.chunks is not None:
+            for chunk in self.chunks:
+                self.iterated_chunks.append(chunk)
+                yield chunk
+            return
+        for i in range(0, len(self.raw), chunk_size):
+            chunk = self.raw[i : i + chunk_size]
+            self.iterated_chunks.append(chunk)
+            yield chunk
+
+
 class _FakeNoticeResponse:
     def __init__(
         self,
         data: object = None,
+        raw_body: bytes | None = None,
+        chunks: list[bytes] | None = None,
+        headers: dict[str, str] | None = None,
         status: int = 200,
         error: Exception | None = None,
+        stream_error: Exception | None = None,
     ) -> None:
         self.data = data
+        self.headers = headers or {}
         self.status = status
         self.error = error
+        if raw_body is not None:
+            raw = raw_body
+        elif data is not None:
+            if isinstance(data, (bytes, bytearray)):
+                raw = bytes(data)
+            elif isinstance(data, str):
+                raw = data.encode("utf-8")
+            else:
+                raw = json.dumps(data).encode("utf-8")
+        else:
+            raw = b""
+        self.content = _FakeContentStream(
+            chunks=chunks, raw=raw, stream_error=stream_error
+        )
 
     def raise_for_status(self) -> None:
         if self.error:
@@ -846,6 +892,18 @@ async def test_help_notice_query_valid_string_and_truncation(monkeypatch):
         ({"data": "string_root"}, None),
         ({"data": 123}, None),
         ({"data": None}, None),
+        # Malformed non-JSON payloads
+        ({"raw_body": b"<html>502 Bad Gateway</html>"}, None),
+        ({"raw_body": b"not valid json {"}, None),
+        # Stream read failure
+        (
+            {
+                "stream_error": aiohttp.ClientPayloadError(
+                    "Premature end of chunked stream"
+                )
+            },
+            None,
+        ),
         # HTTP error status codes (404, 500)
         ({"data": {"notice": "error"}, "status": 404}, None),
         ({"data": {"notice": "error"}, "status": 500}, None),
@@ -871,6 +929,60 @@ async def test_help_notice_query_invalid_or_error_scenarios(
     response = _FakeNoticeResponse(**response_kwargs) if response_kwargs else None
     _patch_notice_session(monkeypatch, response=response, get_error=get_error)
     assert await command._query_astrbot_notice() == ""
+
+
+@pytest.mark.asyncio
+async def test_help_notice_query_body_size_limits(monkeypatch):
+    command = HelpCommand(MagicMock())
+
+    # 1. Body exactly at the size limit of 64 KiB (65,536 bytes)
+    prefix = b'{"notice": "ok", "pad": "'
+    suffix = b'"}'
+    target_len = 64 * 1024  # 65,536
+    pad_len = target_len - len(prefix) - len(suffix)
+    exact_body = prefix + (b"a" * pad_len) + suffix
+    assert len(exact_body) == target_len
+
+    response_at_limit = _FakeNoticeResponse(raw_body=exact_body)
+    _patch_notice_session(monkeypatch, response=response_at_limit)
+    assert await command._query_astrbot_notice() == "ok"
+    assert sum(len(c) for c in response_at_limit.content.iterated_chunks) == target_len
+
+    # 2. Body exceeding the size limit by 1 byte (65,537 bytes)
+    oversized_body = exact_body + b"!"
+    response_over_by_one = _FakeNoticeResponse(raw_body=oversized_body)
+    _patch_notice_session(monkeypatch, response=response_over_by_one)
+    assert await command._query_astrbot_notice() == ""
+
+    # 3. Streamed chunks exceeding size limit: proves reading stops immediately without buffering the rest
+    chunk1 = b"x" * (40 * 1024)
+    chunk2 = b"x" * (30 * 1024)
+    chunk3 = b"x" * (50 * 1024)
+    streaming_response = _FakeNoticeResponse(chunks=[chunk1, chunk2, chunk3])
+    _patch_notice_session(monkeypatch, response=streaming_response)
+
+    assert await command._query_astrbot_notice() == ""
+    # Only the first two chunks were read before immediately aborting; chunk3 was never consumed
+    assert len(streaming_response.content.iterated_chunks) == 2
+    assert chunk3 not in streaming_response.content.iterated_chunks
+
+    # 4. Content-Length header exceeding limit: rejects immediately without reading any chunks
+    header_response = _FakeNoticeResponse(
+        headers={"Content-Length": str(70 * 1024)},
+        chunks=[b"x" * 1000],
+    )
+    _patch_notice_session(monkeypatch, response=header_response)
+    assert await command._query_astrbot_notice() == ""
+    assert len(header_response.content.iterated_chunks) == 0
+
+    # 5. Content-Length header is smaller than limit (or missing) but actual stream exceeds limit
+    mismatched_response = _FakeNoticeResponse(
+        headers={"Content-Length": "100"},
+        chunks=[chunk1, chunk2, chunk3],
+    )
+    _patch_notice_session(monkeypatch, response=mismatched_response)
+    assert await command._query_astrbot_notice() == ""
+    assert len(mismatched_response.content.iterated_chunks) == 2
 
 
 @pytest.mark.asyncio

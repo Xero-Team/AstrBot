@@ -1,3 +1,4 @@
+import json
 from html import escape
 
 import aiohttp
@@ -6,6 +7,8 @@ from astrbot.api import logger, star
 from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_image_file, reply_image_url, reply_text
+
+_MAX_NOTICE_BYTES = 64 * 1024  # 64 KiB (65,536 bytes)
 
 
 class HelpCommand:
@@ -18,7 +21,33 @@ class HelpCommand:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get("https://astrbot.app/notice.json") as resp:
                     resp.raise_for_status()
-                    payload = await resp.json()
+
+                    content_length = resp.headers.get("Content-Length")
+                    if (
+                        content_length
+                        and content_length.isdigit()
+                        and int(content_length) > _MAX_NOTICE_BYTES
+                    ):
+                        logger.debug(
+                            "AstrBot remote notice Content-Length exceeds limit: %s",
+                            content_length,
+                        )
+                        return ""
+
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in resp.content.iter_chunked(8192):
+                        total += len(chunk)
+                        if total > _MAX_NOTICE_BYTES:
+                            logger.debug(
+                                "AstrBot remote notice response exceeded size limit of %s bytes",
+                                _MAX_NOTICE_BYTES,
+                            )
+                            return ""
+                        chunks.append(chunk)
+
+                    body = b"".join(chunks)
+                    payload = json.loads(body)
                     notice = (
                         payload.get("notice") if isinstance(payload, dict) else None
                     )

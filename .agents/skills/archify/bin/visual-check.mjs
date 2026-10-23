@@ -444,11 +444,10 @@ export class ChromeVisualBrowser {
         minimumProjectedNodeTextPx: minimum ? minimum.projectedFontPx : null,
         minimumProjectedNodeText: minimum ? minimum.text : null,
         minimumProjectedNodeTextDetail: minimum ? minimum.detail : null,
+        hasDiagram: Boolean(svg),
         hasLegend: Boolean(legendRect && legendRect.width && legendRect.height),
         hasNavigationDock: Boolean(navigationDockRect && navigationDockRect.width && navigationDockRect.height),
-        legendDockIntersectionArea: stageDockIntersectionArea > 0
-          ? intersectionArea(legendRect, navigationDockRect)
-          : 0,
+        legendDockIntersectionArea: intersectionArea(legendRect, navigationDockRect),
         dockStageIntersectionArea: stageDockIntersectionArea,
         dockStageGap: stageRect && navigationDockRect ? navigationDockRect.top - stageRect.bottom : null,
         viewerChromeRequiredGap: viewerChromeReceipt ? viewerChromeReceipt.gap : null,
@@ -505,8 +504,10 @@ function observation({ width, height, theme, metrics }) {
   const minimumProjectedNodeTextPx = metrics.minimumProjectedNodeTextPx == null
     ? null
     : Number(metrics.minimumProjectedNodeTextPx);
-  const readabilityOk = minimumProjectedNodeTextPx == null
-    || minimumProjectedNodeTextPx >= MIN_PROJECTED_NODE_TEXT_PX;
+  const hasDiagram = metrics.hasDiagram !== false;
+  const readabilityOk = !hasDiagram
+    || (minimumProjectedNodeTextPx != null
+      && minimumProjectedNodeTextPx >= MIN_PROJECTED_NODE_TEXT_PX);
   const legendDockIntersectionArea = Number(metrics.legendDockIntersectionArea) || 0;
   const dockStageIntersectionArea = Number(metrics.dockStageIntersectionArea) || 0;
   const dockStageGap = metrics.dockStageGap == null ? null : Number(metrics.dockStageGap);

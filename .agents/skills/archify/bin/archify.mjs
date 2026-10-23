@@ -1828,7 +1828,7 @@ function commandValidate(args) {
     if (!['architecture', 'workflow'].includes(type)) {
       fail('--layout-json is currently supported for architecture and workflow diagrams only.');
     }
-    const result = runNode([renderer, input, '/dev/null', '--layout-json'], {
+    const result = runNode([renderer, input, os.devNull, '--layout-json'], {
       stdio: 'pipe',
       env: rendererEnv(quality, repoRoot, true),
     });

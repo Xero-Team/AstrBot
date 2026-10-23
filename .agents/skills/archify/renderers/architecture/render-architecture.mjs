@@ -302,6 +302,12 @@ function resolveBoundaryTitles() {
     if (minimumFontSize >= finalMinimumFontSize) {
       return { boundaries: nextBoundaries, readabilityProblem: null };
     }
+    if (finalViewBoxWidth > budgetViewBoxWidth) {
+      return {
+        boundaries: nextBoundaries,
+        readabilityProblem: `[composition/desktop-readability] Boundary titles do not fit at the readable font size for the final ${finalViewBoxWidth}px viewBox — shorten boundary labels or move wrapped components closer to the left edge.`,
+      };
+    }
     candidateBoundaries = nextBoundaries;
   }
 

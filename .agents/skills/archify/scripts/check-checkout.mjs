@@ -19,7 +19,13 @@ function run(args) {
   const result = spawnSync(process.execPath, [cli, ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
+    timeout: 10 * 60 * 1000,
+    maxBuffer: 32 * 1024 * 1024,
   });
+  if (result.error) {
+    process.stderr.write(`archify ${args.join(' ')} failed: ${result.error.message}\n`);
+    process.exit(1);
+  }
   if (result.status !== 0) {
     process.stderr.write(result.stderr || result.stdout || '');
     process.exit(result.status || 1);

@@ -283,7 +283,6 @@ class ChunkedUploadService:
     @staticmethod
     def _assemble_sync(session: UploadSession, dest_path: Path) -> int:
         temp_path = dest_path.parent / f".{dest_path.name}.{uuid.uuid4().hex}.tmp"
-        mode = 0o600
         try:
             mode = stat.S_IMODE(dest_path.stat().st_mode)
         except OSError:

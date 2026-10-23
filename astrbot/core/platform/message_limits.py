@@ -178,17 +178,31 @@ def split_platform_text(
     parts: list[str] = []
     truncated = False
     while remaining:
+        before = remaining
         if _measure(remaining, limit.unit) <= limit.max_length:
             parts.append(remaining)
             break
-        window = _slice_prefix(remaining, limit.max_length, limit.unit)
+        preliminary = _slice_prefix(remaining, limit.max_length, limit.unit)
+        fence = _active_fence(preliminary)
+        reserved = len(fence) + 1 if fence else 0
+        window = _slice_prefix(
+            remaining,
+            max(1, limit.max_length - reserved),
+            limit.unit,
+        )
         if not window:
             truncated = True
             break
         boundary = _best_boundary(window, limit.unit)
         chunk = window[:boundary] if boundary else window
-        remaining = remaining[len(chunk) :]
-        chunk, remaining = _close_and_reopen_fence(chunk, remaining)
+        rest = remaining[len(chunk) :]
+        chunk, remaining = _close_and_reopen_fence(chunk, rest)
+        if len(remaining) >= len(before):
+            chunk = window
+            rest = before[len(window) :]
+            chunk, remaining = _close_and_reopen_fence(chunk, rest)
+        if len(remaining) >= len(before):
+            remaining = rest
         if chunk:
             parts.append(chunk)
         if len(parts) >= limit.max_chunks:

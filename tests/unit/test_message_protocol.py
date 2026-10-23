@@ -1973,3 +1973,18 @@ def test_plan_message_delivery_flattens_native_summaries_when_forward_false():
     assert format_qq_face(111) in text
     assert "wow" in text
     assert format_json_card_prompt(json_card) in text
+
+
+def test_route_identity_origin_matches_session_identity():
+    from astrbot.core.platform.message_type import MessageType
+    from astrbot.core.platform.route_identity import PlatformRouteIdentity
+
+    identity = PlatformRouteIdentity(
+        platform_id="misskey",
+        message_type=MessageType.GROUP_MESSAGE,
+        target_id="room-1",
+        origin="misskey:GroupMessage:room%room-1",
+    )
+
+    assert identity.as_origin() == "misskey:GroupMessage:room%room-1"
+    assert identity.target_id == "room-1"

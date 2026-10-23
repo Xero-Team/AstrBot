@@ -155,7 +155,10 @@ class MarkdownChunker(BaseChunker):
                 )
                 for i, sub_chunk in enumerate(sub_chunks):
                     chunk_text = self._apply_heading_context(
-                        heading_path, sub_chunk, is_continuation=(i > 0)
+                        heading_path,
+                        sub_chunk,
+                        is_continuation=(i > 0),
+                        chunk_size=chunk_size,
                     )
                     raw_chunks.append((chunk_text, True))
 
@@ -168,16 +171,26 @@ class MarkdownChunker(BaseChunker):
         return ""
 
     def _apply_heading_context(
-        self, heading_path: list[str], content: str, is_continuation: bool
+        self,
+        heading_path: list[str],
+        content: str,
+        is_continuation: bool,
+        chunk_size: int,
     ) -> str:
-        """为 chunk 内容添加标题上下文"""
+        """为 chunk 内容添加标题上下文，且不突破 chunk_size。"""
         if not self.include_heading_context or not heading_path:
             return content.strip()
 
         title = " > ".join(heading_path)
-        if is_continuation:
-            return f"{self.continuation_prefix} {title}\n\n{content}".strip()
-        return f"{title}\n\n{content}".strip()
+        marker = f"{self.continuation_prefix} " if is_continuation else ""
+        prefix = f"{marker}{title}\n\n"
+        excess = len(prefix) + len(content) - chunk_size
+        if excess > 0:
+            if excess >= len(title):
+                return content.strip()
+            title = title[:-excess]
+            prefix = f"{marker}{title}\n\n"
+        return f"{prefix}{content}".strip()
 
     def _merge_heading_only_chunks(
         self, raw_chunks: list[tuple[str, bool]], chunk_size: int

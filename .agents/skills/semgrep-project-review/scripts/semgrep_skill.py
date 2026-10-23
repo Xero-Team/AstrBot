@@ -219,8 +219,7 @@ def explicit_output_dir(repo: Path, raw: str | None) -> Path:
         and not resolved.is_relative_to(repository / ".tmp")
     ):
         raise SkillError(
-            "--out-dir must not be the repository root or an in-repo path "
-            "outside .tmp"
+            "--out-dir must not be the repository root or an in-repo path outside .tmp"
         )
     if path.exists() and (path / "findings.json").exists():
         print(
@@ -1468,7 +1467,9 @@ def cmd_issues(args: argparse.Namespace) -> int:
             security.append(finding)
             continue
         title = issue_title(finding)
-        finding_key = f"{finding.get('path', '')}:{finding.get('start_line', '')}:{title}"
+        finding_key = (
+            f"{finding.get('path', '')}:{finding.get('start_line', '')}:{title}"
+        )
         if finding_key in seen_titles:
             continue
         seen_titles.add(finding_key)

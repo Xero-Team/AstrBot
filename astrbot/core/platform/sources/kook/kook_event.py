@@ -157,10 +157,9 @@ class KookEvent(AstrMessageEvent):
                     text=json.dumps(json_data),
                     type=KookMessageType.CARD,
                 )
-            case _:
-                raise NotImplementedError(
-                    f'kook适配器尚未实现对 "{message_component.type}" 消息类型的支持'
-                )
+        raise NotImplementedError(
+            f'kook适配器尚未实现对 "{message_component.type}" 消息类型的支持'
+        )
 
     async def send(self, message: MessageChain):
         file_upload_tasks: list[Coroutine[Any, Any, OrderMessage]] = []

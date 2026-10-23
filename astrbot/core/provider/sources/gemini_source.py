@@ -105,11 +105,10 @@ class ProviderGoogleGenAI(Provider):
             **httpx_client_kwargs(route),
         }
 
-        # Track the previous client so it can be closed in terminate() instead
-        # of leaking when _init_client is called again (e.g. via set_key).
-        # Only the most recent stale client is kept to avoid unbounded growth.
+        # Track every replaced client so terminate() closes all of them when
+        # _init_client runs repeatedly (e.g. via set_key).
         if self._http_client is not None:
-            self._stale_http_clients = [self._http_client]
+            self._stale_http_clients.append(self._http_client)
 
         self._http_client = httpx.AsyncClient(
             event_hooks={"request": [self._enforce_astrbot_user_agent]},
@@ -152,7 +151,8 @@ class ProviderGoogleGenAI(Provider):
             e.message = ""
 
         if e.code == 429 or "API key not valid" in e.message:
-            keys.remove(self.chosen_api_key)
+            if self.chosen_api_key in keys:
+                keys.remove(self.chosen_api_key)
             if len(keys) > 0:
                 self.set_key(random.choice(keys))  # noqa: S311  # non-cryptographic jitter/identifier selection
                 logger.warning(
@@ -999,6 +999,7 @@ class ProviderGoogleGenAI(Provider):
         retry = 10
         keys = self.api_keys.copy()
 
+        yielded = False
         for _ in range(retry):
             try:
                 async for response in self._query_stream(
@@ -1007,9 +1008,12 @@ class ProviderGoogleGenAI(Provider):
                     request_max_retries=request_max_retries,
                     conversation_id=conversation_id,
                 ):
+                    yielded = True
                     yield response
                 break
             except APIError as e:
+                if yielded:
+                    raise
                 if await self._handle_api_error(e, keys):
                     continue
                 break

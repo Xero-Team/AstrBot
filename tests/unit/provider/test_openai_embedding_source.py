@@ -63,3 +63,8 @@ def test_embedding_dimensions_mode_can_force_or_disable_parameter():
 
     provider.provider_config["embedding_dimensions_mode"] = "never"
     assert provider._embedding_kwargs() == {}
+
+
+def test_openai_embedding_api_base_handles_missing_values():
+    assert _normalize_api_base(None) == "https://api.openai.com/v1"
+    assert _normalize_api_base("   ") == "https://api.openai.com/v1"

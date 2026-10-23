@@ -45,3 +45,18 @@ Body
     assert "# Not a heading" in chunks[0]
     assert "Title" in chunks[1]
     assert "## Section" in chunks[1]
+
+
+@pytest.mark.asyncio
+async def test_recursive_chunker_never_exceeds_chunk_size_with_overlap():
+    from astrbot.core.knowledge_base.chunking.recursive import (
+        RecursiveCharacterChunker,
+    )
+
+    chunks = await RecursiveCharacterChunker().chunk(
+        "a" * 25 + " " + "b" * 25,
+        chunk_size=10,
+        chunk_overlap=9,
+    )
+
+    assert all(len(chunk) <= 10 for chunk in chunks)

@@ -1,4 +1,6 @@
+import os
 import shutil
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -9,6 +11,8 @@ from astrbot.core.utils.io import ensure_dir
 from astrbot.utils.version_comparator import VersionComparator
 
 from .constants import get_backup_directories
+
+MAX_ARCHIVE_MEMBER_BYTES = 512 * 1024 * 1024
 
 
 def validate_path_within(target_path: Path, base_dir: Path) -> bool:
@@ -61,9 +65,7 @@ def import_attachments(
                 logger.warning("附件路径越界，已跳过")
                 continue
 
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(name) as src, open(target_path, "wb") as dst:
-                dst.write(src.read())
+            _extract_archive_member(zf, name, target_path)
             count += 1
         except Exception as exc:
             logger.warning("导入附件失败: %s", safe_error("", exc))
@@ -105,8 +107,8 @@ def import_directories(
             continue
 
         target_dir = Path(target_dir_str)
+        backup_path = backup_existing_directory(target_dir)
         try:
-            backup_existing_directory(target_dir)
             target_dir.mkdir(parents=True, exist_ok=True)
             file_count = extract_directory_files(
                 zf,
@@ -121,6 +123,14 @@ def import_directories(
             logger.warning("导入目录失败: %s", safe_error("", exc))
             add_warning("导入目录失败")
             dir_stats[dir_name] = 0
+            if backup_path is not None and backup_path.exists():
+                if target_dir.exists():
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                shutil.move(str(backup_path), str(target_dir))
+                backup_path = None
+        finally:
+            if backup_path is not None and backup_path.exists():
+                shutil.rmtree(backup_path, ignore_errors=True)
 
     return dir_stats
 
@@ -133,15 +143,32 @@ def list_directory_archive_files(zf: zipfile.ZipFile, archive_prefix: str) -> li
     ]
 
 
-def backup_existing_directory(target_dir: Path) -> None:
-    if not target_dir.exists():
-        return
+def _extract_archive_member(
+    zf: zipfile.ZipFile,
+    name: str,
+    target_path: Path,
+) -> None:
+    info = zf.getinfo(name)
+    if info.file_size > MAX_ARCHIVE_MEMBER_BYTES:
+        raise ValueError("archive member exceeds the size limit")
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target_path.with_name(f".{target_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with zf.open(name) as src, open(temporary, "wb") as dst:
+            shutil.copyfileobj(src, dst, length=1024 * 1024)
+        os.replace(temporary, target_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
-    backup_path = Path(f"{target_dir}.bak")
-    if backup_path.exists():
-        shutil.rmtree(backup_path)
+
+def backup_existing_directory(target_dir: Path) -> Path | None:
+    if not target_dir.exists():
+        return None
+
+    backup_path = target_dir.with_name(f".{target_dir.name}.bak-{uuid.uuid4().hex[:8]}")
     shutil.move(str(target_dir), str(backup_path))
     logger.debug("已备份现有目录")
+    return backup_path
 
 
 def extract_directory_files(
@@ -167,9 +194,7 @@ def extract_directory_files(
                 ensure_dir(target_path)
                 continue
 
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(name) as src, open(target_path, "wb") as dst:
-                dst.write(src.read())
+            _extract_archive_member(zf, name, target_path)
             file_count += 1
         except Exception as exc:
             logger.warning("导入文件失败: %s", safe_error("", exc))

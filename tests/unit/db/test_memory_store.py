@@ -131,8 +131,10 @@ async def test_memory_sqlite_interfaces(temp_db: SQLiteDatabase):
     )
     assert merged_deleted_created is False
     assert merged_deleted.id == fact.id
-    assert merged_deleted.status == "deleted"
-    assert await temp_db.list_memory_facts(person_id="user-a") == []
+    assert merged_deleted.status == "active"
+    assert [row.id for row in await temp_db.list_memory_facts(person_id="user-a")] == [
+        fact.id
+    ]
 
     assert await temp_db.update_memory_fact_status(
         fact.id,

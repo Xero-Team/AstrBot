@@ -30,10 +30,13 @@ class PDFParser(BaseParser):
         return text_parts
 
     @staticmethod
-    def _resolve_image_format(filter_type: str) -> tuple[str, str]:
-        if filter_type == "/DCTDecode":
+    def _resolve_image_format(filter_type: object) -> tuple[str, str] | None:
+        filters = filter_type if isinstance(filter_type, list) else [filter_type]
+        if "/DCTDecode" in filters:
             return "jpg", "image/jpeg"
-        return "png", "image/png"
+        if "/JPXDecode" in filters:
+            return "jp2", "image/jp2"
+        return None
 
     @staticmethod
     def _iter_page_xobjects(page) -> list:
@@ -73,8 +76,11 @@ class PDFParser(BaseParser):
         try:
             if obj.get("/Subtype") != "/Image":
                 return None
+            image_format = self._resolve_image_format(obj.get("/Filter", ""))
+            if image_format is None:
+                return None
+            ext, mime_type = image_format
             image_data = obj.get_data()
-            ext, mime_type = self._resolve_image_format(obj.get("/Filter", ""))
         except Exception:
             return None
         return MediaItem(

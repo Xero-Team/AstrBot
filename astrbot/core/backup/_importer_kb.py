@@ -27,13 +27,8 @@ async def clear_kb_data(kb_manager: KnowledgeBaseManager | None) -> None:
     async with kb_manager.kb_db.get_db() as session:
         async with session.begin():
             for table_name, model_class in KB_METADATA_MODELS.items():
-                try:
-                    await session.execute(delete(model_class))
-                    logger.debug("已清空知识库表 %s", table_name)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    logger.warning("清空知识库表失败: %s", safe_error("", exc))
+                await session.execute(delete(model_class))
+                logger.debug("已清空知识库表 %s", table_name)
 
     for _kb_id, kb_helper in list(kb_manager.kb_insts.items()):
         try:

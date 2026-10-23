@@ -120,6 +120,29 @@ class StopWithoutResultStage(Stage):
         yield
 
 
+class NonYieldingStage(Stage):
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent):
+        if False:
+            yield
+
+
+class RecordingResponderStage(Stage):
+    def __init__(self) -> None:
+        self.delivered: list[str] = []
+
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent) -> None:
+        result = event.get_result()
+        if result is not None:
+            self.delivered.append(result.get_plain_text())
+            event.clear_result()
+
+
 def _scheduler(stages: list[Stage]) -> PipelineScheduler:
     ctx = SimpleNamespace(
         execution_context=SimpleNamespace(
@@ -197,14 +220,14 @@ async def test_pipeline_sends_empty_completion_for_webchat_when_not_skipped():
 @pytest.mark.asyncio
 async def test_pipeline_delivers_stopped_generator_result_before_stopping():
     reply_stage = StoppedReplyStage()
-    scheduler = _scheduler([reply_stage, TraceStage("respond")])
+    responder = RecordingResponderStage()
+    scheduler = _scheduler([reply_stage, responder])
     event = PipelineEvent()
 
     await scheduler._process_stages(event)
 
-    assert "respond" in event.stage_trace
-    assert event.get_result() is not None
-    assert event.get_result().get_plain_text() == "command reply"
+    assert responder.delivered == ["command reply"]
+    assert event.get_result() is None
     assert reply_stage.resumed is False
 
 
@@ -217,3 +240,13 @@ async def test_pipeline_skips_downstream_for_stopped_generator_without_result():
 
     assert "late" not in event.stage_trace
     assert event.is_stopped() is True
+
+
+@pytest.mark.asyncio
+async def test_pipeline_continues_past_generator_without_yields():
+    scheduler = _scheduler([NonYieldingStage(), TraceStage("after")])
+    event = PipelineEvent()
+
+    await scheduler._process_stages(event)
+
+    assert "after" in event.stage_trace

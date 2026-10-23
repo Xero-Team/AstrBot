@@ -879,7 +879,11 @@ class DingtalkPlatformAdapter(Platform):
                     if self._terminated_event.is_set():
                         should_cancel_task = True
                         round_event.set()
-                    round_event.wait()
+                    while (
+                        not round_event.is_set()
+                        and not self._terminated_event.is_set()
+                    ):
+                        round_event.wait(0.5)
                     if self._terminated_event.is_set():
                         return
                     if task.done():

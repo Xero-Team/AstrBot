@@ -302,9 +302,7 @@ def _get_plugin_target_paths(
         Path(local_path) if is_update and local_path else plugins_dir / plugin_name
     )
     backup_path = (
-        target_path.with_name(f".{target_path.name}.backup-{uuid.uuid4().hex[:8]}")
-        if is_update
-        else None
+        target_path.with_name(f"{target_path.name}_backup") if is_update else None
     )
     return plugin_name, repo_url, target_path, backup_path
 

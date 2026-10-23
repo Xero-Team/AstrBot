@@ -349,7 +349,7 @@ class AstrBotExporter:
                         table_name,
                         safe_error("", exc),
                     )
-                    export_data[table_name] = []
+                    raise RuntimeError(f"导出知识库表 {table_name} 失败") from exc
 
         return export_data
 
@@ -374,7 +374,7 @@ class AstrBotExporter:
             raise
         except Exception as exc:
             logger.warning("导出知识库文档失败: %s", safe_error("", exc))
-            return {"documents": []}
+            raise RuntimeError("导出知识库文档失败") from exc
 
     async def _export_kb_vector_index(
         self,

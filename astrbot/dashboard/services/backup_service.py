@@ -228,12 +228,16 @@ class BackupService:
         self._claim_data_task()
         task_id = str(uuid.uuid4())
         self._active_data_task = task_id
-        self._init_task(task_id, "export", "pending")
-        create_tracked_task(
-            self._background_tasks,
-            self.background_export_task(task_id),
-            name=f"backup-export:{task_id}",
-        )
+        try:
+            self._init_task(task_id, "export", "pending")
+            create_tracked_task(
+                self._background_tasks,
+                self.background_export_task(task_id),
+                name=f"backup-export:{task_id}",
+            )
+        except BaseException:
+            self._active_data_task = None
+            raise
         return {
             "task_id": task_id,
             "message": "export task created, processing in background",
@@ -482,12 +486,17 @@ class BackupService:
         task_id = str(uuid.uuid4())
         self._active_data_task = task_id
         self._active_import_path = zip_path
-        self._init_task(task_id, "import", "pending")
-        create_tracked_task(
-            self._background_tasks,
-            self.background_import_task(task_id, zip_path),
-            name=f"backup-import:{task_id}",
-        )
+        try:
+            self._init_task(task_id, "import", "pending")
+            create_tracked_task(
+                self._background_tasks,
+                self.background_import_task(task_id, zip_path),
+                name=f"backup-import:{task_id}",
+            )
+        except BaseException:
+            self._active_data_task = None
+            self._active_import_path = None
+            raise
 
         return {
             "task_id": task_id,

@@ -395,6 +395,7 @@ class AstrBotExporter:
             raise
         except Exception as exc:
             logger.warning("导出知识库向量索引失败: %s", safe_error("", exc))
+            raise RuntimeError("导出知识库向量索引失败") from exc
 
     async def _export_kb_media_files(
         self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str
@@ -416,6 +417,7 @@ class AstrBotExporter:
             raise
         except Exception as exc:
             logger.warning("导出知识库媒体文件失败: %s", safe_error("", exc))
+            raise RuntimeError("导出知识库媒体文件失败") from exc
 
     async def _export_kb_source_files(
         self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str
@@ -441,6 +443,7 @@ class AstrBotExporter:
             raise
         except Exception as exc:
             logger.warning("导出知识库源文件失败: %s", safe_error("", exc))
+            raise RuntimeError("导出知识库源文件失败") from exc
 
     async def _export_directories(
         self, zf: zipfile.ZipFile
@@ -495,7 +498,7 @@ class AstrBotExporter:
                 raise
             except Exception as exc:
                 logger.warning("导出目录失败: %s", safe_error("", exc))
-                stats[dir_name] = {"files": 0, "size": 0}
+                raise RuntimeError(f"导出目录 {dir_name} 失败") from exc
 
         return stats
 
@@ -516,6 +519,7 @@ class AstrBotExporter:
                 raise
             except Exception as exc:
                 logger.warning("导出附件失败: %s", safe_error("", exc))
+                raise RuntimeError("导出附件失败") from exc
 
     def _model_to_dict(self, record: Any) -> dict:
         """将 SQLModel 实例转换为字典

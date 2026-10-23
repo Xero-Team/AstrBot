@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ from astrbot.core.memory.tools import (
     SearchMemoryTool,
 )
 from astrbot.core.memory.writeback import MemoryFactExtractor, MemoryProfileRefresher
+from astrbot.core.memory.writeback.worker import MemoryWritebackWorker
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     _run_runtime_memory_postprocess,
 )
@@ -584,3 +586,14 @@ def test_frozenset_round_trip_keeps_tuple_members_hashable():
     thawed = thaw_catalog_value(frozen)
 
     assert thawed == {("a", 1), ("b", 2)}
+
+
+@pytest.mark.asyncio
+async def test_memory_writeback_worker_stop_wakes_an_idle_worker():
+    worker = MemoryWritebackWorker(SimpleNamespace())
+    await worker.start()
+    try:
+        await asyncio.wait_for(worker.stop(), timeout=2)
+    finally:
+        if worker._task is not None and not worker._task.done():
+            worker._task.cancel()

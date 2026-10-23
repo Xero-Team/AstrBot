@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -10,7 +10,11 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 async def test_platform_stats_upsert_count_and_time_window_ordering(
     temp_db: SQLiteDatabase,
 ):
-    now = datetime.now().replace(minute=0, second=0, microsecond=0)
+    now = (
+        datetime.now(UTC)
+        .replace(tzinfo=None)
+        .replace(minute=0, second=0, microsecond=0)
+    )
     older_hour = now - timedelta(hours=2)
     newer_hour = now - timedelta(hours=1)
 
@@ -80,3 +84,20 @@ async def test_insert_provider_stat_normalizes_defaults_and_persists_numbers(
     assert stored.start_time == 1.5
     assert stored.end_time == 0.0
     assert stored.time_to_first_token == 0.25
+
+
+@pytest.mark.asyncio
+async def test_platform_stats_default_timestamp_is_utc_hour_bucket(
+    temp_db: SQLiteDatabase,
+):
+    await temp_db.insert_platform_stats("slack", "bot", count=1)
+
+    rows = await temp_db.get_platform_stats(offset_sec=10 * 365 * 24 * 3600)
+
+    assert len(rows) == 1
+    stored = rows[0].timestamp
+    assert stored.minute == 0
+    assert stored.second == 0
+    assert stored.microsecond == 0
+    age = datetime.now(UTC).replace(tzinfo=None) - stored
+    assert timedelta(0) <= age < timedelta(hours=1, minutes=1)

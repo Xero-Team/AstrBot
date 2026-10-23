@@ -57,7 +57,7 @@ class StatisticsStoreMixin(DatabaseStoreMixin):
         """Get platform statistic rows within the specified offset in seconds."""
         async with store_session(self) as session:
             session: AsyncSession
-            now = datetime.now()
+            now = datetime.now(UTC).replace(tzinfo=None)
             start_time = now - timedelta(seconds=offset_sec)
             result = await session.execute(
                 select(PlatformStat)

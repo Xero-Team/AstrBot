@@ -1589,7 +1589,30 @@ async def test_backup_round_trips_backend_vector_index(tmp_path, filename):
     assert result.success is True
 
 
-def test_convert_datetime_fields_keeps_unparseable_values():
+def test_import_attachments_restores_files_under_the_new_data_root(tmp_path):
+    from astrbot.core.backup._importer_files import import_attachments
+
+    archive = tmp_path / "backup.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("files/attachments/a1.png", b"image")
+
+    with zipfile.ZipFile(archive) as zf:
+        count = import_attachments(
+            zf,
+            [
+                {
+                    "attachment_id": "a1",
+                    "path": "/old/machine/data/attachments/stored.png",
+                }
+            ],
+            str(tmp_path / "cmd_config.json"),
+        )
+
+    assert count == 1
+    assert (tmp_path / "attachments" / "stored.png").read_bytes() == b"image"
+
+
+def test_convert_datetime_fields_rejects_unparseable_values():
     importer = AstrBotImporter(main_db=MagicMock())
     row = {
         "conversation_id": "test-123",
@@ -1599,7 +1622,5 @@ def test_convert_datetime_fields_keeps_unparseable_values():
         "updated_at": "2024-01-01T12:00:00",
     }
 
-    result = importer._convert_datetime_fields(row, ConversationV2)
-
-    assert result["created_at"] == "not-a-date"
-    assert isinstance(result["updated_at"], datetime)
+    with pytest.raises(ValueError):
+        importer._convert_datetime_fields(row, ConversationV2)

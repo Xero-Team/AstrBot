@@ -4,8 +4,6 @@ from typing import Any
 from sqlalchemy import DateTime
 from sqlalchemy import inspect as sa_inspect
 
-from astrbot import logger
-
 
 def convert_datetime_fields(
     row: dict[str, Any],
@@ -18,7 +16,11 @@ def convert_datetime_fields(
         model_class: SQLAlchemy model class used for import.
 
     Returns:
-        A shallow-copied row with datetime fields converted when possible.
+        A shallow-copied row with datetime fields converted.
+
+    Raises:
+        ValueError: If a datetime column holds a value that cannot be parsed.
+            Import callers treat this as a row-level failure and skip the row.
     """
 
     converted = row.copy()
@@ -35,11 +37,9 @@ def convert_datetime_fields(
         if isinstance(column.type, DateTime):
             try:
                 converted[column.name] = datetime.fromisoformat(value)
-            except TypeError, ValueError:
-                logger.warning(
-                    "保留无法解析的日期字段 %s.%s",
-                    getattr(model_class, "__name__", model_class),
-                    column.name,
-                )
+            except (OverflowError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"invalid datetime value for column {column.name}"
+                ) from exc
 
     return converted

@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 import aiohttp
+import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
 try:
@@ -22,6 +23,7 @@ from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
 _REQUEST_ERROR = "Dashscope TTS audio generation failed"
+MAX_AUDIO_DOWNLOAD_BYTES = 50 * 1024 * 1024
 
 
 @register_provider_adapter(
@@ -140,7 +142,19 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response,
             ):
-                return await response.read()
+                response.raise_for_status()
+                content_type = response.headers.get("Content-Type", "")
+                if "audio" not in content_type.lower():
+                    logger.warning(
+                        "[Dashscope TTS] Audio download returned unexpected content type: %s",
+                        content_type,
+                    )
+                    return None
+                data = await response.content.read(MAX_AUDIO_DOWNLOAD_BYTES + 1)
+                if len(data) > MAX_AUDIO_DOWNLOAD_BYTES:
+                    logger.warning("[Dashscope TTS] Audio download exceeded size limit")
+                    return None
+                return data
         except asyncio.CancelledError:
             raise
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:
@@ -154,14 +168,22 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         model: str,
         text: str,
     ) -> tuple[bytes | None, str]:
-        synthesizer = SpeechSynthesizer(
-            headers={
-                name.lower(): value for name, value in self.request_headers.items()
-            },
-            model=model,
-            voice=self.voice,
-            format=AudioFormat.WAV_24000HZ_MONO_16BIT,
-        )
+        # The SDK copies ``dashscope.api_key`` into the synthesizer instance at
+        # construction time. Swap it only for that synchronous window so several
+        # providers can keep different credentials without leaving a global key.
+        previous_api_key = dashscope.api_key
+        dashscope.api_key = self.chosen_api_key
+        try:
+            synthesizer = SpeechSynthesizer(
+                headers={
+                    name.lower(): value for name, value in self.request_headers.items()
+                },
+                model=model,
+                voice=self.voice,
+                format=AudioFormat.WAV_24000HZ_MONO_16BIT,
+            )
+        finally:
+            dashscope.api_key = previous_api_key
         loop = asyncio.get_running_loop()
         audio_bytes = await loop.run_in_executor(
             None,

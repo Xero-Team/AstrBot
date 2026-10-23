@@ -230,6 +230,8 @@
     "provider.models.empty_current": "(empty)",
     "provider.models.hint": "Use /model set <name-or-index> to switch models. Model names can be resolved across configured providers.",
     "provider.models.invalid_index": "Invalid model index.",
-    "work.status.progress": "Running: {task}\nCoding agent: {agent}\nLatest: {action}\nTool calls: {tools}; events: {events}"
+    "work.status.progress": "Running: {task}\nCoding agent: {agent}\nLatest: {action}\nTool calls: {tools}; events: {events}",
+    "plugin.disable.failed": "Plugin operation failed: {error}",
+    "plugin.enable.failed": "Plugin operation failed: {error}"
   }
 }

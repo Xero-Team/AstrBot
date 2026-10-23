@@ -86,6 +86,8 @@ class BotCommands:
                 await reply_i18n(self.context, event, "bot.target.denied")
                 return
         settings["session_enabled"] = enabled
+        if enabled:
+            settings["session_blocked"] = False
         await self.context.preferences.session_put(
             umo,
             _SESSION_SERVICE_CONFIG,
@@ -136,7 +138,6 @@ class BotCommands:
             await reply_i18n(self.context, event, "bot.leave.confirm")
             return
 
-        await send_i18n(self.context, event, "bot.leave.ok")
         try:
             await self.context.platform_actions.invoke_for_event(
                 event,
@@ -146,5 +147,7 @@ class BotCommands:
         except Exception as exc:
             logger.warning("Failed to leave group: %s", safe_error("", exc))
             await send_i18n(self.context, event, "bot.leave.failed")
+        else:
+            await send_i18n(self.context, event, "bot.leave.ok")
         event.clear_result()
         event.stop_event()

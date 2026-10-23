@@ -46,6 +46,14 @@ class PluginCommands:
         except RuntimeError:
             await reply_i18n(self.context, event, "plugin.disable.unavailable")
             return
+        except Exception as exc:
+            await reply_i18n(
+                self.context,
+                event,
+                "plugin.disable.failed",
+                error=safe_error("", exc),
+            )
+            return
         await reply_i18n(
             self.context, event, "plugin.disable.ok", plugin_name=plugin_name
         )
@@ -59,6 +67,14 @@ class PluginCommands:
             await self.context.runtime_info.enable_plugin(plugin_name)
         except RuntimeError:
             await reply_i18n(self.context, event, "plugin.enable.unavailable")
+            return
+        except Exception as exc:
+            await reply_i18n(
+                self.context,
+                event,
+                "plugin.enable.failed",
+                error=safe_error("", exc),
+            )
             return
         await reply_i18n(
             self.context, event, "plugin.enable.ok", plugin_name=plugin_name

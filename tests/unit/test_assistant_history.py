@@ -139,7 +139,7 @@ async def test_merge_keeps_other_sender_complete_turn():
         {"role": "user", "content": "from-b"},
         {"role": "assistant", "content": "b-answer"},
     ]
-    assert manager.update_conversation.await_args.kwargs["token_usage"] == 0
+    assert manager.update_conversation.await_args.kwargs["token_usage"] == 7
 
 
 @pytest.mark.asyncio

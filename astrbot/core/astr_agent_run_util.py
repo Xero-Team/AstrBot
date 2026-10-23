@@ -380,7 +380,7 @@ async def run_agent(
                     ):
                         yield chain
 
-                if can_buffer_llm_result and agent_runner.done():
+                if can_buffer_llm_result:
                     async for chain in _emit_buffered_llm_result(
                         buffered_llm_chains, astr_event
                     ):

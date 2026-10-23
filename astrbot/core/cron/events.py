@@ -37,10 +37,10 @@ class CronMessageEvent(AstrMessageEvent):
 
         msg_obj = AstrBotMessage()
         msg_obj.type = message_type
-        msg_obj.self_id = sender_id
+        msg_obj.self_id = ""
         msg_obj.session_id = session.session_id
         msg_obj.message_id = uuid.uuid4().hex
-        msg_obj.sender = MessageMember(user_id=session.session_id, nickname=sender_name)
+        msg_obj.sender = MessageMember(user_id=sender_id, nickname=sender_name)
         msg_obj.message = [Plain(message)]
         msg_obj.message_str = message
         msg_obj.raw_message = message

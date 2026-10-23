@@ -752,10 +752,12 @@ class AstrBotCoreLifecycle:
             await cancel_tracked_tasks(self._background_tasks)
 
             if not self._cleanup_stack_closed:
-                self._cleanup_stack_closed = True
                 for scheduler in self.pipeline_scheduler_mapping.values():
                     self._register_cleanup("pipeline work tasks", scheduler.close)
-                await self._cleanup_stack.aclose()
+                try:
+                    await self._cleanup_stack.aclose()
+                finally:
+                    self._cleanup_stack_closed = True
 
             from astrbot.core.utils.trace_store import close_trace_store
 
@@ -865,11 +867,11 @@ class AstrBotCoreLifecycle:
                 getattr(self.services, "authorization", None),
             ),
         )
+        await scheduler.initialize()
         old_scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+        self.pipeline_scheduler_mapping[conf_id] = scheduler
         if old_scheduler is not None:
             await old_scheduler.close()
-        await scheduler.initialize()
-        self.pipeline_scheduler_mapping[conf_id] = scheduler
         manager = getattr(self, "turn_window_manager", None)
         if manager is not None:
             manager.discard_all(f"reload pipeline {conf_id}")

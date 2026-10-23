@@ -1587,3 +1587,19 @@ async def test_backup_round_trips_backend_vector_index(tmp_path, filename):
 
     assert (restore_dir / filename).read_bytes() == b"vector-index"
     assert result.success is True
+
+
+def test_convert_datetime_fields_keeps_unparseable_values():
+    importer = AstrBotImporter(main_db=MagicMock())
+    row = {
+        "conversation_id": "test-123",
+        "platform_id": "test",
+        "user_id": "user1",
+        "created_at": "not-a-date",
+        "updated_at": "2024-01-01T12:00:00",
+    }
+
+    result = importer._convert_datetime_fields(row, ConversationV2)
+
+    assert result["created_at"] == "not-a-date"
+    assert isinstance(result["updated_at"], datetime)

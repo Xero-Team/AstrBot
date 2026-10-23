@@ -99,7 +99,9 @@ class AstrBotExporter:
             progress_callback, "main_db", 0, 100, "正在导出主数据库..."
         )
         main_data = await self._export_main_database()
-        self._write_json_entry(zf, "databases/main_db.json", main_data)
+        await asyncio.to_thread(
+            self._write_json_entry, zf, "databases/main_db.json", main_data
+        )
         await self._report_progress(
             progress_callback, "main_db", 100, 100, "主数据库导出完成"
         )
@@ -122,7 +124,9 @@ class AstrBotExporter:
             progress_callback, "kb_metadata", 0, 100, "正在导出知识库元数据..."
         )
         kb_meta_data = await self._export_kb_metadata()
-        self._write_json_entry(zf, "databases/kb_metadata.json", kb_meta_data)
+        await asyncio.to_thread(
+            self._write_json_entry, zf, "databases/kb_metadata.json", kb_meta_data
+        )
         await self._report_progress(
             progress_callback, "kb_metadata", 100, 100, "知识库元数据导出完成"
         )
@@ -138,7 +142,12 @@ class AstrBotExporter:
                 f"正在导出知识库 {kb_helper.kb.kb_name} 的文档数据...",
             )
             doc_data = await self._export_kb_documents(kb_helper)
-            self._write_json_entry(zf, f"databases/kb_{kb_id}/documents.json", doc_data)
+            await asyncio.to_thread(
+                self._write_json_entry,
+                zf,
+                f"databases/kb_{kb_id}/documents.json",
+                doc_data,
+            )
             await self._export_kb_vector_index(zf, kb_helper, kb_id)
             await self._export_kb_media_files(zf, kb_helper, kb_id)
             await self._export_kb_source_files(zf, kb_helper, kb_id)

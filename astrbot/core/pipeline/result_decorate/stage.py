@@ -262,6 +262,8 @@ class ResultDecorateStage(Stage):
                 chain.append(component)
                 continue
             for part in parts:
+                if isinstance(part, tuple):
+                    part = str(next((item for item in part if item), ""))
                 if self.content_cleanup_rule:
                     try:
                         part = re.sub(self.content_cleanup_rule, "", part)

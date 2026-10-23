@@ -493,3 +493,19 @@ def test_safe_subset_matches_posix_shell_argv(source: str) -> None:
     )
     expected = tuple(completed.stdout.rstrip(b"\0").decode().split("\0"))
     assert parse_arguments(source).argv == expected
+
+
+def test_header_scan_ignores_trailing_whitespace_before_newline() -> None:
+    catalog = CommandCatalog()
+
+    tokens = catalog._scan_header_tokens("group \n", 3)
+
+    assert tokens == [("group", 0, 5)]
+
+
+def test_schema_rejects_positional_only_parameters() -> None:
+    async def handler(self, event, value: str, /) -> None: ...
+
+    with pytest.raises(CommandError) as caught:
+        compile_command_schema(handler)
+    assert caught.value.diagnostic.code is CommandErrorCode.UNSUPPORTED_SIGNATURE

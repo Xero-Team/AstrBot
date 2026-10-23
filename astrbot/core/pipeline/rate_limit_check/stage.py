@@ -120,7 +120,9 @@ class RateLimitStage(Stage):
             empty_sessions = [
                 session_id
                 for session_id, timestamps in self.event_timestamps.items()
-                if not timestamps and session_id != active_session_id
+                if not timestamps
+                and session_id != active_session_id
+                and not self.locks.get(session_id, asyncio.Lock()).locked()
             ]
             for session_id in empty_sessions:
                 self.event_timestamps.pop(session_id, None)
@@ -130,7 +132,9 @@ class RateLimitStage(Stage):
         idle_sessions = [
             session_id
             for session_id, timestamps in self.event_timestamps.items()
-            if not timestamps and session_id != active_session_id
+            if not timestamps
+            and session_id != active_session_id
+            and not self.locks.get(session_id, asyncio.Lock()).locked()
         ]
         for session_id in idle_sessions:
             self.event_timestamps.pop(session_id, None)

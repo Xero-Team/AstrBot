@@ -350,8 +350,13 @@ async def _drain_stdout(
     *,
     adapter,
     observer: CodingRunObserver,
+    snapshot: list[str] | None = None,
 ) -> str:
-    """Copy stdout to the log, normalize each line live, and return its tail."""
+    """Copy stdout to the log, normalize each line live, and return its tail.
+
+    ``snapshot`` receives the captured tail even when the drain is cancelled,
+    because a stream that outlives the process is abandoned after a timeout.
+    """
     if stream is None:
         return ""
     decoder = codecs.getincrementaldecoder("utf-8")("replace")
@@ -365,41 +370,45 @@ async def _drain_stdout(
             for event in adapter.feed(line):
                 await observer.record(event)
 
-    while chunk := await stream.read(READ_CHUNK_BYTES):
-        text = decoder.decode(chunk)
-        if not text:
-            continue
-        log.write(text)
-        log.flush()
-        captured.append(text)
-        captured_chars += len(text)
-        while captured_chars > MAX_CAPTURED_CHARS and len(captured) > 1:
-            captured_chars -= len(captured.popleft())
-        pending += text
-        while "\n" in pending:
-            line, pending = pending.split("\n", 1)
-            if discarding:
-                discarding = False
+    try:
+        while chunk := await stream.read(READ_CHUNK_BYTES):
+            text = decoder.decode(chunk)
+            if not text:
                 continue
-            await consume_line(line)
-        if len(pending) > MAX_STREAM_LINE_CHARS:
-            logger.warning(
-                "Discarding an oversized coding-agent output line (%s characters).",
-                len(pending),
-            )
-            pending = ""
-            discarding = True
+            log.write(text)
+            log.flush()
+            captured.append(text)
+            captured_chars += len(text)
+            while captured_chars > MAX_CAPTURED_CHARS and len(captured) > 1:
+                captured_chars -= len(captured.popleft())
+            pending += text
+            while "\n" in pending:
+                line, pending = pending.split("\n", 1)
+                if discarding:
+                    discarding = False
+                    continue
+                await consume_line(line)
+            if len(pending) > MAX_STREAM_LINE_CHARS:
+                logger.warning(
+                    "Discarding an oversized coding-agent output line (%s characters).",
+                    len(pending),
+                )
+                pending = ""
+                discarding = True
 
-    tail = decoder.decode(b"", final=True)
-    if tail:
-        log.write(tail)
-        log.flush()
-        captured.append(tail)
-        captured_chars += len(tail)
-        pending += tail
-    if pending and not discarding:
-        await consume_line(pending)
-    return "".join(captured)
+        tail = decoder.decode(b"", final=True)
+        if tail:
+            log.write(tail)
+            log.flush()
+            captured.append(tail)
+            captured_chars += len(tail)
+            pending += tail
+        if pending and not discarding:
+            await consume_line(pending)
+        return "".join(captured)
+    finally:
+        if snapshot is not None:
+            snapshot.append("".join(captured))
 
 
 async def _wait_for_exit(
@@ -718,6 +727,7 @@ async def run_coding_task(
 
         adapter = adapter_for(str(agent.get("type", "")))
         stdout_text = ""
+        stdout_snapshot: list[str] = []
         stream_tasks: list[asyncio.Future] = []
         try:
             with (workspace / OUTPUT_LOG_NAME).open("w", encoding="utf-8") as log:
@@ -728,6 +738,7 @@ async def run_coding_task(
                             log,
                             adapter=adapter,
                             observer=observer,
+                            snapshot=stdout_snapshot,
                         )
                     )
                 )
@@ -752,7 +763,7 @@ async def run_coding_task(
                             "Coding agent output did not close after the process "
                             "exited; continuing with the captured tail."
                         )
-                        stdout_text = ""
+                        stdout_text = "".join(stdout_snapshot)
                     # A child that exits without reading stdin closes the pipe;
                     # that failure is not the run's failure.
                     await asyncio.gather(stream_tasks[2], return_exceptions=True)

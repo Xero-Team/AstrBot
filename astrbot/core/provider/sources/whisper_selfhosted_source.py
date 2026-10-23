@@ -58,6 +58,9 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             return await asyncio.shield(future)
         except asyncio.CancelledError:
             future.cancel()
+            # A running thread cannot be interrupted; wait for it so callers do
+            # not delete a temporary audio file the worker still reads.
+            await asyncio.shield(future)
             raise
         finally:
             self._executor_futures.discard(future)
@@ -130,7 +133,10 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
 
     async def terminate(self) -> None:
         """Cancel pending model work and release the loaded model reference."""
-        for future in tuple(self._executor_futures):
+        pending = tuple(self._executor_futures)
+        for future in pending:
             future.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         self._executor_futures.clear()
         self.model = None

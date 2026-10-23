@@ -43,6 +43,10 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
 $SchemaPath = [System.IO.Path]::GetFullPath($SchemaPath)
 $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 
+if ($SchemaPath -eq $OutputPath) {
+    throw "SchemaPath and OutputPath must be different."
+}
+
 if (-not (Test-Path -LiteralPath $SchemaPath)) {
     throw "Schema file not found: $SchemaPath"
 }

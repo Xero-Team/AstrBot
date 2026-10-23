@@ -349,6 +349,7 @@ export class ChromeVisualBrowser {
     const url = new URL(pathToFileURL(artifactPath).href);
     url.searchParams.set('theme', theme);
     const loaded = this.cdp.waitFor('Page.loadEventFired', sessionId);
+    loaded.catch(() => {});
     const navigation = await this.cdp.send('Page.navigate', { url: url.href }, sessionId);
     if (navigation.errorText) throw new Error(`Chrome navigation failed: ${navigation.errorText}`);
     await loaded;
@@ -444,10 +445,11 @@ export class ChromeVisualBrowser {
         minimumProjectedNodeTextPx: minimum ? minimum.projectedFontPx : null,
         minimumProjectedNodeText: minimum ? minimum.text : null,
         minimumProjectedNodeTextDetail: minimum ? minimum.detail : null,
-        hasDiagram: Boolean(svg),
         hasLegend: Boolean(legendRect && legendRect.width && legendRect.height),
         hasNavigationDock: Boolean(navigationDockRect && navigationDockRect.width && navigationDockRect.height),
-        legendDockIntersectionArea: intersectionArea(legendRect, navigationDockRect),
+        legendDockIntersectionArea: stageDockIntersectionArea > 0
+          ? intersectionArea(legendRect, navigationDockRect)
+          : 0,
         dockStageIntersectionArea: stageDockIntersectionArea,
         dockStageGap: stageRect && navigationDockRect ? navigationDockRect.top - stageRect.bottom : null,
         viewerChromeRequiredGap: viewerChromeReceipt ? viewerChromeReceipt.gap : null,
@@ -504,10 +506,8 @@ function observation({ width, height, theme, metrics }) {
   const minimumProjectedNodeTextPx = metrics.minimumProjectedNodeTextPx == null
     ? null
     : Number(metrics.minimumProjectedNodeTextPx);
-  const hasDiagram = metrics.hasDiagram !== false;
-  const readabilityOk = !hasDiagram
-    || (minimumProjectedNodeTextPx != null
-      && minimumProjectedNodeTextPx >= MIN_PROJECTED_NODE_TEXT_PX);
+  const readabilityOk = minimumProjectedNodeTextPx == null
+    || minimumProjectedNodeTextPx >= MIN_PROJECTED_NODE_TEXT_PX;
   const legendDockIntersectionArea = Number(metrics.legendDockIntersectionArea) || 0;
   const dockStageIntersectionArea = Number(metrics.dockStageIntersectionArea) || 0;
   const dockStageGap = metrics.dockStageGap == null ? null : Number(metrics.dockStageGap);

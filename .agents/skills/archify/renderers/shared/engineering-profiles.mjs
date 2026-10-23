@@ -88,18 +88,6 @@ export function deploymentOwnershipDiagnostics(diagram) {
           evidence: { componentType: component.type, privateMemberships: 0 },
           supportedFixes: ['add the component id to the real private security-group boundary wraps list'],
         });
-      } else if (privateScopes.length > 1) {
-        diagnostics.push({
-          code: 'engineering/deployment-private-state-ambiguous',
-          severity: 'error',
-          message: `Stateful component ${JSON.stringify(component.id)} belongs to more than one private security-group boundary.`,
-          subject: subject('components', index, component),
-          evidence: {
-            componentType: component.type,
-            securityGroups: privateScopes.map(({ boundary, index: boundaryIndex }) => ({ boundaryIndex, label: boundary.label })),
-          },
-          supportedFixes: ['keep the component id in exactly one real security-group boundary wraps list'],
-        });
       }
     }
   });

@@ -142,10 +142,10 @@ function validateLifecycle() {
   const problems = [];
   if (states.size !== asArray(lifecycle.states).length) problems.push('State ids must be unique.');
 
-  // The three bands are fixed at y=112/264/436. Preserve the original
-  // outcome/legend reserve even though measured legend rows now sit lower.
-  if (lifecycleAreaBottom() + 4 < 448) {
-    problems.push(`viewBox height ${viewBox[1]} is too short for the fixed band layout — set meta.viewBox[1] to at least 566.`);
+  // Derive the minimum from the outcome band instead of a stale constant.
+  const minimumViewBoxHeight = layout.outcomeY + layout.outcomeH + 122;
+  if (viewBox[1] < minimumViewBoxHeight) {
+    problems.push(`viewBox height ${viewBox[1]} is too short for the fixed band layout — set meta.viewBox[1] to at least ${minimumViewBoxHeight}.`);
   }
 
   const laneIds = new Set(asArray(lifecycle.lanes).map((lane) => lane.id));

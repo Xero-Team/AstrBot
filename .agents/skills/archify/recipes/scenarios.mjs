@@ -140,7 +140,7 @@ const RAW_RECIPES = [
   {
     id: 'async-roundtrip', type: 'sequence', proof: 'async-roundtrip',
     presentation: { preset: 'signal-flow', motion: 'trace', views: 'recommended' },
-    signals: [['async roundtrip', 14], ['webhook', 10], ['callback', 10], ['acknowledgement', 8], ['timeout', 7], ['retry message', 8], ['异步回调', 14], ['回调', 10], ['确认消息', 8], ['超时', 7], ['消息重试', 9]],
+    signals: [['async roundtrip', 14], ['webhook', 10], ['callback', 10], ['acknowledgement', 8], ['timeout', 7], ['retry message', 8], ['异步回调', 14], ['回调', 10], ['确认消息', 8], ['超时', 7], ['消息重试', 9], ['webhook', 10]],
     en: {
       title: 'Async roundtrip', question: 'What happens after the initial request returns?',
       summary: 'A sequence view of enqueue, acknowledgement, background work, callbacks, retries, timeout, and final consistency.',

@@ -26,6 +26,26 @@ Pin a build with `sha-<7-char>` or that day's `nightly-YYYYMMDD`. The first GHCR
 package is private until a maintainer sets visibility to public; anonymous
 `docker pull` fails until then.
 
+The same substitution works for the `astrbot` service in
+`compose-with-napcat.yml` and `compose-with-searxng.yml`: remove its `build:`
+block and keep `image: ghcr.io/xero-team/astrbot:nightly`. To keep the base file
+intact, use an override that resets the build definition (Compose 2.24+):
+
+```yaml
+# compose.override.yml
+services:
+  astrbot:
+    image: ghcr.io/xero-team/astrbot:nightly
+    build: !reset null
+```
+
+```bash
+docker compose -f compose-with-searxng.yml -f compose.override.yml up -d
+```
+
+The SearXNG sidecar is always pulled from its own upstream image; only the
+AstrBot service changes.
+
 ## Build from Source
 
 Clone this repository and build from its root `Dockerfile` and Compose files
@@ -34,10 +54,11 @@ built into the Dashboard and served at `/help/`.
 
 ## Choose a Compose File
 
-The repository provides two locally built deployment paths:
+The repository provides three locally built deployment paths:
 
 - `compose.yml`: runs AstrBot. Use it for QQ Official Bot, Telegram, Discord, and other platforms, or when you manage the bot protocol implementation separately.
-- `compose-with-napcat.yml`: runs AstrBot and NapCat together for personal QQ accounts. AstrBot is still built from the local checkout; NapCat uses the referenced NapCat container image.
+- `compose-with-napcat.yml`: runs AstrBot and NapCat together for personal QQ accounts. AstrBot is still built from the local checkout; NapCat uses the upstream `latest` image.
+- `compose-with-searxng.yml`: runs AstrBot and a SearXNG sidecar for self-hosted web search. AstrBot is still built from the local checkout; SearXNG uses the upstream `latest` image.
 
 Clone the repository first:
 
@@ -113,11 +134,13 @@ Override `.env` from the command line when needed:
 ASTRBOT_FEATURES=browser,node,docker docker compose up -d --build
 ```
 
-The NapCat stack uses the same argument:
+The NapCat and SearXNG stacks use the same argument:
 
 ```bash
 ASTRBOT_FEATURES=browser,node,docker \
   docker compose -f compose-with-napcat.yml up -d --build
+ASTRBOT_FEATURES=minimal \
+  docker compose -f compose-with-searxng.yml up -d --build
 ```
 
 Available feature groups:
@@ -185,6 +208,10 @@ docker compose -f compose-with-napcat.yml up -d --build
 docker compose -f compose-with-napcat.yml logs -f astrbot napcat
 ```
 
+NapCat follows the upstream `latest` tag and is re-pulled on every
+`docker compose up`. Pin a tag and digest in the Compose file if you need a
+reproducible deployment.
+
 On Linux, you can run NapCat with your host user's UID/GID to reduce bind-mount permission issues:
 
 ```bash
@@ -210,6 +237,56 @@ AstrBot and NapCat share an internal Docker network. With `MODE=ws`, create the 
 
 If you retain the Compose file's original `MODE=astrbot`, do not create the dedicated `NapCat` platform. Create `OneBot v11`, set `ws_reverse_host` to `0.0.0.0`, and keep port `6199`. It only needs to be reachable on the internal Docker network and does not need to be published to the host. For authentication, likewise remove `MODE` after the initial configuration is generated, then set the same token in NapCat and AstrBot.
 
+## Start AstrBot and SearXNG Together
+
+`compose-with-searxng.yml` starts AstrBot and a SearXNG sidecar on the same
+Docker network. AstrBot is still built from the local checkout; SearXNG uses the
+upstream `latest` image. To skip the local AstrBot build, apply the nightly
+override shown in [Pull the nightly image](#pull-the-nightly-image); SearXNG is
+still pulled from its own image.
+
+```bash
+docker compose -f compose-with-searxng.yml up -d --build
+docker compose -f compose-with-searxng.yml logs -f astrbot searxng
+```
+
+On first start, `scripts/searxng/entrypoint.sh` creates `./searxng/settings.yml`
+with a random `server.secret_key` and enables `html` and `json` in
+`search.formats`. The directory is git-ignored; do not commit it because it
+contains the instance secret. The file is never rewritten after it exists, so
+delete it and recreate the SearXNG container only when you want a new secret.
+
+This Compose file publishes (host ports bind to loopback by default):
+
+- `6185`: AstrBot WebUI (documentation at `/help/`).
+- `8080`: SearXNG WebUI. Set `SEARXNG_PORT` or `SEARXNG_BIND_ADDRESS` to change it.
+
+It persists:
+
+- `./data`.
+- `./searxng`, which holds `settings.yml`.
+- The `searxng-cache` volume, which holds regenerable cache data.
+
+On Linux, the image may take ownership of `./searxng` as its `searxng` user
+(UID 977) on first start; edit `settings.yml` with elevated permissions if
+needed.
+
+AstrBot reaches SearXNG by service name. In the WebUI, open **Config → AI → Web
+Search**, keep `SearXNG` in `Web Search Sources`, and set `SearXNG Instance URL`
+(`provider_settings.websearch_searxng_url`) to `http://searxng:8080`. The
+published host port is for browsing and debugging only; do not use it in that
+field. SearXNG must reach the public search engines, so the network is a normal
+bridge network rather than an internal-only one. The bundled service disables
+SearXNG's limiter because it is loopback-only; do not expose it publicly without
+a reverse proxy and its rate limiter enabled.
+
+The service follows the upstream `latest` tag and sets `pull_policy: always`, so
+`docker compose up -d` checks for a newer image each time. To update only
+SearXNG, run `docker compose -f compose-with-searxng.yml pull searxng` and then
+`docker compose -f compose-with-searxng.yml up -d searxng`. If you need a
+reproducible deployment, replace `latest` with a release tag and digest from
+Docker Hub.
+
 ## Health probes
 
 AstrBot exposes two unauthenticated, side-effect-free endpoints on the WebUI
@@ -220,10 +297,11 @@ port:
 - `GET /readyz`: readiness. Returns `200` after core startup completes, and
   `503` with `{"status": "not_ready"}` while it is still starting.
 
-The bundled `compose.yml` and `compose-with-napcat.yml` use `/healthz` for the
-container healthcheck. Point an orchestrator at `/readyz` when you need to hold
-traffic until the runtime is usable. Neither endpoint exposes internal state or
-requires Dashboard authentication.
+The bundled `compose.yml`, `compose-with-napcat.yml`, and
+`compose-with-searxng.yml` use `/healthz` for the AstrBot container healthcheck.
+The SearXNG service uses its own `/healthz`. Point an orchestrator at `/readyz`
+when you need to hold traffic until the runtime is usable. Neither AstrBot
+endpoint exposes internal state or requires Dashboard authentication.
 
 ## Configure an HTTP Proxy in Docker
 
@@ -255,10 +333,9 @@ docker compose restart astrbot
 ```
 
 To change the username at the same time, add `--username <new-username>` to the
-first command. With the NapCat Compose file, add
-`-f compose-with-napcat.yml` to both commands. The command updates the mounted
-`data/` configuration; do not reset credentials by editing password or JWT
-fields manually.
+first command. With another Compose file, add its `-f <file>` argument to both
+commands. The command updates the mounted `data/` configuration; do not reset
+credentials by editing password or JWT fields manually.
 
 To update, back up `data/`, pull the latest code, and rebuild the selected service:
 
@@ -272,4 +349,11 @@ For the NapCat stack, use:
 ```bash
 git pull --ff-only
 docker compose -f compose-with-napcat.yml up -d --build
+```
+
+For the SearXNG stack, use:
+
+```bash
+git pull --ff-only
+docker compose -f compose-with-searxng.yml up -d --build
 ```

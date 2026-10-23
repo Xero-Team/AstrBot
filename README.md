@@ -123,6 +123,12 @@ If you want to start AstrBot and NapCat together from this repository:
 docker compose -f compose-with-napcat.yml up -d --build
 ```
 
+To run AstrBot with a self-hosted SearXNG for web search:
+
+```bash
+docker compose -f compose-with-searxng.yml up -d --build
+```
+
 Binding to `0.0.0.0` is an explicit exposure choice. Restrict access with a firewall and preferably an HTTPS reverse proxy. More details: [Deploy AstrBot with Docker](docs/en/deploy/astrbot/docker.md).
 
 ## Supported Messaging Platforms

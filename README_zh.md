@@ -117,6 +117,12 @@ ASTRBOT_FEATURES=browser,node,docker \
 docker compose -f compose-with-napcat.yml up -d --build
 ```
 
+如果希望使用自托管 SearXNG 提供网页搜索：
+
+```bash
+docker compose -f compose-with-searxng.yml up -d --build
+```
+
 绑定到 `0.0.0.0` 是显式扩大暴露面的选择，请同时限制防火墙来源，并优先使用 HTTPS 反向代理。更多细节请参考[使用 Docker 部署 AstrBot](docs/zh/deploy/astrbot/docker.md)。
 
 ## 支持的消息平台

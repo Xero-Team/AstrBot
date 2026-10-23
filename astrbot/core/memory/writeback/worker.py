@@ -44,6 +44,7 @@ class MemoryWritebackWorker:
         try:
             await self._task
         except asyncio.CancelledError:
+            # The worker was cancelled as part of this shutdown path.
             pass
         if cancelled:
             raise asyncio.CancelledError

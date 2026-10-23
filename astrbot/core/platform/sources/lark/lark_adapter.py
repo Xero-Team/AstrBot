@@ -88,6 +88,9 @@ class LarkPlatformAdapter(Platform):
 
         # socket or webhook
         self.connection_mode = platform_config.get("lark_connection_mode", "socket")
+        # The unified webhook server keeps the platform reachable after ``run``
+        # has finished its setup, so wait here until the platform is terminated.
+        self._shutdown_event = asyncio.Event()
 
         # 初始化 WebSocket 长连接相关配置
         async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
@@ -1013,6 +1016,7 @@ class LarkPlatformAdapter(Platform):
             webhook_uuid = self.config.get("webhook_uuid")
             if webhook_uuid:
                 log_webhook_info(f"{self.meta().id}(飞书 Webhook)", webhook_uuid)
+                await self._shutdown_event.wait()
             else:
                 logger.warning("[Lark] Webhook 模式已启用，但未配置 webhook_uuid")
         else:
@@ -1038,6 +1042,9 @@ class LarkPlatformAdapter(Platform):
             self.bot_open_id = bot_info.open_id
 
     async def terminate(self) -> None:
+        shutdown_event = getattr(self, "_shutdown_event", None)
+        if shutdown_event is not None:
+            shutdown_event.set()
         if self.connection_mode == "socket":
             await self.client._disconnect()
         elif self.webhook_server is not None:

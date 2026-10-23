@@ -17,9 +17,9 @@ Vuetify 4 / Vue 3.5 / Pinia 4 / vue-router 5 API behavior or migration notes.
 
 ## Locked
 
-- Stack (do not silently upgrade or add parallel tooling): Vue `3.5.43`,
-  Vuetify `4.2.4`, Pinia `4.0.3`, vue-router `5.4.0`, Vite `8.3.4`,
-  Vitest `5.0.3`, `vee-validate` `4.15.1` + `yup`, pnpm `12.11.2`. These are
+- Stack (do not silently upgrade or add parallel tooling): Vue `3.5.44`,
+  Vuetify `4.3.0`, Pinia `4.1.0`, vue-router `5.4.0`, Vite `8.3.5`,
+  Vitest `5.0.5`, `vee-validate` `4.15.1`, pnpm `12.11.2`. These are
   the versions in `dashboard/package.json`; Vuetify 3 answers are wrong here.
 - Theme source of truth is `dashboard/src/design/theme.ts` (`themeNames`,
   `astrBotThemes`, semantic roles). Colours come from theme tokens

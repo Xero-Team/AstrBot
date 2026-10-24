@@ -45,9 +45,9 @@ from astrbot.core.star.star import StarMetadata
         (True, "conversation", "local", "none"),
         (True, "work", "inherit", "local"),
         (True, "work", "none", "none"),
-        (True, "work", "sandbox", "sandbox"),
+        (True, "work", "sandbox", "none"),
         (True, "work", "local", "local"),
-        (True, "work", {"invalid": True}, "local"),
+        (True, "work", {"invalid": True}, "none"),
         (False, "conversation", "sandbox", "local"),
     ],
 )
@@ -665,14 +665,14 @@ class TestMainAgentBuildConfig:
             tool_schema_mode="skills-like",
             streaming_response=False,
             kb_agentic_mode=True,
-            computer_use_runtime="sandbox",
+            computer_use_runtime="local",
             add_cron_tools=False,
         )
         assert config.tool_call_timeout == 120
         assert config.tool_schema_mode == "skills-like"
         assert config.streaming_response is False
         assert config.kb_agentic_mode is True
-        assert config.computer_use_runtime == "sandbox"
+        assert config.computer_use_runtime == "local"
         assert config.add_cron_tools is False
 
 
@@ -1455,7 +1455,6 @@ def _catalog_config(**overrides):
         "computer_use_runtime": "none",
         "kb_agentic_mode": False,
         "add_cron_tools": False,
-        "sandbox_cfg": {},
     }
     values.update(overrides)
     return ama.MainAgentBuildConfig(**values)
@@ -3957,181 +3956,3 @@ class TestApplyLlmSafetyMode:
         module._apply_llm_safety_mode(config, req)
 
         assert "You are running in Safe Mode" in req.system_prompt
-
-
-class TestApplySandboxTools:
-    """Tests for _apply_sandbox_tools function."""
-
-    def test_apply_sandbox_tools_creates_toolset_if_none(self, mock_context):
-        """Test that ToolSet is created when func_tool is None."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert req.func_tool is not None
-        assert isinstance(req.func_tool, ToolSet)
-
-    def test_apply_sandbox_tools_does_not_hang_computer_tools(self, mock_context):
-        """Sandbox prompts stay, but tools come from catalog assembly."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert req.func_tool is not None
-        assert req.func_tool.names() == []
-
-    def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
-        """Test that sandbox mode prompt is added to system_prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert "sandboxed environment" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
-        """Test that CUA sandbox guidance nudges reliable GUI workflows."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "cua"},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert "Firefox" in req.system_prompt
-        assert "background=true" in req.system_prompt
-        assert 'firefox "https://example.com"' in req.system_prompt
-        assert "astrbot_cua_screenshot" in req.system_prompt
-        assert "astrbot_cua_key_press" not in req.system_prompt
-        assert "return_image_to_llm" in req.system_prompt
-        assert "astrbot_execute_shell" in req.system_prompt
-        assert "\\n" in req.system_prompt
-        assert "send_to_user=true" in req.system_prompt
-        assert "focused and empty or safe to append" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_shipyard_neo_adds_path_rule(self, mock_context):
-        """Test Shipyard Neo sandbox guidance adds workspace path rule."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard_neo",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None, system_prompt="Original")
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert "[Shipyard Neo File Path Rule]" in req.system_prompt
-        assert "baidu_homepage.png" in req.system_prompt
-        assert "/workspace/baidu_homepage.png" in req.system_prompt
-
-    def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
-        """Test that existing tools are preserved when adding sandbox tools."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        existing_toolset = ToolSet()
-        existing_tool = MagicMock()
-        existing_tool.name = "existing_tool"
-        existing_toolset.add_tool(existing_tool)
-        req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert "existing_tool" in req.func_tool.names()
-        assert "astrbot_execute_shell" not in req.func_tool.names()
-
-    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self, mock_context):
-        """Test that sandbox prompt is appended to existing system prompt."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert req.system_prompt.startswith("Base prompt")
-        assert "sandboxed environment" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_none_system_prompt(self, mock_context):
-        """Test that sandbox prompt is applied when system_prompt is None."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt=None)
-
-        module._apply_sandbox_tools(
-            config,
-            req,
-            "session-123",
-            mock_context.catalogs.tools,
-        )
-
-        assert isinstance(req.system_prompt, str)
-        assert "sandboxed environment" in req.system_prompt

@@ -12,9 +12,8 @@ The key option is `Computer Use Runtime`:
 
 - `none`: disables Computer Use; Shell, Python, filesystem, and related tools are not mounted. Skill manuals still load through `read_skill` and do not require Computer Use.
 - `local`: executes on the host machine where AstrBot is running. Use this when the Agent needs local files, command-line tools, or local dependencies.
-- `sandbox`: executes inside an isolated sandbox. Use this when you want to reduce host risk or provide automation capabilities to multiple users.
 
-If you are not sure which mode to choose, prefer `sandbox`. Use `local` only when direct host access is required.
+Use `local` only when direct host access is required. Legacy configurations with a removed runtime value are treated as `none`.
 
 ## Local Mode
 
@@ -60,7 +59,7 @@ The local Shell tool also runs with this workspace as its current working direct
 - `File edit`: replaces exact text in files.
 - `Grep search`: searches file contents through ripgrep.
 
-`local` mode does not mount sandbox upload/download tools, and it does not provide browser automation. Browser automation belongs to the sandbox runtime and requires a sandbox profile with the `browser` capability.
+`local` mode does not mount remote upload/download or browser automation tools.
 
 The local Shell tool includes basic blocking for dangerous commands such as `rm -rf`, `sudo`, `shutdown`, `reboot`, and `kill -9`. This is not a complete security sandbox and should not be treated as one.
 
@@ -68,11 +67,11 @@ The local Shell tool includes basic blocking for dangerous commands such as `rm 
 
 In the local permission table, open the **File access scope** menu to read each option's description. **Workspace** restricts access to the session workspace, temporary directories, and skill files. **Entire environment** (formerly **Host files**) allows access to files permitted by the account running AstrBot. In Docker, this means files inside the container and mounted files, not all files on the Docker host. **Disabled** prevents file access through local Computer Use tools. These descriptions now appear under the corresponding menu options instead of below the table. Hover over or tap the question mark after “All files in the environment where AstrBot runs.” for details about account permissions and Docker file access.
 
-New installations use the same defaults on Windows, Linux, and macOS: members get workspace files without execution, while administrators get entire-environment execution with networking. Existing saved permissions are preserved, including a member file access scope that was explicitly set to **Disabled**. The legacy Windows member default has the same saved value as a deliberate opt-out, so the fork does not rewrite it during upgrade; choose **Workspace** in the permission table when member file access is wanted. This administrator default runs Local code directly under the AstrBot account with entire-environment file access and networking; on Linux and macOS it does not use process isolation. Choose workspace scope or a sandbox runtime when that access is not appropriate.
+New installations use the same defaults on Windows, Linux, and macOS: members get workspace files without execution, while administrators get entire-environment execution with networking. Existing saved permissions are preserved, including a member file access scope that was explicitly set to **Disabled**. The legacy Windows member default has the same saved value as a deliberate opt-out, so the fork does not rewrite it during upgrade; choose **Workspace** in the permission table when member file access is wanted. This administrator default runs Local code directly under the AstrBot account with entire-environment file access and networking; on Linux and macOS it does not use process isolation. Choose workspace scope when that access is not appropriate.
 
 If a saved policy requires Local process isolation but isolation is unavailable, code execution and execution network access are disabled without widening file access or rewriting the saved policy. Workspace files without execution and entire-environment execution with networking remain available. The permission matrix keeps saved checks and marks unavailable execution as **Inactive**; hover over or select the adjacent help icon to see the cause. Restoring isolation and restarting AstrBot makes the saved policy effective again.
 
-Windows supports workspace-scoped file reading, writing, and editing through native file handles. File operations reject symbolic links, directory junctions, and multiply linked files. Local process isolation is still unsupported on native Windows; administrators can execute code with entire-environment access and networking, and isolated execution requires a sandbox runtime.
+Windows supports workspace-scoped file reading, writing, and editing through native file handles. File operations reject symbolic links, directory junctions, and multiply linked files. Local process isolation is still unsupported on native Windows; administrators can execute code with entire-environment access and networking.
 
 Computer Use uses the unified authorization service. There is no “Require AstrBot admin permission” switch. Typical actions include:
 
@@ -81,9 +80,8 @@ Computer Use uses the unified authorization service. There is no “Require Astr
 - `tool.python_exec`
 - `tool.file_read`
 - `tool.file_write`
-- `tool.browser_control`
 
-`tool.file_read` is available to current-session members and above, still subject to path limits. `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.browser_control`, `tool.mcp_write`, and `tool.computer_use` are instance-scoped high-risk actions: an authenticated Dashboard-driven WebChat may use them only in its current session/config after the WebChat one-time step-up. An IM sender bound as `instance_operator` on that config may use the same set without step-up. Global control-plane actions remain Dashboard-only; anonymous WebChat, plugins, agents, API keys, and unbound IM members do not inherit Dashboard roles. Sandbox, path, Prompt, and declared-tool restrictions still apply.
+`tool.file_read` is available to current-session members and above, still subject to path limits. `tool.local_exec`, `tool.python_exec`, `tool.file_write`, `tool.mcp_write`, and `tool.computer_use` are instance-scoped high-risk actions: an authenticated Dashboard-driven WebChat may use them only in its current session/config after the WebChat one-time step-up. An IM sender bound as `instance_operator` on that config may use the same set without step-up. Global control-plane actions remain Dashboard-only; anonymous WebChat, plugins, agents, API keys, and unbound IM members do not inherit Dashboard roles. Path, Prompt, and declared-tool restrictions still apply.
 
 In `local` mode, ordinary session members may read:
 
@@ -94,35 +92,6 @@ In `local` mode, ordinary session members may read:
 - `.astrbot` under the system temporary directory
 
 Writes and edits remain limited to the current session workspace and temporary directories. Bind the IM sender as `instance_operator` on that config from the Dashboard [authorization page](/en/use/authorization). `/admin grant` only creates current-session `session_admin`; it does not turn an IM user into a global operator. See [Architecture](/en/dev/architecture#unified-authorization) for the developer model.
-
-## Sandbox Mode
-
-`sandbox` mode runs execution actions inside an isolated environment instead of directly on the AstrBot host.
-
-Inside the sandbox, the Agent can still use Shell, Python, and filesystem tools. If the selected sandbox profile supports the `browser` capability, AstrBot also mounts browser automation tools.
-
-With Shipyard Neo, the sandbox workspace root is usually:
-
-```text
-/workspace
-```
-
-Filesystem tools should usually receive relative paths, for example:
-
-```text
-result.txt
-```
-
-instead of:
-
-```text
-/workspace/result.txt
-```
-
-For sandbox deployment, profiles, TTL, persistence, and browser capabilities, see [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox).
-
-> [!NOTE]
-> Even in `sandbox` mode, Shell, Python, browser, and upload/download tools are still authorized as `tool.local_exec`, `tool.python_exec`, `tool.browser_control`, and `tool.file_write`. Sandboxing isolates execution but does not change authorization.
 
 ## Skills
 
@@ -136,6 +105,5 @@ The relationship between Skills and Computer Use is:
 For example, a Skill may ask the Agent to read files, run scripts, and generate a report. If `Computer Use Runtime` is `none`, the Agent may see the Skill instructions, but it cannot call Shell or Python to execute them.
 
 In `local` mode, the Agent reads local Skills.
-In `sandbox` mode, AstrBot attempts to sync local Skills into the sandbox so the Agent can execute them there.
 
 For more details, see [Anthropic Skills](/en/use/skills).

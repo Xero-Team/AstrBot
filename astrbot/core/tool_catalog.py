@@ -42,50 +42,7 @@ LOCAL_COMPUTER_TOOLS: tuple[str, ...] = (
     "astrbot_grep_tool",
 )
 
-SANDBOX_BASE_COMPUTER_TOOLS: tuple[str, ...] = (
-    "astrbot_execute_shell",
-    "astrbot_execute_ipython",
-    "astrbot_upload_file",
-    "astrbot_download_file",
-    "astrbot_file_read_tool",
-    "astrbot_file_write_tool",
-    "astrbot_file_edit_tool",
-    "astrbot_grep_tool",
-)
-
-SANDBOX_BROWSER_TOOLS: tuple[str, ...] = (
-    "astrbot_execute_browser",
-    "astrbot_execute_browser_batch",
-    "astrbot_run_browser_skill",
-)
-
-NEO_LIFECYCLE_TOOLS: tuple[str, ...] = (
-    "astrbot_get_execution_history",
-    "astrbot_annotate_execution",
-    "astrbot_create_skill_payload",
-    "astrbot_get_skill_payload",
-    "astrbot_create_skill_candidate",
-    "astrbot_list_skill_candidates",
-    "astrbot_evaluate_skill_candidate",
-    "astrbot_promote_skill_candidate",
-    "astrbot_list_skill_releases",
-    "astrbot_rollback_skill_release",
-    "astrbot_sync_skill_release",
-)
-
-CUA_COMPUTER_TOOLS: tuple[str, ...] = (
-    "astrbot_cua_screenshot",
-    "astrbot_cua_mouse_click",
-    "astrbot_cua_keyboard_type",
-)
-
-COMPUTER_TOOL_NAMES: frozenset[str] = frozenset(
-    LOCAL_COMPUTER_TOOLS
-    + SANDBOX_BASE_COMPUTER_TOOLS
-    + SANDBOX_BROWSER_TOOLS
-    + NEO_LIFECYCLE_TOOLS
-    + CUA_COMPUTER_TOOLS
-)
+COMPUTER_TOOL_NAMES: frozenset[str] = frozenset(LOCAL_COMPUTER_TOOLS)
 COMPUTER_TOOL_ACTIONS: frozenset[str] = frozenset(
     {
         "tool.local_exec",
@@ -171,8 +128,6 @@ class ToolCatalogInputs:
     proactive_messaging: bool = False
     kb_agentic_mode: bool = False
     add_cron_tools: bool = False
-    sandbox_booter: str = "shipyard_neo"
-    sandbox_capabilities: Sequence[str] | None = None
     elevated_instance_tool_actions: frozenset[str] = frozenset()
     allow_computer_tools: bool = True
     plugins: PluginLookup | None = None
@@ -224,21 +179,6 @@ def local_computer_tool_names() -> tuple[str, ...]:
     return LOCAL_COMPUTER_TOOLS
 
 
-def sandbox_computer_tool_names(
-    *,
-    booter: str = "shipyard_neo",
-    capabilities: Sequence[str] | None = None,
-) -> tuple[str, ...]:
-    names = list(SANDBOX_BASE_COMPUTER_TOOLS)
-    if booter == "shipyard_neo":
-        if capabilities is None or "browser" in capabilities:
-            names.extend(SANDBOX_BROWSER_TOOLS)
-        names.extend(NEO_LIFECYCLE_TOOLS)
-    if booter == "cua":
-        names.extend(CUA_COMPUTER_TOOLS)
-    return tuple(names)
-
-
 def resolve_catalog_surface(
     *,
     source: str | None,
@@ -286,14 +226,10 @@ def tool_required_actions(tool: FunctionTool) -> tuple[str, ...]:
     if name in {
         "astrbot_file_write_tool",
         "astrbot_file_edit_tool",
-        "astrbot_upload_file",
-        "astrbot_download_file",
     }:
         return ("tool.file_write",)
     if name in {"astrbot_file_read_tool", "astrbot_grep_tool"}:
         return ("tool.file_read",)
-    if name.startswith("astrbot_cua_"):
-        return ("tool.computer_use",)
     if "browser" in name:
         return ("tool.browser_control",)
     if "skill" in name and name.startswith("astrbot_"):
@@ -408,13 +344,6 @@ def _on_demand_computer_tools(inputs: ToolCatalogInputs) -> set[str]:
     runtime = inputs.computer_use_runtime
     if runtime == "local":
         return set(local_computer_tool_names())
-    if runtime == "sandbox":
-        return set(
-            sandbox_computer_tool_names(
-                booter=inputs.sandbox_booter,
-                capabilities=inputs.sandbox_capabilities,
-            )
-        )
     return set()
 
 

@@ -4,7 +4,6 @@ export const STATUS_SUCCESS = 'success' as const;
 export const STATUS_ERROR = 'error' as const;
 export const STATUS_SKIPPED = 'skipped' as const;
 
-export type SkillMode = 'local' | 'neo';
 export type UploadStatus =
   | typeof STATUS_WAITING
   | typeof STATUS_UPLOADING
@@ -12,13 +11,6 @@ export type UploadStatus =
   | typeof STATUS_ERROR
   | typeof STATUS_SKIPPED;
 export type SnackbarColor = 'success' | 'error' | 'warning';
-export type ReleaseStage = 'canary' | 'stable';
-
-export interface SandboxCacheState {
-  ready: boolean;
-  count: number;
-  updated_at: string | null;
-}
 
 export interface UploadItem {
   id: string;
@@ -36,42 +28,12 @@ export interface UploadResultEntry {
   error?: string;
 }
 
-export interface NeoFilterState {
-  skill_key: string;
-  status: string;
-  stage: string;
-}
-
-export interface NeoCandidate {
-  id: string;
-  skill_key?: string;
-  status?: string;
-  latest_score?: number | null;
-  payload_ref?: string;
-  [key: string]: unknown;
-}
-
-export interface NeoRelease {
-  id: string;
-  skill_key?: string;
-  stage?: string;
-  version?: string | number;
-  is_active: boolean;
-  active?: boolean;
-  [key: string]: unknown;
-}
-
 export interface SkillEntry {
   type: string;
   path: string;
   name: string;
   editable: boolean;
   [key: string]: unknown;
-}
-
-export interface PayloadDialogState {
-  show: boolean;
-  content: string;
 }
 
 export interface EditorDialogState {
@@ -129,69 +91,6 @@ export function normalizeSkillEntry(value: unknown): SkillEntry | null {
   };
 }
 
-export function normalizeNeoCandidate(value: unknown): NeoCandidate | null {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const id = getString(record.id).trim();
-  if (!id) {
-    return null;
-  }
-
-  const latestScore =
-    typeof record.latest_score === 'number' &&
-    Number.isFinite(record.latest_score)
-      ? record.latest_score
-      : null;
-
-  return {
-    ...record,
-    id,
-    skill_key: getString(record.skill_key) || undefined,
-    status: getString(record.status) || undefined,
-    latest_score: latestScore,
-    payload_ref: getString(record.payload_ref) || undefined,
-  };
-}
-
-export function normalizeNeoRelease(value: unknown): NeoRelease | null {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const id = getString(record.id).trim();
-  if (!id) {
-    return null;
-  }
-
-  return {
-    ...record,
-    id,
-    skill_key: getString(record.skill_key) || undefined,
-    stage: getString(record.stage) || undefined,
-    version:
-      typeof record.version === 'string' || typeof record.version === 'number'
-        ? record.version
-        : undefined,
-    active: typeof record.active === 'boolean' ? record.active : undefined,
-    is_active: getBoolean(record.is_active, getBoolean(record.active)),
-  };
-}
-
-export function normalizeNeoItemsPayload(payload: unknown) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-  const record = asRecord(payload);
-  if (!record || !Array.isArray(record.items)) {
-    return [];
-  }
-  return record.items;
-}
-
 export function normalizeUploadName(name: string) {
   return String(name).trim().toLowerCase();
 }
@@ -205,11 +104,4 @@ export function formatFileSize(size: number) {
 
 export function statusChipClass(status: UploadStatus) {
   return `skills-status-chip skills-status-chip--${status}`;
-}
-
-export function candidatePromoteLoadingKey(
-  candidateId: string,
-  stage: ReleaseStage,
-) {
-  return `${candidateId}:${stage}`;
 }

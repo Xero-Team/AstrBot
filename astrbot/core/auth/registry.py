@@ -400,9 +400,6 @@ def dashboard_api_capability_specs(
         collection = Resource.named("skill", "collection")
         specs.append(("extension.read", collection.type, collection.id))
         specs.append(("extension.manage", collection.type, collection.id))
-        for neo_collection in ("neo-candidates", "neo-releases"):
-            named = Resource.named("skill", neo_collection)
-            specs.append(("extension.read", named.type, named.id))
     return tuple(dict.fromkeys(specs))
 
 

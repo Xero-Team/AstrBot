@@ -272,12 +272,6 @@ async def check_admin_permission(
         "Shell execution": ("tool.local_exec", "shell-execution"),
         "Shell session management": ("tool.local_exec", "shell-session"),
         "Python execution": ("tool.python_exec", "python-execution"),
-        "File upload/download": ("tool.file_write", "file-transfer"),
-        "Taking CUA screenshots": ("tool.computer_use", "cua-screenshot"),
-        "Using CUA mouse": ("tool.computer_use", "cua-mouse"),
-        "Using CUA keyboard": ("tool.computer_use", "cua-keyboard"),
-        "Using browser tools": ("tool.browser_control", "browser"),
-        "Using skill lifecycle tools": ("extension.manage", "skill-lifecycle"),
         "Send message to another session": ("agent.manage", "send-message"),
     }.get(operation_name)
     if mapped is None:

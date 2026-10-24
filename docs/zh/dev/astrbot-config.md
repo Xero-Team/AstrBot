@@ -180,19 +180,17 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 旧字段 `provider_settings.streaming_segmented` 已删除，不要重新加入。
 
-### Computer Use 与沙箱
+### Computer Use 与本地隔离
 
-- `computer_use_runtime`：`none`、`local` 或 `sandbox`，默认 `none`。
+- `computer_use_runtime`：`none` 或 `local`，默认 `none`。旧值 `sandbox` 和未知运行环境一律按 `none` 处理；已移除的 `provider_settings.sandbox` 配置块会被清理。
 - `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.computer_use`、`tool.local_exec`、`tool.file_read` 和 `tool.file_write` 等动作统一授权。WebChat 高风险实例工具仍要 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up。
-- `sandbox.booter`：`shipyard_neo` 或 `cua`，其余字段保存 endpoint、token、profile、TTL 或 CUA 系统/遥测/本地模式配置。
-
-本地模式直接操作 AstrBot 主机，应仅在可信环境使用。沙箱也不是自动授权边界；仍需限制管理员、Prompt 工具和外部网络。
+  本地模式直接操作 AstrBot 主机，应仅在可信环境使用。本地进程隔离在 Linux 上依赖 bubblewrap、在 macOS 上依赖 Seatbelt；隔离不可用时受限执行会失败关闭。仍需限制管理员、Prompt 工具和外部网络。
 
 ### 搜索与图片
 
 `web_search`、`websearch_route`（有序来源列表）、`websearch_oversample` 及各 Provider Key 控制内置网页搜索；`websearch_searxng_url` 指向自托管 SearXNG；`web_search_link` 控制是否附加链接。密钥应在 WebUI 中填写。
 
-`image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制请求准备卡口 `prepare_provider_request` 中的图片处理，主智能体聊天路径、SDK `llm_generate` 与 `tool_loop_agent` 共用该卡口。送给模型的图片在此处转为 JPEG，最长边只缩小、从不放大；每张 JPEG 在 Base64 编码前严格小于 512 KiB（524,288 字节）。超过 64 MiB 的原图会在解码前跳过。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。关闭压缩时仍会转 JPEG，但不按配置的最长边缩放，仍可能为满足 512 KiB 上限而缩小。Computer Use 使用 CUA 沙箱（`computer_use_runtime=sandbox` 且 `sandbox.booter=cua`）时，静态图默认不缩放以保持像素坐标 1:1，只有超过 512 KiB 才会继续缩小；未缩放且超过 5 MB 仍会告警，超过 20 MB 准备上限则丢弃。主智能体只把适配器引用物化为本地路径，不在组装附件时预编码 JPEG。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。对 `quoted_message_parser` 而言，`0` 是有效边界：深度限制会保留根层并停止子层递归，`max_forward_fetch=0` 会禁止递归调用 `get_forward_msg`。负数或无效值会回退为默认值；该设置不会全局禁止引用消息回退路径中的直接 `get_msg` 调用。
+`image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制请求准备卡口 `prepare_provider_request` 中的图片处理，主智能体聊天路径、SDK `llm_generate` 与 `tool_loop_agent` 共用该卡口。送给模型的图片在此处转为 JPEG，最长边只缩小、从不放大；每张 JPEG 在 Base64 编码前严格小于 512 KiB（524,288 字节）。超过 64 MiB 的原图会在解码前跳过。动画 GIF/WebP 会按 dhash 抽帧，最多 8 帧。关闭压缩时仍会转 JPEG，但不按配置的最长边缩放，仍可能为满足 512 KiB 上限而缩小。主智能体只把适配器引用物化为本地路径，不在组装附件时预编码 JPEG。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。对 `quoted_message_parser` 而言，`0` 是有效边界：深度限制会保留根层并停止子层递归，`max_forward_fetch=0` 会禁止递归调用 `get_forward_msg`。负数或无效值会回退为默认值；该设置不会全局禁止引用消息回退路径中的直接 `get_msg` 调用。
 
 ## BTW 模型选择
 
@@ -202,9 +200,9 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 
 ### Computer Use 边界
 
-启用 BTW 后，对话循环的 Computer Use 固定为 `none`，并约束其子代理转交与显式传入的工具。宿主机 Shell、Python、文件系统、浏览器、CUA 和沙箱 Skill 生命周期工具不会进入对话循环工具目录。普通 Skill 手册仍可通过 `read_skill` 阅读。
+启用 BTW 后，对话循环的 Computer Use 固定为 `none`，并约束其子代理转交与显式传入的工具。宿主机 Shell、Python 和文件系统工具不会进入对话循环工具目录。普通 Skill 手册仍可通过 `read_skill` 阅读。
 
-`btw.work_loop.computer_use_runtime` 支持 `inherit`（默认）、`none`、`local` 和 `sandbox`。`inherit` 沿用 `provider_settings.computer_use_runtime`。实际运行时同时作用于工作请求及其子代理转交；`none` 也会排除显式声明的电脑工具。关闭 BTW 后沿用现有 Computer Use 配置。这些设置只选择能力，不授予角色，也不绕过授权、WebChat step-up、路径限制或沙箱检查。
+`btw.work_loop.computer_use_runtime` 支持 `inherit`（默认）、`none` 和 `local`；旧值 `sandbox` 按 `none` 处理。`inherit` 沿用 `provider_settings.computer_use_runtime`。实际运行时同时作用于工作请求及其子代理转交；`none` 也会排除显式声明的电脑工具。关闭 BTW 后沿用现有 Computer Use 配置。这些设置只选择能力，不授予角色，也不绕过授权、WebChat step-up、路径限制或本地隔离检查。
 
 ## BTW 循环会话历史与工作交接
 
@@ -334,9 +332,9 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 
 ## BTW 工作循环的只读边界与委派
 
-`btw.work_loop.read_only` 默认为 `true`。开启后工作循环的工具目录只保留读取与搜索能力：`astrbot_file_read_tool`、`astrbot_grep_tool`、网页搜索、记忆与知识库工具照常可用；Shell、Python、文件写入与编辑、上传下载、浏览器、CUA，以及 `readOnlyHint` 不为真的 MCP 工具都会被移除，`delegate_coding_task` 是唯一的写入途径。判定按语义而非名单：没有声明 `required_actions` 的工具一律视为可写，插件工具也不例外，因为没有东西为它担保。它只收紧能力：文件读取仍要求 `btw.work_loop.computer_use_runtime` 已授予 local 或 sandbox，角色、路径限制、沙箱、WebChat step-up 与逐项循环分配规则都不变。关闭 `read_only` 恢复原有的写入能力。
+`btw.work_loop.read_only` 默认为 `true`。开启后工作循环的工具目录只保留读取与搜索能力：`astrbot_file_read_tool`、`astrbot_grep_tool`、网页搜索、记忆与知识库工具照常可用；Shell、Python、文件写入与编辑，以及 `readOnlyHint` 不为真的 MCP 工具都会被移除，`delegate_coding_task` 是唯一的写入途径。判定按语义而非名单：没有声明 `required_actions` 的工具一律视为可写，插件工具也不例外，因为没有东西为它担保。它只收紧能力：文件读取仍要求 `btw.work_loop.computer_use_runtime` 已授予 `local`，角色、路径限制、本地进程隔离、WebChat step-up 与逐项循环分配规则都不变。关闭 `read_only` 恢复原有的写入能力。
 
-`btw.work_loop.coding_agents` 声明可委派的本地 CLI 代理，在 Dashboard 的 **更多功能 → BTW 双循环** 页面配置。每个条目包含 `id`、`type`（`claude_code`、`codex`、`opencode` 或 `custom`）、`command`、`model`、`max_output_chars`、`permission_mode`（Claude Code 权限模式，默认 `acceptEdits`）、`sandbox`（Codex 沙箱，默认 `workspace-write`）、`project_dir`、`extra_args`、`env`、`timeout_seconds` 和 `providers`。`permission_mode` 与 `sandbox` 是交给该 CLI 自己执行的策略，不是操作系统级的隔离：默认值让代理只在任务目录内写入，配置了 `project_dir` 时该目录也会显式加入可写范围；`bypassPermissions` 与 `danger-full-access` 必须显式配置。Claude Code 以 `-p` 非交互方式运行，没有终端可以回答权限询问，而 `acceptEdits` 只自动放行编辑：需要跑 shell 命令（测试、git 等）的任务会一直等到 `timeout_seconds` 超时，这类任务必须显式选择 `bypassPermissions`。OpenCode 没有独立的权限模式或沙箱配置：AstrBot 注入的内联配置会拒绝 `doom_loop`（无头运行无法回答该询问），并通过 `external_directory` 放行配置的 `project_dir`；其余规则沿用操作者自己的 OpenCode 配置。非交互的 `opencode run` 会自动拒绝本应询问的权限请求；只有通过 `extra_args` 显式启用 `--auto`，才会自动批准所有未被显式拒绝的请求。委派会启动本地进程并向文件系统写入，因此 `delegate_coding_task` 按 `tool.local_exec` 与 `tool.file_write` 授权：这项工作循环的 Computer Use 运行时必须是 `local`。`sandbox` 下放行等于绕过沙箱——这个进程由本机直接拉起，并不在沙箱里——`inherit` 在请求构建前等同 `none`，`provider_settings.computer_use_runtime` 默认的 `none` 会同时关闭文件读取和委派；WebChat step-up 等表面提升与逐项循环分配规则照常适用。
+`btw.work_loop.coding_agents` 声明可委派的本地 CLI 代理，在 Dashboard 的 **更多功能 → BTW 双循环** 页面配置。每个条目包含 `id`、`type`（`claude_code`、`codex`、`opencode` 或 `custom`）、`command`、`model`、`max_output_chars`、`permission_mode`（Claude Code 权限模式，默认 `acceptEdits`）、`sandbox`（Codex 沙箱，默认 `workspace-write`）、`project_dir`、`extra_args`、`env`、`timeout_seconds` 和 `providers`。`permission_mode` 与 `sandbox` 是交给该 CLI 自己执行的策略，不是操作系统级的隔离：默认值让代理只在任务目录内写入，配置了 `project_dir` 时该目录也会显式加入可写范围；`bypassPermissions` 与 `danger-full-access` 必须显式配置。Claude Code 以 `-p` 非交互方式运行，没有终端可以回答权限询问，而 `acceptEdits` 只自动放行编辑：需要跑 shell 命令（测试、git 等）的任务会一直等到 `timeout_seconds` 超时，这类任务必须显式选择 `bypassPermissions`。OpenCode 没有独立的权限模式或沙箱配置：AstrBot 注入的内联配置会拒绝 `doom_loop`（无头运行无法回答该询问），并通过 `external_directory` 放行配置的 `project_dir`；其余规则沿用操作者自己的 OpenCode 配置。非交互的 `opencode run` 会自动拒绝本应询问的权限请求；只有通过 `extra_args` 显式启用 `--auto`，才会自动批准所有未被显式拒绝的请求。委派会启动本地进程并向文件系统写入，因此 `delegate_coding_task` 按 `tool.local_exec` 与 `tool.file_write` 授权：这项工作循环的 Computer Use 运行时必须是 `local`。`inherit` 在请求构建前等同 `none`，`provider_settings.computer_use_runtime` 默认的 `none` 会同时关闭文件读取和委派；WebChat step-up 等表面提升与逐项循环分配规则照常适用。
 
 工作循环通过 `delegate_coding_task` 交办一次写入任务：任务文本写入 `<btw.work_loop.workspace_root>/<会话 ID>-<代理 ID>-<运行 ID>/TASK.md`，`workspace_root` 留空时使用数据目录下的 `btw/workspaces`。每次委派都会新建一个带运行 ID 的目录，因此同一会话的两次委派不会互相覆盖。代理在该目录中运行，完整输出记录到同目录的 `output.log`。stdout 的 NDJSON 会逐行解析为统一事件，实时追加到 `events.jsonl`，并把运行摘要写入 `run.json`；Trace 页记录 `coding_agent_start`、`coding_agent_event` 与 `coding_agent_end`，`/work status` 显示代理、最新动作、事件数和工具调用数，Dashboard 的 **更多功能 → BTW 委派运行**（`/btw/runs`）显示同一份工作会话与事件时间线。后端 `GET /api/v1/btw/work-sessions` 只接受 Dashboard 会话，开发者 API key 会被拒绝。Claude Code、Codex 与 OpenCode 各自只有一个流适配器；OpenCode 适配器同时兼容 v1 的 `callID` 与 v2 的 `id` 工具字段。新增同类 CLI 时复用这套事件模型，而不是在 runner 里分支解析。任务结束后工作循环读回状态、退出码、产物路径与代理的最终消息；产物是运行前后的差集——git 工作树取 `git status --porcelain` 的变化与运行期间的提交，普通目录取运行开始后写入的文件——在报告里以工作区根目录为基准给出相对路径，不暴露本机数据目录的绝对位置，最多 50 项。代理退出后仍留在其进程组或 Job Object 中的子进程会被一并结束，超时、取消与正常结束都是如此，因此一次委派不会留下还在写盘的遗留进程。
 

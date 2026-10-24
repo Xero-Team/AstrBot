@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 288 icons */
+/* Auto-generated MDI subset – 287 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -866,10 +866,6 @@
 
 .mdi-pound::before {
   content: "\F0423";
-}
-
-.mdi-progress-check::before {
-  content: "\F0995";
 }
 
 .mdi-pulse::before {

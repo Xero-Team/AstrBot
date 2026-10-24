@@ -138,12 +138,6 @@ class PluginService:
                 "You are not permitted to do this operation in demo mode"
             )
 
-    async def sync_skills_after_plugin_change(self) -> None:
-        try:
-            await self.computer_runtime.sync_skills_to_active_sandboxes()
-        except Exception:
-            logger.warning("Failed to sync plugin-provided skills to active sandboxes.")
-
     async def reload_failed_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
         payload = data if isinstance(data, dict) else {}
@@ -154,7 +148,6 @@ class PluginService:
         success, err = await self.plugin_lifecycle.reload_failed_plugin(dir_name)
         if not success:
             raise PluginServiceError(f"重载失败: {err}", public_message="重载失败")
-        await self.sync_skills_after_plugin_change()
         return None, f"插件 {dir_name} 重载成功。"
 
     async def reload_plugin(self, data: object) -> tuple[None, str]:
@@ -167,7 +160,6 @@ class PluginService:
                 message or "插件重载失败",
                 public_message="插件重载失败",
             )
-        await self.sync_skills_after_plugin_change()
         return None, "重载成功。"
 
     async def list_plugins(
@@ -756,11 +748,7 @@ class PluginService:
             return []
 
         try:
-            skills = SkillManager().list_skills(
-                active_only=False,
-                runtime="local",
-                show_sandbox_path=False,
-            )
+            skills = SkillManager().list_skills(active_only=False)
         except Exception as exc:
             logger.warning(f"获取插件 Skills 失败 {plugin.name}: {exc!s}")
             return []
@@ -1585,7 +1573,6 @@ class PluginService:
                 repo_url=repo_url,
                 download_url=download_url,
             )
-            await self.sync_skills_after_plugin_change()
             logger.info(f"安装插件 {repo_url} 成功。")
             return plugin_info or {}, "安装成功。"
         except PluginVersionUnsupportedError as exc:
@@ -1625,7 +1612,6 @@ class PluginService:
                 repo_url="",
                 download_url="",
             )
-            await self.sync_skills_after_plugin_change()
             logger.info(f"安装插件 {upload_file.filename} 成功")
             return plugin_info or {}, "安装成功。"
         except PluginVersionUnsupportedError as exc:
@@ -1653,7 +1639,6 @@ class PluginService:
             delete_data=delete_data,
         )
         await self.remove_plugin_install_source(root_dir_name)
-        await self.sync_skills_after_plugin_change()
         logger.info(f"卸载插件 {plugin_name} 成功")
         return None, "卸载成功"
 
@@ -1672,7 +1657,6 @@ class PluginService:
             delete_config=delete_config,
             delete_data=delete_data,
         )
-        await self.sync_skills_after_plugin_change()
         logger.info(f"卸载失败插件 {dir_name} 成功")
         return None, "卸载成功"
 
@@ -1700,7 +1684,6 @@ class PluginService:
         )
         await self.refresh_plugin_install_source_after_update(plugin_name, update_info)
         await self.plugin_lifecycle.reload(plugin_name)
-        await self.sync_skills_after_plugin_change()
         logger.info(f"更新插件 {plugin_name} 成功。")
         return None, "更新成功。"
 
@@ -1786,8 +1769,6 @@ class PluginService:
                 results.append(result)
 
         failed = [result for result in results if result["status"] == "error"]
-        if len(failed) < len(results):
-            await self.sync_skills_after_plugin_change()
         message = (
             "批量更新完成，全部成功。"
             if not failed
@@ -1810,7 +1791,6 @@ class PluginService:
             await self.plugin_lifecycle.turn_off_plugin(plugin_name)
             message = "停用成功。"
             log_action = "停用"
-        await self.sync_skills_after_plugin_change()
         logger.info(f"{log_action}插件 {plugin_name} 。")
         return None, message
 

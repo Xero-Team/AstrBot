@@ -175,7 +175,7 @@ def test_btw_controls_survive_dashboard_metadata_conversion() -> None:
     assert enabled["description"] == "ai_group.btw.btw.enabled.description"
     assert enabled["hint"] == "ai_group.btw.btw.enabled.hint"
     runtime = section["items"]["btw.work_loop.computer_use_runtime"]
-    assert runtime["options"] == ["inherit", "none", "local", "sandbox"]
+    assert runtime["options"] == ["inherit", "none", "local"]
     assert runtime["labels"] == "ai_group.btw.btw.work_loop.computer_use_runtime.labels"
     for locale in LOCALES:
         catalog = _load_locale(locale)
@@ -197,12 +197,6 @@ def test_config_metadata_docs_paths_are_relative_and_preserved() -> None:
     assert ai_sections["knowledgebase"]["docs"] == "use/knowledge-base.html"
     assert ai_sections["websearch"]["docs"] == "use/websearch.html"
     assert ai_sections["agent_computer_use"]["docs"] == "use/computer.html"
-    assert (
-        ai_sections["agent_computer_use"]["items"]["provider_settings.sandbox.booter"][
-            "docs"
-        ]
-        == "use/astrbot-agent-sandbox.html"
-    )
     assert ai_sections["proactive_capability"]["docs"] == "use/proactive-agent.html"
     assert ai_sections["truncate_and_compress"]["docs"] == "use/context-compress.html"
     assert converted["plugin_group"]["metadata"]["plugin"]["docs"] == (

@@ -119,6 +119,7 @@ def import_directories(
                 archive_prefix,
                 target_dir,
                 add_warning,
+                fail_on_error=True,
             )
             dir_stats[dir_name] = file_count
             logger.debug("导入目录完成: %d 个文件", file_count)
@@ -189,8 +190,11 @@ def extract_directory_files(
     archive_prefix: str,
     target_dir: Path,
     add_warning: Any,
+    *,
+    fail_on_error: bool = False,
 ) -> int:
     file_count = 0
+    failed = 0
     for name in dir_files:
         try:
             rel_path = name[len(archive_prefix) :]
@@ -200,6 +204,7 @@ def extract_directory_files(
             target_path = target_dir / rel_path
             if not validate_path_within(target_path, target_dir):
                 add_warning("文件路径越界，已跳过")
+                failed += 1
                 continue
 
             if zf.getinfo(name).is_dir():
@@ -209,8 +214,11 @@ def extract_directory_files(
             _extract_archive_member(zf, name, target_path)
             file_count += 1
         except Exception as exc:
+            failed += 1
             logger.warning("导入文件失败: %s", safe_error("", exc))
             add_warning("导入文件失败")
+    if fail_on_error and failed:
+        raise RuntimeError(f"{failed} directory entries could not be imported")
     return file_count
 
 

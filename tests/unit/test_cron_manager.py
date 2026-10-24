@@ -698,6 +698,36 @@ class TestRunJob:
         assert "\r" not in logged_job_id
         assert "\n" not in logged_job_id
 
+    @pytest.mark.asyncio
+    async def test_duplicate_run_is_skipped_and_logs_a_sanitized_job_id(
+        self, cron_manager
+    ):
+        started = asyncio.Event()
+        release = asyncio.Event()
+        runs: list[str] = []
+
+        async def fake_run_once(job_id: str, **_kwargs) -> None:
+            runs.append(job_id)
+            started.set()
+            await release.wait()
+
+        cron_manager._run_job_once = fake_run_once
+        job_id = "active-job\r\nforged-entry"
+
+        first = asyncio.create_task(cron_manager._run_job(job_id))
+        await started.wait()
+
+        with patch("astrbot.core.cron.manager.logger") as mock_logger:
+            await cron_manager._run_job(job_id)
+
+        release.set()
+        await first
+
+        assert runs == [job_id]
+        logged_job_id = mock_logger.warning.call_args.args[1]
+        assert logged_job_id == "active-jobforged-entry"
+        assert cron_manager._running_job_ids == set()
+
 
 class TestRunBasicJob:
     """Tests for _run_basic_job method."""

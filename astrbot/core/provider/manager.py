@@ -761,6 +761,7 @@ class ProviderManager:
             try:
                 await self._mcp_init_task
             except asyncio.CancelledError:
+                # The MCP init task is cancelled during shutdown.
                 pass
 
         provider_groups = (

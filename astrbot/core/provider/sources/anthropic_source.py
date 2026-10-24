@@ -148,6 +148,7 @@ class ProviderAnthropic(Provider):
                 getattr(anthropic_base_client, "httpx2", httpx),
             )
         except ImportError:
+            # The optional internal httpx alias is not always available.
             pass
         return create_proxy_client(
             "Anthropic",

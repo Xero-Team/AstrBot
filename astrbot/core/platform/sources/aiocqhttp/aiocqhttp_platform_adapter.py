@@ -54,6 +54,7 @@ def _payload_field(payload: Any, name: str) -> Any:
         except asyncio.CancelledError:
             raise
         except Exception:
+            # A payload without this attribute falls back to getattr.
             pass
     return getattr(payload, name, None)
 

@@ -102,6 +102,7 @@ class EmbeddingStorage:
                 try:
                     os.remove(tmp)
                 except OSError:
+                    # A leftover temporary index file is harmless.
                     pass
 
     @staticmethod
@@ -126,6 +127,7 @@ class EmbeddingStorage:
                 try:
                     os.remove(tmp)
                 except OSError:
+                    # A leftover temporary index file is harmless.
                     pass
 
     async def insert(self, vector: np.ndarray, id: int) -> None:

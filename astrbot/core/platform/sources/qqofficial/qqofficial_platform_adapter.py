@@ -818,6 +818,7 @@ class QQOfficialPlatformAdapter(Platform):
                     if emoji_text:
                         return f"[表情:{emoji_text}]"
                 except Exception:
+                    # Unparseable ext data falls back to the raw text below.
                     pass
             # Fallback if parsing fails
             return "[表情]"

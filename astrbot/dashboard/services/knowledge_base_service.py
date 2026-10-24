@@ -446,6 +446,7 @@ class KnowledgeBaseService:
         try:
             shutil.rmtree(staging_dir)
         except FileNotFoundError:
+            # A missing staging directory is already clean.
             pass
         except OSError as exc:
             logger.warning(

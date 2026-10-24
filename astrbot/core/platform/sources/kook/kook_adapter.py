@@ -214,6 +214,7 @@ class KookPlatformAdapter(Platform):
             try:
                 await self._main_task
             except asyncio.CancelledError:
+                # The main task is cancelled by this shutdown path.
                 pass
 
         logger.info("[KOOK] 资源清理完成")

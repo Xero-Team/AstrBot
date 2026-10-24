@@ -514,6 +514,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     cast(discord.Interaction, self.message_obj.raw_message).data,
                 ).get("custom_id", "")
             except Exception:
+                # Absent interaction data yields an empty id.
                 pass
         return ""
 

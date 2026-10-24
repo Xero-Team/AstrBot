@@ -491,6 +491,7 @@ async def resolve_component_url_or_path(
                 if value and value.startswith("http"):
                     url_candidate = value
             except Exception:
+                # A component that cannot resolve is not a media source.
                 pass
 
         # 3. 回退到同步属性
@@ -508,6 +509,7 @@ async def resolve_component_url_or_path(
                     continue
 
     except Exception:
+        # A malformed chain is skipped rather than raised.
         pass
 
     return url_candidate, local_path

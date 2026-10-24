@@ -264,6 +264,7 @@ class KookClient:
             try:
                 await self.ws.close()
             except Exception:
+                # Closing an already-closed connection is not an error.
                 pass
             self.ws = None
         self._stop_event.clear()
@@ -296,6 +297,7 @@ class KookClient:
                 try:
                     await self.ws.close()
                 except Exception:
+                    # Best-effort close after a failed connection attempt.
                     pass
                 self.ws = None
             return False
@@ -588,6 +590,7 @@ class KookClient:
             try:
                 await self.heartbeat_task
             except asyncio.CancelledError:
+                # The heartbeat task is cancelled during shutdown.
                 pass
 
         event_tasks = list(self._event_tasks)

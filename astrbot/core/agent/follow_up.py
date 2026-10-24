@@ -152,6 +152,8 @@ class FollowUpCoordinator:
             await self._mark_consumed(capture._state_key(), capture.order_seq)
             return True, False
         await self._activate_and_wait(capture._state_key(), capture.order_seq)
+        if self._terminated:
+            return True, False
         return False, True
 
     async def finalize_capture(

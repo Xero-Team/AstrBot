@@ -199,6 +199,27 @@ class CozeAPIClient:
                 event_data = None
                 decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
+                def consume_line(line: str) -> dict[str, Any] | None:
+                    nonlocal event_type, event_data
+                    line = line.strip()
+                    if not line:
+                        if event_type and event_data:
+                            event = {"event": event_type, "data": event_data}
+                            event_type = None
+                            event_data = None
+                            return event
+                        return None
+                    if line.startswith("event:"):
+                        event_type = line[6:].strip()
+                    elif line.startswith("data:"):
+                        data_str = line[5:].strip()
+                        if data_str and data_str != "[DONE]":
+                            try:
+                                event_data = json.loads(data_str)
+                            except json.JSONDecodeError:
+                                event_data = {"content": data_str}
+                    return None
+
                 async for chunk in response.content:
                     if chunk:
                         buffer += decoder.decode(chunk)
@@ -206,33 +227,15 @@ class CozeAPIClient:
                         buffer = lines[-1]
 
                         for line in lines[:-1]:
-                            line = line.strip()
-
-                            if not line:
-                                if event_type and event_data:
-                                    yield {"event": event_type, "data": event_data}
-                                    event_type = None
-                                    event_data = None
-                            elif line.startswith("event:"):
-                                event_type = line[6:].strip()
-                            elif line.startswith("data:"):
-                                data_str = line[5:].strip()
-                                if data_str and data_str != "[DONE]":
-                                    try:
-                                        event_data = json.loads(data_str)
-                                    except json.JSONDecodeError:
-                                        event_data = {"content": data_str}
+                            if event := consume_line(line):
+                                yield event
 
                 tail = decoder.decode(b"", final=True)
                 if tail:
                     buffer += tail
-                if buffer.strip().startswith("data:"):
-                    data_str = buffer.strip()[5:].strip()
-                    if data_str and data_str != "[DONE]":
-                        try:
-                            event_data = json.loads(data_str)
-                        except json.JSONDecodeError:
-                            event_data = {"content": data_str}
+                for line in buffer.split("\n"):
+                    if event := consume_line(line):
+                        yield event
                 if event_type and event_data:
                     yield {"event": event_type, "data": event_data}
 

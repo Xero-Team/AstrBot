@@ -573,11 +573,13 @@ class LocalShellComponent(ShellComponent):
                     start = min(read_cursor, size)
                     session.output_file.seek(start)
                     data = session.output_file.read(max(1, max_output_chars))
-                # Once the process has exited no continuation can complete a
-                # truncated sequence, so consume it or the cursor never moves.
+                # Only the reader finishing proves no later byte can complete a
+                # truncated sequence. A reaped process can still have buffered
+                # output in the pipe; consuming it there would split the next
+                # poll's bytes and corrupt the character.
                 data = _trim_incomplete_utf8(
                     data,
-                    final=session.process.returncode is not None,
+                    final=session.reader_task.done(),
                 )
                 return data, start + len(data), size
 

@@ -4,6 +4,8 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -658,3 +660,46 @@ async def test_exec_managed_skips_blocklist_inside_sandbox(tmp_path, monkeypatch
             allowed_root=str(tmp_path),
             sandboxed=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_poll_session_keeps_a_truncated_tail_until_the_reader_finishes():
+    shell = LocalShellComponent()
+    output = tempfile.TemporaryFile(mode="w+b")
+    output.write("中".encode()[:2])
+    output.flush()
+    output_lock = threading.Lock()
+
+    async def finish_reader() -> None:
+        await asyncio.sleep(0.05)
+        with output_lock:
+            output.seek(0, os.SEEK_END)
+            output.write("中".encode()[2:])
+            output.flush()
+
+    session = local_booter._LocalShellSession(
+        session_id="session-a",
+        runtime_id="local",
+        umo="owner",
+        sender_id="",
+        creator_is_admin=False,
+        sandboxed=False,
+        process=SimpleNamespace(returncode=0, pid=12345),
+        output_file=output,
+        output_lock=output_lock,
+        started_at=0.0,
+        output_event=asyncio.Event(),
+        reader_task=asyncio.create_task(finish_reader()),
+        wait_task=asyncio.create_task(asyncio.sleep(0)),
+        last_activity=0.0,
+    )
+    shell._sessions[session.session_id] = session
+
+    result = await shell.poll_session(
+        owner_id="owner",
+        session_id=session.session_id,
+        max_output_chars=100,
+    )
+
+    assert result["stdout"] == "中"
+    assert result["has_more"] is False

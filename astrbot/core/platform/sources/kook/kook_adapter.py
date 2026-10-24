@@ -150,9 +150,11 @@ class KookPlatformAdapter(Platform):
                 logger.info("[KOOK] 尝试连接KOOK服务器...")
 
                 # 尝试连接
-                started_at = time.monotonic()
                 await self.client.get_bot_info()
                 self._roles_cache.set_bot_id(self.client.bot_id)
+                # Measure only the connection lifetime; a slow credentials
+                # lookup must not hide a connection that closed immediately.
+                started_at = time.monotonic()
                 success = await self.client.connect()
                 if success and time.monotonic() - started_at < 5:
                     success = False

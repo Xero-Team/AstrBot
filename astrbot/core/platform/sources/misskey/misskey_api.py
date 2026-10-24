@@ -4,6 +4,7 @@ import random
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, NoReturn
+from urllib.parse import urlsplit
 
 try:
     import aiohttp
@@ -730,19 +731,37 @@ class MisskeyAPI:
                     return bytes(chunks)
         return None
 
+    def _is_instance_origin(self, url: str) -> bool:
+        """Return whether ``url`` belongs to the configured Misskey instance."""
+        try:
+            target = urlsplit(url)
+            origin = urlsplit(self.instance_url)
+        except ValueError:
+            return False
+        return (
+            target.scheme.lower() in {"http", "https"}
+            and bool(target.netloc)
+            and (target.scheme.lower(), target.netloc.lower())
+            == (origin.scheme.lower(), origin.netloc.lower())
+        )
+
     async def _download_file_bytes(self, url: str) -> bytes | None:
         # Remote downloads must verify TLS; this fork has no insecure fallback.
-        try:
-            data = await self._download_with_existing_session(
-                url,
-                ssl_verify=True,
-            )
-            if data is not None:
-                return data
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.debug("Misskey authenticated download failed; retrying")
+        # Only the configured Misskey origin may receive the authenticated
+        # session headers: note and component media URLs can point anywhere and
+        # the bot token must not leak to a third-party host.
+        if self._is_instance_origin(url):
+            try:
+                data = await self._download_with_existing_session(
+                    url,
+                    ssl_verify=True,
+                )
+                if data is not None:
+                    return data
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("Misskey authenticated download failed; retrying")
         return await self._download_with_temp_session(url, ssl_verify=True)
 
     async def upload_and_find_file(

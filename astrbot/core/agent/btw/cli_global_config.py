@@ -296,17 +296,12 @@ def _split_at_first_table(text: str) -> tuple[str, str]:
 
 
 def _strip_top_level_keys(text: str, keys: set[str]) -> str:
-    """Remove conflicting top-level keys before the first TOML table."""
+    """Remove conflicting top-level keys from a table-free TOML prefix."""
     lines: list[str] = []
-    in_table = False
     for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("["):
-            in_table = True
-        if not in_table:
-            match = re.match(r"^\s*([A-Za-z0-9_-]+)\s*=", line)
-            if match and match.group(1) in keys:
-                continue
+        match = re.match(r"^\s*([A-Za-z0-9_-]+)\s*=", line)
+        if match and match.group(1) in keys:
+            continue
         lines.append(line)
     return "\n".join(lines)
 
@@ -470,14 +465,14 @@ def apply_provider(cli: str, provider: Mapping) -> ManagedFile:
     env_key = credential_env_name(provider_id)
     _back_up_once(path)
     block = _managed_block(base_url, model, env_key if api_key else "")
-    rest = _strip_top_level_keys(
-        _strip_managed_block(existing),
+    rest_top_level, rest_tables = _split_at_first_table(_strip_managed_block(existing))
+    rest_top_level = _strip_top_level_keys(
+        rest_top_level,
         {"model", "model_provider"},
     )
     # Keep the managed block contiguous: a later rewrite removes exactly this
     # range. User top-level keys stay above it and user tables below it so the
     # file remains valid TOML and unrelated configuration survives.
-    rest_top_level, rest_tables = _split_at_first_table(rest)
     parts = [
         part.strip("\n")
         for part in (rest_top_level, block, rest_tables)

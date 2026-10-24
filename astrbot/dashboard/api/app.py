@@ -80,8 +80,6 @@ from .static_files import router as static_files_router
 
 CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
 
-_MANAGED_CONFIG_LOCK = asyncio.Lock()
-
 
 def _build_observability(runtime: CoreRuntime) -> Observability:
     """Configure observability and wire the runtime-owned gauge collectors."""
@@ -125,6 +123,9 @@ def create_dashboard_asgi_app(
     app.state.dashboard_static_folder = static_folder
     app.state.dashboard_config = {}
     app.state.dashboard_testing = False
+    # Keep the lock per app so it is bound to this app's event loop rather than
+    # to whichever loop imported the module first.
+    managed_config_lock = asyncio.Lock()
     extension_registry = runtime.plugin_manager.extensions.registry
     plugin_page_sessions = PluginPageSessionService(extension_registry, jwt_secret)
     plugin_file_tickets = PluginFileTicketService(extension_registry, jwt_secret)
@@ -236,7 +237,7 @@ def create_dashboard_asgi_app(
                     )
                 raise RuntimeError("MCP configuration reload failed") from exc
             return
-        async with _MANAGED_CONFIG_LOCK:
+        async with managed_config_lock:
             previous = copy.deepcopy(dict(runtime.astrbot_config))
             committed = await save_config_async(
                 next_config, runtime.astrbot_config, is_core=True

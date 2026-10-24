@@ -177,9 +177,16 @@ def _decode_bytes_with_fallback(
     return output.decode("utf-8", errors="replace")
 
 
-def _trim_incomplete_utf8(data: bytes) -> bytes:
-    """Drop a trailing incomplete multibyte sequence so the next poll finishes it."""
-    if not data:
+def _trim_incomplete_utf8(data: bytes, *, final: bool = False) -> bytes:
+    """Drop a trailing incomplete multibyte sequence so the next poll finishes it.
+
+    Args:
+        data: Bytes read from the session output file.
+        final: Whether no more output can arrive. A truncated sequence at EOF
+            cannot be completed, so it must be consumed instead of retried
+            forever.
+    """
+    if not data or final:
         return data
     encodings = ["utf-8", locale.getpreferredencoding(False)]
     for encoding in dict.fromkeys(encodings):
@@ -566,7 +573,12 @@ class LocalShellComponent(ShellComponent):
                     start = min(read_cursor, size)
                     session.output_file.seek(start)
                     data = session.output_file.read(max(1, max_output_chars))
-                data = _trim_incomplete_utf8(data)
+                # Once the process has exited no continuation can complete a
+                # truncated sequence, so consume it or the cursor never moves.
+                data = _trim_incomplete_utf8(
+                    data,
+                    final=session.process.returncode is not None,
+                )
                 return data, start + len(data), size
 
             return await asyncio.to_thread(_read)

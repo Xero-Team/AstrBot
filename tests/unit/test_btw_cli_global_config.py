@@ -188,6 +188,23 @@ def test_a_multiline_array_is_not_mistaken_for_a_table(homes):
     assert parsed["mcp_servers"]["mine"]["command"] == "npx"
 
 
+def test_a_conflicting_key_after_a_multiline_array_is_replaced(homes):
+    path = cg.target_path("codex")
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        'matrix = [\n  [1, 2],\n]\nmodel = "user-model"\n\n'
+        '[mcp_servers.mine]\ncommand = "npx"\n',
+        encoding="utf-8",
+    )
+
+    cg.apply_provider("codex", PROVIDER)
+
+    parsed = tomllib.loads(path.read_text(encoding="utf-8"))
+    assert parsed["model"] == "opus"
+    assert parsed["matrix"] == [[1, 2]]
+    assert parsed["mcp_servers"]["mine"]["command"] == "npx"
+
+
 def test_rewriting_replaces_the_section_instead_of_stacking_it(homes):
     path = cg.target_path("codex")
     cg.apply_provider("codex", {**PROVIDER, "api_key": ""})

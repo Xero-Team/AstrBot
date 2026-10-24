@@ -91,6 +91,11 @@ def test_trim_incomplete_utf8_drops_truncated_sequence():
     assert local_booter._trim_incomplete_utf8(truncated) == b""
 
 
+def test_trim_incomplete_utf8_consumes_truncated_sequence_at_eof():
+    truncated = "中".encode()[:-1]
+    assert local_booter._trim_incomplete_utf8(truncated, final=True) == truncated
+
+
 def test_local_shell_component_uses_windows_locale_for_gbk(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
@@ -440,6 +445,29 @@ def test_managed_shell_captures_output_and_supports_incremental_poll(tmp_path):
         )
         assert result["status"] == "completed"
         assert "managed-output" in result["stdout"]
+        assert result["session_closed"] is True
+        await shell.shutdown_sessions()
+
+    asyncio.run(scenario())
+
+
+def test_managed_shell_consumes_a_truncated_tail_after_exit(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent(session_ttl_seconds=60)
+        result = await shell.exec_managed(
+            _python_command(
+                r"import sys; sys.stdout.buffer.write(b'abc\xe4\xb8'); "
+                "sys.stdout.buffer.flush()"
+            ),
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=30_000,
+        )
+        assert result["status"] == "completed"
+        assert "abc" in result["stdout"]
+        # The trailing incomplete sequence cannot be completed after exit; it
+        # must be consumed so the session is not stuck reporting has_more.
         assert result["session_closed"] is True
         await shell.shutdown_sessions()
 

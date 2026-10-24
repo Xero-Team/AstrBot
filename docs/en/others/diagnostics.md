@@ -86,6 +86,14 @@ Stack traces in `astrbot.log` no longer include loguru local-variable dumps, and
 
 Before sharing logs, still review and redact API keys, tokens, cookies, private chat content, and other sensitive information.
 
+## Export a diagnostics bundle
+
+When you need to submit logs, prefer `Export diagnostics` in the Dashboard over collecting files by hand. The entry points are **More Features → Data and Logs → Logs** and **Settings → Maintenance → Diagnostics**. Both use the same export. Only authenticated dashboard administrators can download a bundle; developer API keys are not accepted.
+
+The archive contains disk and rotated logs, configured custom logs, cached logs, available trace history, configuration and routes, plugin status, environment details, and a manifest. `Redact credentials (recommended)` is enabled by default, masking recognized credentials and replacing public IP addresses with consistent aliases. Unchecking it keeps original sensitive values and adds `raw` to the filename; share that only privately with someone you trust. Export a preset range of the last hour, 12 hours, day, or 3 days, or choose custom start and end times.
+
+See [Logs](/en/use/webui#logs) for the full contents and limits. Review chat content, cookies, and custom secrets before sharing.
+
 ## Operational Metrics and Tracing
 
 AstrBot can expose operational metrics and OpenTelemetry traces. Both are off by

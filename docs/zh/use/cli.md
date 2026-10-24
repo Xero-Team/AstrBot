@@ -115,7 +115,11 @@ uv run astrbot plug install --editable ../my-plugin
 uv run astrbot plug install -e ../my-plugin
 ```
 
-editable 模式依赖操作系统的符号链接能力和权限；发布或迁移实例时不要把这个链接当成完整插件副本。
+editable 模式依赖操作系统的符号链接能力和权限；发布或迁移实例时不要把这个链接当成完整插件副本。editable 安装不能用 `astrbot plug update` 原地更新，命令会拒绝并提示重新安装。
+
+### 更新插件
+
+`astrbot plug update` 会在插件目录旁创建隐藏的临时备份，更新成功后删除；更新失败时用该备份恢复原目录。不要手动移动或删除更新期间出现的备份目录，也不要把它当作长期备份。
 
 ### 代理
 

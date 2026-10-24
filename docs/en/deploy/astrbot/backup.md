@@ -16,10 +16,12 @@ Runtime data defaults to `data/` under the process working directory. With `ASTR
 
 Open **Settings → Maintenance** in the Dashboard, then **Backup & Restore** / **Backup Manager**. The exporter writes main-database tables as JSON and packs:
 
-- main-database tables (export of `data/astrbot.db`, not a copy of an open file)
+- main-database tables (export of `data/astrbot.db`, not a copy of an open file), including conversations, prompts, scheduled tasks, UMO aliases, model usage statistics, OpenAPI access keys, and MCP server configuration
 - knowledge-base metadata, vector documents, and media files
 - `cmd_config.json`, `config/`, plugins and plugin data, Skills, WebChat, Dashboard appearance assets, attachments
 - `t2i_templates/` and `temp/`
+
+TOTP trusted devices are never written to the backup. Replace restore clears device trust on the target instance, so device verification is required again afterward. OpenAPI access keys and MCP configuration in the archive are sensitive; protect the whole ZIP.
 
 Create the backup in the WebUI and copy the ZIP outside the checkout. Import through the same dialog. Extraction rejects path traversal outside the intended directories.
 

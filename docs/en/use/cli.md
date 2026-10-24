@@ -115,7 +115,11 @@ uv run astrbot plug install --editable ../my-plugin
 uv run astrbot plug install -e ../my-plugin
 ```
 
-Editable mode depends on operating-system symlink support and permissions. Do not treat the link as a complete plugin copy when publishing or moving an instance.
+Editable mode depends on operating-system symlink support and permissions. Do not treat the link as a complete plugin copy when publishing or moving an instance. Editable installs cannot be updated in place with `astrbot plug update`; the command refuses and asks you to reinstall instead.
+
+### Update a Plugin
+
+`astrbot plug update` creates a hidden temporary backup beside the plugin directory and removes it after a successful update. If the update fails, the backup restores the original directory. Do not move or delete that backup directory during the update, and do not treat it as a long-term backup.
 
 ### Proxy
 

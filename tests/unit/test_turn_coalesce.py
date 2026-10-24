@@ -264,3 +264,47 @@ async def test_failed_enqueue_cleans_transferred_temporary_files(tmp_path: Path)
     await asyncio.sleep(0.05)
 
     assert not temp_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_recall_releases_only_the_recalled_fragment_media(tmp_path: Path):
+    manager = TurnWindowManager(lambda event: True)
+    recall_file = tmp_path / "recalled.bin"
+    kept_file = tmp_path / "kept.bin"
+    recall_file.write_bytes(b"recalled")
+    kept_file.write_bytes(b"kept")
+    recalled = _event("recalled", message_id="recall-one")
+    kept = _event("kept", message_id="keep-one")
+    recalled.track_temporary_local_file(str(recall_file))
+    kept.track_temporary_local_file(str(kept_file))
+
+    manager.accept(recalled, wait_seconds=30, max_total_seconds=30)
+    manager.accept(kept, wait_seconds=30, max_total_seconds=30)
+    manager.recall("recall-one")
+
+    assert not recall_file.exists()
+    assert kept_file.exists()
+
+    await manager.terminate()
+    assert not kept_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_dropping_the_oldest_fragment_releases_its_media(tmp_path: Path):
+    manager = TurnWindowManager(lambda event: True, max_fragments=1)
+    dropped_file = tmp_path / "dropped.bin"
+    kept_file = tmp_path / "kept.bin"
+    dropped_file.write_bytes(b"dropped")
+    kept_file.write_bytes(b"kept")
+    dropped = _event("dropped", message_id="drop-one")
+    kept = _event("kept", message_id="keep-two")
+    dropped.track_temporary_local_file(str(dropped_file))
+    kept.track_temporary_local_file(str(kept_file))
+
+    manager.accept(dropped, wait_seconds=30, max_total_seconds=30)
+    manager.accept(kept, wait_seconds=30, max_total_seconds=30)
+
+    assert not dropped_file.exists()
+    assert kept_file.exists()
+
+    await manager.terminate()

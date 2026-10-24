@@ -33,6 +33,7 @@ class TurnWindow:
     flush_task: asyncio.Task | None = None
     typing_paused: bool = False
     temporary_files: list[str] = field(default_factory=list)
+    fragment_files: dict[int, list[str]] = field(default_factory=dict)
 
 
 class TurnWindowManager:
@@ -113,6 +114,7 @@ class TurnWindowManager:
         if len(window.fragments) >= self._max_fragments:
             dropped = window.fragments.pop(0)
             logger.warning("Turn window %s dropped oldest fragment", key)
+            self._release_fragment_files(window, dropped)
             dropped.cleanup_temporary_local_files()
         self._take_temporary_files(window, event)
         window.fragments.append(event)
@@ -124,9 +126,26 @@ class TurnWindowManager:
         for path in getattr(event.message_obj, "temporary_file_paths", []) or []:
             if path not in paths:
                 paths.append(path)
+        owned: list[str] = []
         for path in paths:
-            if event.transfer_temporary_local_file(path):
+            if not event.transfer_temporary_local_file(path):
+                continue
+            owned.append(path)
+            if path not in window.temporary_files:
                 window.temporary_files.append(path)
+        if owned:
+            window.fragment_files[id(event)] = owned
+
+    @staticmethod
+    def _release_fragment_files(window: TurnWindow, fragment: AstrMessageEvent) -> None:
+        """Delete temporary files owned only by one removed fragment."""
+        paths = window.fragment_files.pop(id(fragment), [])
+        for path in paths:
+            if any(path in owned for owned in window.fragment_files.values()):
+                continue
+            if path in window.temporary_files:
+                window.temporary_files.remove(path)
+            TurnWindowManager._delete_temporary_path(path)
 
     def discard(self, event: AstrMessageEvent, *, group: bool = False) -> None:
         """Drop an open window without flushing to the LLM."""
@@ -148,6 +167,7 @@ class TurnWindowManager:
             kept: list[AstrMessageEvent] = []
             for fragment in window.fragments:
                 if str(getattr(fragment.message_obj, "message_id", "")) == target_id:
+                    self._release_fragment_files(window, fragment)
                     fragment.cleanup_temporary_local_files()
                 else:
                     kept.append(fragment)
@@ -284,6 +304,7 @@ class TurnWindowManager:
         for path in window.temporary_files:
             flush.track_temporary_local_file(path)
         window.temporary_files.clear()
+        window.fragment_files.clear()
         flush.set_extra("should_run_command", False)
         flush.set_extra("should_run_llm", True)
         flush.set_extra("route_kind", "turn_flush")
@@ -301,13 +322,18 @@ class TurnWindowManager:
             task.cancel()
 
     @staticmethod
-    def _delete_temporary_files(window: TurnWindow) -> None:
+    def _delete_temporary_path(path: str) -> None:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Failed to remove buffered temporary file: %s", path)
+
+    @classmethod
+    def _delete_temporary_files(cls, window: TurnWindow) -> None:
         for path in window.temporary_files:
-            try:
-                Path(path).unlink(missing_ok=True)
-            except OSError:
-                logger.warning("Failed to remove buffered temporary file")
+            cls._delete_temporary_path(path)
         window.temporary_files.clear()
+        window.fragment_files.clear()
 
     def _evict_oldest_window(self) -> None:
         while len(self._windows) >= self._max_windows:

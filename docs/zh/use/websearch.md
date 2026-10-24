@@ -40,6 +40,8 @@ search:
 
 然后在 `SearXNG 实例地址`（`websearch_searxng_url`）中填写实例地址，例如 `http://127.0.0.1:8080`。出于安全考虑，AstrBot 只会访问你显式配置的这个端点，不跟随重定向，也不会在服务端抓取结果 URL。
 
+如果使用 Docker 部署，`compose-with-searxng.yml` 会启动一个已启用 `json` 的预配置 SearXNG 边车；该组合中请把实例地址填为 `http://searxng:8080`。详见[使用 Docker 部署 AstrBot](/deploy/astrbot/docker)。
+
 ## DuckDuckGo
 
 DuckDuckGo 无需任何配置即可使用，作为免 Key 兜底来源。它通过 HTML 端点解析结果，不依赖额外依赖。

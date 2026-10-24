@@ -367,7 +367,6 @@ class MisskeyAPI:
         instance_url: str,
         access_token: str,
         *,
-        allow_insecure_downloads: bool = False,
         download_timeout: int = 15,
         chunk_size: int = 64 * 1024,
         max_download_bytes: int | None = None,
@@ -377,7 +376,6 @@ class MisskeyAPI:
         self._session: aiohttp.ClientSession | None = None
         self.streaming: StreamingClient | None = None
         # download options
-        self.allow_insecure_downloads = allow_insecure_downloads
         self.download_timeout = download_timeout
         self.chunk_size = chunk_size
         self.max_download_bytes = (
@@ -733,11 +731,11 @@ class MisskeyAPI:
         return None
 
     async def _download_file_bytes(self, url: str) -> bytes | None:
-        ssl_verify = not self.allow_insecure_downloads
+        # Remote downloads must verify TLS; this fork has no insecure fallback.
         try:
             data = await self._download_with_existing_session(
                 url,
-                ssl_verify=ssl_verify,
+                ssl_verify=True,
             )
             if data is not None:
                 return data
@@ -745,7 +743,7 @@ class MisskeyAPI:
             raise
         except Exception:
             logger.debug("Misskey authenticated download failed; retrying")
-        return await self._download_with_temp_session(url, ssl_verify=ssl_verify)
+        return await self._download_with_temp_session(url, ssl_verify=True)
 
     async def upload_and_find_file(
         self,

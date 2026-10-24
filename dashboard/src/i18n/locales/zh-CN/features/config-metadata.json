@@ -914,10 +914,6 @@
           "hint": "用于校验 LINE Webhook 签名。"
         }
       },
-      "misskey_allow_insecure_downloads": {
-        "description": "允许不安全下载（禁用 SSL 验证）",
-        "hint": "当远端服务器存在证书问题导致无法正常下载时，自动禁用 SSL 验证作为回退方案。适用于某些图床的证书配置问题。启用有安全风险，仅在必要时使用。"
-      },
       "misskey_default_visibility": {
         "description": "默认帖子可见性",
         "hint": "机器人发帖时的默认可见性设置。public：公开，home：主页时间线，followers：仅关注者。"

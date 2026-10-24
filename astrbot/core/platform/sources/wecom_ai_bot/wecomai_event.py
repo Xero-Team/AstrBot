@@ -186,6 +186,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         ):
             if self.only_use_webhook_url_to_send and self.webhook_client and message:
                 await self.webhook_client.send_message_chain(message)
+                # The webhook already delivered the content; only close the
+                # stream so the client does not receive a duplicate reply.
                 await self.long_connection_sender(
                     req_id,
                     {
@@ -193,7 +195,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "stream": {
                             "id": stream_id,
                             "finish": True,
-                            "content": self._extract_plain_text_from_chain(message),
+                            "content": "",
                         },
                     },
                 )

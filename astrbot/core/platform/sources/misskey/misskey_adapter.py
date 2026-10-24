@@ -85,10 +85,6 @@ class MisskeyPlatformAdapter(Platform):
         self.enable_file_upload = self.config.get("misskey_enable_file_upload", True)
         self.upload_folder = self.config.get("misskey_upload_folder")
 
-        # download / security related options (exposed to platform_config)
-        self.allow_insecure_downloads = bool(
-            self.config.get("misskey_allow_insecure_downloads", False),
-        )
         # parse download timeout and chunk size safely
         _dt = self.config.get("misskey_download_timeout")
         try:
@@ -122,8 +118,7 @@ class MisskeyPlatformAdapter(Platform):
             "misskey_default_visibility": "public",
             "misskey_local_only": False,
             "misskey_enable_chat": True,
-            # download / security options
-            "misskey_allow_insecure_downloads": False,
+            # download options
             "misskey_download_timeout": 15,
             "misskey_download_chunk_size": 65536,
             "misskey_max_download_bytes": None,
@@ -168,7 +163,6 @@ class MisskeyPlatformAdapter(Platform):
         self.api = MisskeyAPI(
             self.instance_url,
             self.access_token,
-            allow_insecure_downloads=self.allow_insecure_downloads,
             download_timeout=self.download_timeout,
             chunk_size=self.download_chunk_size,
             max_download_bytes=self.max_download_bytes,

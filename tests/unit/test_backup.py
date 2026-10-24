@@ -1708,6 +1708,48 @@ def test_import_directories_warns_when_existing_directory_cannot_be_backed_up(
     assert "导入目录失败" in warnings
 
 
+def test_import_directories_restores_the_previous_tree_when_a_file_fails(
+    tmp_path, monkeypatch
+):
+    from astrbot.core.backup import _importer_files
+
+    archive = tmp_path / "backup.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("directories/plugins/demo/main.py", "print('new')\n")
+        zf.writestr("directories/plugins/demo/broken.py", "print('bad')\n")
+
+    target = tmp_path / "plugins"
+    target.mkdir()
+    (target / "old.py").write_text("print('old')\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        _importer_files,
+        "get_backup_directories",
+        lambda: {"plugins": str(target)},
+    )
+    original_extract = _importer_files._extract_archive_member
+
+    def _extract(zf, name, target_path):
+        if name.endswith("broken.py"):
+            raise OSError("corrupt member")
+        return original_extract(zf, name, target_path)
+
+    monkeypatch.setattr(_importer_files, "_extract_archive_member", _extract)
+
+    warnings: list[str] = []
+    with zipfile.ZipFile(archive) as zf:
+        stats = _importer_files.import_directories(
+            zf,
+            {"version": "1.1", "directories": ["plugins"]},
+            warnings.append,
+        )
+
+    assert stats["plugins"] == 0
+    assert (target / "old.py").read_text(encoding="utf-8") == "print('old')\n"
+    assert not (target / "demo" / "main.py").exists()
+    assert "导入目录失败" in warnings
+
+
 @pytest.mark.asyncio
 async def test_export_kb_metadata_fails_the_backup_on_table_error():
     class _Context:

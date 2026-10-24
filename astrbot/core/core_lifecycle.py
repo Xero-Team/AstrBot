@@ -363,7 +363,6 @@ class AstrBotCoreLifecycle:
             "file token artifacts",
             self.services.file_token_service.shutdown,
         )
-        self._register_cleanup("metrics", self.services.metrics.shutdown)
         self._register_cleanup(
             "shared preferences",
             self.services.preferences.terminate,
@@ -489,7 +488,6 @@ class AstrBotCoreLifecycle:
             demo_mode=self.services.demo_mode,
             follow_up_coordinator=self.services.follow_up_coordinator,
             llm_metadata_catalog=self.services.llm_metadata_catalog,
-            metrics=self.services.metrics,
             authorization=self.services.authorization,
         )
         self.execution_context = execution_context

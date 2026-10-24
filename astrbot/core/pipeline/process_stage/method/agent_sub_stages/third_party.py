@@ -46,7 +46,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.error_redaction import safe_error
-from astrbot.core.utils.task_utils import create_tracked_task
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
 from ....context import PipelineContext, call_event_hook
@@ -480,13 +479,3 @@ class ThirdPartyAgentSubStage:
                 if stream_watchdog_task and not stream_watchdog_task.done():
                     stream_watchdog_task.cancel()
                     await asyncio.gather(stream_watchdog_task, return_exceptions=True)
-
-        create_tracked_task(
-            self.ctx.execution_context.background_tasks,
-            self.ctx.execution_context.metrics.upload(
-                llm_tick=1,
-                model_name=self.runner_type,
-                provider_type=self.runner_type,
-            ),
-            name=f"metric:runner:{self.runner_type}",
-        )

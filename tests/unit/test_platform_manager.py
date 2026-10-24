@@ -26,8 +26,8 @@ def _make_registries() -> tuple[HandlerRegistry, PluginRegistry]:
 
 
 def _make_metrics() -> SimpleNamespace:
-    """Return a per-manager telemetry port without shared test state."""
-    return SimpleNamespace(upload=AsyncMock())
+    """Return a per-manager local-statistics port without shared test state."""
+    return SimpleNamespace(record_platform_event=AsyncMock())
 
 
 def _make_manager() -> PlatformManager:

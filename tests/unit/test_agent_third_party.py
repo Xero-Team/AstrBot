@@ -539,7 +539,6 @@ async def test_third_party_process_uses_json_card_summary_when_prompt_is_empty(
     monkeypatch.setattr(
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
-    _set_metrics_upload(stage, AsyncMock())
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
@@ -614,7 +613,6 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
         message_str="ask hello",
         extras={"enable_streaming": False},
     )
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner()
     non_streaming_calls: list[dict] = []
 
@@ -660,7 +658,6 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
-    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
@@ -668,7 +665,6 @@ async def test_third_party_process_uses_non_streaming_path_when_event_disables_s
     assert yielded == [None]
     assert runner.close.await_count == 1
     assert non_streaming_calls[0]["stream_to_general"] is False
-    assert metric_upload.await_count == 1
     assert runner.reset.await_args.kwargs["streaming"] is False
 
 
@@ -688,7 +684,6 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     event.platform_meta.support_streaming_message = False
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner()
     non_streaming_calls: list[dict] = []
 
@@ -734,7 +729,6 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
-    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
@@ -743,7 +737,6 @@ async def test_third_party_process_turns_streaming_into_general_when_platform_do
     assert non_streaming_calls[0]["stream_to_general"] is True
     assert runner.reset.await_args.kwargs["streaming"] is True
     assert runner.close.await_count == 1
-    assert metric_upload.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -762,7 +755,6 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
     runner = FakeThirdPartyRunner()
-    metric_upload = AsyncMock()
     watchdog_started = asyncio.Event()
     watchdog_cancelled = asyncio.Event()
     watchdog_tasks: list[asyncio.Task[None]] = []
@@ -821,14 +813,12 @@ async def test_third_party_process_closes_runner_when_streaming_handler_raises_b
         "_start_stream_watchdog",
         fake_start_stream_watchdog,
     )
-    _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="stream setup failed"):
         async for _ in stage.process(event):
             pass
 
     assert runner.close.await_count == 1
-    assert metric_upload.await_count == 0
     assert watchdog_cancelled.is_set()
     assert watchdog_tasks[0].done()
 
@@ -848,7 +838,6 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner()
     runner.reset = AsyncMock(side_effect=RuntimeError("reset failed"))
 
@@ -882,14 +871,12 @@ async def test_third_party_process_closes_runner_when_reset_raises_and_skips_met
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="reset failed"):
         async for _ in stage.process(event):
             pass
 
     assert runner.close.await_count == 1
-    assert metric_upload.await_count == 0
 
 
 @pytest.mark.asyncio
@@ -907,7 +894,6 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner()
 
     class FakeDifyRunner:
@@ -947,14 +933,12 @@ async def test_third_party_process_closes_runner_when_non_streaming_handler_rais
     monkeypatch.setattr(
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
-    _set_metrics_upload(stage, metric_upload)
 
     with pytest.raises(RuntimeError, match="non-streaming failed"):
         async for _ in stage.process(event):
             pass
 
     assert runner.close.await_count == 1
-    assert metric_upload.await_count == 0
 
 
 @pytest.mark.asyncio
@@ -1010,7 +994,6 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner()
 
     class FakeDifyRunner:
@@ -1056,14 +1039,12 @@ async def test_third_party_process_watchdog_closes_runner_when_stream_never_cons
         ),
     )
     monkeypatch.setattr(stage, "_handle_streaming_response", fake_streaming_response)
-    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
 
     assert yielded == [None]
     assert runner.close.await_count == 1
-    assert metric_upload.await_count == 1
     assert (
         event.result_history[-1].result_content_type
         == ResultContentType.STREAMING_RESULT
@@ -1100,7 +1081,6 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
         message_str="",
         message_components=[image, record],
     )
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner()
     captured_calls: list[dict] = []
 
@@ -1142,7 +1122,6 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     monkeypatch.setattr(
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
-    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
@@ -1155,7 +1134,6 @@ async def test_third_party_process_builds_media_only_request_and_uses_non_stream
     assert req.audio_urls == ["/tmp/audio.wav"]
     set_prompt_error.assert_called_once_with(event, None)
     assert runner.close.await_count == 1
-    assert metric_upload.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -1179,7 +1157,6 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
             Reply(id="quoted-face", chain=[Face(id=111)], message_str=""),
         ],
     )
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner()
 
     class FakeDifyRunner:
@@ -1219,7 +1196,6 @@ async def test_third_party_process_inlines_qq_face_component_and_quote_context(
     monkeypatch.setattr(
         stage, "_handle_non_streaming_response", fake_non_streaming_response
     )
-    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event)]
 
@@ -1254,7 +1230,6 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
     stage.ctx = _pipeline_context(SimpleNamespace())
     stage.conf = {"provider_settings": {}}
     event = FakeInternalProcessEvent(message_str="ask hello")
-    metric_upload = AsyncMock()
     runner = FakeThirdPartyRunner(
         final_resp=LLMResponse(
             role="assistant",
@@ -1293,7 +1268,6 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
             tool_call_timeout=tool_call_timeout,
         ),
     )
-    _set_metrics_upload(stage, metric_upload)
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
@@ -1311,4 +1285,3 @@ async def test_third_party_process_streaming_consumed_closes_runner_after_stream
     )
     assert event.result_history[-1].get_plain_text() == "stream final"
     assert runner.close.await_count == 1
-    assert metric_upload.await_count == 1

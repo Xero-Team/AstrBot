@@ -79,13 +79,9 @@ AstrBot 团队**已尽合理努力在技术和策略层面设置安全与内容�
 
 ## 8. 统计信息与隐私说明
 
-AstrBot 可能会收集有限的匿名统计信息，用于了解系统使用情况、发现问题以及持续改进项目。
-
-所收集的统计信息仅包括与系统运行和功能使用相关的基础技术指标，例如功能使用频率、错误信息等。
+AstrBot 不会收集或上传遥测统计数据。平台消息量等统计仅写入您本地部署的数据库，用于 Dashboard 展示，不会发送到任何外部服务。
 
 AstrBot **不会收集、上传或存储您的对话内容、消息正文、输入文本，或任何能够识别您个人身份的敏感信息**。
-
-您可以手动关闭此项功能，通过在系统环境变量中设置 `ASTRBOT_DISABLE_METRICS=1` 来禁用匿名统计信息收集。
 
 ## 9. 责任限制
 
@@ -202,13 +198,9 @@ In case of emergency (for example, if there is a risk of self-harm or harm to ot
 
 ## 8. Metrics and Privacy
 
-AstrBot may collect a limited amount of anonymous usage statistics to understand system usage, identify issues, and continuously improve the project.
-
-Collected metrics are limited to basic technical indicators related to system operation and feature usage, such as feature usage frequency and error information.
+AstrBot does not collect or upload telemetry. Platform message counts and similar statistics are written only to your local deployment database for the Dashboard and are never sent to an external service.
 
 AstrBot **does not collect, upload, or store your conversation content, message bodies, input text, or any personally identifiable or sensitive information**.
-
-You may manually disable this feature by setting the environment variable `ASTRBOT_DISABLE_METRICS=1` to turn off anonymous metrics collection.
 
 ## 9. Limitation of Liability
 

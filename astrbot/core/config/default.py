@@ -411,7 +411,6 @@ DEFAULT_CONFIG = {
         },
         "vector_store": "exact" if os.name == "nt" else "faiss",
     },
-    "disable_metrics": False,
 }
 
 
@@ -3419,11 +3418,6 @@ CONFIG_METADATA_2 = {
             },
             "callback_api_base": {
                 "type": "string",
-            },
-            "disable_metrics": {
-                "description": "禁用匿名使用统计",
-                "type": "bool",
-                "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
             },
             "log": {
                 "type": "object",

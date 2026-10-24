@@ -208,6 +208,7 @@ class SatoriPlatformAdapter(Platform):
                 try:
                     await self.heartbeat_task
                 except asyncio.CancelledError:
+                    # The heartbeat task is cancelled during shutdown.
                     pass
             if self.ws:
                 try:
@@ -264,6 +265,7 @@ class SatoriPlatformAdapter(Platform):
                 else:
                     break
         except asyncio.CancelledError:
+            # Normal cancellation of the heartbeat loop.
             pass
         except Exception as e:
             logger.error(f"心跳任务异常: {e}")

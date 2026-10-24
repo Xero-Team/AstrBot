@@ -1179,6 +1179,7 @@ class ProviderGoogleGenAI(Provider):
             try:
                 await self.client.aclose()
             except Exception:
+                # Closing an already-released client is not an error.
                 pass
             self.client = None
 

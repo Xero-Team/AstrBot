@@ -328,10 +328,12 @@ class LocalShellComponent(ShellComponent):
                     try:
                         proc.kill()
                     except Exception:
+                        # Best-effort kill; the child may already be gone.
                         pass
                 try:
                     proc.wait(timeout=5)
                 except Exception:
+                    # Best-effort wait; the original error is re-raised below.
                     pass
                 raise
             return {
@@ -506,6 +508,7 @@ class LocalShellComponent(ShellComponent):
             try:
                 await asyncio.wait_for(asyncio.shield(wait_task), yield_time_ms / 1000)
             except TimeoutError:
+                # A yield timeout is expected; poll reports the pending state.
                 pass
         return await self.poll_session(
             owner_id=owner_id,
@@ -578,6 +581,7 @@ class LocalShellComponent(ShellComponent):
                     try:
                         await waiter
                     except asyncio.CancelledError:
+                        # The waiter is cancelled because the session already ended.
                         pass
             if session.wait_task.done():
                 await session.reader_task
@@ -652,6 +656,7 @@ class LocalShellComponent(ShellComponent):
                     try:
                         native_process.send_signal(signal.SIGINT)
                     except ProcessLookupError:
+                        # The process exited before the signal could be delivered.
                         pass
         return await self.poll_session(
             owner_id=owner_id,
@@ -805,6 +810,7 @@ class LocalShellComponent(ShellComponent):
             try:
                 await session.timeout_task
             except asyncio.CancelledError:
+                # The timeout task is cancelled by this cleanup path.
                 pass
         with session.output_lock:
             session.output_file.close()

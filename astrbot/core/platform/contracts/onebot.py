@@ -550,10 +550,6 @@ class OneBotActionInput:
                 raise OneBotActionValidationError(
                     f"Action parameter {name} must be numeric"
                 )
-            elif kind == "message" and value is None:
-                raise OneBotActionValidationError(
-                    f"Action parameter {name} must be provided"
-                )
         return values
 
 

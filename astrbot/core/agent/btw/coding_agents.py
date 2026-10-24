@@ -506,6 +506,11 @@ def build_invocation(
     if agent_type != "opencode" and _provider_is_configured(agent, provider):
         assert provider is not None
         settings_path, provider_env = _settings_layer(agent, provider)
+    selected_model = str(agent.get("model", "")).strip()
+    if not selected_model and provider is not None:
+        # An official-login preset writes no config layer, but the provider's
+        # model still has to reach the CLI through its managed flag.
+        selected_model = str(provider.get("model", "")).strip()
     command = str(agent.get("command", ""))
     extra_args = [str(item) for item in agent.get("extra_args", [])]
     argv: list[str] = []
@@ -520,8 +525,8 @@ def build_invocation(
         # or settings layer back down.
         argv += extra_args
         argv += ["--permission-mode", str(agent.get("permission_mode"))]
-        if model := str(agent.get("model", "")):
-            argv += ["--model", model]
+        if selected_model:
+            argv += ["--model", selected_model]
         if project_dir := str(agent.get("project_dir", "")):
             argv += ["--add-dir", project_dir]
         if settings_path is not None:
@@ -532,8 +537,8 @@ def build_invocation(
         argv += ["--sandbox", str(agent.get("sandbox"))]
         argv += ["--skip-git-repo-check"]
         argv += ["-o", str(workspace / LAST_MESSAGE_NAME)]
-        if model := str(agent.get("model", "")):
-            argv += ["--model", model]
+        if selected_model:
+            argv += ["--model", selected_model]
         if project_dir := str(agent.get("project_dir", "")):
             argv += ["--add-dir", project_dir]
         if settings_path is not None:
@@ -552,7 +557,7 @@ def build_invocation(
         # The inline layer owns the model whenever it set one.  Repeat that
         # fully-namespaced value last so an extra ``--model`` cannot bypass the
         # provider that was just injected.
-        model = str(config.get("model") or agent.get("model", ""))
+        model = str(config.get("model") or selected_model)
         if model:
             argv += ["--model", model]
     else:

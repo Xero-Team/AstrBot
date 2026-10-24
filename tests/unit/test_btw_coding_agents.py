@@ -391,6 +391,7 @@ def test_a_codex_provider_with_only_a_model_uses_the_official_login(
     )[0]
     invocation = ca.build_invocation(agent, workspace=tmp_path)
     assert invocation.settings_path is None
+    assert invocation.argv[invocation.argv.index("--model") + 1] == "o3"
 
 
 def test_a_custom_agent_runs_its_own_command_line(isolated_paths, tmp_path):

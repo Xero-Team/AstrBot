@@ -106,10 +106,9 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any]]:
         if len(buffer) > SSE_MAX_BUFFER_CHARS:
             logger.warning(
                 "DeerFlow SSE parser buffer exceeded %d chars without delimiter; "
-                "flushing oversized block to prevent unbounded memory growth.",
+                "aborting the oversized block to prevent unbounded memory growth.",
                 SSE_MAX_BUFFER_CHARS,
             )
-            buffer = ""
             raise DeerFlowAPIError(
                 operation="SSE stream",
                 status=0,

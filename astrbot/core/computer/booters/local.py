@@ -187,7 +187,13 @@ def _trim_incomplete_utf8(data: bytes) -> bytes:
             data.decode(encoding)
             return data
         except (LookupError, UnicodeDecodeError) as exc:
-            if isinstance(exc, UnicodeDecodeError) and exc.end >= len(data):
+            # Only a truncated multibyte sequence at the end may be retried by
+            # the next poll. Other trailing bytes are invalid in this encoding;
+            # trimming them would keep the cursor on them forever.
+            if (
+                isinstance(exc, UnicodeDecodeError)
+                and exc.reason == "unexpected end of data"
+            ):
                 return data[: exc.start]
             continue
     return data

@@ -2,6 +2,7 @@
 
 import json
 import os
+import tomllib
 
 import pytest
 
@@ -133,7 +134,6 @@ def test_codex_keeps_the_users_comments_and_keys(homes):
     assert 'model = "gpt-5"' not in text
     assert 'model = "opus"' in text
     assert "[mcp_servers.mine]" in text
-    assert text.index(cg.CODEX_MANAGED_BEGIN) < text.index("# my own settings")
     assert cg.CODEX_MANAGED_BEGIN in text and cg.CODEX_MANAGED_END in text
     assert 'base_url = "https://gw.example"' in text
     assert state.managed is True
@@ -145,6 +145,47 @@ def test_codex_keeps_the_users_comments_and_keys(homes):
     )
     assert auth[cg.credential_env_name("gw")] == "sk-secret"
     assert "sk-secret" not in text
+
+
+def test_a_second_switch_keeps_the_users_top_level_keys_and_tables(homes):
+    path = cg.target_path("codex")
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        '# my own settings\ntheme = "dark"\n\n[mcp_servers.mine]\ncommand = "npx"\n',
+        encoding="utf-8",
+    )
+
+    cg.apply_provider("codex", PROVIDER)
+    cg.apply_provider("codex", {**PROVIDER, "base_url": "https://second.example"})
+
+    text = path.read_text(encoding="utf-8")
+    assert "# my own settings" in text
+    assert 'theme = "dark"' in text
+    assert "[mcp_servers.mine]" in text
+    assert text.count(cg.CODEX_MANAGED_BEGIN) == 1
+    assert 'base_url = "https://second.example"' in text
+
+    parsed = tomllib.loads(text)
+    assert parsed["theme"] == "dark"
+    assert parsed["model"] == "opus"
+    assert parsed["model_provider"] == cg.CODEX_PROVIDER_ID
+    assert parsed["mcp_servers"]["mine"]["command"] == "npx"
+
+
+def test_a_multiline_array_is_not_mistaken_for_a_table(homes):
+    path = cg.target_path("codex")
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        'matrix = [\n  [1, 2],\n  [3, 4],\n]\n\n[mcp_servers.mine]\ncommand = "npx"\n',
+        encoding="utf-8",
+    )
+
+    cg.apply_provider("codex", PROVIDER)
+    cg.apply_provider("codex", {**PROVIDER, "base_url": "https://second.example"})
+
+    parsed = tomllib.loads(path.read_text(encoding="utf-8"))
+    assert parsed["matrix"] == [[1, 2], [3, 4]]
+    assert parsed["mcp_servers"]["mine"]["command"] == "npx"
 
 
 def test_rewriting_replaces_the_section_instead_of_stacking_it(homes):

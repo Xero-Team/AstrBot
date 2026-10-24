@@ -196,13 +196,17 @@ def split_platform_text(
         boundary = _best_boundary(window, limit.unit)
         chunk = window[:boundary] if boundary else window
         rest = remaining[len(chunk) :]
-        chunk, remaining = _close_and_reopen_fence(chunk, rest)
-        if len(remaining) >= len(before):
-            chunk = window
-            rest = before[len(window) :]
-            chunk, remaining = _close_and_reopen_fence(chunk, rest)
-        if len(remaining) >= len(before):
-            remaining = rest
+        decorated, next_remaining = _close_and_reopen_fence(chunk, rest)
+        if _measure(decorated, limit.unit) > limit.max_length or len(
+            next_remaining
+        ) >= len(before):
+            # Fence decoration cannot fit or would not shrink the remainder.
+            # A hard cut keeps the platform limit authoritative.
+            chunk = _slice_prefix(before, limit.max_length, limit.unit)
+            remaining = before[len(chunk) :]
+        else:
+            chunk = decorated
+            remaining = next_remaining
         if chunk:
             parts.append(chunk)
         if len(parts) >= limit.max_chunks:

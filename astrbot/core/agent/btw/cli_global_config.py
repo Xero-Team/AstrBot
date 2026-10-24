@@ -31,6 +31,7 @@ import json
 import os
 import re
 import tempfile
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -275,13 +276,23 @@ def _managed_block(base_url: str, model: str, env_key: str) -> str:
     return "\n".join(lines)
 
 
-def _split_managed_block(block: str) -> tuple[str, str]:
-    """Split the managed block into top-level keys and the provider table."""
-    marker = f"[model_providers.{CODEX_PROVIDER_ID}]"
-    head, separator, tail = block.partition(marker)
-    if not separator:
-        return block, ""
-    return head.rstrip(), marker + tail
+def _split_at_first_table(text: str) -> tuple[str, str]:
+    """Split text before its first table so top-level keys stay top-level."""
+    lines = text.splitlines(keepends=True)
+    prefix = ""
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("["):
+            try:
+                tomllib.loads(prefix)
+            except tomllib.TOMLDecodeError:
+                # A bracket inside a multi-line array or string is not a table.
+                pass
+            else:
+                head = prefix.strip("\n")
+                tail = "".join(lines[index:]).strip("\n")
+                return head, tail
+        prefix += line
+    return text.strip("\n"), ""
 
 
 def _strip_top_level_keys(text: str, keys: set[str]) -> str:
@@ -459,12 +470,19 @@ def apply_provider(cli: str, provider: Mapping) -> ManagedFile:
     env_key = credential_env_name(provider_id)
     _back_up_once(path)
     block = _managed_block(base_url, model, env_key if api_key else "")
-    top_level, table = _split_managed_block(block)
     rest = _strip_top_level_keys(
         _strip_managed_block(existing),
         {"model", "model_provider"},
     )
-    parts = [part.strip("\n") for part in (top_level, rest, table) if part.strip()]
+    # Keep the managed block contiguous: a later rewrite removes exactly this
+    # range. User top-level keys stay above it and user tables below it so the
+    # file remains valid TOML and unrelated configuration survives.
+    rest_top_level, rest_tables = _split_at_first_table(rest)
+    parts = [
+        part.strip("\n")
+        for part in (rest_top_level, block, rest_tables)
+        if part.strip()
+    ]
     _atomic_write(path, "\n\n".join(parts) + "\n", private=False)
 
     _apply_codex_credential(env_key, api_key)

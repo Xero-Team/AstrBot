@@ -1,7 +1,11 @@
+from dataclasses import replace
+
 from astrbot.core.platform.message_limits import (
     DISCORD_TEXT_LIMIT,
     TELEGRAM_TEXT_LIMIT,
     WECOM_TEXT_LIMIT,
+    MessageLimitUnit,
+    PlatformTextLimit,
     split_platform_text,
 )
 
@@ -49,8 +53,6 @@ def test_hard_cuts_when_no_natural_boundary() -> None:
 
 
 def test_max_chunks_degrades() -> None:
-    from dataclasses import replace
-
     limit = replace(DISCORD_TEXT_LIMIT, max_chunks=2)
     result = split_platform_text("a" * 8000, limit)
     assert len(result.parts) == 2
@@ -64,3 +66,31 @@ def test_long_fenced_single_line_still_makes_progress() -> None:
     assert len(result.parts) < 20
     assert all(len(part) <= 2000 for part in result.parts)
     assert any("A" in part for part in result.parts)
+
+
+def test_fence_closing_never_exceeds_the_hard_limit() -> None:
+    limit = PlatformTextLimit(
+        max_length=10,
+        unit=MessageLimitUnit.CHARS,
+        supports_markdown=True,
+        supports_structured_components=True,
+        allows_consecutive_messages=True,
+        max_chunks=100,
+    )
+    # The closing fence sits within the preliminary slice, so reserving space
+    # from that slice alone is not enough: the decorated chunk must still fit.
+    text = "~~~~\n ~~~~\n"
+    result = split_platform_text(text, limit)
+
+    assert result.parts
+    assert all(len(part) <= limit.max_length for part in result.parts)
+
+
+def test_byte_limits_hold_with_fences_and_wide_characters() -> None:
+    limit = replace(WECOM_TEXT_LIMIT, max_length=24, max_chunks=100)
+    text = "```\n" + "中😀" * 40 + "\n```"
+
+    result = split_platform_text(text, limit)
+
+    assert result.parts
+    assert all(len(part.encode("utf-8")) <= limit.max_length for part in result.parts)

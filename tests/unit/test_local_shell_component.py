@@ -80,6 +80,17 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
     assert result["exit_code"] == 0
 
 
+def test_trim_incomplete_utf8_keeps_invalid_trailing_byte():
+    # A genuinely invalid byte must advance the cursor; trimming it would make
+    # every poll return nothing and block later output.
+    assert local_booter._trim_incomplete_utf8(b"abc\xff") == b"abc\xff"
+
+
+def test_trim_incomplete_utf8_drops_truncated_sequence():
+    truncated = "中".encode()[:-1]
+    assert local_booter._trim_incomplete_utf8(truncated) == b""
+
+
 def test_local_shell_component_uses_windows_locale_for_gbk(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs

@@ -15,7 +15,6 @@ _SQLITE_RUNTIME_PRAGMAS = (
     "PRAGMA cache_size=20000",
     "PRAGMA temp_store=MEMORY",
     "PRAGMA mmap_size=134217728",
-    "PRAGMA optimize",
 )
 
 

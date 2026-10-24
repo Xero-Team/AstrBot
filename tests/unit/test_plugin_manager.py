@@ -875,7 +875,7 @@ async def plugin_manager_pm(tmp_path, monkeypatch):
             self.kb_manager = MagicMock()
             self.html_renderer = MagicMock()
             self.file_token_service = MagicMock()
-            self.metrics = SimpleNamespace(upload=AsyncMock())
+            self.metrics = SimpleNamespace(record_platform_event=AsyncMock())
             self.demo_mode = False
             self.dashboard_extension_registry = DashboardExtensionRegistry()
             self.dashboard_extensions = DashboardExtensionAccess(

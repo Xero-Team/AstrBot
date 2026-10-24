@@ -76,11 +76,7 @@ def create_isolated_runtime_services(
         webchat_run_coordinator=WebChatRunCoordinator(webchat_queue_manager),
         follow_up_coordinator=FollowUpCoordinator(),
         llm_metadata_catalog=LLMMetadataCatalog(),
-        metrics=MetricsRuntime(
-            config,
-            database,
-            installation_id_path=data_path / ".installation_id",
-        ),
+        metrics=MetricsRuntime(database),
         computer_runtime=ComputerRuntime(),
         tool_image_cache=ToolImageCache(data_path / "temp" / "tool_images"),
         totp_runtime_state=TotpRuntimeState(),

@@ -398,7 +398,6 @@ Dashboard 账户有稳定的 `account_id`，其 TOTP 密钥、恢复码哈希和
 - `timezone`：IANA 时区名称，默认 `Asia/Shanghai`。
 - `callback_api_base`：外部服务访问 AstrBot 回调/文件 URL 的公开基地址，不改变监听地址。
 - `plugin_set`：配置档可用插件，`["*"]` 为全部，空列表为不使用插件。
-- `disable_metrics`：关闭指标采集。内置命令可在 Dashboard 的命令管理页面逐项启用或停用。
 
 ## 进程级环境覆盖
 

@@ -14,9 +14,7 @@ from astrbot import logger
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.io import remove_dir
-from astrbot.core.utils.metrics import MetricsSink
 from astrbot.core.utils.pip_installer import PipInstaller
-from astrbot.core.utils.task_utils import create_tracked_task
 
 from .plugin_runtime_common import ensure_plugin_requirements
 from .updator import PluginUpdator
@@ -67,7 +65,6 @@ class PluginPackageInstaller:
         plugin_store_path: str,
         plugin_config_path: str,
         background_tasks: set[asyncio.Task[Any]],
-        metrics: MetricsSink,
     ) -> None:
         self._execution_context = execution_context
         self._catalogs = catalogs
@@ -75,7 +72,6 @@ class PluginPackageInstaller:
         self._plugin_store_path = plugin_store_path
         self._plugin_config_path = plugin_config_path
         self._background_tasks = background_tasks
-        self._metrics = metrics
         self._updator = PluginUpdator()
 
     @property
@@ -190,11 +186,6 @@ class PluginPackageInstaller:
         terminate_plugin: TerminatePlugin | None = None,
     ) -> dict[str, str | None] | None:
         """Download a plugin and publish it only after loading succeeds."""
-        create_tracked_task(
-            self._background_tasks,
-            self._metrics.upload(et="install_star", repo=repo_url),
-            name="metric:install-star",
-        )
         with tempfile.TemporaryDirectory(
             dir=self._staging_root(),
             prefix=".plugin-install-",
@@ -243,12 +234,6 @@ class PluginPackageInstaller:
             Path(zip_file_path).unlink(missing_ok=True)
         except OSError as exc:
             logger.warning("删除插件压缩包失败: %s", exc)
-        if plugin_info and plugin_info.get("repo"):
-            create_tracked_task(
-                self._background_tasks,
-                self._metrics.upload(et="install_star_f", repo=plugin_info["repo"]),
-                name="metric:install-star-success",
-            )
         return plugin_info
 
     async def _install_from_staged_directory(

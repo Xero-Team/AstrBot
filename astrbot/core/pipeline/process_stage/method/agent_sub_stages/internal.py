@@ -315,15 +315,6 @@ class InternalAgentSubStage:
         ):
             pending = await self._capture_pending_history(event, req, agent_runner)
             await self._finalize_pending_history(event, req, pending)
-        create_tracked_task(
-            self.ctx.execution_context.background_tasks,
-            self.ctx.execution_context.metrics.upload(
-                llm_tick=1,
-                model_name=agent_runner.provider.get_model(),
-                provider_type=agent_runner.provider.meta().type,
-            ),
-            name="upload_agent_metric",
-        )
 
     async def _build_checked_agent_runner(
         self,

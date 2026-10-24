@@ -63,7 +63,6 @@ from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
-from astrbot.core.utils.metrics import MetricsSink
 from astrbot.core.utils.session_lock import SessionLockManager
 from astrbot.core.utils.session_waiter import SessionWaiterRegistry
 
@@ -216,7 +215,6 @@ class CoreExecutionContext:
         subagent_orchestrator: SubAgentOrchestrator | None = None,
         demo_mode: bool = False,
         *,
-        metrics: MetricsSink,
         active_event_registry: ActiveEventRegistry | None = None,
         session_lock_manager: SessionLockManager | None = None,
         session_waiter_registry: SessionWaiterRegistry | None = None,
@@ -276,8 +274,6 @@ class CoreExecutionContext:
         """Runtime-owned action/resource authorization service."""
         self.llm_metadata_catalog = llm_metadata_catalog or LLMMetadataCatalog()
         """Runtime-owned model metadata used by Agent and Dashboard paths."""
-        self.metrics = metrics
-        """Runtime-owned telemetry capability used by Agent execution."""
         self.follow_up_coordinator = follow_up_coordinator or FollowUpCoordinator()
         """Runtime-owned active Agent follow-up coordination state."""
         self.background_tasks: set[asyncio.Task] = set()

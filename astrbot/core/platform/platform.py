@@ -233,15 +233,15 @@ class Platform(abc.ABC):
 
         self._metrics = metrics
 
-    def _schedule_metric(self, *, name: str, **kwargs: Any) -> None:
-        """Schedule a metric under this adapter's task ownership."""
+    def _schedule_metric(self, *, name: str) -> None:
+        """Record a local platform event under this adapter's task ownership."""
 
         metrics = getattr(self, "_metrics", None)
         if metrics is None:
             return
         create_tracked_task(
             self._background_tasks,
-            metrics.upload(**kwargs),
+            metrics.record_platform_event(platform_id=self.meta().name),
             name=name,
         )
 
@@ -275,8 +275,6 @@ class Platform(abc.ABC):
         """
         self._schedule_metric(
             name=f"metric:send-by-session:{self.meta().name}",
-            msg_event_tick=1,
-            adapter_name=self.meta().name,
         )
         return PlatformSendResult(
             platform_id=self.meta().id,

@@ -289,7 +289,6 @@ class WecomPlatformAdapter(Platform):
         cursor = self._wechat_kf_cursors.get(kfid, "")
         first_pull = not cursor
         collected: list[dict] = []
-        next_cursor = cursor
         while True:
             ret = self.wechat_kf_api.sync_msg(token, kfid, cursor)
             if not isinstance(ret, dict):
@@ -297,12 +296,12 @@ class WecomPlatformAdapter(Platform):
             collected.extend(ret.get("msg_list") or [])
             next_cursor = ret.get("next_cursor") or cursor
             if not ret.get("has_more") or not next_cursor or next_cursor == cursor:
+                # Advance only after every page was fetched, so a transient
+                # failure does not skip the pages collected before it.
+                if next_cursor:
+                    self._wechat_kf_cursors[kfid] = next_cursor
                 break
             cursor = next_cursor
-        # Advance only after every page was fetched, so a transient failure
-        # does not skip the pages already collected before it.
-        if next_cursor:
-            self._wechat_kf_cursors[kfid] = next_cursor
 
         if not first_pull:
             return collected

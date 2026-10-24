@@ -8,8 +8,11 @@ from astrbot.core.utils.metrics import MetricsRuntime
 
 
 @pytest.mark.asyncio
-async def test_metrics_runtime_persists_platform_statistics() -> None:
+async def test_metrics_runtime_persists_platform_statistics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Platform statistics are written to the local store."""
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
     database = AsyncMock()
     metrics = MetricsRuntime(database)
 
@@ -25,7 +28,10 @@ async def test_metrics_runtime_persists_platform_statistics() -> None:
 
 
 @pytest.mark.asyncio
-async def test_metrics_runtime_defaults_platform_type_to_unknown() -> None:
+async def test_metrics_runtime_defaults_platform_type_to_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
     database = AsyncMock()
     metrics = MetricsRuntime(database)
 
@@ -45,7 +51,10 @@ async def test_metrics_runtime_without_database_is_a_noop() -> None:
 
 
 @pytest.mark.asyncio
-async def test_metrics_runtime_propagates_cancellation() -> None:
+async def test_metrics_runtime_propagates_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
     database = AsyncMock()
     database.insert_platform_stats.side_effect = asyncio.CancelledError
     metrics = MetricsRuntime(database)
@@ -61,6 +70,8 @@ async def test_metrics_runtime_never_uses_network_or_installation_identity(
 ) -> None:
     """Statistics stay local: no HTTP session and no .installation_id file."""
     from astrbot.core.utils import proxy_route
+
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
 
     def fail_on_network():
         raise AssertionError("statistics must not create an HTTP session")

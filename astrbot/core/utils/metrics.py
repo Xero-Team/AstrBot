@@ -8,6 +8,7 @@ network or installation-identity state.
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Protocol
 
 from astrbot import logger
@@ -46,6 +47,8 @@ class MetricsRuntime:
                 know a more specific type.
         """
         if self._db is None:
+            return
+        if os.environ.get("ASTRBOT_TEST_MODE", "").lower() == "true":
             return
         try:
             await self._db.insert_platform_stats(

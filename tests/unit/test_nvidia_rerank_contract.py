@@ -147,3 +147,39 @@ async def test_rerank_terminate_drops_an_already_closed_client() -> None:
 
     assert provider.client is None
     assert client.closed_by_terminate is False
+
+
+@pytest.mark.parametrize(
+    ("model", "expected_path"),
+    [
+        (
+            "nvidia/nemotron-3.5-rerank-8b",
+            "nvidia/nemotron-3.5-rerank-8b",
+        ),
+        (
+            "nvidia/llama-3.2-nv-rerankqa-1b-v1",
+            "nvidia/llama-3_2-nv-rerankqa-1b-v1",
+        ),
+        (
+            "nvidia/llama-3.2-nv-rerankqa-1b-v2",
+            "nvidia/llama-3_2-nv-rerankqa-1b-v2",
+        ),
+        (
+            "nvidia/llama-3.2-nemoretriever-500m-rerank-v2",
+            "nvidia/llama-3_2-nemoretriever-500m-rerank-v2",
+        ),
+        ("nv-rerank-qa-mistral-4b:1", "nvidia"),
+    ],
+)
+def test_nvidia_rerank_preserves_model_specific_endpoint_paths(
+    model: str, expected_path: str
+) -> None:
+    provider = NvidiaRerankProvider.__new__(NvidiaRerankProvider)
+    provider.base_url = "https://rerank.example.test"
+    provider.model_endpoint = "/v1/retrieval/reranking"
+    provider.model = model
+
+    assert (
+        provider._get_endpoint()
+        == f"https://rerank.example.test/{expected_path}/v1/retrieval/reranking"
+    )

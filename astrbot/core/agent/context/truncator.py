@@ -121,27 +121,37 @@ class ContextTruncator:
 
         system_messages, non_system_messages = self._split_system_rest(messages)
 
-        if len(non_system_messages) // 2 <= keep_most_recent_turns:
+        rounds = self._split_rounds(non_system_messages)
+        if len(rounds) <= keep_most_recent_turns:
             return messages
 
         num_to_keep = keep_most_recent_turns - drop_turns + 1
         if num_to_keep <= 0:
             truncated_contexts = []
         else:
-            truncated_contexts = non_system_messages[-num_to_keep * 2 :]
-
-        # Find the first user message
-        index = next(
-            (i for i, item in enumerate(truncated_contexts) if item.role == "user"),
-            None,
-        )
-        if index is not None and index > 0:
-            truncated_contexts = truncated_contexts[index:]
+            truncated_contexts = self._flatten_rounds(rounds[-num_to_keep:])
 
         result = self._ensure_user_message(
             system_messages, truncated_contexts, messages
         )
         return self.fix_messages(result)
+
+    @staticmethod
+    def _split_rounds(messages: list[Message]) -> list[list[Message]]:
+        rounds: list[list[Message]] = []
+        current: list[Message] = []
+        for message in messages:
+            if message.role == "user" and current:
+                rounds.append(current)
+                current = []
+            current.append(message)
+        if current:
+            rounds.append(current)
+        return rounds
+
+    @staticmethod
+    def _flatten_rounds(rounds: list[list[Message]]) -> list[Message]:
+        return [message for rnd in rounds for message in rnd]
 
     def truncate_by_dropping_oldest_turns(
         self,
@@ -154,10 +164,11 @@ class ContextTruncator:
 
         system_messages, non_system_messages = self._split_system_rest(messages)
 
-        if len(non_system_messages) // 2 <= drop_turns:
+        rounds = self._split_rounds(non_system_messages)
+        if len(rounds) <= drop_turns:
             truncated_non_system = []
         else:
-            truncated_non_system = non_system_messages[drop_turns * 2 :]
+            truncated_non_system = self._flatten_rounds(rounds[drop_turns:])
 
         # Find the first user message
         index = next(

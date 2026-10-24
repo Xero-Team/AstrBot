@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 from typing import Any
 
 from astrbot.core.utils.proxy_route import normalize_proxy_mode
@@ -156,15 +157,16 @@ def _normalize_value(value: Any, default: Any) -> Any:
             return default
         try:
             return int(value)
-        except TypeError, ValueError:
+        except OverflowError, TypeError, ValueError:
             return default
     if isinstance(default, float):
         if isinstance(value, bool):
             return default
         try:
-            return float(value)
-        except TypeError, ValueError:
+            result = float(value)
+        except OverflowError, TypeError, ValueError:
             return default
+        return result if math.isfinite(result) else default
     if isinstance(default, str):
         return value if isinstance(value, str) else default
     return copy.deepcopy(value) if value is not None else copy.deepcopy(default)

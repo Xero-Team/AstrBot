@@ -106,6 +106,17 @@ def main() -> int:
         handler_name = args.command.replace("-", "_")
         if keyword.iskeyword(handler_name):
             raise ValueError("command must not produce a Python keyword handler name")
+        if handler_name in {
+            "initialize",
+            "terminate",
+            "send",
+            "call",
+            "context",
+            "__init__",
+        }:
+            raise ValueError(
+                "command must not produce a handler name reserved by the plugin base API"
+            )
         root = locate_astrbot_root(args.astrbot_root)
         python_floor, python_pin = read_python_floor(root)
         output = args.output.expanduser().resolve()

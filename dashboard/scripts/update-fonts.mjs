@@ -8,11 +8,13 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const subsetFont = require('subset-font');
@@ -27,17 +29,19 @@ const FONT_METADATA = join(FONT_ROOT, 'sources.json');
 
 const ASCII_AND_PUNCTUATION =
   ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n\r\t';
-const NOTO_UNICODE_RANGES = [
-  [0x0000, 0x2fff],
-  [0x3000, 0x4dff],
-  [0x4e00, 0x6fff],
-  [0x7000, 0x9fff],
-  [0xa000, 0xffff],
-  [0x10000, 0x1ffff],
-  [0x20000, 0x2ffff],
-  [0x30000, 0x3ffff],
-  [0x40000, 0x10ffff],
-];
+const NOTO_UNICODE_RANGES = (() => {
+  const ranges = [[0x0000, 0x2fff]];
+  for (let start = 0x3000; start <= 0xffff; start += 0x800) {
+    ranges.push([start, Math.min(start + 0x7ff, 0xffff)]);
+  }
+  ranges.push(
+    [0x10000, 0x1ffff],
+    [0x20000, 0x2ffff],
+    [0x30000, 0x3ffff],
+    [0x40000, 0x10ffff],
+  );
+  return ranges;
+})();
 
 export const FONT_SOURCES = {
   noto: {
@@ -436,6 +440,23 @@ export async function updateFonts() {
       }
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
+    }
+
+    const prettierBin = join(
+      DASHBOARD_ROOT,
+      '..',
+      'node_modules',
+      'prettier',
+      'bin',
+      'prettier.cjs',
+    );
+    if (existsSync(prettierBin)) {
+      const cssPath = join(FONT_ROOT, 'fonts.css');
+      await writeAtomic(cssPath, outputs.get('fonts.css'));
+      execFileSync(process.execPath, [prettierBin, '--write', cssPath], {
+        cwd: join(DASHBOARD_ROOT, '..'),
+      });
+      outputs.set('fonts.css', await readFile(cssPath));
     }
 
     const generated = [];

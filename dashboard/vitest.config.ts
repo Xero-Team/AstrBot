@@ -20,6 +20,9 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       setupFiles: ['./tests/setup.vitest.ts'],
+      // Component-mount tests share CPU with the parallel `make check-web`
+      // targets; the 5s default is too tight when the host is saturated.
+      testTimeout: 15_000,
       fsModuleCache: false,
       include: ['./tests/**/*.{vitest.ts,test.mjs}'],
       exclude: [

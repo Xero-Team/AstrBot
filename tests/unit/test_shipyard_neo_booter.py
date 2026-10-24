@@ -345,3 +345,22 @@ async def test_neo_shell_rejects_invalid_environment_keys():
     accepted = await component.exec("echo hello", env={"GOOD_KEY": "1"})
     assert accepted["success"] is True
     sandbox.shell.exec.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_neo_edit_file_rejects_an_empty_old_string():
+    from astrbot.core.computer.booters.shipyard_neo import NeoFileSystemComponent
+
+    component = NeoFileSystemComponent.__new__(NeoFileSystemComponent)
+    component._sandbox = SimpleNamespace(
+        filesystem=SimpleNamespace(
+            read_file=AsyncMock(return_value="content"),
+            write_file=AsyncMock(),
+        )
+    )
+
+    result = await component.edit_file("note.txt", "", "x", replace_all=True)
+
+    assert result["success"] is False
+    assert result["replacements"] == 0
+    component._sandbox.filesystem.write_file.assert_not_awaited()

@@ -40,6 +40,8 @@ search:
 
 Then fill in the instance address in `SearXNG Instance URL` (`websearch_searxng_url`), for example `http://127.0.0.1:8080`. For safety, AstrBot only contacts the endpoint you explicitly configure, does not follow redirects, and does not fetch result URLs server-side.
 
+If you deploy with Docker, `compose-with-searxng.yml` starts a preconfigured SearXNG sidecar with `json` already enabled. In that stack, use `http://searxng:8080` as the instance URL; see [Deploy AstrBot with Docker](/en/deploy/astrbot/docker).
+
 ## DuckDuckGo (keyless fallback)
 
 DuckDuckGo works with no configuration and serves as the keyless fallback. It parses results from its HTML endpoint without any extra dependency.

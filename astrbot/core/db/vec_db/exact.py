@@ -9,6 +9,7 @@ knowledge bases and a reference implementation of the ``VectorStore`` contract.
 from __future__ import annotations
 
 import os
+import uuid
 
 import numpy as np
 
@@ -48,11 +49,17 @@ class ExactEmbeddingStorage:
         dirname = os.path.dirname(self.path)
         if dirname:
             os.makedirs(dirname, exist_ok=True)
-        np.savez(
-            self.path,
-            ids=np.asarray(self._ids, dtype=np.int64),
-            vectors=self._vectors,
-        )
+        temporary = f"{self.path}.{uuid.uuid4().hex}.tmp.npz"
+        try:
+            np.savez(
+                temporary,
+                ids=np.asarray(self._ids, dtype=np.int64),
+                vectors=self._vectors,
+            )
+            os.replace(temporary, self.path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def _append(self, vectors: np.ndarray, ids: list[int]) -> None:
         self._vectors = np.vstack([self._vectors, vectors])

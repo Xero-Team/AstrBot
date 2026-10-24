@@ -672,16 +672,21 @@ class ProviderManager:
                     self.rerank_provider_insts.remove(prov_inst)
 
             classifier = self.inst_map[provider_id]
-            if isinstance(classifier, ClassifierProvider):
+            if (
+                isinstance(classifier, ClassifierProvider)
+                and classifier in self.classifier_provider_insts
+            ):
                 self.classifier_provider_insts.remove(classifier)
 
-            if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()  # type: ignore
+            try:
+                if getattr(self.inst_map[provider_id], "terminate", None):
+                    await self.inst_map[provider_id].terminate()  # type: ignore
+            finally:
+                self.inst_map.pop(provider_id, None)
 
             logger.info(
                 f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
             )
-            del self.inst_map[provider_id]
 
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
@@ -761,6 +766,7 @@ class ProviderManager:
             try:
                 await self._mcp_init_task
             except asyncio.CancelledError:
+                # The MCP init task is cancelled during shutdown.
                 pass
 
         provider_groups = (

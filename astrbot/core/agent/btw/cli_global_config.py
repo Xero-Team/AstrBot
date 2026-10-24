@@ -31,6 +31,7 @@ import json
 import os
 import re
 import tempfile
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -275,6 +276,36 @@ def _managed_block(base_url: str, model: str, env_key: str) -> str:
     return "\n".join(lines)
 
 
+def _split_at_first_table(text: str) -> tuple[str, str]:
+    """Split text before its first table so top-level keys stay top-level."""
+    lines = text.splitlines(keepends=True)
+    prefix = ""
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("["):
+            try:
+                tomllib.loads(prefix)
+            except tomllib.TOMLDecodeError:
+                # A bracket inside a multi-line array or string is not a table.
+                pass
+            else:
+                head = prefix.strip("\n")
+                tail = "".join(lines[index:]).strip("\n")
+                return head, tail
+        prefix += line
+    return text.strip("\n"), ""
+
+
+def _strip_top_level_keys(text: str, keys: set[str]) -> str:
+    """Remove conflicting top-level keys from a table-free TOML prefix."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        match = re.match(r"^\s*([A-Za-z0-9_-]+)\s*=", line)
+        if match and match.group(1) in keys:
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _managed_bounds(text: str) -> tuple[int, int] | None:
     """Return where AstrBot's section starts and ends past the end marker."""
     start = text.find(CODEX_MANAGED_BEGIN)
@@ -434,8 +465,20 @@ def apply_provider(cli: str, provider: Mapping) -> ManagedFile:
     env_key = credential_env_name(provider_id)
     _back_up_once(path)
     block = _managed_block(base_url, model, env_key if api_key else "")
-    rest = _strip_managed_block(existing)
-    _atomic_write(path, f"{block}\n" + (f"\n{rest}" if rest else ""), private=False)
+    rest_top_level, rest_tables = _split_at_first_table(_strip_managed_block(existing))
+    rest_top_level = _strip_top_level_keys(
+        rest_top_level,
+        {"model", "model_provider"},
+    )
+    # Keep the managed block contiguous: a later rewrite removes exactly this
+    # range. User top-level keys stay above it and user tables below it so the
+    # file remains valid TOML and unrelated configuration survives.
+    parts = [
+        part.strip("\n")
+        for part in (rest_top_level, block, rest_tables)
+        if part.strip()
+    ]
+    _atomic_write(path, "\n\n".join(parts) + "\n", private=False)
 
     _apply_codex_credential(env_key, api_key)
     return read_state(cli)

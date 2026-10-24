@@ -244,8 +244,19 @@ class AstrBotImporter:
         try:
             main_data = json.loads(zf.read("databases/main_db.json"))
             if mode == "replace":
-                await self._clear_main_db()
-            imported = await self._import_main_database(main_data)
+                async with self.main_db.get_db() as session:
+                    async with session.begin():
+                        await self._clear_main_db(session)
+                        imported = await self._import_main_database(
+                            main_data,
+                            session=session,
+                            result=result,
+                        )
+            else:
+                imported = await self._import_main_database(
+                    main_data,
+                    result=result,
+                )
             result.imported_tables.update(imported)
             return main_data
         except asyncio.CancelledError:
@@ -273,7 +284,10 @@ class AstrBotImporter:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            result.add_internal_warning("导入知识库失败", exc)
+            if mode == "replace":
+                result.add_internal_error("导入知识库失败", exc)
+            else:
+                result.add_internal_warning("导入知识库失败", exc)
 
     def _import_config_stage(self, zf: zipfile.ZipFile, result: ImportResult) -> None:
         if "config/cmd_config.json" in zf.namelist():
@@ -520,69 +534,92 @@ class AstrBotImporter:
         if version_check["status"] == "minor_diff":
             logger.warning("备份版本存在差异")
 
-    async def _clear_main_db(self) -> None:
+    async def _clear_main_db(self, session: Any | None = None) -> None:
         """清空主数据库所有表"""
-        async with self.main_db.get_db() as session:
-            async with session.begin():
-                # Replace restores also invalidate device trust on the target instance.
-                for table_name, model_class in (
-                    MAIN_DB_MODELS | EXCLUDED_MAIN_DB_MODELS
-                ).items():
-                    try:
-                        await session.execute(delete(model_class))
-                        logger.debug(f"已清空表 {table_name}")
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as exc:
-                        raise DatabaseClearError("清空主数据库失败") from exc
-                # API key capabilities are derived from ``ApiKey.scopes`` and
-                # target rows are replaced below, so stale grants must go too.
-                await session.execute(
-                    delete(AuthCapability).where(
-                        col(AuthCapability.subject_id).startswith("api-key:")
-                    )
-                )
+        if session is not None:
+            await self._clear_main_db_rows(session)
+            return
+        async with self.main_db.get_db() as db_session:
+            async with db_session.begin():
+                await self._clear_main_db_rows(db_session)
+
+    async def _clear_main_db_rows(self, session: Any) -> None:
+        # Replace restores also invalidate device trust on the target instance.
+        for table_name, model_class in (
+            MAIN_DB_MODELS | EXCLUDED_MAIN_DB_MODELS
+        ).items():
+            try:
+                await session.execute(delete(model_class))
+                logger.debug(f"已清空表 {table_name}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                raise DatabaseClearError("清空主数据库失败") from exc
+        # API key capabilities are derived from ``ApiKey.scopes`` and target
+        # rows are replaced below, so stale grants must go too.
+        await session.execute(
+            delete(AuthCapability).where(
+                col(AuthCapability.subject_id).startswith("api-key:")
+            )
+        )
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
         await clear_kb_data(self.kb_manager)
 
     async def _import_main_database(
-        self, data: dict[str, list[dict]]
+        self,
+        data: dict[str, list[dict]],
+        *,
+        session: Any | None = None,
+        result: ImportResult | None = None,
     ) -> dict[str, int]:
         """导入主数据库数据"""
+        if session is not None:
+            return await self._import_main_database_rows(data, session, result)
+        async with self.main_db.get_db() as db_session:
+            async with db_session.begin():
+                return await self._import_main_database_rows(data, db_session, result)
+
+    async def _import_main_database_rows(
+        self,
+        data: dict[str, list[dict]],
+        session: Any,
+        result: ImportResult | None,
+    ) -> dict[str, int]:
         imported: dict[str, int] = {}
+        for table_name, rows in data.items():
+            model_class = MAIN_DB_MODELS.get(table_name)
+            if not model_class:
+                logger.warning("未知的备份数据表，已跳过")
+                continue
+            normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
-        async with self.main_db.get_db() as session:
-            async with session.begin():
-                for table_name, rows in data.items():
-                    model_class = MAIN_DB_MODELS.get(table_name)
-                    if not model_class:
-                        logger.warning("未知的备份数据表，已跳过")
-                        continue
-                    normalized_rows = self._preprocess_main_table_rows(table_name, rows)
+            count = 0
+            for row in normalized_rows:
+                try:
+                    # 转换 datetime 字符串为 datetime 对象
+                    row = self._convert_datetime_fields(row, model_class)
+                    obj = model_class(**row)
+                    async with session.begin_nested():
+                        session.add(obj)
+                        if isinstance(obj, ApiKey):
+                            self._restore_api_key_capabilities(session, obj)
+                        await session.flush()
+                    count += 1
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    if result is not None:
+                        result.add_warning(f"导入 {table_name} 记录失败，该行已跳过")
+                    logger.warning(
+                        "导入记录到 %s 失败: %s",
+                        table_name,
+                        safe_error("", exc),
+                    )
 
-                    count = 0
-                    for row in normalized_rows:
-                        try:
-                            # 转换 datetime 字符串为 datetime 对象
-                            row = self._convert_datetime_fields(row, model_class)
-                            obj = model_class(**row)
-                            session.add(obj)
-                            if isinstance(obj, ApiKey):
-                                self._restore_api_key_capabilities(session, obj)
-                            count += 1
-                        except asyncio.CancelledError:
-                            raise
-                        except Exception as exc:
-                            logger.warning(
-                                "导入记录到 %s 失败: %s",
-                                table_name,
-                                safe_error("", exc),
-                            )
-
-                    imported[table_name] = count
-                    logger.debug(f"导入表 {table_name}: {count} 条记录")
+            imported[table_name] = count
+            logger.debug(f"导入表 {table_name}: {count} 条记录")
 
         return imported
 
@@ -618,6 +655,15 @@ class AstrBotImporter:
     def _preprocess_main_table_rows(
         self, table_name: str, rows: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
+        if table_name == "attachments":
+            attachments_dir = Path(self.config_path).parent / "attachments"
+            rewritten: list[dict[str, Any]] = []
+            for row in rows:
+                original = row.get("path")
+                if isinstance(original, str) and original:
+                    row = {**row, "path": str(attachments_dir / Path(original).name)}
+                rewritten.append(row)
+            return rewritten
         if table_name == "platform_stats":
             normalized_rows = self._merge_platform_stats_rows(rows)
             duplicate_count = len(rows) - len(normalized_rows)

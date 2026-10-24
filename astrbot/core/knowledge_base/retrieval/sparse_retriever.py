@@ -171,6 +171,8 @@ class SparseRetriever:
         kb_options: dict,
     ) -> list[SparseResult]:
         tokenized_query = tokenize_text(query, self.hit_stopwords)
+        if not tokenized_query:
+            return []
         results: list[SparseResult] = []
         for kb_id in kb_ids:
             vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")

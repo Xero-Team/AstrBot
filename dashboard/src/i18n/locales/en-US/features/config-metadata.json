@@ -920,10 +920,6 @@
           "hint": "Used to verify LINE webhook signatures."
         }
       },
-      "misskey_allow_insecure_downloads": {
-        "description": "Allow Insecure Downloads (Disable SSL Verification)",
-        "hint": "If remote servers have certificate issues, SSL verification will be disabled as a fallback. Use only when necessary due to security risks."
-      },
       "misskey_default_visibility": {
         "description": "Default Post Visibility",
         "hint": "Default visibility for bot posts. public: public, home: home timeline, followers: followers only."

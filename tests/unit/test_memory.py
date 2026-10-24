@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ from astrbot.core.memory.tools import (
     SearchMemoryTool,
 )
 from astrbot.core.memory.writeback import MemoryFactExtractor, MemoryProfileRefresher
+from astrbot.core.memory.writeback.worker import MemoryWritebackWorker
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     _run_runtime_memory_postprocess,
 )
@@ -564,3 +566,34 @@ async def test_memory_tuning_probe_records_real_retrieval_metrics(temp_db):
         "User likes retrieval probes."
     )
     assert task.evaluation_result["samples"][1]["top_fact"] is None
+
+
+def test_memory_extractor_splits_preference_clauses():
+    from astrbot.core.memory.writeback.fact_extractor import MemoryFactExtractor
+
+    facts = MemoryFactExtractor().extract("I like tea, but I hate coffee")
+    texts = {fact.fact_text for fact in facts}
+
+    assert "User likes tea." in texts
+    assert "User dislikes coffee." in texts
+    assert all("but" not in text for text in texts)
+
+
+def test_frozenset_round_trip_keeps_tuple_members_hashable():
+    from astrbot.core.catalog_values import freeze_catalog_value, thaw_catalog_value
+
+    frozen = freeze_catalog_value({("a", 1), ("b", 2)})
+    thawed = thaw_catalog_value(frozen)
+
+    assert thawed == {("a", 1), ("b", 2)}
+
+
+@pytest.mark.asyncio
+async def test_memory_writeback_worker_stop_wakes_an_idle_worker():
+    worker = MemoryWritebackWorker(SimpleNamespace())
+    await worker.start()
+    try:
+        await asyncio.wait_for(worker.stop(), timeout=2)
+    finally:
+        if worker._task is not None and not worker._task.done():
+            worker._task.cancel()

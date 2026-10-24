@@ -16,7 +16,10 @@ def _load_compose(name: str) -> dict:
     return loaded
 
 
-@pytest.mark.parametrize("compose_name", ["compose.yml", "compose-with-napcat.yml"])
+@pytest.mark.parametrize(
+    "compose_name",
+    ["compose.yml", "compose-with-napcat.yml", "compose-with-searxng.yml"],
+)
 def test_compose_keeps_astrbot_as_a_local_source_build(compose_name: str) -> None:
     """Compose deployments must build this checkout instead of pulling upstream."""
     compose = _load_compose(compose_name)
@@ -60,9 +63,44 @@ def test_napcat_compose_keeps_astrbot_unprivileged_and_napcat_privileged() -> No
     assert _is_unprivileged(astrbot)
     assert "/var/run/docker.sock:/var/run/docker.sock" in astrbot["volumes"]
     assert napcat["privileged"] is True
+    assert napcat["image"].endswith(":latest")
+    assert napcat["pull_policy"] == "always"
 
 
-@pytest.mark.parametrize("compose_name", ["compose.yml", "compose-with-napcat.yml"])
+def test_searxng_compose_keeps_the_service_private_and_current() -> None:
+    """The search sidecar is internal-only, unprivileged, and refreshed on up."""
+    compose = _load_compose("compose-with-searxng.yml")
+    astrbot = compose["services"]["astrbot"]
+    searxng = compose["services"]["searxng"]
+
+    assert _is_unprivileged(astrbot)
+    assert _is_unprivileged(searxng)
+    assert searxng["networks"] == ["astrbot_network"]
+    assert "./searxng:/etc/searxng:Z" in searxng["volumes"]
+    assert searxng["image"].endswith(":latest")
+    assert searxng["pull_policy"] == "always"
+
+    ports = [str(port) for port in searxng["ports"]]
+    assert any("127.0.0.1" in port and port.endswith(":8080") for port in ports), ports
+    assert "http://searxng:8080" in yaml.safe_dump(compose)
+
+
+def test_searxng_entrypoint_enables_json_and_generates_a_secret() -> None:
+    """First start must produce a private settings.yml that the API can use."""
+    script = (REPO_ROOT / "scripts/searxng/entrypoint.sh").read_text(encoding="utf-8")
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    assert "use_default_settings: true" in script
+    assert "- json" in script
+    assert "secret_key" in script
+    assert "exec /usr/local/searxng/entrypoint.sh" in script
+    assert "/searxng/" in gitignore
+
+
+@pytest.mark.parametrize(
+    "compose_name",
+    ["compose.yml", "compose-with-napcat.yml", "compose-with-searxng.yml"],
+)
 def test_compose_does_not_ship_a_separate_docs_service(compose_name: str) -> None:
     """Documentation is bundled into the Dashboard at /help/, not a sidecar."""
     compose = _load_compose(compose_name)
@@ -174,6 +212,7 @@ def test_ci_validates_compose_and_dockerfile_build_syntax() -> None:
     for command in (
         "docker compose -f compose.yml config --quiet",
         "docker compose -f compose-with-napcat.yml config --quiet",
+        "docker compose -f compose-with-searxng.yml config --quiet",
         "docker compose --dry-run -f compose.yml build astrbot",
         "docker build --check --file Dockerfile .",
     ):

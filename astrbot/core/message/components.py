@@ -274,6 +274,7 @@ class Record(DeferredMediaSourceComponent):
             try:
                 file_exists = os.path.exists(self.file)
             except OSError:
+                # A path that cannot be probed is treated as absent.
                 pass
             if (
                 is_file_uri(self.file)
@@ -291,11 +292,13 @@ class Record(DeferredMediaSourceComponent):
             try:
                 url_exists = os.path.exists(self.url)
             except OSError:
+                # A path that cannot be probed is treated as absent.
                 pass
             if is_file_uri(self.url):
                 try:
                     decoded_url_exists = os.path.exists(self._decode_file_uri(self.url))
                 except OSError:
+                    # A path that cannot be probed is treated as absent.
                     pass
             if (
                 is_file_uri(self.url)
@@ -312,6 +315,7 @@ class Record(DeferredMediaSourceComponent):
                 if os.path.exists(self.path):
                     return self.path
             except OSError:
+                # A path that cannot be probed is treated as absent.
                 pass
 
         # 4) 最后裸返回 file（即使不行也要让调用方看到原始内容）
@@ -396,6 +400,7 @@ class Video(DeferredMediaSourceComponent):
             try:
                 candidate_exists = os.path.exists(candidate)
             except OSError:
+                # A path that cannot be probed is treated as absent.
                 pass
             if (
                 is_file_uri(candidate)
@@ -411,6 +416,7 @@ class Video(DeferredMediaSourceComponent):
                 if os.path.exists(self.path):
                     return self.path
             except OSError:
+                # A path that cannot be probed is treated as absent.
                 pass
 
         return self.file or self.url or ""
@@ -438,6 +444,7 @@ class Video(DeferredMediaSourceComponent):
             if os.path.exists(file_source):
                 return os.path.abspath(file_source)
         except OSError:
+            # An unreadable path is reported as invalid below.
             pass
         raise Exception(f"not a valid file: {file_source}")
 
@@ -472,11 +479,14 @@ class Video(DeferredMediaSourceComponent):
 
     async def to_dict(self) -> dict:
         """Serialize the video after resolving its public file reference."""
-        url_or_path = self.file
+        await self._resolve_deferred_source()
+        url_or_path = self.file or self.url or self.path or ""
         if url_or_path.startswith("http"):
             payload_file = url_or_path
         elif self._callback_api_base and self._file_token_service:
-            payload_file = await self._register_runtime_file(url_or_path)
+            payload_file = await self._register_runtime_file(
+                await self.convert_to_file_path()
+            )
         else:
             payload_file = url_or_path
         data: dict[str, object] = {

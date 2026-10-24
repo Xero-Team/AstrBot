@@ -329,7 +329,6 @@ class GroupChatContext:
             cnt = len(self.raw_records.get(umo, deque()))
             self.raw_records.pop(umo, None)
             self._record_ids.pop(umo, None)
-        self._locks.pop(umo, None)
         async with self._caption_claim_lock:
             self._caption_last_claim.pop(umo, None)
         stale_tokens = [

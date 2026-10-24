@@ -257,7 +257,11 @@ async def test_importer_database_clear_failure_hides_internal_cause(
     with zipfile.ZipFile(backup_path, "w") as archive:
         archive.writestr("manifest.json", f'{{"astrbot_version": "{VERSION}"}}')
         archive.writestr("databases/main_db.json", "{}")
-    importer = AstrBotImporter(main_db=MagicMock())
+    session = MagicMock()
+    session.begin.return_value = _AsyncContext(None)
+    main_db = MagicMock()
+    main_db.get_db.return_value = _AsyncContext(session)
+    importer = AstrBotImporter(main_db=main_db)
     importer._clear_main_db = AsyncMock(
         side_effect=DatabaseClearError(_SENSITIVE_ERROR)
     )
@@ -291,9 +295,7 @@ async def test_exporter_unknown_exception_log_is_redacted(
 
 
 @pytest.mark.asyncio
-async def test_exporter_best_effort_failure_log_is_redacted(
-    monkeypatch, caplog
-) -> None:
+async def test_exporter_failure_log_is_redacted(monkeypatch, caplog) -> None:
     exporter = AstrBotExporter(main_db=MagicMock())
     archive = MagicMock()
     archive.write.side_effect = RuntimeError(_SENSITIVE_ERROR)
@@ -303,10 +305,11 @@ async def test_exporter_best_effort_failure_log_is_redacted(
     )
 
     with caplog.at_level(logging.WARNING, logger="astrbot"):
-        await exporter._export_attachments(
-            archive,
-            [{"path": "attachment.txt", "attachment_id": "attachment"}],
-        )
+        with pytest.raises(RuntimeError, match="导出附件失败"):
+            await exporter._export_attachments(
+                archive,
+                [{"path": "attachment.txt", "attachment_id": "attachment"}],
+            )
 
     _assert_no_sensitive_values(caplog.text)
 

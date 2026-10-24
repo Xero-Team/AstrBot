@@ -10,6 +10,7 @@ class _Event:
         self.unified_msg_origin = umo
         self.extras: dict[str, object] = {}
         self.stopped = False
+        self.result: object | None = None
 
     def set_extra(self, key: str, value: object) -> None:
         self.extras[key] = value
@@ -17,8 +18,14 @@ class _Event:
     def get_extra(self, key: str, default=None):
         return self.extras.get(key, default)
 
+    def set_result(self, result: object) -> None:
+        self.result = result
+
     def stop_event(self) -> None:
         self.stopped = True
+
+    def clear_result(self) -> None:
+        self.result = None
 
 
 def test_request_agent_stop_invokes_all_callbacks_despite_one_failure():
@@ -40,6 +47,17 @@ def test_request_agent_stop_invokes_all_callbacks_despite_one_failure():
     assert first.extras["agent_stop_requested"] is True
     assert second.extras["agent_stop_requested"] is True
     assert set(called) == {"broken", "second"}
+
+
+def test_stop_all_discards_pending_results():
+    registry = ActiveEventRegistry()
+    event = _Event("webchat:session")
+    event.set_result(object())
+    registry.register(event)
+
+    assert registry.stop_all("webchat:session") == 1
+    assert event.stopped is True
+    assert event.result is None
 
 
 def test_unregister_agent_stop_callback_and_event_release_runner_controls():

@@ -175,6 +175,22 @@ class PromptStoreMixin(DatabaseStoreMixin):
         sort_order: int | None = None,
     ) -> PromptFolder | None:
         """Update a prompt folder."""
+        if parent_id is not NOT_GIVEN and parent_id is not None:
+            if parent_id == folder_id:
+                raise ValueError("a prompt folder cannot be its own parent")
+            async with store_session(self) as session:
+                session: AsyncSession
+                rows = await session.execute(
+                    select(PromptFolder.folder_id, PromptFolder.parent_id)
+                )
+                parents = {row[0]: row[1] for row in rows}
+            cursor = parent_id
+            seen: set[str] = set()
+            while cursor is not None and cursor not in seen:
+                if cursor == folder_id:
+                    raise ValueError("a prompt folder cannot move below its descendant")
+                seen.add(cursor)
+                cursor = parents.get(cursor)
         async with store_session(self) as session:
             session: AsyncSession
             async with session.begin():

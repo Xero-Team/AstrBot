@@ -489,14 +489,14 @@
 
       function extractLanguage(codeElement) {
         const className = codeElement.className || "";
-        const match = className.match(/language-([\\w+#.-]+)/i);
+        const match = className.match(/language-([\w+#.-]+)/i);
         return match ? match[1] : "";
       }
 
       function enhanceCodeBlocks(root) {
         const blocks = Array.from(root.querySelectorAll("pre > code")).map((codeElement) => ({
           rawLanguage: extractLanguage(codeElement),
-          displayLanguage: extractLanguage(codeElement).trim().split(/\\s+/, 1)[0].toLowerCase(),
+          displayLanguage: extractLanguage(codeElement).trim().split(/\s+/, 1)[0].toLowerCase(),
         }));
 
         if (window.AstrBotT2IShiki) {

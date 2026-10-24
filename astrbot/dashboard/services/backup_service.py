@@ -59,7 +59,8 @@ def secure_filename(filename: str) -> str:
 def generate_unique_filename(original_filename: str) -> str:
     name, ext = os.path.splitext(original_filename)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{name}_{timestamp}{ext}"
+    suffix = uuid.uuid4().hex[:8]
+    return f"{name}_{timestamp}_{suffix}{ext}"
 
 
 class BackupService:
@@ -79,6 +80,8 @@ class BackupService:
         self.backup_progress: dict[str, dict] = {}
         self.chunked_uploads = ChunkedUploadService(self.chunks_dir)
         self._background_tasks: set[asyncio.Task] = set()
+        self._active_data_task: str | None = None
+        self._active_import_path: str | None = None
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -136,6 +139,8 @@ class BackupService:
         progress = self.backup_progress[task_id]
         if status is not None:
             progress["status"] = status
+            if task_id in self.backup_tasks:
+                self.backup_tasks[task_id]["status"] = status
         if stage is not None:
             progress["stage"] = stage
         if current is not None:
@@ -215,14 +220,24 @@ class BackupService:
             "page_size": page_size,
         }
 
+    def _claim_data_task(self) -> None:
+        if self._active_data_task is not None:
+            raise BackupServiceError("已有备份导入或导出任务正在运行")
+
     def export_backup(self) -> dict:
+        self._claim_data_task()
         task_id = str(uuid.uuid4())
-        self._init_task(task_id, "export", "pending")
-        create_tracked_task(
-            self._background_tasks,
-            self.background_export_task(task_id),
-            name=f"backup-export:{task_id}",
-        )
+        self._active_data_task = task_id
+        try:
+            self._init_task(task_id, "export", "pending")
+            create_tracked_task(
+                self._background_tasks,
+                self.background_export_task(task_id),
+                name=f"backup-export:{task_id}",
+            )
+        except BaseException:
+            self._active_data_task = None
+            raise
         return {
             "task_id": task_id,
             "message": "export task created, processing in background",
@@ -257,6 +272,9 @@ class BackupService:
                 safe_error("", exc),
             )
             self._set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
+        finally:
+            if self._active_data_task == task_id:
+                self._active_data_task = None
 
     async def upload_backup(self, file: Any | None) -> dict:
         if not file:
@@ -464,13 +482,21 @@ class BackupService:
         if not os.path.exists(zip_path):
             raise BackupServiceError(f"备份文件不存在: {filename}")
 
+        self._claim_data_task()
         task_id = str(uuid.uuid4())
-        self._init_task(task_id, "import", "pending")
-        create_tracked_task(
-            self._background_tasks,
-            self.background_import_task(task_id, zip_path),
-            name=f"backup-import:{task_id}",
-        )
+        self._active_data_task = task_id
+        self._active_import_path = zip_path
+        try:
+            self._init_task(task_id, "import", "pending")
+            create_tracked_task(
+                self._background_tasks,
+                self.background_import_task(task_id, zip_path),
+                name=f"backup-import:{task_id}",
+            )
+        except BaseException:
+            self._active_data_task = None
+            self._active_import_path = None
+            raise
 
         return {
             "task_id": task_id,
@@ -512,6 +538,10 @@ class BackupService:
                 safe_error("", exc),
             )
             self._set_task_result(task_id, "failed", error=_BACKGROUND_TASK_ERROR)
+        finally:
+            if self._active_data_task == task_id:
+                self._active_data_task = None
+            self._active_import_path = None
 
     def get_progress(self, task_id: str | None) -> dict:
         if not task_id:
@@ -550,6 +580,15 @@ class BackupService:
             raise BackupServiceError("备份文件不存在")
         return BackupDownload(path=file_path, filename=filename)
 
+    def _is_active_import(self, file_path: str) -> bool:
+        active = self._active_import_path
+        if not active:
+            return False
+        try:
+            return os.path.samefile(file_path, active)
+        except OSError:
+            return False
+
     def delete_backup(self, data: object) -> tuple[dict | None, str | None]:
         payload = self._payload(data)
         filename = self._validate_backup_filename(
@@ -557,6 +596,8 @@ class BackupService:
             missing="缺少参数 filename",
         )
         file_path = os.path.join(self.backup_dir, filename)
+        if self._is_active_import(file_path):
+            raise BackupServiceError("该备份正在导入，无法删除")
         if not os.path.exists(file_path):
             raise BackupServiceError("备份文件不存在")
 
@@ -585,6 +626,8 @@ class BackupService:
             raise BackupServiceError("备份文件不存在")
 
         new_path = os.path.join(self.backup_dir, new_filename)
+        if self._is_active_import(old_path):
+            raise BackupServiceError("该备份正在导入，无法重命名")
         if os.path.exists(new_path):
             raise BackupServiceError(f"文件名 '{new_filename}' 已存在")
 

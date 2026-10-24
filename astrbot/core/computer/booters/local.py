@@ -177,6 +177,35 @@ def _decode_bytes_with_fallback(
     return output.decode("utf-8", errors="replace")
 
 
+def _trim_incomplete_utf8(data: bytes, *, final: bool = False) -> bytes:
+    """Drop a trailing incomplete multibyte sequence so the next poll finishes it.
+
+    Args:
+        data: Bytes read from the session output file.
+        final: Whether no more output can arrive. A truncated sequence at EOF
+            cannot be completed, so it must be consumed instead of retried
+            forever.
+    """
+    if not data or final:
+        return data
+    encodings = ["utf-8", locale.getpreferredencoding(False)]
+    for encoding in dict.fromkeys(encodings):
+        try:
+            data.decode(encoding)
+            return data
+        except (LookupError, UnicodeDecodeError) as exc:
+            # Only a truncated multibyte sequence at the end may be retried by
+            # the next poll. Other trailing bytes are invalid in this encoding;
+            # trimming them would keep the cursor on them forever.
+            if (
+                isinstance(exc, UnicodeDecodeError)
+                and exc.reason == "unexpected end of data"
+            ):
+                return data[: exc.start]
+            continue
+    return data
+
+
 def _decode_shell_output(output: bytes | str | None) -> str:
     # Normalize CRLF so tool text output is identical across platforms.
     return _decode_bytes_with_fallback(output, preferred_encoding="utf-8").replace(
@@ -312,10 +341,12 @@ class LocalShellComponent(ShellComponent):
                     try:
                         proc.kill()
                     except Exception:
+                        # Best-effort kill; the child may already be gone.
                         pass
                 try:
                     proc.wait(timeout=5)
                 except Exception:
+                    # Best-effort wait; the original error is re-raised below.
                     pass
                 raise
             return {
@@ -490,6 +521,7 @@ class LocalShellComponent(ShellComponent):
             try:
                 await asyncio.wait_for(asyncio.shield(wait_task), yield_time_ms / 1000)
             except TimeoutError:
+                # A yield timeout is expected; poll reports the pending state.
                 pass
         return await self.poll_session(
             owner_id=owner_id,
@@ -540,7 +572,15 @@ class LocalShellComponent(ShellComponent):
                         return b"", read_cursor, read_cursor
                     start = min(read_cursor, size)
                     session.output_file.seek(start)
-                    data = session.output_file.read(max_output_chars)
+                    data = session.output_file.read(max(1, max_output_chars))
+                # Only the reader finishing proves no later byte can complete a
+                # truncated sequence. A reaped process can still have buffered
+                # output in the pipe; consuming it there would split the next
+                # poll's bytes and corrupt the character.
+                data = _trim_incomplete_utf8(
+                    data,
+                    final=session.reader_task.done(),
+                )
                 return data, start + len(data), size
 
             return await asyncio.to_thread(_read)
@@ -561,6 +601,7 @@ class LocalShellComponent(ShellComponent):
                     try:
                         await waiter
                     except asyncio.CancelledError:
+                        # The waiter is cancelled because the session already ended.
                         pass
             if session.wait_task.done():
                 await session.reader_task
@@ -635,6 +676,7 @@ class LocalShellComponent(ShellComponent):
                     try:
                         native_process.send_signal(signal.SIGINT)
                     except ProcessLookupError:
+                        # The process exited before the signal could be delivered.
                         pass
         return await self.poll_session(
             owner_id=owner_id,
@@ -788,6 +830,7 @@ class LocalShellComponent(ShellComponent):
             try:
                 await session.timeout_task
             except asyncio.CancelledError:
+                # The timeout task is cancelled by this cleanup path.
                 pass
         with session.output_lock:
             session.output_file.close()

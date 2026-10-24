@@ -4,6 +4,8 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -78,6 +80,22 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
     assert result["stdout"] == "技能内容"
     assert result["stderr"] == ""
     assert result["exit_code"] == 0
+
+
+def test_trim_incomplete_utf8_keeps_invalid_trailing_byte():
+    # A genuinely invalid byte must advance the cursor; trimming it would make
+    # every poll return nothing and block later output.
+    assert local_booter._trim_incomplete_utf8(b"abc\xff") == b"abc\xff"
+
+
+def test_trim_incomplete_utf8_drops_truncated_sequence():
+    truncated = "中".encode()[:-1]
+    assert local_booter._trim_incomplete_utf8(truncated) == b""
+
+
+def test_trim_incomplete_utf8_consumes_truncated_sequence_at_eof():
+    truncated = "中".encode()[:-1]
+    assert local_booter._trim_incomplete_utf8(truncated, final=True) == truncated
 
 
 def test_local_shell_component_uses_windows_locale_for_gbk(monkeypatch):
@@ -435,6 +453,29 @@ def test_managed_shell_captures_output_and_supports_incremental_poll(tmp_path):
     asyncio.run(scenario())
 
 
+def test_managed_shell_consumes_a_truncated_tail_after_exit(tmp_path):
+    async def scenario() -> None:
+        shell = LocalShellComponent(session_ttl_seconds=60)
+        result = await shell.exec_managed(
+            _python_command(
+                r"import sys; sys.stdout.buffer.write(b'abc\xe4\xb8'); "
+                "sys.stdout.buffer.flush()"
+            ),
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=30_000,
+        )
+        assert result["status"] == "completed"
+        assert "abc" in result["stdout"]
+        # The trailing incomplete sequence cannot be completed after exit; it
+        # must be consumed so the session is not stuck reporting has_more.
+        assert result["session_closed"] is True
+        await shell.shutdown_sessions()
+
+    asyncio.run(scenario())
+
+
 def test_managed_shell_owner_isolation_and_write(tmp_path):
     async def scenario() -> None:
         shell = LocalShellComponent(session_ttl_seconds=60)
@@ -619,3 +660,46 @@ async def test_exec_managed_skips_blocklist_inside_sandbox(tmp_path, monkeypatch
             allowed_root=str(tmp_path),
             sandboxed=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_poll_session_keeps_a_truncated_tail_until_the_reader_finishes():
+    shell = LocalShellComponent()
+    output = tempfile.TemporaryFile(mode="w+b")
+    output.write("中".encode()[:2])
+    output.flush()
+    output_lock = threading.Lock()
+
+    async def finish_reader() -> None:
+        await asyncio.sleep(0.05)
+        with output_lock:
+            output.seek(0, os.SEEK_END)
+            output.write("中".encode()[2:])
+            output.flush()
+
+    session = local_booter._LocalShellSession(
+        session_id="session-a",
+        runtime_id="local",
+        umo="owner",
+        sender_id="",
+        creator_is_admin=False,
+        sandboxed=False,
+        process=SimpleNamespace(returncode=0, pid=12345),
+        output_file=output,
+        output_lock=output_lock,
+        started_at=0.0,
+        output_event=asyncio.Event(),
+        reader_task=asyncio.create_task(finish_reader()),
+        wait_task=asyncio.create_task(asyncio.sleep(0)),
+        last_activity=0.0,
+    )
+    shell._sessions[session.session_id] = session
+
+    result = await shell.poll_session(
+        owner_id="owner",
+        session_id=session.session_id,
+        max_output_chars=100,
+    )
+
+    assert result["stdout"] == "中"
+    assert result["has_more"] is False

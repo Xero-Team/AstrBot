@@ -24,6 +24,25 @@ docker compose up -d astrbot
 需要钉死某次构建时，改用 `sha-<7 位短哈希>` 或当天的 `nightly-YYYYMMDD`。
 首次推送后的 GHCR 包默认私有；维护者把包可见性改成公开之前，匿名 `docker pull` 会失败。
 
+`compose-with-napcat.yml` 和 `compose-with-searxng.yml` 里的 `astrbot` 服务也可以
+这样替换：删除它的 `build:` 块，保留
+`image: ghcr.io/xero-team/astrbot:nightly`。如果想保留原文件，可以用 Compose
+覆盖文件重置构建定义（需要 Compose 2.24+）：
+
+```yaml
+# compose.override.yml
+services:
+  astrbot:
+    image: ghcr.io/xero-team/astrbot:nightly
+    build: !reset null
+```
+
+```bash
+docker compose -f compose-with-searxng.yml -f compose.override.yml up -d
+```
+
+SearXNG 边车始终从自己的上游镜像拉取，只有 AstrBot 服务会切换。
+
 ## 从源码构建
 
 需要完整功能或定制运行时功能时，请克隆本仓库，并使用根目录的 `Dockerfile` 和
@@ -31,10 +50,11 @@ Compose 文件在本地构建。文档会随 Dashboard 构建进 WebUI 的 `/hel
 
 ## 选择 Compose 文件
 
-仓库提供两条本地构建路径：
+仓库提供三条本地构建路径：
 
 - `compose.yml`：运行 AstrBot，适合接入 QQ 官方机器人、Telegram、Discord 等平台，或独立管理其他机器人协议端。
-- `compose-with-napcat.yml`：运行 AstrBot 和 NapCat，适合 QQ 个人号；AstrBot 仍由本地源码构建，NapCat 使用所引用的 NapCat 容器镜像。
+- `compose-with-napcat.yml`：运行 AstrBot 和 NapCat，适合 QQ 个人号；AstrBot 仍由本地源码构建，NapCat 使用上游 `latest` 镜像。
+- `compose-with-searxng.yml`：运行 AstrBot 和用于自托管网页搜索的 SearXNG；AstrBot 仍由本地源码构建，SearXNG 使用上游 `latest` 镜像。
 
 先克隆仓库：
 
@@ -102,11 +122,13 @@ ASTRBOT_FEATURES=browser,documents,media,ocr,fonts,node,docker
 ASTRBOT_FEATURES=browser,node,docker docker compose up -d --build
 ```
 
-NapCat 组合使用同一个参数：
+NapCat 和 SearXNG 组合使用同一个参数：
 
 ```bash
 ASTRBOT_FEATURES=browser,node,docker \
   docker compose -f compose-with-napcat.yml up -d --build
+ASTRBOT_FEATURES=minimal \
+  docker compose -f compose-with-searxng.yml up -d --build
 ```
 
 可用的功能组如下：
@@ -169,6 +191,9 @@ docker compose -f compose-with-napcat.yml up -d --build
 docker compose -f compose-with-napcat.yml logs -f astrbot napcat
 ```
 
+NapCat 跟随上游 `latest` 标签，每次 `docker compose up` 都会重新拉取。如果需要
+可复现的部署，请在 Compose 文件中固定具体的 tag 和 digest。
+
 Linux 上可让 NapCat 使用当前宿主用户的 UID/GID，以减少挂载目录权限问题：
 
 ```bash
@@ -194,6 +219,51 @@ AstrBot 与 NapCat 位于同一个 Docker 网络。使用 `MODE=ws` 时，请在
 
 如果保留 Compose 原有的 `MODE=astrbot`，则不要创建独立 `NapCat` 平台。请创建 `OneBot v11` 平台，将 `ws_reverse_host` 设为 `0.0.0.0`，端口保持 `6199`。`6199` 只需在内部 Docker 网络可达，不需要发布到宿主机。如需鉴权，同样要在第一次生成配置后从 Compose 删除 `MODE`，再在 NapCat 与 AstrBot 两端设置相同 token。
 
+## 同时启动 AstrBot 和 SearXNG
+
+`compose-with-searxng.yml` 会在同一个 Docker 网络中启动 AstrBot 和 SearXNG。
+AstrBot 仍由本地源码构建；SearXNG 使用上游 `latest` 镜像。如果不想在本地构建
+AstrBot，可按[拉取 nightly 镜像](#拉取-nightly-镜像)中的覆盖方式改用 GHCR 镜像；
+SearXNG 仍从自己的镜像拉取。
+
+```bash
+docker compose -f compose-with-searxng.yml up -d --build
+docker compose -f compose-with-searxng.yml logs -f astrbot searxng
+```
+
+首次启动时，`scripts/searxng/entrypoint.sh` 会创建 `./searxng/settings.yml`，
+写入随机生成的 `server.secret_key`，并在 `search.formats` 中启用 `html` 与
+`json`。该目录已被 Git 忽略；文件包含实例密钥，不要提交。文件存在后不会被重写；
+只有需要更换密钥时，才删除它并重新创建 SearXNG 容器。
+
+该 Compose 默认发布（宿主机仅绑定环回地址）：
+
+- `6185`：AstrBot WebUI（文档在 `/help/`）。
+- `8080`：SearXNG WebUI。可通过 `SEARXNG_PORT` 或 `SEARXNG_BIND_ADDRESS` 修改。
+
+并持久化：
+
+- `./data`。
+- `./searxng`，用于保存 `settings.yml`。
+- `searxng-cache` 卷，用于保存可重新生成的缓存数据。
+
+在 Linux 上，镜像首次启动时可能把 `./searxng` 的所有者改成镜像内的
+`searxng` 用户（UID 977）；之后编辑 `settings.yml` 可能需要提升权限。
+
+AstrBot 通过服务名访问 SearXNG。进入 WebUI 的 **配置 → AI → 网页搜索**，在
+`网页搜索来源` 中保留 `SearXNG`，并把 `SearXNG 实例地址`
+（`provider_settings.websearch_searxng_url`）填为 `http://searxng:8080`。
+发布的宿主机端口仅供浏览和调试，不要填入该地址。SearXNG 需要访问公网搜索引擎，
+因此这里使用普通 bridge 网络，而不是仅限内部的网络。该服务默认关闭 SearXNG 的
+限流器（limiter），因为它只绑定环回地址；不要在没有反向代理和限流器的情况下把它
+公开到公网。
+
+该服务跟随上游 `latest` 标签，并设置了 `pull_policy: always`，因此每次执行
+`docker compose up -d` 都会检查是否有新镜像。只更新 SearXNG 时，先运行
+`docker compose -f compose-with-searxng.yml pull searxng`，再运行
+`docker compose -f compose-with-searxng.yml up -d searxng`。如果需要可复现的部署，
+请把 `latest` 换成 Docker Hub 上的具体版本 tag 和 digest。
+
 ## 健康检查端点
 
 AstrBot 在 WebUI 端口上提供两个无需鉴权、无副作用的端点：
@@ -202,9 +272,10 @@ AstrBot 在 WebUI 端口上提供两个无需鉴权、无副作用的端点：
 - `GET /readyz`：就绪探针。核心启动完成后返回 `200`，启动过程中返回 `503`
   和 `{"status": "not_ready"}`。
 
-仓库自带的 `compose.yml` 与 `compose-with-napcat.yml` 使用 `/healthz` 作为容器
-健康检查。如果编排系统需要在运行时可用前暂不转发流量，可改用 `/readyz`。
-两个端点都不会暴露内部状态，也不需要 Dashboard 鉴权。
+仓库自带的 `compose.yml`、`compose-with-napcat.yml` 与
+`compose-with-searxng.yml` 使用 `/healthz` 作为 AstrBot 容器健康检查；
+SearXNG 服务使用它自己的 `/healthz`。如果编排系统需要在运行时可用前暂不转发流量，
+可改用 `/readyz`。两个 AstrBot 端点都不会暴露内部状态，也不需要 Dashboard 鉴权。
 
 ## 在 Docker 中配置 HTTP 代理
 
@@ -234,9 +305,9 @@ docker compose exec astrbot astrbot password
 docker compose restart astrbot
 ```
 
-如需同时修改用户名，请在第一条命令后添加 `--username <新用户名>`。使用 NapCat
-Compose 文件时，两条命令都要加上 `-f compose-with-napcat.yml`。该命令会更新挂载的
-`data/` 配置；不要通过手工编辑密码或 JWT 字段重置凭据。
+如需同时修改用户名，请在第一条命令后添加 `--username <新用户名>`。使用其他 Compose
+文件时，两条命令都要加上对应的 `-f <文件>`。该命令会更新挂载的 `data/` 配置；
+不要通过手工编辑密码或 JWT 字段重置凭据。
 
 更新时先备份 `data/`，再拉取代码并重新构建所用服务：
 
@@ -250,4 +321,11 @@ NapCat 组合部署则使用：
 ```bash
 git pull --ff-only
 docker compose -f compose-with-napcat.yml up -d --build
+```
+
+SearXNG 组合部署使用：
+
+```bash
+git pull --ff-only
+docker compose -f compose-with-searxng.yml up -d --build
 ```

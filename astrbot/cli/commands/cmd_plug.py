@@ -1,14 +1,15 @@
 import re
-import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
 import click
+import yaml
 
 from ..utils.basic import check_astrbot_root, get_astrbot_root
 from ..utils.plugin import (
     PluginRecord,
     PluginStatus,
+    _cleanup_local_plugin_target,
     build_plug_list,
     get_git_repo,
     install_local_plugin,
@@ -88,14 +89,15 @@ def new(name: str) -> None:
 
     click.echo("Rewriting plugin metadata...")
     # Rewrite metadata.yaml
+    metadata = {
+        "name": name,
+        "desc": desc,
+        "version": version,
+        "author": author,
+        "repo": repo,
+    }
     with open(plug_path / "metadata.yaml", "w", encoding="utf-8") as f:
-        f.write(
-            f"name: {name}\n"
-            f"desc: {desc}\n"
-            f"version: {version}\n"
-            f"author: {author}\n"
-            f"repo: {repo}\n",
-        )
+        yaml.safe_dump(metadata, f, allow_unicode=True, sort_keys=False)
 
     # Rewrite README.md
     with open(plug_path / "README.md", "w", encoding="utf-8") as f:
@@ -115,22 +117,25 @@ def new(name: str) -> None:
         count=1,
         flags=re.MULTILINE,
     )
+
+    def _rewrite_star_import(match: re.Match[str]) -> str:
+        names = [
+            part.strip()
+            for part in match.group(1).split(",")
+            if part.strip() and part.strip() != "register"
+        ]
+        return f"from astrbot.api.star import {', '.join(names)}\n" if names else ""
+
     new_content = re.sub(
-        r"from astrbot\.api\.star import ([^\n]*?)\bregister\b,?\s*",
+        r"^from astrbot\.api\.star import \(?([^)\n]*)\)?[ \t]*$\n?",
         lambda match: (
-            "from astrbot.api.star import "
-            + ", ".join(
-                part.strip()
-                for part in match.group(1).split(",")
-                if part.strip() and part.strip() != "register"
-            )
+            _rewrite_star_import(match)
+            if re.search(r"\bregister\b", match.group(1))
+            else match.group(0)
         ),
         new_content,
         count=1,
-    )
-    new_content = new_content.replace(
-        "from astrbot.api.star import \n",
-        "",
+        flags=re.MULTILINE,
     )
 
     with open(plug_path / "main.py", "w", encoding="utf-8") as f:
@@ -234,7 +239,7 @@ def remove(name: str) -> None:
     )
 
     try:
-        shutil.rmtree(plugin_path)
+        _cleanup_local_plugin_target(Path(plugin_path))
         click.echo(f"Plugin {name} has been uninstalled")
     except Exception as e:
         raise click.ClickException(f"Failed to uninstall plugin {name}: {e}")

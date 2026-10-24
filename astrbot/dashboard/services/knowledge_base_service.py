@@ -446,6 +446,7 @@ class KnowledgeBaseService:
         try:
             shutil.rmtree(staging_dir)
         except FileNotFoundError:
+            # A missing staging directory is already clean.
             pass
         except OSError as exc:
             logger.warning(
@@ -1205,6 +1206,8 @@ class KnowledgeBaseService:
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
 
+        page = max(page, 1)
+        page_size = min(max(page_size, 1), 1000)
         offset = (page - 1) * page_size
         return {
             "items": await kb_helper.get_chunks_by_doc_id(

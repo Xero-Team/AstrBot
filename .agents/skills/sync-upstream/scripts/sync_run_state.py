@@ -352,6 +352,8 @@ def cmd_review(args: argparse.Namespace) -> None:
     entry = state["commits"].get(commit)
     if entry is None:
         raise StateError(f"{commit} has not been started")
+    if entry.get("status") == "complete":
+        raise StateError(f"{commit} is already complete; run start to reopen it")
     review_json = getattr(args, "review_json", None)
     risk: str | None = None
     summary = ""

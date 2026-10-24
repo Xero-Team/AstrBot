@@ -45,3 +45,52 @@ Body
     assert "# Not a heading" in chunks[0]
     assert "Title" in chunks[1]
     assert "## Section" in chunks[1]
+
+
+@pytest.mark.asyncio
+async def test_recursive_chunker_never_exceeds_chunk_size_with_overlap():
+    from astrbot.core.knowledge_base.chunking.recursive import (
+        RecursiveCharacterChunker,
+    )
+
+    chunks = await RecursiveCharacterChunker().chunk(
+        "a" * 25 + " " + "b" * 25,
+        chunk_size=10,
+        chunk_overlap=9,
+    )
+
+    assert all(len(chunk) <= 10 for chunk in chunks)
+
+
+def test_overlap_state_never_exceeds_chunk_size():
+    from astrbot.core.knowledge_base.chunking.recursive import (
+        RecursiveCharacterChunker,
+    )
+
+    chunker = RecursiveCharacterChunker(chunk_size=10, chunk_overlap=9)
+    parts, length = chunker._build_overlap_state(
+        combined_text="a" * 7,
+        split="b" * 6,
+        overlap=9,
+        chunk_size=10,
+    )
+
+    assert length <= 10
+    assert len("".join(parts)) <= 10
+
+
+@pytest.mark.asyncio
+async def test_markdown_heading_context_never_exceeds_chunk_size():
+    from astrbot.core.knowledge_base.chunking.markdown import MarkdownChunker
+
+    chunker = MarkdownChunker(
+        chunk_size=30,
+        chunk_overlap=5,
+        include_heading_context=True,
+    )
+    text = "# " + ("VeryLongHeading" * 4) + "\n\n" + ("body " * 20)
+
+    chunks = await chunker.chunk(text)
+
+    assert chunks
+    assert all(len(chunk) <= 30 for chunk in chunks)

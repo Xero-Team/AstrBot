@@ -148,6 +148,7 @@ class ProviderAnthropic(Provider):
                 getattr(anthropic_base_client, "httpx2", httpx),
             )
         except ImportError:
+            # The optional internal httpx alias is not always available.
             pass
         return create_proxy_client(
             "Anthropic",
@@ -511,6 +512,14 @@ class ProviderAnthropic(Provider):
         if isinstance(last_block, dict) and "cache_control" not in last_block:
             last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
 
+    def _default_max_tokens(self) -> int:
+        configured = self.provider_config.get("max_tokens")
+        try:
+            value = int(str(configured))
+        except TypeError, ValueError:
+            return 4096
+        return value if value > 0 else 4096
+
     async def _query(
         self,
         payloads: dict,
@@ -541,7 +550,7 @@ class ProviderAnthropic(Provider):
             }
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 65536
+            payloads["max_tokens"] = self._default_max_tokens()
         self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
@@ -577,10 +586,10 @@ class ProviderAnthropic(Provider):
 
         llm_response = LLMResponse(role="assistant")
 
+        completion_text = ""
         for content_block in completion.content:
             if content_block.type == "text":
-                completion_text = str(content_block.text).strip()
-                llm_response.completion_text = completion_text
+                completion_text += str(content_block.text)
 
             if content_block.type == "thinking":
                 reasoning_content = str(content_block.thinking).strip()
@@ -592,6 +601,8 @@ class ProviderAnthropic(Provider):
                 llm_response.tools_call_name.append(content_block.name)
                 llm_response.tools_call_ids.append(content_block.id)
 
+        if completion_text:
+            llm_response.completion_text = completion_text.strip()
         llm_response.id = completion.id
         llm_response.usage = self._extract_usage(completion.usage)
 
@@ -659,7 +670,7 @@ class ProviderAnthropic(Provider):
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 65536
+            payloads["max_tokens"] = self._default_max_tokens()
         self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)

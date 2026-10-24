@@ -19,7 +19,7 @@ for (const testFile of testFiles) {
 const result = spawnSync(
   process.execPath,
   ['--no-warnings', '--test', ...testFiles],
-  { cwd: dashboardRoot, stdio: 'inherit' },
+  { cwd: dashboardRoot, stdio: 'inherit', timeout: 10 * 60 * 1000 },
 );
 
 if (result.error) {

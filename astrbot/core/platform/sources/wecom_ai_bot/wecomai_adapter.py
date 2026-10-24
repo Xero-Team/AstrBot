@@ -172,6 +172,7 @@ class WecomAIBotAdapter(Platform):
             self.shutdown_event,
         )
         self._stream_plain_cache: dict[str, str] = {}
+        self._stream_image_cache: dict[str, list[str]] = {}
 
         self.webhook_client: WecomAIBotWebhookClient | None = None
         if self.msg_push_webhook_url:
@@ -247,6 +248,7 @@ class WecomAIBotAdapter(Platform):
             stream_id = message_data["stream"]["id"]
             if not self.queue_mgr.has_back_queue(stream_id):
                 self._stream_plain_cache.pop(stream_id, None)
+                self._stream_image_cache.pop(stream_id, None)
                 if self.queue_mgr.is_stream_finished(stream_id):
                     logger.debug(
                         f"Stream already finished, returning end message: {stream_id}"
@@ -305,6 +307,16 @@ class WecomAIBotAdapter(Platform):
             )
             if not finish:
                 self._stream_plain_cache[stream_id] = cached_plain_content
+                if image_base64:
+                    self._stream_image_cache[stream_id] = [
+                        *self._stream_image_cache.get(stream_id, []),
+                        *image_base64,
+                    ]
+            else:
+                image_base64 = [
+                    *self._stream_image_cache.pop(stream_id, []),
+                    *image_base64,
+                ]
             if finish and not latest_plain_content and not image_base64:
                 end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
                     stream_id,
@@ -528,8 +540,12 @@ class WecomAIBotAdapter(Platform):
                 process_encrypted_image(url, aes_key or self.encoding_aes_key)
                 for url, aes_key in _img_url_to_process
             ]
-            results = await asyncio.gather(*tasks)
-            for success, result in results:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, BaseException):
+                    logger.error(f"处理加密图片失败: {result}")
+                    continue
+                success, result = result
                 if success:
                     image_base64.append(result)
                 else:

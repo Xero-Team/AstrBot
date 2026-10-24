@@ -16,8 +16,10 @@ from ..register import register_provider_adapter
 _REQUEST_ERROR = "OpenAI embedding request failed"
 
 
-def _normalize_api_base(api_base: str) -> str:
-    api_base = api_base.strip().removesuffix("/").removesuffix("/embeddings")
+def _normalize_api_base(api_base: str | None) -> str:
+    api_base = (api_base or "").strip().removesuffix("/").removesuffix("/embeddings")
+    if not api_base:
+        return "https://api.openai.com/v1"
     if api_base and not re.search(r"/v\d+$", api_base):
         api_base = api_base + "/v1"
     return api_base

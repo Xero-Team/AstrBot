@@ -297,11 +297,10 @@ async def _merge_concurrent_history(
     if _is_prefix(latest_history, base_history):
         merged = new_history[:unit_start] + latest_history[len(base_history) :]
         merged.extend(current_unit)
-        extra_turns = len(latest_history) > len(base_history)
-        return merged, 0 if extra_turns else token_usage
+        return merged, token_usage
     merged = list(latest_history)
     merged.extend(current_unit)
-    return merged, 0
+    return merged, token_usage
 
 
 def _is_prefix(

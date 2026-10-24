@@ -230,6 +230,8 @@
     "provider.models.empty_current": "（空）",
     "provider.models.hint": "使用 /model set <名称或序号> 切换模型。模型名也可以解析到其他已配置 Provider。",
     "provider.models.invalid_index": "模型序号无效。",
-    "work.status.progress": "执行中：{task}\n编码代理：{agent}\n最新进展：{action}\n工具调用：{tools}；事件：{events}"
+    "work.status.progress": "执行中：{task}\n编码代理：{agent}\n最新进展：{action}\n工具调用：{tools}；事件：{events}",
+    "plugin.disable.failed": "插件操作失败：{error}",
+    "plugin.enable.failed": "插件操作失败：{error}"
   }
 }

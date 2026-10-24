@@ -1057,3 +1057,29 @@ async def test_watch_agent_stop_signal_requests_stop_when_event_is_already_stopp
     await util._watch_agent_stop_signal(runner, event)
 
     assert runner.stop_requested is True
+
+
+@pytest.mark.asyncio
+async def test_buffered_llm_output_is_flushed_when_the_step_limit_ends_the_run():
+    class NeverDoneRunner(FakeRunner):
+        def done(self) -> bool:
+            return False
+
+        async def step(self):
+            yield _response(
+                "llm_result",
+                MessageChain().message("intermediate"),
+            )
+
+    runner = NeverDoneRunner([], event=FakeEvent())
+
+    outputs = [
+        chain
+        async for chain in util.run_agent(
+            runner,
+            max_step=0,
+            buffer_intermediate_messages=True,
+        )
+    ]
+
+    assert [chain.get_plain_text() for chain in outputs] == ["intermediate"]

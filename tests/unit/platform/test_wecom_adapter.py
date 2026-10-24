@@ -43,6 +43,7 @@ def _adapter() -> WecomPlatformAdapter:
     )
     adapter.agent_id = None
     adapter._wechat_kf_seen_text_messages = {}
+    adapter._wechat_kf_cursors = {}
     adapter.handle_msg = AsyncMock()
     return adapter
 
@@ -895,13 +896,13 @@ def test_wecom_kf_sync_uses_next_cursor_until_done():
         )
     )
 
-    latest = adapter._latest_wechat_kf_message("token", "kf")
+    messages = adapter._latest_wechat_kf_messages("token", "kf")
 
-    assert latest == {"msgid": "c"}
+    assert messages == [{"msgid": "a"}, {"msgid": "b"}, {"msgid": "c"}]
     assert calls == ["", "cursor-1", "cursor-2"]
 
 
-def test_wecom_kf_sync_keeps_the_last_message_when_the_terminal_page_is_empty():
+def test_wecom_kf_sync_keeps_every_message_when_the_terminal_page_is_empty():
     responses = [
         {"has_more": 1, "next_cursor": "cursor-1", "msg_list": [{"msgid": "a"}]},
         {"has_more": 0, "next_cursor": "", "msg_list": []},
@@ -914,7 +915,7 @@ def test_wecom_kf_sync_keeps_the_last_message_when_the_terminal_page_is_empty():
         )
     )
 
-    assert adapter._latest_wechat_kf_message("token", "kf") == {"msgid": "a"}
+    assert adapter._latest_wechat_kf_messages("token", "kf") == [{"msgid": "a"}]
     assert calls == ["", "cursor-1"]
 
 
@@ -923,7 +924,7 @@ def test_wecom_kf_sync_tolerates_error_responses_and_stops_on_repeated_cursor():
     adapter.wechat_kf_api = SimpleNamespace(
         sync_msg=lambda *args: {"errcode": 40000, "errmsg": "invalid"}
     )
-    assert adapter._latest_wechat_kf_message("token", "kf") is None
+    assert adapter._latest_wechat_kf_messages("token", "kf") == []
 
     responses = [
         {"has_more": 1, "next_cursor": "same", "msg_list": [{"msgid": "a"}]},
@@ -936,5 +937,118 @@ def test_wecom_kf_sync_tolerates_error_responses_and_stops_on_repeated_cursor():
         )
     )
 
-    assert adapter._latest_wechat_kf_message("token", "kf") == {"msgid": "b"}
+    assert adapter._latest_wechat_kf_messages("token", "kf") == [
+        {"msgid": "a"},
+        {"msgid": "b"},
+    ]
     assert calls == ["", "same"]
+
+
+class _FakeWecomKfApi:
+    def __init__(self, pages: dict[str, object]) -> None:
+        self.pages = pages
+        self.calls: list[tuple[str, str, str]] = []
+
+    def sync_msg(self, token: str, kfid: str, cursor: str):
+        self.calls.append((token, kfid, cursor))
+        return self.pages.get(
+            cursor, {"has_more": 0, "next_cursor": "", "msg_list": []}
+        )
+
+
+def test_wecom_kf_first_pull_skips_historical_messages():
+    adapter = _adapter()
+    adapter._wechat_kf_cursors = {}
+    adapter.wechat_kf_api = _FakeWecomKfApi(
+        {
+            "": {
+                "has_more": 1,
+                "next_cursor": "c1",
+                "msg_list": [{"msgid": "old", "send_time": 100}],
+            },
+            "c1": {
+                "has_more": 0,
+                "next_cursor": "c2",
+                "msg_list": [{"msgid": "new", "send_time": 200}],
+            },
+        }
+    )
+
+    items = adapter._latest_wechat_kf_messages("token", "kfid", since=150)
+
+    assert [item["msgid"] for item in items] == ["new"]
+    assert adapter._wechat_kf_cursors["kfid"] == "c2"
+
+
+def test_wecom_kf_subsequent_pull_uses_stored_cursor():
+    adapter = _adapter()
+    adapter._wechat_kf_cursors = {"kfid": "c2"}
+    api = _FakeWecomKfApi(
+        {
+            "c2": {
+                "has_more": 0,
+                "next_cursor": "c3",
+                "msg_list": [{"msgid": "newer", "send_time": 300}],
+            }
+        }
+    )
+    adapter.wechat_kf_api = api
+
+    items = adapter._latest_wechat_kf_messages("token", "kfid", since=999)
+
+    assert [item["msgid"] for item in items] == ["newer"]
+    assert api.calls == [("token", "kfid", "c2")]
+    assert adapter._wechat_kf_cursors["kfid"] == "c3"
+
+
+def test_wecom_kf_first_pull_without_event_time_keeps_every_message():
+    adapter = _adapter()
+    adapter._wechat_kf_cursors = {}
+    adapter.wechat_kf_api = _FakeWecomKfApi(
+        {
+            "": {
+                "has_more": 0,
+                "next_cursor": "c1",
+                "msg_list": [
+                    {"msgid": "first", "send_time": 100},
+                    {"msgid": "last", "send_time": 200},
+                ],
+            }
+        }
+    )
+
+    items = adapter._latest_wechat_kf_messages("token", "kfid")
+
+    assert [item["msgid"] for item in items] == ["first", "last"]
+    assert adapter._wechat_kf_cursors["kfid"] == "c1"
+
+
+def test_wecom_event_since_bounds_missing_or_invalid_create_time(monkeypatch):
+    monkeypatch.setattr(wecom_adapter.time, "time", lambda: 1000)
+
+    assert wecom_adapter._wecom_event_since({"CreateTime": 500}) == 440
+    assert wecom_adapter._wecom_event_since({}) == 400
+    assert wecom_adapter._wecom_event_since({"CreateTime": "bad"}) == 400
+
+
+def test_wecom_kf_sync_failure_does_not_advance_cursor():
+    adapter = _adapter()
+    calls: list[str] = []
+
+    def sync_msg(token, kfid, cursor=""):
+        calls.append(cursor)
+        if not cursor:
+            return {
+                "has_more": 1,
+                "next_cursor": "cursor-1",
+                "msg_list": [{"msgid": "a"}],
+            }
+        raise RuntimeError("network")
+
+    adapter.wechat_kf_api = SimpleNamespace(sync_msg=sync_msg)
+
+    with pytest.raises(RuntimeError, match="network"):
+        adapter._latest_wechat_kf_messages("token", "kf")
+
+    assert calls == ["", "cursor-1"]
+    assert adapter._wechat_kf_cursors == {}

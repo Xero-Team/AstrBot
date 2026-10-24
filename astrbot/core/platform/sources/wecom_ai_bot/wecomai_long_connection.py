@@ -85,6 +85,7 @@ class WecomAIBotLongConnectionClient:
                     try:
                         await heartbeat_task
                     except asyncio.CancelledError:
+                        # Heartbeat cancellation is expected during shutdown.
                         pass
                     message_tasks = list(self._message_tasks)
                     if message_tasks:
@@ -137,9 +138,14 @@ class WecomAIBotLongConnectionClient:
             if self._shutdown_event.is_set():
                 break
             try:
-                await self.send_command("ping", self.gen_req_id(), None)
+                sent = await self.send_command("ping", self.gen_req_id(), None)
+                if not sent:
+                    raise RuntimeError("心跳命令未被服务端确认")
             except Exception as e:
                 logger.warning("[WecomAI][LongConn] 发送心跳失败: %s", e)
+                ws = self._ws
+                if ws is not None and not ws.closed:
+                    await ws.close()
                 return
 
     async def _handle_text_message(self, text: str) -> None:

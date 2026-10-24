@@ -1,22 +1,35 @@
-# When connecting to OneBot v11 Napcat, please use this compose file for one-click deployment: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
+# Default local deployment: build AstrBot from this checkout and run it alone.
+#
+# Usage:
+#   docker compose up -d --build
+#   docker compose --profile computer up -d --build computer
+#
+# For AstrBot + NapCat, use compose-with-napcat.yml.
+# For AstrBot + SearXNG, use compose-with-searxng.yml.
 
+# Shared definition for the two AstrBot service variants below.
 x-astrbot: &astrbot
   build:
-    context: .
-    dockerfile: Dockerfile
-    target: runtime
+    context: . # Build this checkout instead of pulling an image.
+    dockerfile: Dockerfile # Root Dockerfile.
+    target: runtime # Production runtime stage; use `dev` for the tool image.
     args:
+      # Runtime feature groups; `full` enables every group. See the Docker docs.
       ASTRBOT_FEATURES: '${ASTRBOT_FEATURES:-full}'
-  image: astrbot:local
-  restart: always
-  init: true
+  image: astrbot:local # Local tag for the image produced by `build`.
+  restart: always # Restart unless the operator stops the container.
+  init: true # Forward signals and reap orphaned child processes.
   ports:
+    # Host ports bind to loopback by default. Set ASTRBOT_BIND_ADDRESS=0.0.0.0
+    # only with a firewall or reverse proxy in front of the WebUI.
     - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6185:6185' # AstrBot WebUI
-    - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6199:6199' # Optional. OneBot v11 Napcat Websocket Port
+    - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6199:6199' # Optional OneBot v11 WebSocket
   environment:
-    TZ: '${TZ:-Asia/Shanghai}'
+    TZ: '${TZ:-Asia/Shanghai}' # Container timezone.
+    # The container must listen on all interfaces for the published port to work.
     ASTRBOT_DASHBOARD_HOST: '0.0.0.0'
   healthcheck:
+    # Liveness only; use /readyz when an orchestrator must wait for readiness.
     test:
       - CMD
       - python
@@ -24,23 +37,24 @@ x-astrbot: &astrbot
       - >-
         import urllib.request;
         urllib.request.urlopen('http://127.0.0.1:6185/healthz', timeout=3)
-    interval: 30s
-    timeout: 5s
-    retries: 3
-    start_period: 30s
+    interval: 30s # Probe every 30 seconds.
+    timeout: 5s # Fail a probe after 5 seconds.
+    retries: 3 # Mark unhealthy after three consecutive failures.
+    start_period: 30s # Ignore failures during the first 30 seconds.
 
 services:
+  # Default service: AstrBot with its state under ./data.
   astrbot:
     <<: *astrbot
     volumes:
-      - ./data:/AstrBot/data
+      - ./data:/AstrBot/data # Config, database, plugins, and runtime state.
 
   # Opt-in computer-tool Docker access. Default `docker compose up` does not
   # start this service. Use:
   #   docker compose --profile computer up -d --build computer
   computer:
     <<: *astrbot
-    profiles: ['computer']
+    profiles: ['computer'] # Keep this service out of the default profile.
     volumes:
-      - ./data:/AstrBot/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/AstrBot/data # Same runtime state as the default service.
+      - /var/run/docker.sock:/var/run/docker.sock # Docker control for the computer tool.

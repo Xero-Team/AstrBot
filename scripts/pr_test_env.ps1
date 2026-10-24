@@ -82,6 +82,20 @@ function Run-SmokeTest {
     $smokeLog = Join-Path ([System.IO.Path]::GetTempPath()) ("astrbot-smoke-{0}.log" -f [guid]::NewGuid())
     $smokeErrLog = Join-Path ([System.IO.Path]::GetTempPath()) ("astrbot-smoke-{0}.err.log" -f [guid]::NewGuid())
 
+    $portOwners = @()
+    if ($IsWindows) {
+        $portOwners = @(Get-NetTCPConnection -LocalPort 6185 -State Listen -ErrorAction SilentlyContinue)
+    }
+    else {
+        $lsofCommand = Get-Command lsof -ErrorAction SilentlyContinue
+        if ($lsofCommand) {
+            $portOwners = @(& $lsofCommand.Source "-tiTCP:6185" "-sTCP:LISTEN" 2>$null)
+        }
+    }
+    if ($portOwners.Count -gt 0) {
+        throw "Port 6185 is already in use; refusing to run a smoke test against another process."
+    }
+
     Write-Host "==> Starting smoke test on http://localhost:6185"
     $startProcessParams = @{
         FilePath               = "uv"
@@ -103,6 +117,10 @@ function Run-SmokeTest {
 
             try {
                 $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:6185" -TimeoutSec 5
+                $process.Refresh()
+                if ($process.HasExited) {
+                    break
+                }
                 if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
                     Write-Host "==> Smoke test passed"
                     return
@@ -126,8 +144,19 @@ function Run-SmokeTest {
     }
     finally {
         if (-not $process.HasExited) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            $process.WaitForExit()
+            if ($IsWindows) {
+                & taskkill /PID $process.Id /T /F 2>$null | Out-Null
+            }
+            else {
+                $pkillCommand = Get-Command pkill -ErrorAction SilentlyContinue
+                if ($pkillCommand) {
+                    & $pkillCommand.Source "-TERM" "-P" $process.Id 2>$null
+                }
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+            if (-not $process.WaitForExit(10000)) {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
         }
         Remove-Item -LiteralPath $smokeLog, $smokeErrLog -Force -ErrorAction SilentlyContinue
     }

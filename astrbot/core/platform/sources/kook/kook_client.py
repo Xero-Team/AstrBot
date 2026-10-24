@@ -264,6 +264,7 @@ class KookClient:
             try:
                 await self.ws.close()
             except Exception:
+                # Closing an already-closed connection is not an error.
                 pass
             self.ws = None
         self._stop_event.clear()
@@ -296,6 +297,7 @@ class KookClient:
                 try:
                     await self.ws.close()
                 except Exception:
+                    # Best-effort close after a failed connection attempt.
                     pass
                 self.ws = None
             return False
@@ -534,6 +536,9 @@ class KookClient:
             logger.error(
                 f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 异常: {e}'
             )
+            raise RuntimeError(
+                f'发送kook消息类型 "{kook_message_type.name}" 异常: {e}'
+            ) from e
 
     async def upload_asset(self, file_url: str | None) -> str:
         """上传文件到kook,获得远端资源url
@@ -546,7 +551,7 @@ class KookClient:
             return file_url
 
         async with MediaResolver(file_url).as_path() as media_file:
-            bytes_data = media_file.read_bytes()
+            bytes_data = await asyncio.to_thread(media_file.read_bytes)
             filename = media_file.path.name
 
         data = aiohttp.FormData()
@@ -588,6 +593,7 @@ class KookClient:
             try:
                 await self.heartbeat_task
             except asyncio.CancelledError:
+                # The heartbeat task is cancelled during shutdown.
                 pass
 
         event_tasks = list(self._event_tasks)

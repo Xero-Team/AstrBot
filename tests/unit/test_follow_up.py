@@ -176,3 +176,52 @@ def test_follow_up_coordinators_do_not_share_active_runner_state() -> None:
 
     assert first._active_runners["umo-1"] is runner
     assert second._active_runners == {}
+
+
+@pytest.mark.asyncio
+async def test_terminate_wakes_a_pending_ticket(coordinator: FollowUpCoordinator):
+    ticket = FollowUpTicket(seq=1, text="pending")
+    capture = FollowUpCapture(
+        umo="umo-1",
+        ticket=ticket,
+        order_seq=coordinator._allocate_order("umo-1"),
+        monitor_task=asyncio.create_task(asyncio.sleep(30)),
+    )
+    coordinator._pending_tickets.append(ticket)
+    waiter = asyncio.create_task(coordinator.prepare_capture(capture))
+    await asyncio.sleep(0)
+    await coordinator.terminate()
+    capture.monitor_task.cancel()
+    await asyncio.gather(capture.monitor_task, return_exceptions=True)
+
+    assert await waiter == (True, False)
+
+
+@pytest.mark.asyncio
+async def test_terminate_while_waiting_for_turn_order_does_not_activate(
+    coordinator: FollowUpCoordinator,
+):
+    coordinator._allocate_order("umo-1")
+    ticket = FollowUpTicket(seq=1, text="pending")
+    capture = FollowUpCapture(
+        umo="umo-1",
+        ticket=ticket,
+        order_seq=coordinator._allocate_order("umo-1"),
+        monitor_task=asyncio.create_task(asyncio.sleep(30)),
+    )
+    coordinator._pending_tickets.append(ticket)
+    waiter = asyncio.create_task(coordinator.prepare_capture(capture))
+    ticket.resolved.set()
+
+    statuses = coordinator._order_states["umo-1"]["statuses"]
+    for _ in range(50):
+        if statuses.get(capture.order_seq) == "active":
+            break
+        await asyncio.sleep(0)
+    assert statuses[capture.order_seq] == "active"
+
+    await coordinator.terminate()
+    capture.monitor_task.cancel()
+    await asyncio.gather(capture.monitor_task, return_exceptions=True)
+
+    assert await waiter == (True, False)

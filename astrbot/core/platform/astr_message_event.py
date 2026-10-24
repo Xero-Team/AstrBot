@@ -187,6 +187,7 @@ class AstrMessageEvent(abc.ABC):
                 message_type=message_type,
                 session_id=session_id,
             ),
+            origin=str(self.session),
         )
         # self.unified_msg_origin = str(self.session)
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
@@ -461,10 +462,15 @@ class AstrMessageEvent(abc.ABC):
 
     def transfer_temporary_local_file(self, path: str) -> bool:
         """Transfer one temporary artifact to another runtime-owned lease."""
-        if path not in self._temporary_local_files:
-            return False
-        self._temporary_local_files.remove(path)
-        return True
+        transferred = False
+        if path in self._temporary_local_files:
+            self._temporary_local_files.remove(path)
+            transferred = True
+        message_paths = getattr(self.message_obj, "temporary_file_paths", None)
+        if isinstance(message_paths, list) and path in message_paths:
+            message_paths.remove(path)
+            transferred = True
+        return transferred
 
     def untrack_temporary_local_file(self, path: str) -> None:
         """Stop owning a temporary file so it can outlive this event."""
@@ -725,6 +731,9 @@ class AstrMessageEvent(abc.ABC):
                                 await sleep(component_delay)
                             text_buffer = text_buffer[match.end() :]
                 else:
+                    if text_buffer.strip():
+                        await send_text(text_buffer.strip())
+                        text_buffer = ""
                     attempts.append(
                         await self._send_streaming_fragment(
                             MessageChain(chain=[component]),

@@ -39,6 +39,7 @@ def _adapter() -> WecomAIBotAdapter:
     adapter.initial_respond_text = ""
     adapter.friend_message_welcome_text = ""
     adapter._stream_plain_cache = {}
+    adapter._stream_image_cache = {}
     adapter._send_long_connection_respond_msg = AsyncMock()
     adapter._send_long_connection_respond_welcome = AsyncMock()
     return adapter

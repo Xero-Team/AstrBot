@@ -81,6 +81,9 @@ def mock_main_db():
 
     # 模拟异步上下文管理器
     session = AsyncMock()
+    session.begin = MagicMock(
+        return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
+    )
     db.get_db = MagicMock(
         return_value=AsyncMock(__aenter__=AsyncMock(return_value=session))
     )
@@ -754,7 +757,7 @@ class TestSecureFilename:
         assert result.startswith("backup_")
         assert result.endswith(".zip")
         # 应包含时间戳格式 YYYYMMDD_HHMMSS
-        assert re.search(r"backup_\d{8}_\d{6}\.zip", result)
+        assert re.search(r"backup_\d{8}_\d{6}_[0-9a-f]{8}\.zip", result)
 
     def test_generate_unique_filename_with_complex_name(self):
         """测试复杂文件名生成唯一文件名"""
@@ -762,7 +765,7 @@ class TestSecureFilename:
         # 应在原文件名后添加时间戳
         assert result.startswith("my_backup_file_")
         assert result.endswith(".zip")
-        assert re.search(r"my_backup_file_\d{8}_\d{6}\.zip", result)
+        assert re.search(r"my_backup_file_\d{8}_\d{6}_[0-9a-f]{8}\.zip", result)
 
 
 class TestVersionComparison:
@@ -1587,3 +1590,195 @@ async def test_backup_round_trips_backend_vector_index(tmp_path, filename):
 
     assert (restore_dir / filename).read_bytes() == b"vector-index"
     assert result.success is True
+
+
+def test_import_attachments_restores_files_under_the_new_data_root(tmp_path):
+    from astrbot.core.backup._importer_files import import_attachments
+
+    archive = tmp_path / "backup.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("files/attachments/a1.png", b"image")
+
+    with zipfile.ZipFile(archive) as zf:
+        count = import_attachments(
+            zf,
+            [
+                {
+                    "attachment_id": "a1",
+                    "path": "/old/machine/data/attachments/stored.png",
+                }
+            ],
+            str(tmp_path / "cmd_config.json"),
+        )
+
+    assert count == 1
+    assert (tmp_path / "attachments" / "stored.png").read_bytes() == b"image"
+
+
+def test_attachment_rows_are_rewritten_to_the_new_data_root(tmp_path):
+    importer = AstrBotImporter(
+        main_db=MagicMock(),
+        config_path=str(tmp_path / "cmd_config.json"),
+    )
+
+    rows = importer._preprocess_main_table_rows(
+        "attachments",
+        [{"attachment_id": "a1", "path": "/old/machine/data/attachments/a1.png"}],
+    )
+
+    assert rows[0]["path"] == str(tmp_path / "attachments" / "a1.png")
+
+
+def test_convert_datetime_fields_rejects_unparseable_values():
+    importer = AstrBotImporter(main_db=MagicMock())
+    row = {
+        "conversation_id": "test-123",
+        "platform_id": "test",
+        "user_id": "user1",
+        "created_at": "not-a-date",
+        "updated_at": "2024-01-01T12:00:00",
+    }
+
+    with pytest.raises(ValueError):
+        importer._convert_datetime_fields(row, ConversationV2)
+
+
+@pytest.mark.asyncio
+async def test_main_database_import_skips_a_row_that_fails_on_flush(tmp_path):
+    importer = AstrBotImporter(main_db=MagicMock())
+
+    class _Nested:
+        async def __aenter__(self):
+            return None
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class _Session:
+        def __init__(self):
+            self.added = []
+
+        def begin_nested(self):
+            return _Nested()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def flush(self):
+            if len(self.added) >= 2:
+                raise ValueError("constraint violation")
+
+    result = ImportResult()
+    session = _Session()
+    imported = await importer._import_main_database_rows(
+        {
+            "platform_stats": [
+                {
+                    "timestamp": "2026-01-01T00:00:00+00:00",
+                    "platform_id": "p1",
+                    "platform_type": "t1",
+                    "count": 1,
+                },
+                {
+                    "timestamp": "2026-01-01T01:00:00+00:00",
+                    "platform_id": "p2",
+                    "platform_type": "t2",
+                    "count": 1,
+                },
+            ]
+        },
+        session,
+        result,
+    )
+
+    assert imported["platform_stats"] == 1
+    assert result.warnings == ["导入 platform_stats 记录失败，该行已跳过"]
+
+
+def test_import_directories_warns_when_existing_directory_cannot_be_backed_up(
+    tmp_path, monkeypatch
+):
+    from astrbot.core.backup import _importer_files
+
+    archive = tmp_path / "backup.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("directories/plugins/demo/main.py", "print('x')\n")
+
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        _importer_files,
+        "backup_existing_directory",
+        lambda _target: (_ for _ in ()).throw(OSError("locked")),
+    )
+
+    with zipfile.ZipFile(archive) as zf:
+        stats = _importer_files.import_directories(
+            zf,
+            {"version": "1.1", "directories": ["plugins"]},
+            warnings.append,
+        )
+
+    assert stats["plugins"] == 0
+    assert "导入目录失败" in warnings
+
+
+def test_import_directories_restores_the_previous_tree_when_a_file_fails(
+    tmp_path, monkeypatch
+):
+    from astrbot.core.backup import _importer_files
+
+    archive = tmp_path / "backup.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("directories/plugins/demo/main.py", "print('new')\n")
+        zf.writestr("directories/plugins/demo/broken.py", "print('bad')\n")
+
+    target = tmp_path / "plugins"
+    target.mkdir()
+    (target / "old.py").write_text("print('old')\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        _importer_files,
+        "get_backup_directories",
+        lambda: {"plugins": str(target)},
+    )
+    original_extract = _importer_files._extract_archive_member
+
+    def _extract(zf, name, target_path):
+        if name.endswith("broken.py"):
+            raise OSError("corrupt member")
+        return original_extract(zf, name, target_path)
+
+    monkeypatch.setattr(_importer_files, "_extract_archive_member", _extract)
+
+    warnings: list[str] = []
+    with zipfile.ZipFile(archive) as zf:
+        stats = _importer_files.import_directories(
+            zf,
+            {"version": "1.1", "directories": ["plugins"]},
+            warnings.append,
+        )
+
+    assert stats["plugins"] == 0
+    assert (target / "old.py").read_text(encoding="utf-8") == "print('old')\n"
+    assert not (target / "demo" / "main.py").exists()
+    assert "导入目录失败" in warnings
+
+
+@pytest.mark.asyncio
+async def test_export_kb_metadata_fails_the_backup_on_table_error():
+    class _Context:
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, *_args):
+            return None
+
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=RuntimeError("db down"))
+    kb_manager = SimpleNamespace(
+        kb_db=SimpleNamespace(get_db=lambda: _Context()),
+    )
+    exporter = AstrBotExporter(main_db=MagicMock(), kb_manager=kb_manager)
+
+    with pytest.raises(RuntimeError, match="导出知识库表"):
+        await exporter._export_kb_metadata()

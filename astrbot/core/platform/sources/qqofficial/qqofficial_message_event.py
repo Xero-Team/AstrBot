@@ -410,8 +410,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return None
         if isinstance(ret, dict):
             ret_id = ret.get("id")
-            return str(ret_id) if ret_id is not None else None
-        ret_id = getattr(ret, "id", None)
+        else:
+            ret_id = getattr(ret, "message_id", None)
+            if ret_id is None:
+                ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
     @staticmethod
@@ -667,6 +669,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         elif isinstance(source, botpy.message.Message):
             if media.image_path:
                 payload["file_image"] = media.image_path
+            elif media.image_base64:
+                payload["file_image"] = media.image_base64
             payload.pop("msg_type", None)
             ret = await self._send_with_markdown_fallback(
                 send_func=lambda retry_payload: self._bot.api.post_message(
@@ -680,6 +684,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             if media.image_path:
                 payload["file_image"] = media.image_path
+            elif media.image_base64:
+                payload["file_image"] = media.image_base64
             payload.pop("msg_type", None)
             ret = await self._send_with_markdown_fallback(
                 send_func=lambda retry_payload: self._bot.api.post_dms(

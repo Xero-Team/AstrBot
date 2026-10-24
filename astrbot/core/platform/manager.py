@@ -420,6 +420,9 @@ class PlatformManager:
                 # 记录错误到平台实例
                 if platform:
                     platform.record_error(error_msg, tb_str)
+            else:
+                if platform:
+                    platform.status = PlatformStatus.STOPPED
 
     async def reload(self, platform_config: dict) -> None:
         async with self._platform_lifecycle_lock:

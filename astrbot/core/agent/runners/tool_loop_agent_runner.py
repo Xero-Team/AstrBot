@@ -381,6 +381,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 completed.result()
             except asyncio.CancelledError:
+                # Cleanup futures are cancelled on purpose when the run stops.
                 pass
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
@@ -403,6 +404,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         except TimeoutError:
             self._detach_stop_cleanup(task)
         except asyncio.CancelledError, StopAsyncIteration:
+            # The stop cleanup already timed out or finished; the caller handles it.
             pass
         except Exception:  # The caller handles the original operation result.
             pass
@@ -416,6 +418,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         try:
             await asyncio.shield(operation)
         except asyncio.CancelledError, StopAsyncIteration, Exception:
+            # Closing is best-effort after the shielded operation is cancelled.
             pass
         await close()
 
@@ -473,6 +476,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         except TimeoutError:
             self._detach_stop_cleanup(close_task)
         except RuntimeError, StopAsyncIteration:
+            # The close task was already cancelled or completed.
             pass
 
     def _read_tool_hint(self) -> str:
@@ -748,6 +752,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     attempt.retry_state.attempt_number,
                                     self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
                                 )
+                            if has_visible_stream_output:
+                                return
                             raise
             except AgentStopRequested:
                 raise
@@ -1800,6 +1806,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             except AgentStopRequested:
                 interrupted.set()
+            except Exception as exc:
+                outcomes[index] = _ParallelToolOutcome(
+                    tool_name=call[0],
+                    tool_call_id=call[2],
+                    tool_call_streak=call_streaks[index],
+                    content=f"Error: {safe_error('', exc)}",
+                )
 
         async with asyncio.TaskGroup() as task_group:
             for index, call in enumerate(calls):

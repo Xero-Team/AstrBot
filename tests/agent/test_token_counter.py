@@ -128,8 +128,8 @@ class TestEmojiCounting:
 
 
 class TestTrustedUsage:
-    def test_trusted_overrides(self):
-        """如果 API 返回了 token 数，直接用它不做估算。"""
+    def test_trusted_usage_is_a_floor_for_the_estimate(self):
+        """可信用量作为下限，新增消息的估算仍会计入。"""
         msg = _msg(
             "user",
             [
@@ -140,7 +140,7 @@ class TestTrustedUsage:
             ],
         )
         tokens = counter.count_tokens([msg], trusted_token_usage=42)
-        assert tokens == 42
+        assert tokens >= 42
 
 
 class TestToolCalls:

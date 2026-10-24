@@ -18,6 +18,21 @@ def _to_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
 
 
+def _resolve_timeout_seconds(
+    context: ContextWrapper[AstrAgentContext],
+    kwargs: dict[str, Any],
+    default: int,
+) -> int:
+    """Return a usable timeout bounded by the executor's call deadline."""
+    requested = kwargs.get("timeout", default)
+    if not isinstance(requested, int) or isinstance(requested, bool) or requested <= 0:
+        requested = default
+    deadline = getattr(context, "tool_call_timeout", None)
+    if isinstance(deadline, int) and not isinstance(deadline, bool) and deadline > 0:
+        return min(requested, deadline)
+    return requested
+
+
 async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> Any:
     booter = await context.context.context.computer_runtime.get_booter(
         context.context.context,
@@ -44,7 +59,11 @@ class BrowserExecTool(FunctionTool):
             "type": "object",
             "properties": {
                 "cmd": {"type": "string", "description": "Browser command to execute."},
-                "timeout": {"type": "integer", "default": 30},
+                "timeout": {
+                    "type": "integer",
+                    "default": 30,
+                    "description": "Timeout in seconds, capped by the agent tool-call timeout.",
+                },
                 "description": {
                     "type": "string",
                     "description": "Optional execution description.",
@@ -71,7 +90,7 @@ class BrowserExecTool(FunctionTool):
         **kwargs: Any,
     ) -> ToolExecResult:
         cmd: str = kwargs["cmd"]
-        timeout_seconds: int = kwargs.get("timeout_seconds", 30)
+        timeout_seconds = _resolve_timeout_seconds(context, kwargs, 30)
         description: str | None = kwargs.get("description", None)
         tags: str | None = kwargs.get("tags", None)
         learn: bool = kwargs.get("learn", False)
@@ -109,7 +128,11 @@ class BrowserBatchExecTool(FunctionTool):
                     "items": {"type": "string"},
                     "description": "Ordered browser commands.",
                 },
-                "timeout": {"type": "integer", "default": 60},
+                "timeout": {
+                    "type": "integer",
+                    "default": 60,
+                    "description": "Timeout in seconds, capped by the agent tool-call timeout.",
+                },
                 "stop_on_error": {"type": "boolean", "default": True},
                 "description": {
                     "type": "string",
@@ -137,7 +160,7 @@ class BrowserBatchExecTool(FunctionTool):
         **kwargs: Any,
     ) -> ToolExecResult:
         commands: list[str] = kwargs["commands"]
-        timeout_seconds: int = kwargs.get("timeout_seconds", 60)
+        timeout_seconds = _resolve_timeout_seconds(context, kwargs, 60)
         stop_on_error: bool = kwargs.get("stop_on_error", True)
         description: str | None = kwargs.get("description", None)
         tags: str | None = kwargs.get("tags", None)
@@ -173,7 +196,11 @@ class RunBrowserSkillTool(FunctionTool):
             "type": "object",
             "properties": {
                 "skill_key": {"type": "string"},
-                "timeout": {"type": "integer", "default": 60},
+                "timeout": {
+                    "type": "integer",
+                    "default": 60,
+                    "description": "Timeout in seconds, capped by the agent tool-call timeout.",
+                },
                 "stop_on_error": {"type": "boolean", "default": True},
                 "include_trace": {"type": "boolean", "default": False},
                 "description": {"type": "string"},
@@ -189,7 +216,7 @@ class RunBrowserSkillTool(FunctionTool):
         **kwargs: Any,
     ) -> ToolExecResult:
         skill_key: str = kwargs["skill_key"]
-        timeout_seconds: int = kwargs.get("timeout_seconds", 60)
+        timeout_seconds = _resolve_timeout_seconds(context, kwargs, 60)
         stop_on_error: bool = kwargs.get("stop_on_error", True)
         include_trace: bool = kwargs.get("include_trace", False)
         description: str | None = kwargs.get("description", None)

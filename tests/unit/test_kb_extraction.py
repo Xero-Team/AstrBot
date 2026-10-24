@@ -107,3 +107,13 @@ async def test_image_ocr_parser_propagates_missing_engine(monkeypatch) -> None:
 
     with pytest.raises(OCREngineUnavailable):
         await ImageOCRParser().parse(b"image-bytes", "scan.png")
+
+
+def test_pdf_filter_arrays_resolve_to_the_real_image_encoding():
+    from pypdf.generic import ArrayObject, NameObject
+
+    assert PDFParser._resolve_image_format(
+        ArrayObject([NameObject("/ASCII85Decode"), NameObject("/DCTDecode")])
+    ) == ("jpg", "image/jpeg")
+    assert PDFParser._resolve_image_format("/JPXDecode") == ("jp2", "image/jp2")
+    assert PDFParser._resolve_image_format("/FlateDecode") is None

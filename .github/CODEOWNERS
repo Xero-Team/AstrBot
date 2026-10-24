@@ -35,6 +35,7 @@
 /Dockerfile                 @BegoniaHe
 /compose.yml                @BegoniaHe
 /compose-with-napcat.yml    @BegoniaHe
+/compose-with-searxng.yml   @BegoniaHe
 /k8s/                       @BegoniaHe
 
 # Upstream-sync tracking and fork governance records.

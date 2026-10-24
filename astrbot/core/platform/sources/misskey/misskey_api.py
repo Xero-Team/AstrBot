@@ -4,6 +4,7 @@ import random
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, NoReturn
+from urllib.parse import urlsplit
 
 try:
     import aiohttp
@@ -83,6 +84,7 @@ class StreamingClient:
                                 f"[Misskey WebSocket] 重新订阅 {channel_type} 失败: {e}",
                             )
                 except Exception:
+                    # Disconnect is best-effort while handling an error.
                     pass
             return True
 
@@ -167,6 +169,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Disconnect is best-effort while handling an error.
                 pass
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(
@@ -176,6 +179,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Disconnect is best-effort while handling an error.
                 pass
         except websockets.exceptions.InvalidHandshake as e:
             logger.error(f"[Misskey WebSocket] 握手失败: {e}")
@@ -183,6 +187,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Disconnect is best-effort while handling an error.
                 pass
         except Exception as e:
             logger.error(f"[Misskey WebSocket] 监听消息失败: {e}")
@@ -190,6 +195,7 @@ class StreamingClient:
             try:
                 await self.disconnect()
             except Exception:
+                # Disconnect is best-effort while handling an error.
                 pass
         finally:
             handler_tasks = list(self._handler_tasks)
@@ -362,7 +368,6 @@ class MisskeyAPI:
         instance_url: str,
         access_token: str,
         *,
-        allow_insecure_downloads: bool = False,
         download_timeout: int = 15,
         chunk_size: int = 64 * 1024,
         max_download_bytes: int | None = None,
@@ -372,7 +377,6 @@ class MisskeyAPI:
         self._session: aiohttp.ClientSession | None = None
         self.streaming: StreamingClient | None = None
         # download options
-        self.allow_insecure_downloads = allow_insecure_downloads
         self.download_timeout = download_timeout
         self.chunk_size = chunk_size
         self.max_download_bytes = (
@@ -727,14 +731,38 @@ class MisskeyAPI:
                     return bytes(chunks)
         return None
 
-    async def _download_file_bytes(self, url: str) -> bytes | None:
+    def _is_instance_origin(self, url: str) -> bool:
+        """Return whether ``url`` belongs to the configured Misskey instance."""
         try:
-            return await self._download_with_existing_session(
-                url,
-                ssl_verify=True,
-            ) or await self._download_with_temp_session(url, ssl_verify=True)
-        except Exception as ssl_error:
-            raise ssl_error
+            target = urlsplit(url)
+            origin = urlsplit(self.instance_url)
+        except ValueError:
+            return False
+        return (
+            target.scheme.lower() in {"http", "https"}
+            and bool(target.netloc)
+            and (target.scheme.lower(), target.netloc.lower())
+            == (origin.scheme.lower(), origin.netloc.lower())
+        )
+
+    async def _download_file_bytes(self, url: str) -> bytes | None:
+        # Remote downloads must verify TLS; this fork has no insecure fallback.
+        # Only the configured Misskey origin may receive the authenticated
+        # session headers: note and component media URLs can point anywhere and
+        # the bot token must not leak to a third-party host.
+        if self._is_instance_origin(url):
+            try:
+                data = await self._download_with_existing_session(
+                    url,
+                    ssl_verify=True,
+                )
+                if data is not None:
+                    return data
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("Misskey authenticated download failed; retrying")
+        return await self._download_with_temp_session(url, ssl_verify=True)
 
     async def upload_and_find_file(
         self,
@@ -780,6 +808,7 @@ class MisskeyAPI:
                     try:
                         os.unlink(tmp_path)
                     except Exception:
+                        # A stale temporary file is harmless.
                         pass
         except Exception as e:
             logger.error(f"[Misskey API] 本地上传失败: {e}")

@@ -391,6 +391,14 @@ async def run_agent(
                 if not stop_watcher.done():
                     stop_watcher.cancel()
                 await asyncio.gather(stop_watcher, return_exceptions=True)
+
+        # The step limit can end the loop while the runner never reaches DONE.
+        # Emit whatever was buffered; an aborted run returns before this point.
+        if can_buffer_llm_result:
+            async for chain in _emit_buffered_llm_result(
+                buffered_llm_chains, astr_event
+            ):
+                yield chain
     except Exception as e:
         logger.error(
             "Agent execution failed: %s",

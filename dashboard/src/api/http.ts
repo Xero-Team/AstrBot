@@ -122,7 +122,7 @@ function normalizeAxiosError(error: AxiosError) {
   if (error.response?.status === 429) {
     const data = error.response.data as { message?: string } | undefined;
     if (data?.message) {
-      throw new Error(data.message);
+      error.message = data.message;
     }
   }
   throw error;

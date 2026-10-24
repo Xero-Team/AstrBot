@@ -74,7 +74,8 @@
     },
     "parallel": {
       "enabled": "启用原生并行工具调用",
-      "blocked": "此工具不允许启用并行执行。"
+      "blocked": "此工具不允许启用并行执行。",
+      "updated": "工具并行执行设置已更新"
     },
     "configTags": {
       "tooltipTitle": "该工具在配置文件 {config} 中启用，因为：",
@@ -210,6 +211,7 @@
     "updateToolPermissionBuiltin": "内置工具不支持单独配置权限",
     "updateParallelExecutionFailed": "并行工具调用设置更新失败",
     "testError": "测试连接失败: {error}",
-    "catalogError": "MCP 目录操作失败: {error}"
+    "catalogError": "MCP 目录操作失败: {error}",
+    "updateParallelExecutionSuccess": "并行工具执行设置已更新"
   }
 }

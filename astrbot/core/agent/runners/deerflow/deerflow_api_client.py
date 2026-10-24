@@ -87,9 +87,15 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any]]:
     # Use a forgiving decoder at network boundaries so malformed bytes do not abort stream parsing.
     decoder = codecs.getincrementaldecoder("utf-8")("replace")
     buffer = ""
+    pending_cr = ""
 
     async for chunk in resp.content.iter_chunked(8192):
-        buffer += _normalize_sse_newlines(decoder.decode(chunk))
+        text = pending_cr + decoder.decode(chunk)
+        pending_cr = ""
+        if text.endswith("\r"):
+            text = text[:-1]
+            pending_cr = "\r"
+        buffer += _normalize_sse_newlines(text)
 
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
@@ -100,16 +106,18 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any]]:
         if len(buffer) > SSE_MAX_BUFFER_CHARS:
             logger.warning(
                 "DeerFlow SSE parser buffer exceeded %d chars without delimiter; "
-                "flushing oversized block to prevent unbounded memory growth.",
+                "aborting the oversized block to prevent unbounded memory growth.",
                 SSE_MAX_BUFFER_CHARS,
             )
-            parsed = _parse_sse_block(buffer)
-            if parsed is not None:
-                yield parsed
-            buffer = ""
+            raise DeerFlowAPIError(
+                operation="SSE stream",
+                status=0,
+                body="buffer exceeded its limit before a delimiter",
+                url="",
+            )
 
     # flush any remaining buffered text
-    buffer += _normalize_sse_newlines(decoder.decode(b"", final=True))
+    buffer += _normalize_sse_newlines(pending_cr + decoder.decode(b"", final=True))
     while "\n\n" in buffer:
         block, buffer = buffer.split("\n\n", 1)
         parsed = _parse_sse_block(block)

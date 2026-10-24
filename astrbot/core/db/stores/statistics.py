@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, func, select, text
@@ -20,12 +20,12 @@ class StatisticsStoreMixin(DatabaseStoreMixin):
             session: AsyncSession
             async with session.begin():
                 if timestamp is None:
-                    timestamp = datetime.now().replace(
-                        minute=0,
-                        second=0,
-                        microsecond=0,
-                    )
-                current_hour = timestamp
+                    timestamp = datetime.now(UTC).replace(tzinfo=None)
+                current_hour = timestamp.replace(
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
                 await session.execute(
                     text("""
                     INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)
@@ -57,7 +57,7 @@ class StatisticsStoreMixin(DatabaseStoreMixin):
         """Get platform statistic rows within the specified offset in seconds."""
         async with store_session(self) as session:
             session: AsyncSession
-            now = datetime.now()
+            now = datetime.now(UTC).replace(tzinfo=None)
             start_time = now - timedelta(seconds=offset_sec)
             result = await session.execute(
                 select(PlatformStat)

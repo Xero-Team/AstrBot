@@ -16,7 +16,11 @@ def convert_datetime_fields(
         model_class: SQLAlchemy model class used for import.
 
     Returns:
-        A shallow-copied row with datetime fields converted when possible.
+        A shallow-copied row with datetime fields converted.
+
+    Raises:
+        ValueError: If a datetime column holds a value that cannot be parsed.
+            Import callers treat this as a row-level failure and skip the row.
     """
 
     converted = row.copy()
@@ -31,6 +35,11 @@ def convert_datetime_fields(
         if value is None or not isinstance(value, str):
             continue
         if isinstance(column.type, DateTime):
-            converted[column.name] = datetime.fromisoformat(value)
+            try:
+                converted[column.name] = datetime.fromisoformat(value)
+            except (OverflowError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"invalid datetime value for column {column.name}"
+                ) from exc
 
     return converted

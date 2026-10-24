@@ -55,9 +55,9 @@ class KookEvent(AstrMessageEvent):
         self.astrbot_message_type: MessageType = message_obj.type
         self._file_message_counter = 0
 
-    def _wrap_message(
+    async def _wrap_message(
         self, index: int, message_component: BaseMessageComponent
-    ) -> Coroutine[Any, Any, OrderMessage]:
+    ) -> OrderMessage:
         async def wrap_upload(
             index: int, message_type: KookMessageType, upload_coro
         ) -> OrderMessage:
@@ -82,7 +82,7 @@ class KookEvent(AstrMessageEvent):
         match message_component:
             case Image():
                 self._file_message_counter += 1
-                return wrap_upload(
+                return await wrap_upload(
                     index,
                     KookMessageType.IMAGE,
                     self._client.upload_asset(message_component.file),
@@ -90,7 +90,7 @@ class KookEvent(AstrMessageEvent):
 
             case Video():
                 self._file_message_counter += 1
-                return wrap_upload(
+                return await wrap_upload(
                     index,
                     KookMessageType.VIDEO,
                     self._client.upload_asset(message_component.file),
@@ -105,7 +105,7 @@ class KookEvent(AstrMessageEvent):
                     )
 
                 self._file_message_counter += 1
-                return handle_file(index, message_component)
+                return await handle_file(index, message_component)
 
             case Record():
 
@@ -131,23 +131,25 @@ class KookEvent(AstrMessageEvent):
                         type=KookMessageType.CARD,
                     )
 
-                return handle_audio(index, message_component)
+                return await handle_audio(index, message_component)
             case Plain():
-                return handle_plain(index, message_component.text)
+                return await handle_plain(index, message_component.text)
             case Mention():
                 if message_component.is_everyone_sentinel():
-                    return handle_plain(index, "@all")
-                return handle_plain(index, f"(met){message_component.target}(met)")
+                    return await handle_plain(index, "@all")
+                return await handle_plain(
+                    index, f"(met){message_component.target}(met)"
+                )
             case MentionAll():
-                return handle_plain(index, "(met)all(met)")
+                return await handle_plain(index, "(met)all(met)")
             case Reply():
-                return handle_plain(index, "", reply_id=message_component.id)
+                return await handle_plain(index, "", reply_id=message_component.id)
             case Json():
                 json_data = message_component.data
                 # kook卡片json外层得是一个列表
                 if isinstance(json_data, dict):
                     json_data = [json_data]
-                return handle_plain(
+                return await handle_plain(
                     index,
                     # 考虑到kook可能会更改消息结构,为了能让插件开发者
                     # 自行根据kook文档描述填卡片json内容,故不做模型校验
@@ -155,10 +157,9 @@ class KookEvent(AstrMessageEvent):
                     text=json.dumps(json_data),
                     type=KookMessageType.CARD,
                 )
-            case _:
-                raise NotImplementedError(
-                    f'kook适配器尚未实现对 "{message_component.type}" 消息类型的支持'
-                )
+        raise NotImplementedError(
+            f'kook适配器尚未实现对 "{message_component.type}" 消息类型的支持'
+        )
 
     async def send(self, message: MessageChain):
         file_upload_tasks: list[Coroutine[Any, Any, OrderMessage]] = []

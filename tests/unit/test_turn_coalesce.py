@@ -172,3 +172,139 @@ async def test_flush_clones_webchat_event_without_reinvoking_constructor():
     assert flush.message_str == "hello"
     assert is_manager_flush(flush._extras) is True
     await manager.terminate()
+
+
+@pytest.mark.asyncio
+async def test_accept_takes_ownership_of_temporary_files(tmp_path: Path):
+    queued: list[AstrMessageEvent] = []
+    manager = TurnWindowManager(lambda event: queued.append(event) or True)
+    temp_file = tmp_path / "media.bin"
+    temp_file.write_bytes(b"data")
+    fragment = _event("with media", message_id="media-1")
+    fragment.track_temporary_local_file(str(temp_file))
+
+    manager.accept(fragment, wait_seconds=0.01, max_total_seconds=1)
+    assert fragment.has_temporary_local_file(str(temp_file)) is False
+
+    await asyncio.sleep(0.05)
+    assert len(queued) == 1
+    assert queued[0].has_temporary_local_file(str(temp_file)) is True
+    assert temp_file.exists()
+
+
+def test_transfer_temporary_file_clears_both_ownership_lists(tmp_path: Path):
+    event = _event("both", message_id="both-media")
+    temp_file = str(tmp_path / "both.bin")
+    event.track_temporary_local_file(temp_file)
+    event.message_obj.temporary_file_paths = [temp_file]
+
+    assert event.transfer_temporary_local_file(temp_file) is True
+    assert temp_file not in event._temporary_local_files
+    assert temp_file not in event.message_obj.temporary_file_paths
+
+
+@pytest.mark.asyncio
+async def test_accept_takes_ownership_of_message_object_temporary_files(
+    tmp_path: Path,
+):
+    manager = TurnWindowManager(lambda event: True)
+    temp_file = tmp_path / "adapter-media.bin"
+    temp_file.write_bytes(b"data")
+    fragment = _event("adapter media", message_id="adapter-media")
+    fragment.message_obj.temporary_file_paths = [str(temp_file)]
+
+    manager.accept(fragment, wait_seconds=30, max_total_seconds=30)
+    assert str(temp_file) not in fragment.message_obj.temporary_file_paths
+
+    await manager.terminate()
+
+    assert not temp_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_terminate_deletes_buffered_temporary_files(tmp_path: Path):
+    manager = TurnWindowManager(lambda event: True)
+    temp_file = tmp_path / "media.bin"
+    temp_file.write_bytes(b"data")
+    fragment = _event("with media", message_id="terminate-media")
+    fragment.track_temporary_local_file(str(temp_file))
+
+    manager.accept(fragment, wait_seconds=30, max_total_seconds=30)
+    assert temp_file.exists()
+
+    await manager.terminate()
+
+    assert not temp_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_recall_deletes_temporary_files_of_the_only_fragment(tmp_path: Path):
+    manager = TurnWindowManager(lambda event: True)
+    temp_file = tmp_path / "recalled.bin"
+    temp_file.write_bytes(b"data")
+    fragment = _event("recalled media", message_id="recall-media")
+    fragment.track_temporary_local_file(str(temp_file))
+
+    manager.accept(fragment, wait_seconds=30, max_total_seconds=30)
+    manager.recall("recall-media")
+
+    assert not temp_file.exists()
+    assert manager.has_open_window(manager.window_key(fragment)) is False
+
+
+@pytest.mark.asyncio
+async def test_failed_enqueue_cleans_transferred_temporary_files(tmp_path: Path):
+    manager = TurnWindowManager(lambda event: False)
+    temp_file = tmp_path / "undeliverable.bin"
+    temp_file.write_bytes(b"data")
+    fragment = _event("undeliverable media", message_id="enqueue-media")
+    fragment.track_temporary_local_file(str(temp_file))
+
+    manager.accept(fragment, wait_seconds=0.01, max_total_seconds=1)
+    await asyncio.sleep(0.05)
+
+    assert not temp_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_recall_releases_only_the_recalled_fragment_media(tmp_path: Path):
+    manager = TurnWindowManager(lambda event: True)
+    recall_file = tmp_path / "recalled.bin"
+    kept_file = tmp_path / "kept.bin"
+    recall_file.write_bytes(b"recalled")
+    kept_file.write_bytes(b"kept")
+    recalled = _event("recalled", message_id="recall-one")
+    kept = _event("kept", message_id="keep-one")
+    recalled.track_temporary_local_file(str(recall_file))
+    kept.track_temporary_local_file(str(kept_file))
+
+    manager.accept(recalled, wait_seconds=30, max_total_seconds=30)
+    manager.accept(kept, wait_seconds=30, max_total_seconds=30)
+    manager.recall("recall-one")
+
+    assert not recall_file.exists()
+    assert kept_file.exists()
+
+    await manager.terminate()
+    assert not kept_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_dropping_the_oldest_fragment_releases_its_media(tmp_path: Path):
+    manager = TurnWindowManager(lambda event: True, max_fragments=1)
+    dropped_file = tmp_path / "dropped.bin"
+    kept_file = tmp_path / "kept.bin"
+    dropped_file.write_bytes(b"dropped")
+    kept_file.write_bytes(b"kept")
+    dropped = _event("dropped", message_id="drop-one")
+    kept = _event("kept", message_id="keep-two")
+    dropped.track_temporary_local_file(str(dropped_file))
+    kept.track_temporary_local_file(str(kept_file))
+
+    manager.accept(dropped, wait_seconds=30, max_total_seconds=30)
+    manager.accept(kept, wait_seconds=30, max_total_seconds=30)
+
+    assert not dropped_file.exists()
+    assert kept_file.exists()
+
+    await manager.terminate()

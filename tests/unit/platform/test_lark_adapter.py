@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,6 +17,7 @@ def _adapter() -> LarkPlatformAdapter:
     adapter.bot_name = "astrbot"
     adapter.bot_open_id = "bot-open"
     adapter.event_id_timestamps = {}
+    adapter._shutdown_event = asyncio.Event()
     adapter.lark_api = SimpleNamespace(
         im=SimpleNamespace(
             v1=SimpleNamespace(
@@ -875,6 +877,28 @@ async def test_lark_run_socket_mode_refresh_failure_does_not_block_connect(monke
 
     adapter.client._connect.assert_awaited_once()
     logger_error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lark_webhook_mode_keeps_running_until_terminated():
+    adapter = _adapter()
+    adapter.connection_mode = "webhook"
+    adapter.config = {
+        "id": "lark-test",
+        "lark_connection_mode": "webhook",
+        "webhook_uuid": "uuid-1",
+    }
+    adapter.webhook_server = SimpleNamespace(_callback_tasks=set())
+    adapter._refresh_bot_info = AsyncMock()
+
+    run_task = asyncio.create_task(adapter.run())
+    await asyncio.sleep(0)
+    assert run_task.done() is False
+
+    await adapter.terminate()
+    await asyncio.wait_for(run_task, timeout=1)
+
+    assert adapter._shutdown_event.is_set()
 
 
 def test_lark_unified_webhook_requires_webhook_mode_and_uuid():

@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from pathlib import Path
 from types import SimpleNamespace
@@ -122,6 +123,9 @@ def create_dashboard_asgi_app(
     app.state.dashboard_static_folder = static_folder
     app.state.dashboard_config = {}
     app.state.dashboard_testing = False
+    # Keep the lock per app so it is bound to this app's event loop rather than
+    # to whichever loop imported the module first.
+    managed_config_lock = asyncio.Lock()
     extension_registry = runtime.plugin_manager.extensions.registry
     plugin_page_sessions = PluginPageSessionService(extension_registry, jwt_secret)
     plugin_file_tickets = PluginFileTicketService(extension_registry, jwt_secret)
@@ -233,21 +237,26 @@ def create_dashboard_asgi_app(
                     )
                 raise RuntimeError("MCP configuration reload failed") from exc
             return
-        previous = copy.deepcopy(dict(runtime.astrbot_config))
-        committed = await save_config_async(
-            next_config, runtime.astrbot_config, is_core=True
-        )
-        if not committed:
-            raise RuntimeError("Configuration save was superseded")
-        try:
-            await core_control.reload_pipeline_scheduler("default")
-        except Exception:
+        async with managed_config_lock:
+            previous = copy.deepcopy(dict(runtime.astrbot_config))
+            committed = await save_config_async(
+                next_config, runtime.astrbot_config, is_core=True
+            )
+            if not committed:
+                raise RuntimeError("Configuration save was superseded")
             try:
-                await save_config_async(previous, runtime.astrbot_config, is_core=True)
                 await core_control.reload_pipeline_scheduler("default")
             except Exception:
-                logger.error("Failed to roll back managed Dashboard configuration")
-            raise
+                try:
+                    await save_config_async(
+                        previous,
+                        runtime.astrbot_config,
+                        is_core=True,
+                    )
+                    await core_control.reload_pipeline_scheduler("default")
+                except Exception:
+                    logger.error("Failed to roll back managed Dashboard configuration")
+                raise
 
     computer_runtime_info = detect_local_runtime_info(probe=True)
     app.state.services = SimpleNamespace(

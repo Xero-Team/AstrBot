@@ -31,6 +31,7 @@ from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
@@ -180,6 +181,26 @@ class WecomServer:
             logger.error("企业微信 webhook 回调任务失败: %s", exc, exc_info=exc)
 
 
+def _wecom_message_send_time(item: dict) -> int:
+    try:
+        return int(item.get("send_time", 0))
+    except OverflowError, TypeError, ValueError:
+        return 0
+
+
+def _wecom_event_since(item: dict) -> int:
+    """Return the lower bound for the first kefu sync pull."""
+    try:
+        create_time = int(item.get("CreateTime", 0))
+    except OverflowError, TypeError, ValueError:
+        create_time = 0
+    if create_time <= 0:
+        # A callback token is valid for ten minutes; bound replay when the
+        # event omits CreateTime.
+        return int(time.time()) - 600
+    return create_time - 60
+
+
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
 class WecomPlatformAdapter(Platform):
     WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS = 15
@@ -211,6 +232,8 @@ class WecomPlatformAdapter(Platform):
         self.server = WecomServer(self._event_queue, self.config)
         self.agent_id: str | None = None
         self._wechat_kf_seen_text_messages: dict[str, float] = {}
+        self._wechat_kf_cursors: dict[str, str] = {}
+        self._wechat_kf_lock = asyncio.Lock()
 
         self.client = WeChatClient(
             self.config["corpid"].strip(),
@@ -229,39 +252,66 @@ class WecomPlatformAdapter(Platform):
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
         async def callback(msg: BaseMessage) -> None:
-            if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
-
-                def get_latest_msg_item() -> dict | None:
-                    token = msg._data["Token"]
-                    kfid = msg._data["OpenKfId"]
-                    return self._latest_wechat_kf_message(token, kfid)
-
-                msg_new = await asyncio.get_running_loop().run_in_executor(
-                    None,
-                    get_latest_msg_item,
-                )
-                if msg_new:
-                    await self.convert_wechat_kf_message(msg_new)
+            if (
+                msg.type == "unknown"
+                and msg._data.get("Event") == "kf_msg_or_event"
+                and hasattr(self, "wechat_kf_api")
+            ):
+                token = msg._data.get("Token")
+                kfid = msg._data.get("OpenKfId")
+                if not token or not kfid:
+                    logger.warning("微信客服事件缺少 Token 或 OpenKfId，已忽略")
+                    return
+                since = _wecom_event_since(msg._data)
+                # Serialize pulls so overlapping callbacks do not both replay
+                # the same cursor window.
+                async with self._wechat_kf_lock:
+                    msg_items = await asyncio.get_running_loop().run_in_executor(
+                        None,
+                        self._latest_wechat_kf_messages,
+                        token,
+                        kfid,
+                        since,
+                    )
+                    for msg_new in msg_items:
+                        await self.convert_wechat_kf_message(msg_new)
                 return
             await self.convert_message(msg)
 
         self.server.callback = callback
 
-    def _latest_wechat_kf_message(self, token: str, kfid: str) -> dict | None:
-        cursor = ""
-        latest: dict | None = None
+    def _latest_wechat_kf_messages(
+        self,
+        token: str,
+        kfid: str,
+        since: int | None = None,
+    ) -> list[dict]:
+        cursor = self._wechat_kf_cursors.get(kfid, "")
+        first_pull = not cursor
+        collected: list[dict] = []
         while True:
             ret = self.wechat_kf_api.sync_msg(token, kfid, cursor)
             if not isinstance(ret, dict):
-                return latest
-            page = ret.get("msg_list") or []
-            if page:
-                latest = page[-1]
-            next_cursor = ret.get("next_cursor") or ""
+                return collected
+            collected.extend(ret.get("msg_list") or [])
+            next_cursor = ret.get("next_cursor") or cursor
             if not ret.get("has_more") or not next_cursor or next_cursor == cursor:
+                # Advance only after every page was fetched, so a transient
+                # failure does not skip the pages collected before it.
+                if next_cursor:
+                    self._wechat_kf_cursors[kfid] = next_cursor
                 break
             cursor = next_cursor
-        return latest
+
+        if not first_pull:
+            return collected
+        # An empty cursor starts three days back. On the first pull only keep
+        # messages around the callback event instead of replaying that window.
+        if since is not None:
+            return [
+                item for item in collected if _wecom_message_send_time(item) >= since
+            ]
+        return collected
 
     def _is_duplicate_wechat_kf_text_message(self, session_id: str, text: str) -> bool:
         normalized_text = text.strip()
@@ -370,6 +420,7 @@ class WecomPlatformAdapter(Platform):
                     open_kfid = acc.get("open_kfid", None)
                     if not open_kfid:
                         logger.error("获取微信客服失败，open_kfid 为空。")
+                        continue
                     logger.debug(f"Found open_kfid: {open_kfid!s}")
                     kf_url = (
                         await loop.run_in_executor(
@@ -382,6 +433,7 @@ class WecomPlatformAdapter(Platform):
                     logger.info(
                         f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
                     )
+                    break
             except Exception as e:
                 logger.error(e)
 
@@ -580,6 +632,7 @@ class WecomPlatformAdapter(Platform):
             await asyncio.gather(*callback_tasks, return_exceptions=True)
         try:
             await self.server.server.shutdown()
-        except Exception as _:
-            pass
+        except Exception as exc:
+            # Shutdown is best-effort; the webhook server may already be down.
+            logger.debug("企业微信 webhook 关闭失败: %s", safe_error("", exc))
         logger.info("企业微信 适配器已被关闭")

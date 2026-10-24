@@ -385,8 +385,11 @@ def process_at_mention(
     if not raw_text:
         return message_parts, ""
 
-    if bot_username and raw_text.startswith(f"@{bot_username}"):
-        at_mention = f"@{bot_username}"
+    at_mention = f"@{bot_username}"
+    mention_boundary = len(at_mention) >= len(raw_text) or not (
+        raw_text[len(at_mention)].isalnum() or raw_text[len(at_mention)] == "_"
+    )
+    if bot_username and raw_text.startswith(at_mention) and mention_boundary:
         message.message.append(Comp.Mention(target=bot_self_id))
         remaining_text = raw_text[len(at_mention) :].strip()
         if remaining_text:
@@ -491,6 +494,7 @@ async def resolve_component_url_or_path(
                 if value and value.startswith("http"):
                     url_candidate = value
             except Exception:
+                # A component that cannot resolve is not a media source.
                 pass
 
         # 3. 回退到同步属性
@@ -508,6 +512,7 @@ async def resolve_component_url_or_path(
                     continue
 
     except Exception:
+        # A malformed chain is skipped rather than raised.
         pass
 
     return url_candidate, local_path

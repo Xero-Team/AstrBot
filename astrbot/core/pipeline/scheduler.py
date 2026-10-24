@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator, Awaitable
+from contextlib import aclosing
 from time import time
 from typing import Protocol, cast
 
@@ -102,23 +103,25 @@ class PipelineScheduler:
             if isinstance(coroutine, AsyncGenerator):
                 # 如果返回的是异步生成器, 实现洋葱模型的核心
                 agen = cast(AsyncGenerator[None], coroutine)
-                async for _ in agen:
-                    # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
-                    if event.is_stopped():
-                        logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
-                        )
-                        return
+                async with aclosing(agen) as closing_agen:
+                    async for _ in closing_agen:
+                        # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
+                        was_stopped = event.is_stopped()
+                        if was_stopped and event.get_result() is None:
+                            logger.debug(
+                                f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            )
+                            return
 
-                    # 递归调用, 处理所有后续阶段
-                    await self._process_stages(event, i + 1)
+                        # 递归调用, 处理所有后续阶段
+                        await self._process_stages(event, i + 1)
 
-                    # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
-                    if event.is_stopped():
-                        logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
-                        )
-                        return
+                        # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
+                        if was_stopped or event.is_stopped():
+                            logger.debug(
+                                f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            )
+                            return
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段

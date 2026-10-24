@@ -54,6 +54,7 @@ def _payload_field(payload: Any, name: str) -> Any:
         except asyncio.CancelledError:
             raise
         except Exception:
+            # A payload without this attribute falls back to getattr.
             pass
     return getattr(payload, name, None)
 
@@ -580,8 +581,6 @@ class AiocqhttpAdapter(Platform):
             shutdown_trigger=self.shutdown_trigger_placeholder,
         )
 
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
         logging.getLogger("aiocqhttp").setLevel(logging.ERROR)
         self.shutdown_event = asyncio.Event()
         await coro

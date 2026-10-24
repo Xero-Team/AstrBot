@@ -376,7 +376,15 @@ class QQOfficialChunkedUploader:
                     raise QQOfficialChunkedUploadError(f"Invalid upload part: {part!r}")
                 await self._upload_part(session, part)
 
-        await asyncio.gather(*(upload_part(part) for part in parts))
+        try:
+            async with asyncio.TaskGroup() as task_group:
+                for part in parts:
+                    task_group.create_task(upload_part(part))
+        except ExceptionGroup as group:
+            first = group.exceptions[0]
+            if isinstance(first, QQOfficialChunkedUploadError):
+                raise first from group
+            raise QQOfficialChunkedUploadError(str(first)) from group
 
         merge_body = {
             "file_type": file_type,

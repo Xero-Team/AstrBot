@@ -1,0 +1,106 @@
+# One-click deployment: AstrBot (built natively from this repo) + SearXNG.
+#
+# Usage (after `git clone` of this repo):
+#   docker compose -f compose-with-searxng.yml up -d --build
+#
+# AstrBot is built from this checkout by default. To use the published nightly
+# image instead, replace the `astrbot` service's `build:` block with
+# `image: ghcr.io/xero-team/astrbot:nightly`; SearXNG is always pulled.
+#
+# Ports:
+#   6185 -> AstrBot WebUI   (http://localhost:6185)
+#   8080 -> SearXNG WebUI   (http://localhost:8080, loopback only by default)
+#
+# SearXNG is reached from AstrBot by container name, so the instance address to
+# enter in the WebUI is `http://searxng:8080`, not the published host port.
+# The image follows the upstream `latest` tag and is pulled again on every
+# `docker compose up`; replace the tag with a release tag plus digest when you
+# need a reproducible deployment.
+
+services:
+  # AstrBot, built from this checkout.
+  astrbot:
+    build:
+      context: . # Build this checkout instead of pulling an image.
+      dockerfile: Dockerfile # Root Dockerfile.
+      target: runtime # Production runtime stage.
+      args:
+        # Runtime feature groups; `full` enables every group. See the Docker docs.
+        ASTRBOT_FEATURES: '${ASTRBOT_FEATURES:-full}'
+    image: astrbot:local # Local tag for the image produced by `build`.
+    restart: always # Restart unless the operator stops the container.
+    init: true # Forward signals and reap orphaned child processes.
+    ports:
+      # Host ports bind to loopback by default. Set ASTRBOT_BIND_ADDRESS=0.0.0.0
+      # only with a firewall or reverse proxy in front of the WebUI.
+      - '${ASTRBOT_BIND_ADDRESS:-127.0.0.1}:6185:6185' # AstrBot WebUI
+    environment:
+      TZ: '${TZ:-Asia/Shanghai}' # Container timezone.
+      # The container must listen on all interfaces for the published port to work.
+      ASTRBOT_DASHBOARD_HOST: '0.0.0.0'
+    volumes:
+      - ./data:/AstrBot/data # Config, database, plugins, and runtime state.
+    depends_on:
+      - searxng # Start the search sidecar first; no readiness wait.
+    networks:
+      - astrbot_network
+    healthcheck:
+      # Liveness only; use /readyz when an orchestrator must wait for readiness.
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:6185/healthz', timeout=3)
+      interval: 30s # Probe every 30 seconds.
+      timeout: 5s # Fail a probe after 5 seconds.
+      retries: 3 # Mark unhealthy after three consecutive failures.
+      start_period: 30s # Ignore failures during the first 30 seconds.
+
+  # SearXNG sidecar; AstrBot queries http://searxng:8080/search?format=json.
+  searxng:
+    image: docker.io/searxng/searxng:latest # Follow upstream `latest`.
+    pull_policy: always # Re-check the tag on every `docker compose up`.
+    restart: always # Restart unless the operator stops the container.
+    init: true # Forward signals and reap orphaned child processes.
+    environment:
+      TZ: '${TZ:-Asia/Shanghai}' # Container timezone.
+      # Internal service address used for generated absolute links.
+      SEARXNG_BASE_URL: 'http://searxng:8080/'
+      # Loopback-only deployment, so the built-in rate limiter is unnecessary.
+      SEARXNG_LIMITER: 'false'
+    ports:
+      # Host port for browsing/debugging only; AstrBot uses the service name.
+      - '${SEARXNG_BIND_ADDRESS:-127.0.0.1}:${SEARXNG_PORT:-8080}:8080' # SearXNG WebUI
+    volumes:
+      - ./searxng:/etc/searxng:Z # Generated settings.yml and operator config.
+      - searxng-cache:/var/cache/searxng # Regenerable favicon/cache data.
+      # First-run bootstrap: creates settings.yml with json enabled and a random secret.
+      - ./scripts/searxng/entrypoint.sh:/usr/local/share/astrbot/searxng-entrypoint.sh:ro,Z
+    # Run the config bootstrap before the image's own entrypoint.
+    entrypoint: ['/bin/sh', '/usr/local/share/astrbot/searxng-entrypoint.sh']
+    networks:
+      - astrbot_network
+    healthcheck:
+      # SearXNG's own liveness endpoint.
+      test:
+        - CMD
+        - /usr/local/searxng/.venv/bin/python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)
+      interval: 30s # Probe every 30 seconds.
+      timeout: 5s # Fail a probe after 5 seconds.
+      retries: 3 # Mark unhealthy after three consecutive failures.
+      start_period: 30s # Ignore failures during the first 30 seconds.
+
+volumes:
+  # Named volume keeps cache data out of the bind-mounted config directory.
+  searxng-cache:
+
+networks:
+  # Normal bridge network; SearXNG needs outbound access to search engines.
+  astrbot_network:
+    driver: bridge

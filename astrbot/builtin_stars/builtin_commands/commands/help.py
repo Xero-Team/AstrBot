@@ -1,4 +1,6 @@
+import json
 from html import escape
+from typing import Any, cast
 
 import aiohttp
 
@@ -7,18 +9,57 @@ from astrbot.api.event import AstrMessageEvent
 
 from .reply import reply_image_file, reply_image_url, reply_text
 
+_MAX_NOTICE_BYTES = 64 * 1024  # 64 KiB (65,536 bytes)
+
 
 class HelpCommand:
     def __init__(self, context: star.PluginContext) -> None:
         self.context = context
 
-    async def _query_astrbot_notice(self):
+    async def _query_astrbot_notice(self) -> str:
         try:
             timeout = aiohttp.ClientTimeout(total=2)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get("https://astrbot.app/notice.json") as resp:
-                    return (await resp.json())["notice"]
-        except Exception:
+                    resp.raise_for_status()
+
+                    content_length = resp.headers.get("Content-Length")
+                    if (
+                        content_length
+                        and content_length.isdigit()
+                        and int(content_length) > _MAX_NOTICE_BYTES
+                    ):
+                        logger.debug(
+                            "AstrBot remote notice Content-Length exceeds %s bytes",
+                            _MAX_NOTICE_BYTES,
+                        )
+                        return ""
+
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in resp.content.iter_chunked(8192):
+                        total += len(chunk)
+                        if total > _MAX_NOTICE_BYTES:
+                            logger.debug(
+                                "AstrBot remote notice response exceeded %s bytes",
+                                _MAX_NOTICE_BYTES,
+                            )
+                            return ""
+                        chunks.append(chunk)
+
+                    body = b"".join(chunks)
+                    payload = json.loads(body)
+                    notice = (
+                        payload.get("notice") if isinstance(payload, dict) else None
+                    )
+                    if not isinstance(notice, str):
+                        return ""
+                    return notice[:2000]
+        except Exception as exc:
+            logger.debug(
+                "Failed to query AstrBot remote notice (%s)",
+                type(exc).__name__,
+            )
             return ""
 
     async def _build_reserved_commands(self) -> list[tuple[str, str]]:
@@ -185,11 +226,7 @@ class HelpCommand:
 
     async def help(self, event: AstrMessageEvent, image: bool = False) -> None:
         """Show help for enabled built-in commands."""
-        notice = ""
-        try:
-            notice = await self._query_astrbot_notice()
-        except Exception:
-            pass
+        notice = await self._query_astrbot_notice()
 
         dashboard_version = await self.context.runtime_info.dashboard_version()
         commands = await self._build_reserved_commands()
@@ -224,13 +261,18 @@ class HelpCommand:
             reply_image_url(event, rendered_image)
             return
 
-        if hasattr(event, "track_temporary_local_file"):
-            event.track_temporary_local_file(rendered_image)
-
         callback_base = self._get_callback_base(event)
+        temporary_tracked = False
         if callback_base:
+            if hasattr(event, "track_temporary_local_file"):
+                event.track_temporary_local_file(rendered_image)
+                temporary_tracked = True
             try:
-                token = await self.context.files.publish(rendered_image)
+                publish_owned = getattr(self.context.files, "publish_owned", None)
+                if callable(publish_owned):
+                    token = await cast(Any, publish_owned)(rendered_image, event)
+                else:
+                    token = await self.context.files.publish(rendered_image)
                 image_url = f"{callback_base}/api/v1/files/tokens/{token}"
                 reply_image_url(event, image_url)
                 return
@@ -239,6 +281,9 @@ class HelpCommand:
                     "Failed to expose local help image via file token: %s", exc
                 )
 
+        track_file = getattr(event, "track_temporary_local_file", None)
+        if not temporary_tracked and callable(track_file):
+            track_file(rendered_image)
         logger.debug(
             "Sending local help image without a callback URL: %s",
             rendered_image,

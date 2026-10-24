@@ -108,6 +108,7 @@ class CronJobManager:
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._background_tasks: set[asyncio.Task] = set()
         self._lock = asyncio.Lock()
+        self._running_job_ids: set[str] = set()
         self._started = False
         self._db_synced = False
 
@@ -333,6 +334,30 @@ class CronJobManager:
         *,
         ignore_enabled: bool = False,
         delete_run_once: bool = True,
+    ) -> None:
+        running = self._running_job_ids
+        if job_id in running:
+            logger.warning(
+                "Cron job %s is already running; skipping duplicate run",
+                job_id.replace("\r", "").replace("\n", ""),
+            )
+            return
+        running.add(job_id)
+        try:
+            await self._run_job_once(
+                job_id,
+                ignore_enabled=ignore_enabled,
+                delete_run_once=delete_run_once,
+            )
+        finally:
+            running.discard(job_id)
+
+    async def _run_job_once(
+        self,
+        job_id: str,
+        *,
+        ignore_enabled: bool,
+        delete_run_once: bool,
     ) -> None:
         job = await self.db.get_cron_job(job_id)
         if not job or (not job.enabled and not ignore_enabled):

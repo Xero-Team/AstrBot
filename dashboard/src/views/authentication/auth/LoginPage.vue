@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import AuthLogin from '../authForms/AuthLogin.vue';
 import AuthAppearanceMenu from '@/components/auth/AuthAppearanceMenu.vue';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  type ComponentPublicInstance,
+} from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRoute, useRouter } from 'vue-router';
 import { useModuleI18n } from '@/i18n/composables';
@@ -49,6 +55,7 @@ async function startOidc() {
 }
 const publicVersions = ref<PublicVersionData | null>(null);
 const versionDialogVisible = ref(false);
+const versionHelpBtn = ref<ComponentPublicInstance | null>(null);
 let cardRevealTimer: ReturnType<typeof window.setTimeout> | null = null;
 type VersionItem = { key: string; label: string; value: string };
 type VersionWarning = { key: string; title: string; message: string };
@@ -249,6 +256,7 @@ onBeforeUnmount(() => {
         </span>
         <v-btn
           v-if="versionWarnings.length"
+          ref="versionHelpBtn"
           class="version-help-btn"
           icon
           variant="text"
@@ -265,6 +273,8 @@ onBeforeUnmount(() => {
     </v-card>
     <v-dialog
       v-model="versionDialogVisible"
+      :activator="versionHelpBtn ?? undefined"
+      :open-on-click="false"
       max-width="460"
       :aria-label="t('versions.dialogTitle')"
     >

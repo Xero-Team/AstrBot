@@ -32,6 +32,7 @@ class PlatformAdapterType(enum.Flag):
 
 ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
+    "napcat": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
     "qq_official_webhook": PlatformAdapterType.QQOFFICIAL_WEBHOOK,
     "telegram": PlatformAdapterType.TELEGRAM,

@@ -38,7 +38,8 @@ async def call_handler(
     try:
         ready_to_call = handler(event, *args, **kwargs)
     except TypeError:
-        logger.error("处理函数参数不匹配，请检查 handler 的定义。", exc_info=True)
+        logger.error("处理函数参数不匹配，请检查 handler 的定义。")
+        raise
 
     if ready_to_call is None:
         return

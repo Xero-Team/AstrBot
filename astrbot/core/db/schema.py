@@ -1,5 +1,6 @@
 """Create and migrate the main SQLite schema from registered SQLModel tables."""
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import text
 
@@ -14,19 +15,32 @@ _SQLITE_RUNTIME_PRAGMAS = (
     "PRAGMA cache_size=20000",
     "PRAGMA temp_store=MEMORY",
     "PRAGMA mmap_size=134217728",
-    "PRAGMA optimize",
 )
 
 
-async def apply_runtime_pragmas(engine: AsyncEngine) -> None:
-    """Apply the SQLite runtime PRAGMAs to one connection.
+def _install_runtime_pragmas(engine: AsyncEngine) -> None:
+    sync_engine = engine.sync_engine
+    if getattr(sync_engine, "_astrbot_pragmas_installed", False):
+        return
 
-    Args:
-        engine: Engine bound to the main database file.
-    """
+    @event.listens_for(sync_engine, "connect")
+    def _apply(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            for pragma in _SQLITE_RUNTIME_PRAGMAS:
+                cursor.execute(pragma)
+        finally:
+            cursor.close()
+
+    sync_engine._astrbot_pragmas_installed = True  # type: ignore[attr-defined]
+
+
+async def apply_runtime_pragmas(engine: AsyncEngine) -> None:
+    """Apply connection-scoped SQLite PRAGMAs to every future connection."""
+    _install_runtime_pragmas(engine)
     async with engine.connect() as conn:
-        for pragma in _SQLITE_RUNTIME_PRAGMAS:
-            await conn.execute(text(pragma))
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.execute(text("PRAGMA optimize"))
         await conn.commit()
 
 

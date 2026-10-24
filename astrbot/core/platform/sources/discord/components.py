@@ -37,7 +37,7 @@ class DiscordEmbed(BaseMessageComponent):
             embed.title = self.title
         if self.description:
             embed.description = self.description
-        if self.color:
+        if self.color is not None:
             embed.color = self.color
         if self.url:
             embed.url = self.url

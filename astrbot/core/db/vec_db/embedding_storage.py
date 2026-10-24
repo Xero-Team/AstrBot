@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import tempfile
@@ -70,8 +71,16 @@ class EmbeddingStorage:
         self.dimension = dimension
         self.path = path
         self.index = None
+        self._index_lock = asyncio.Lock()
         if path and os.path.exists(path):
             self.index = self._read_index(path)
+            loaded_dimension = int(getattr(self.index, "d", dimension))
+            if dimension and loaded_dimension != dimension:
+                raise ValueError(
+                    "嵌入向量维度与已有索引不一致: "
+                    f"configured={dimension}, index={loaded_dimension}"
+                )
+            self.dimension = loaded_dimension
         else:
             if dimension <= 0:
                 raise ValueError(
@@ -102,6 +111,7 @@ class EmbeddingStorage:
                 try:
                     os.remove(tmp)
                 except OSError:
+                    # A leftover temporary index file is harmless.
                     pass
 
     @staticmethod
@@ -126,6 +136,7 @@ class EmbeddingStorage:
                 try:
                     os.remove(tmp)
                 except OSError:
+                    # A leftover temporary index file is harmless.
                     pass
 
     async def insert(self, vector: np.ndarray, id: int) -> None:
@@ -135,8 +146,11 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
             )
-        self.index.add_with_ids(vector.reshape(1, -1), np.array([id], dtype=np.int64))
-        await self.save_index()
+        async with self._index_lock:
+            self.index.add_with_ids(
+                vector.reshape(1, -1), np.array([id], dtype=np.int64)
+            )
+            await self._save_index_locked()
 
     async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
         """批量插入向量"""
@@ -149,8 +163,9 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
             )
-        self.index.add_with_ids(vectors, np.array(ids, dtype=np.int64))
-        await self.save_index()
+        async with self._index_lock:
+            self.index.add_with_ids(vectors, np.array(ids, dtype=np.int64))
+            await self._save_index_locked()
 
     async def search(self, vector: np.ndarray, k: int) -> tuple:
         """搜索向量
@@ -163,8 +178,9 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
             )
-        distances, indices = self.index.search(vector.reshape(1, -1), k)
-        return distances, indices
+        async with self._index_lock:
+            distances, indices = self.index.search(vector.reshape(1, -1), k)
+            return distances, indices
 
     async def delete(self, ids: list[int]) -> None:
         """删除向量
@@ -173,15 +189,21 @@ class EmbeddingStorage:
         由于 remove_ids 为幂等操作，此处忽略该错误。
         """
         assert self.index is not None, "FAISS index is not initialized."
-        try:
-            self.index.remove_ids(np.asarray(ids, dtype=np.int64))  # type: ignore[arg-type]
-        except RuntimeError:
-            # 幂等：删除已不存在的 ID，安全忽略
-            pass
-        await self.save_index()
+        async with self._index_lock:
+            try:
+                self.index.remove_ids(np.asarray(ids, dtype=np.int64))  # type: ignore[arg-type]
+            except RuntimeError:
+                # 幂等：删除已不存在的 ID，安全忽略
+                pass
+            await self._save_index_locked()
 
     async def save_index(self) -> None:
         """保存索引（兼容含非 ASCII 字符的 Windows 路径）"""
+        async with self._index_lock:
+            await self._save_index_locked()
+
+    async def _save_index_locked(self) -> None:
+        """Write the index while the caller holds the mutation lock."""
         if self.index is None or not self.path:
             return
-        self._write_index(self.index, self.path)
+        await asyncio.to_thread(self._write_index, self.index, self.path)

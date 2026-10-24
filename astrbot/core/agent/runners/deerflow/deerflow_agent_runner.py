@@ -526,6 +526,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         if delta_text:
             state.latest_text += delta_text
+            state.prev_text_for_streaming = state.latest_text
             if self.streaming:
                 return [
                     AgentResponse(
@@ -551,15 +552,29 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         new_messages: list[dict[str, T.Any]] = []
         if not state.baseline_initialized:
             state.baseline_initialized = True
+            # A reused thread returns the whole history on the first values
+            # event. Only messages from the latest user turn belong to this run.
+            turn_start = 0
+            for idx in range(len(values_messages) - 1, -1, -1):
+                msg = values_messages[idx]
+                if isinstance(msg, dict) and str(msg.get("role", "")).lower() in {
+                    "user",
+                    "human",
+                }:
+                    turn_start = idx
+                    break
             for idx, msg in enumerate(values_messages):
                 if not isinstance(msg, dict):
                     continue
-                new_messages.append(msg)
                 msg_id = get_message_id(msg)
                 if msg_id:
                     self._remember_seen_message_id(state, msg_id)
+                    if idx >= turn_start:
+                        new_messages.append(msg)
                     continue
                 state.no_id_message_fingerprints[idx] = self._fingerprint_message(msg)
+                if idx >= turn_start:
+                    new_messages.append(msg)
         else:
             new_messages = self._extract_new_messages_from_values(
                 values_messages,

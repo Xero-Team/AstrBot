@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from astrbot.builtin_stars.builtin_commands.commands.reply import reply_text
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
@@ -12,6 +13,7 @@ from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 class PipelineEvent:
     def __init__(self) -> None:
         self.stopped = False
+        self.result = None
         self.stage_trace: list[str] = []
         self.trace = MagicMock()
         self._execution_active = False
@@ -22,7 +24,18 @@ class PipelineEvent:
         self.sent_none = False
 
     def is_stopped(self) -> bool:
-        return self.stopped
+        if self.stopped:
+            return True
+        return bool(self.result and self.result.is_stopped())
+
+    def get_result(self):
+        return self.result
+
+    def set_result(self, result) -> None:
+        self.result = result
+
+    def clear_result(self) -> None:
+        self.result = None
 
     def stop_event(self) -> None:
         self.stopped = True
@@ -83,6 +96,51 @@ class CancelStage(Stage):
     async def process(self, event: PipelineEvent) -> None:
         event.stage_trace.append("cancel")
         raise asyncio.CancelledError
+
+
+class StoppedReplyStage(Stage):
+    def __init__(self) -> None:
+        self.resumed = False
+
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent):
+        reply_text(event, "command reply")
+        yield
+        self.resumed = True
+
+
+class StopWithoutResultStage(Stage):
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent):
+        event.stop_event()
+        yield
+
+
+class NonYieldingStage(Stage):
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent):
+        if False:
+            yield
+
+
+class RecordingResponderStage(Stage):
+    def __init__(self) -> None:
+        self.delivered: list[str] = []
+
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent) -> None:
+        result = event.get_result()
+        if result is not None:
+            self.delivered.append(result.get_plain_text())
+            event.clear_result()
 
 
 def _scheduler(stages: list[Stage]) -> PipelineScheduler:
@@ -157,3 +215,59 @@ async def test_pipeline_sends_empty_completion_for_webchat_when_not_skipped():
     await scheduler.execute(event)
 
     assert event.sent_none is True
+
+
+@pytest.mark.asyncio
+async def test_pipeline_delivers_stopped_generator_result_before_stopping():
+    reply_stage = StoppedReplyStage()
+    responder = RecordingResponderStage()
+    scheduler = _scheduler([reply_stage, responder])
+    event = PipelineEvent()
+
+    await scheduler._process_stages(event)
+
+    assert responder.delivered == ["command reply"]
+    assert event.get_result() is None
+    assert reply_stage.resumed is False
+
+
+@pytest.mark.asyncio
+async def test_pipeline_skips_downstream_for_stopped_generator_without_result():
+    scheduler = _scheduler([StopWithoutResultStage(), TraceStage("late")])
+    event = PipelineEvent()
+
+    await scheduler._process_stages(event)
+
+    assert "late" not in event.stage_trace
+    assert event.is_stopped() is True
+
+
+@pytest.mark.asyncio
+async def test_pipeline_continues_past_generator_without_yields():
+    scheduler = _scheduler([NonYieldingStage(), TraceStage("after")])
+    event = PipelineEvent()
+
+    await scheduler._process_stages(event)
+
+    assert "after" in event.stage_trace
+
+
+class FinalizingStage(Stage):
+    async def initialize(self, ctx) -> None:
+        return None
+
+    async def process(self, event: PipelineEvent):
+        try:
+            yield
+        finally:
+            event.stage_trace.append("finalized")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_closes_stage_generator_when_event_stops_after_yield():
+    scheduler = _scheduler([FinalizingStage(), TraceStage("stopper", stop=True)])
+    event = PipelineEvent()
+
+    await scheduler._process_stages(event)
+
+    assert event.stage_trace[:2] == ["stopper", "finalized"]

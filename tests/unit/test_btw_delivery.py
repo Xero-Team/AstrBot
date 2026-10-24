@@ -59,6 +59,9 @@ class WorkEvent:
     def stop_event(self):
         self._stopped = True
 
+    def clear_result(self):
+        self.result = None
+
     def get_platform_id(self):
         return "webchat"
 

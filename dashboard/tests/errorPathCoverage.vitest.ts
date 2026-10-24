@@ -307,7 +307,7 @@ describe('error-path coverage', () => {
     };
     const tools = useToolActions(ref([readonlyTool] as never), toast);
     await tools.toggleTool(readonlyTool as never, 'ro', 'ok', 'err');
-    await tools.toggleToolParallel(readonlyTool as never, true, 'err');
+    await tools.toggleToolParallel(readonlyTool as never, true, 'ok', 'err');
     api.toolApi.setEnabled.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
@@ -322,11 +322,11 @@ describe('error-path coverage', () => {
     const tools2 = useToolActions(ref([writable] as never), toast);
     await tools2.toggleTool(writable as never, 'ro', 'ok', 'err');
     api.toolApi.setParallel.mockRejectedValue(new Error('fail'));
-    await tools2.toggleToolParallel(writable as never, true, 'err');
+    await tools2.toggleToolParallel(writable as never, true, 'ok', 'err');
     api.toolApi.setParallelEnabled.mockResolvedValue({
       data: { status: 'error', message: 'fail' },
     });
-    await tools2.toggleParallelExecution(true, 'err');
+    await tools2.toggleParallelExecution(true, 'ok', 'err');
 
     api.commandApi.list.mockResolvedValue({
       data: {

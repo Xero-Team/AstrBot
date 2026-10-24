@@ -848,13 +848,13 @@ describe('coverage closeout', () => {
     api.toolApi.setParallel.mockResolvedValue({
       data: { status: 'error', message: 'parallel-status' },
     });
-    await tools.toggleToolParallel(writable as never, true, 'err');
+    await tools.toggleToolParallel(writable as never, true, 'ok', 'err');
     expect(writable.parallel_enabled).toBe(false);
     api.toolApi.setParallel.mockRejectedValue(new Error('parallel'));
-    await tools.toggleToolParallel(writable as never, true, 'err');
+    await tools.toggleToolParallel(writable as never, true, 'ok', 'err');
     expect(writable.parallel_enabled).toBe(false);
     api.toolApi.setParallelEnabled.mockRejectedValue(new Error('exec'));
-    await tools.toggleParallelExecution(true, 'err');
+    await tools.toggleParallelExecution(true, 'ok', 'err');
 
     const manager = useFolderManager({
       rootFolderName: 'Root',

@@ -304,8 +304,8 @@ describe('frontend logic coverage', () => {
     };
     const actions = useToolActions(ref([tool] as never), toast);
     await actions.toggleTool(tool as never, 'ro', 'ok', 'err');
-    await actions.toggleToolParallel(tool as never, true, 'err');
-    await actions.toggleParallelExecution(true, 'err');
+    await actions.toggleToolParallel(tool as never, true, 'ok', 'err');
+    await actions.toggleParallelExecution(true, 'ok', 'err');
     expect(actions.parallelExecutionEnabled.value).toBeTypeOf('boolean');
 
     const commandActions = useCommandActions(toast, vi.fn());

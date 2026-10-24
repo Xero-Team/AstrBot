@@ -109,3 +109,13 @@ async def test_insert_batch_rolls_back_documents_when_faiss_write_fails() -> Non
 
     vec_db.embedding_storage.delete.assert_awaited_once_with([11])
     vec_db.document_storage.delete_document_by_doc_id.assert_awaited_once_with("doc-1")
+
+
+@pytest.mark.asyncio
+async def test_embedding_storage_save_index_writes_the_current_index(tmp_path) -> None:
+    path = tmp_path / "index.faiss"
+    storage = EmbeddingStorage(2, str(path))
+
+    await storage.save_index()
+
+    assert path.is_file()

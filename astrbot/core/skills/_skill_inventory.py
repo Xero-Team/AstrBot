@@ -3,8 +3,6 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-SANDBOX_SKILLS_ROOT = "skills"
-SANDBOX_WORKSPACE_ROOT = "/workspace"
 WORKSPACE_SKILLS_ROOT = "skills"
 WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS = 64 * 1024
 
@@ -15,26 +13,6 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F-\x9F]")
 def _normalize_skill_name(name: str | None) -> str:
     raw = str(name or "")
     return re.sub(r"\s+", "_", raw.strip())
-
-
-def _default_sandbox_skill_path(name: str) -> str:
-    return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
-
-
-def _normalize_cached_sandbox_skill_path(name: str, path: str) -> str:
-    normalized = str(path or "").strip().replace("\\", "/")
-    if not normalized:
-        return _default_sandbox_skill_path(name)
-
-    pure_path = PurePosixPath(normalized)
-    if _is_invalid_cached_sandbox_skill_path(name, pure_path):
-        return _default_sandbox_skill_path(name)
-
-    return str(pure_path)
-
-
-def _is_invalid_cached_sandbox_skill_path(name: str, path: PurePosixPath) -> bool:
-    return ".." in path.parts or path.name != "SKILL.md" or path.parent.name != name
 
 
 def _is_ignored_zip_entry(name: str) -> bool:
@@ -113,7 +91,6 @@ class SkillInfo:
     source_type: str = "local_only"
     source_label: str = "local"
     local_exists: bool = True
-    sandbox_exists: bool = False
     plugin_name: str = ""
     readonly: bool = False
     declared_tools: tuple[str, ...] = ()
@@ -201,7 +178,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
 def _render_skill_prompt_description(skill: SkillInfo) -> str:
     description = skill.description or "No description"
-    if skill.source_type not in {"sandbox_only", "workspace"}:
+    if skill.source_type != "workspace":
         return description
     sanitized = _sanitize_prompt_description(description)
     return sanitized or "Read SKILL.md for details."

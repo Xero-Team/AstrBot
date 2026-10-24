@@ -1,16 +1,7 @@
 <template>
   <div class="skills-page">
     <v-container fluid class="pa-0">
-      <SkillsModeHeader
-        v-model:mode="mode"
-        :neo-enabled="neoEnabled"
-        :runtime="runtime"
-        :sandbox-ready="sandboxCache.ready"
-        :neo-unavailable-message="neoUnavailableMessage"
-      />
-
       <SkillsLocalList
-        v-if="mode === 'local'"
         :loading="loading"
         :total-skills="skills.length"
         :result-count="filteredSkills.length"
@@ -93,31 +84,9 @@
           @toggle="toggleSkill(skill)"
         />
       </SkillsLocalList>
-
-      <SkillsNeoPanel
-        v-else-if="mode === 'neo' && neoEnabled"
-        :loading="neoLoading"
-        :candidates="neoCandidates"
-        :releases="neoReleases"
-        v-model:skill-key="neoFilters.skill_key"
-        v-model:status="neoFilters.status"
-        v-model:stage="neoFilters.stage"
-        :promote-loading="candidatePromoteLoading"
-        @evaluate="evaluateCandidate"
-        @promote="promoteCandidate"
-        @view-payload="viewPayload"
-        @delete-candidate="deleteCandidate"
-        @lifecycle="handleReleaseLifecycleAction"
-        @sync-release="syncRelease"
-        @delete-release="deleteRelease"
-      />
     </v-container>
 
-    <SkillsFabStack
-      :mode="mode"
-      @refresh="refreshCurrentMode"
-      @upload="openUploadDialog"
-    />
+    <SkillsFabStack @refresh="fetchSkills" @upload="openUploadDialog" />
 
     <SkillUploadDialog
       :show="uploadDialog"
@@ -168,12 +137,6 @@
       @close="closeSkillEditor"
     />
 
-    <SkillPayloadDialog
-      :show="payloadDialog.show"
-      :content="payloadDialog.content"
-      @update:show="payloadDialog.show = $event"
-    />
-
     <v-snackbar
       v-model="snackbar.show"
       :timeout="3500"
@@ -188,19 +151,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import type { SkillItemData } from '@/api/v1';
-import { skillApi, systemConfigApi } from '@/api/v1';
+import { skillApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { buildSearchQuery, matchesText } from '@/utils/pluginSearch';
 import SkillsLocalList from './SkillsLocalList.vue';
-import SkillsNeoPanel from './SkillsNeoPanel.vue';
-import SkillsModeHeader from './skills/SkillsModeHeader.vue';
 import SkillsFabStack from './skills/SkillsFabStack.vue';
 import SkillListItem from './skills/SkillListItem.vue';
 import SkillUploadDialog from './SkillUploadDialog.vue';
 import SkillDeleteDialog from './SkillDeleteDialog.vue';
 import SkillBatchDeleteDialog from './SkillBatchDeleteDialog.vue';
 import SkillEditorDialog from './SkillEditorDialog.vue';
-import SkillPayloadDialog from './SkillPayloadDialog.vue';
 import {
   STATUS_ERROR,
   STATUS_SKIPPED,
@@ -208,24 +168,12 @@ import {
   STATUS_UPLOADING,
   STATUS_WAITING,
   asRecord,
-  candidatePromoteLoadingKey,
   getBoolean,
-  getNumber,
   getString,
-  normalizeNeoCandidate,
-  normalizeNeoItemsPayload,
-  normalizeNeoRelease,
   normalizeSkillEntry,
   normalizeUploadName,
   type EditorDialogState,
-  type NeoCandidate,
-  type NeoFilterState,
-  type NeoRelease,
-  type PayloadDialogState,
-  type ReleaseStage,
-  type SandboxCacheState,
   type SkillEntry,
-  type SkillMode,
   type SnackbarColor,
   type UploadItem,
   type UploadResultEntry,
@@ -247,16 +195,9 @@ interface SkillItem extends SkillItemData {
 
 const { tm } = useModuleI18n('features/extension');
 
-const mode = ref<SkillMode>('local');
 const skills = ref<SkillItem[]>([]);
 const skillSearch = ref('');
 const loading = ref(false);
-const runtime = ref('local');
-const sandboxCache = reactive<SandboxCacheState>({
-  ready: false,
-  count: 0,
-  updated_at: null,
-});
 const uploading = ref(false);
 const uploadDialog = ref(false);
 const uploadItems = ref<UploadItem[]>([]);
@@ -279,19 +220,6 @@ const snackbar = reactive<{
   color: 'success',
 });
 
-const neoLoading = ref(false);
-const neoCandidates = ref<NeoCandidate[]>([]);
-const neoReleases = ref<NeoRelease[]>([]);
-const neoFilters = reactive<NeoFilterState>({
-  skill_key: '',
-  status: '',
-  stage: '',
-});
-const candidatePromoteLoading = reactive<Record<string, boolean>>({});
-const payloadDialog = reactive<PayloadDialogState>({
-  show: false,
-  content: '',
-});
 const editorDialog = reactive<EditorDialogState>({
   show: false,
   skillName: '',
@@ -307,8 +235,6 @@ const editorDialog = reactive<EditorDialogState>({
   error: '',
 });
 
-const neoEnabled = ref(false);
-const neoUnavailableMessage = ref('');
 let nextUploadItemId = 0;
 
 function normalizeSkillItem(value: unknown): SkillItem | null {
@@ -348,10 +274,6 @@ function showMessage(message: string, color: SnackbarColor = 'success') {
 
 function normalizeSkillsPayload(payload: unknown) {
   if (Array.isArray(payload)) {
-    runtime.value = 'local';
-    sandboxCache.ready = false;
-    sandboxCache.count = 0;
-    sandboxCache.updated_at = null;
     return payload
       .map((skill) => normalizeSkillItem(skill))
       .filter((skill): skill is SkillItem => skill !== null);
@@ -359,18 +281,8 @@ function normalizeSkillsPayload(payload: unknown) {
 
   const record = asRecord(payload);
   if (!record) {
-    runtime.value = 'local';
-    sandboxCache.ready = false;
-    sandboxCache.count = 0;
-    sandboxCache.updated_at = null;
     return [];
   }
-
-  runtime.value = getString(record.runtime) || 'local';
-  const cache = asRecord(record.sandbox_cache);
-  sandboxCache.ready = getBoolean(cache?.ready);
-  sandboxCache.count = getNumber(cache?.count);
-  sandboxCache.updated_at = getString(cache?.updated_at) || null;
 
   const skillList = Array.isArray(record.skills) ? record.skills : [];
   return skillList
@@ -389,21 +301,13 @@ function sourceTypeLabel(sourceType?: string, skill: SkillItem | null = null) {
       source: skill?.source_label || '',
     });
   }
-  if (sourceType === 'sandbox_only') return tm('skills.sourceSandboxOnly');
-  if (sourceType === 'both') return tm('skills.sourceBoth');
   return tm('skills.sourceLocalOnly');
 }
 
 function sourceTypeColor(sourceType?: string) {
-  if (sourceType === 'sandbox_only') return 'indigo';
   if (sourceType === 'plugin') return 'secondary';
   if (sourceType === 'builtin_preset') return 'teal';
-  if (sourceType === 'both') return 'success';
   return 'primary';
-}
-
-function isSandboxPresetSkill(skill: SkillItem) {
-  return skill.source_type === 'sandbox_only';
 }
 
 function isPluginProvidedSkill(skill: SkillItem) {
@@ -421,7 +325,6 @@ function isBuiltinPresetSkill(skill: SkillItem) {
 function isReadOnlySourceSkill(skill: SkillItem) {
   return (
     skill.readonly === true ||
-    isSandboxPresetSkill(skill) ||
     isPluginProvidedSkill(skill) ||
     isBuiltinPresetSkill(skill)
   );
@@ -451,10 +354,6 @@ const allDeletableSelected = computed(
 );
 
 function showReadOnlySkillMessage(skill: SkillItem) {
-  if (isSandboxPresetSkill(skill)) {
-    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-    return;
-  }
   if (isPluginProvidedSkill(skill)) {
     showMessage(tm('skills.pluginReadonly'), 'warning');
     return;
@@ -948,10 +847,6 @@ async function loadSkillFile(path: string) {
 
 async function openSkillEditor(skill: SkillItem) {
   if (batchSelectionEnabled.value) return;
-  if (isSandboxPresetSkill(skill)) {
-    showMessage(tm('skills.sandboxPresetReadonly'), 'warning');
-    return;
-  }
   resetEditorDialog();
   editorDialog.skillName = skill.name;
   editorDialog.show = true;
@@ -1027,251 +922,6 @@ async function saveSkillFile() {
   }
 }
 
-async function fetchNeoCandidates() {
-  const params = {
-    skill_key: neoFilters.skill_key || undefined,
-    status: neoFilters.status || undefined,
-  };
-  const res = await skillApi.neoCandidates(params);
-  neoCandidates.value = normalizeNeoItemsPayload(res.data.data)
-    .map((item) => normalizeNeoCandidate(item))
-    .filter((item): item is NeoCandidate => item !== null);
-}
-
-async function fetchNeoReleases() {
-  const params = {
-    skill_key: neoFilters.skill_key || undefined,
-    stage: neoFilters.stage || undefined,
-  };
-  const res = await skillApi.neoReleases(params);
-  neoReleases.value = normalizeNeoItemsPayload(res.data.data)
-    .map((item) => normalizeNeoRelease(item))
-    .filter((item): item is NeoRelease => item !== null);
-}
-
-async function loadNeoAvailability() {
-  try {
-    const res = await systemConfigApi.get();
-    const data = asRecord(res.data.data);
-    const config = asRecord(data?.config);
-    const providerSettings = asRecord(config?.provider_settings);
-    const sandbox = asRecord(providerSettings?.sandbox);
-    const currentRuntime =
-      getString(providerSettings?.computer_use_runtime) || 'none';
-    const booter = getString(sandbox?.booter);
-    neoEnabled.value =
-      currentRuntime === 'sandbox' && booter === 'shipyard_neo';
-  } catch {
-    neoEnabled.value = false;
-  }
-
-  neoUnavailableMessage.value = tm('skills.neoRuntimeRequired');
-  if (!neoEnabled.value && mode.value === 'neo') {
-    mode.value = 'local';
-  }
-}
-
-async function fetchNeoData() {
-  neoLoading.value = true;
-  try {
-    await Promise.all([fetchNeoCandidates(), fetchNeoReleases()]);
-  } catch {
-    showMessage(tm('skills.neoLoadFailed'), 'error');
-  } finally {
-    neoLoading.value = false;
-  }
-}
-
-async function evaluateCandidate(candidate: NeoCandidate, passed: boolean) {
-  try {
-    const res = await skillApi.evaluateNeoCandidate({
-      candidate_id: candidate.id,
-      passed,
-      score: passed ? 1.0 : 0.0,
-      report: passed ? 'approved_from_webui' : 'rejected_from_webui',
-    });
-    handleApiResponse(
-      res,
-      tm('skills.neoEvaluateSuccess'),
-      tm('skills.neoEvaluateFailed'),
-      async () => {
-        await fetchNeoCandidates();
-      },
-    );
-  } catch {
-    showMessage(tm('skills.neoEvaluateFailed'), 'error');
-  }
-}
-
-async function promoteCandidate(candidate: NeoCandidate, stage: ReleaseStage) {
-  const candidateId = candidate.id;
-  const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
-  if (candidatePromoteLoading[loadingKey]) return;
-  candidatePromoteLoading[loadingKey] = true;
-  try {
-    const res = await skillApi.promoteNeoCandidate({
-      candidate_id: candidateId,
-      stage,
-      sync_to_local: true,
-    });
-    const ok = res.data.status === 'ok';
-    if (!ok) {
-      showMessage(res.data.message || tm('skills.neoPromoteFailed'), 'error');
-    } else {
-      showMessage(tm('skills.neoPromoteSuccess'), 'success');
-    }
-    await fetchNeoData();
-    if (stage === 'stable') {
-      await fetchSkills();
-    }
-  } catch {
-    showMessage(tm('skills.neoPromoteFailed'), 'error');
-  } finally {
-    candidatePromoteLoading[loadingKey] = false;
-  }
-}
-
-async function rollbackRelease(release: NeoRelease) {
-  try {
-    const res = await skillApi.rollbackNeoRelease({
-      release_id: release.id,
-    });
-    handleApiResponse(
-      res,
-      tm('skills.neoRollbackSuccess'),
-      tm('skills.neoRollbackFailed'),
-      async () => {
-        await fetchNeoData();
-      },
-    );
-  } catch {
-    showMessage(tm('skills.neoRollbackFailed'), 'error');
-  }
-}
-
-async function deactivateRelease(release: NeoRelease) {
-  try {
-    const res = await skillApi.rollbackNeoRelease({
-      release_id: release.id,
-    });
-    handleApiResponse(
-      res,
-      tm('skills.neoDeactivateSuccess'),
-      tm('skills.neoDeactivateFailed'),
-      async () => {
-        await fetchNeoData();
-      },
-    );
-  } catch {
-    showMessage(tm('skills.neoDeactivateFailed'), 'error');
-  }
-}
-
-async function handleReleaseLifecycleAction(release: NeoRelease) {
-  if (release.is_active) {
-    await deactivateRelease(release);
-    return;
-  }
-  await rollbackRelease(release);
-}
-
-async function syncRelease(release: NeoRelease) {
-  try {
-    const res = await skillApi.syncNeoRelease({
-      release_id: release.id,
-    });
-    handleApiResponse(
-      res,
-      tm('skills.neoSyncSuccess'),
-      tm('skills.neoSyncFailed'),
-      async () => {
-        await fetchSkills();
-      },
-    );
-  } catch {
-    showMessage(tm('skills.neoSyncFailed'), 'error');
-  }
-}
-
-async function viewPayload(payloadRef?: string) {
-  if (!payloadRef) return;
-  try {
-    const res = await skillApi.neoPayload(payloadRef);
-    if (res.data.status !== 'ok') {
-      showMessage(res.data.message || tm('skills.neoPayloadFailed'), 'error');
-      return;
-    }
-    const payload = res.data.data ?? {};
-    payloadDialog.content = JSON.stringify(payload, null, 2);
-    payloadDialog.show = true;
-  } catch {
-    showMessage(tm('skills.neoPayloadFailed'), 'error');
-  }
-}
-
-async function deleteCandidate(candidate: NeoCandidate) {
-  try {
-    const res = await skillApi.deleteNeoCandidate({
-      candidate_id: candidate.id,
-      reason: 'deleted_from_webui',
-    });
-    handleApiResponse(
-      res,
-      tm('skills.neoDeleteSuccess'),
-      tm('skills.neoDeleteFailed'),
-      async () => {
-        await fetchNeoData();
-      },
-    );
-  } catch {
-    showMessage(tm('skills.neoDeleteFailed'), 'error');
-  }
-}
-
-async function deleteRelease(release: NeoRelease) {
-  try {
-    const res = await skillApi.deleteNeoRelease({
-      release_id: release.id,
-      reason: 'deleted_from_webui',
-    });
-    handleApiResponse(
-      res,
-      tm('skills.neoDeleteSuccess'),
-      tm('skills.neoDeleteFailed'),
-      async () => {
-        await fetchNeoData();
-      },
-    );
-  } catch {
-    showMessage(tm('skills.neoDeleteFailed'), 'error');
-  }
-}
-
-async function refreshCurrentMode() {
-  if (mode.value === 'neo') {
-    await loadNeoAvailability();
-    if (neoEnabled.value) {
-      await fetchNeoData();
-    } else {
-      showMessage(tm('skills.neoRuntimeRequired'), 'warning');
-    }
-  } else {
-    await fetchSkills();
-  }
-}
-
-watch(mode, async (nextMode) => {
-  if (nextMode === 'neo') {
-    cancelBatchSelection();
-    await loadNeoAvailability();
-    if (neoEnabled.value) {
-      await fetchNeoData();
-    }
-  } else {
-    await fetchSkills();
-  }
-});
-
 // Keep the batch selection in sync with the active filter so skills hidden
 // by the search can never be included in a batch delete.
 watch(visibleDeletableSkills, (visibleSkills) => {
@@ -1289,10 +939,7 @@ watch(uploadDialog, (isOpen) => {
 });
 
 onMounted(async () => {
-  await Promise.all([fetchSkills(), loadNeoAvailability()]);
-  if (neoEnabled.value) {
-    await fetchNeoData();
-  }
+  await fetchSkills();
 });
 </script>
 

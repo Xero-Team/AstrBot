@@ -1,8 +1,4 @@
 import { openApiV1, typed } from './shared';
-import type {
-  NeoCandidateActionRequest,
-  NeoReleaseActionRequest,
-} from './shared';
 import type { OpenConfig, SkillListData } from './types';
 
 export const skillApi = {
@@ -53,36 +49,5 @@ export const skillApi = {
         body: content,
       }),
     );
-  },
-  neoCandidates(params?: { skill_key?: string; status?: string }) {
-    return typed<OpenConfig>(
-      openApiV1.listNeoSkillCandidates({ query: params }),
-    );
-  },
-  neoReleases(params?: { skill_key?: string; stage?: string }) {
-    return typed<OpenConfig>(openApiV1.listNeoSkillReleases({ query: params }));
-  },
-  neoPayload(payloadRef: string) {
-    return typed<OpenConfig>(
-      openApiV1.getNeoSkillPayload({ query: { payload_ref: payloadRef } }),
-    );
-  },
-  evaluateNeoCandidate(body: NeoCandidateActionRequest) {
-    return typed<OpenConfig>(openApiV1.evaluateNeoSkillCandidate({ body }));
-  },
-  promoteNeoCandidate(body: NeoCandidateActionRequest) {
-    return typed<OpenConfig>(openApiV1.promoteNeoSkillCandidate({ body }));
-  },
-  rollbackNeoRelease(body: NeoReleaseActionRequest) {
-    return typed<OpenConfig>(openApiV1.rollbackNeoSkillRelease({ body }));
-  },
-  syncNeoRelease(body: NeoReleaseActionRequest) {
-    return typed<OpenConfig>(openApiV1.syncNeoSkillRelease({ body }));
-  },
-  deleteNeoCandidate(body: NeoCandidateActionRequest) {
-    return typed<OpenConfig>(openApiV1.deleteNeoSkillCandidate({ body }));
-  },
-  deleteNeoRelease(body: NeoReleaseActionRequest) {
-    return typed<OpenConfig>(openApiV1.deleteNeoSkillRelease({ body }));
   },
 };

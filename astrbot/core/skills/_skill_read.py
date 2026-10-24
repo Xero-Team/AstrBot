@@ -7,11 +7,7 @@ from astrbot.core.skills._skill_fs import (
     MAX_SKILL_FILE_BYTES,
     TRUNCATION_NOTE,
 )
-from astrbot.core.skills._skill_snapshot import (
-    FrozenSkill,
-    SkillSnapshot,
-    _sandbox_path_under_root,
-)
+from astrbot.core.skills._skill_snapshot import FrozenSkill, SkillSnapshot
 
 GENERIC_SKILL_READ_ERROR = "Unable to read the requested Skill file."
 SKILL_BODY_UNTRUSTED_NOTE = (
@@ -59,25 +55,6 @@ def lookup_frozen_skill(snapshot: SkillSnapshot, name: str) -> FrozenSkill:
     return skill
 
 
-def resolve_sandbox_skill_file(
-    skill: FrozenSkill,
-    relative_path: str,
-    sandbox_root: str,
-) -> str:
-    """Resolve a sandbox Skill path that stays under the frozen snapshot root."""
-    safe_path = resolve_skill_relative_path(relative_path)
-    if not sandbox_root or not skill.resolved_root:
-        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    if not _sandbox_path_under_root(skill.resolved_root, sandbox_root):
-        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    remote = str(PurePosixPath(skill.resolved_root) / safe_path)
-    if not _sandbox_path_under_root(remote, skill.resolved_root):
-        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    if not _sandbox_path_under_root(remote, sandbox_root):
-        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    return remote
-
-
 def read_host_skill_file(skill: FrozenSkill, relative_path: str) -> str:
     safe_path = resolve_skill_relative_path(relative_path)
     frozen_body = skill.file_body(safe_path)
@@ -121,7 +98,6 @@ __all__ = [
     "format_skill_read_result",
     "lookup_frozen_skill",
     "read_host_skill_file",
-    "resolve_sandbox_skill_file",
     "resolve_skill_relative_path",
     "split_truncated_text",
 ]

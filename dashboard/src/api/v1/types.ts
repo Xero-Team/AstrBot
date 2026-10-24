@@ -337,7 +337,6 @@ export type SkillListData =
   | {
       skills?: SkillItemData[];
       runtime?: string;
-      sandbox_cache?: OpenConfig;
       [key: string]: unknown;
     };
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -18,17 +17,14 @@ from astrbot.core.skills._skill_read import (
     SkillReadError,
     lookup_frozen_skill,
     read_host_skill_file,
-    resolve_sandbox_skill_file,
     resolve_skill_relative_path,
 )
 from astrbot.core.skills._skill_snapshot import freeze_skill_snapshot
 from astrbot.core.tool_catalog import (
-    NEO_LIFECYCLE_TOOLS,
     ToolCatalogInputs,
     assemble_tool_catalog_names,
     elevated_instance_tool_actions_from_metadata,
     merge_existing_tools,
-    sandbox_computer_tool_names,
 )
 from astrbot.core.tools.skill_tools import ReadSkillTool
 
@@ -186,7 +182,7 @@ def test_read_skill_rejects_symlink_escape(tmp_path: Path):
         read_host_skill_file(frozen, "escape.md")
 
 
-def test_same_name_precedence_and_sandbox_path_validation(tmp_path: Path):
+def test_same_name_precedence(tmp_path: Path):
     local = _skill(tmp_path, "dup", description="local")
     workspace = SkillInfo(
         name="dup",
@@ -204,41 +200,6 @@ def test_same_name_precedence_and_sandbox_path_validation(tmp_path: Path):
     snapshot = freeze_skill_snapshot([workspace, local], runtime="local")
     assert snapshot.get("dup") is not None
     assert snapshot.get("dup").source_type == "workspace"
-    sandbox = freeze_skill_snapshot(
-        [
-            SkillInfo(
-                name="sb",
-                description="sandbox",
-                path="/tmp/evil/sb/SKILL.md",
-                active=True,
-                source_type="sandbox_only",
-                sandbox_exists=True,
-                local_exists=False,
-            )
-        ],
-        runtime="sandbox",
-        sandbox_root="/workspace",
-    )
-    frozen = sandbox.get("sb")
-    assert frozen is not None
-    assert frozen.runtime_copy == "/workspace/skills/sb/SKILL.md"
-    assert (
-        resolve_sandbox_skill_file(frozen, "SKILL.md", sandbox.sandbox_root)
-        == "/workspace/skills/sb/SKILL.md"
-    )
-    assert (
-        resolve_sandbox_skill_file(frozen, "refs/a.md", sandbox.sandbox_root)
-        == "/workspace/skills/sb/refs/a.md"
-    )
-    escaped = replace(
-        frozen,
-        resolved_root="/tmp/evil/sb",
-        runtime_copy="/tmp/evil/sb/SKILL.md",
-    )
-    with pytest.raises(SkillReadError):
-        resolve_sandbox_skill_file(escaped, "SKILL.md", sandbox.sandbox_root)
-    with pytest.raises(SkillReadError):
-        resolve_sandbox_skill_file(frozen, "SKILL.md", "/other")
 
 
 def test_prompt_tools_matrix_and_duplicate_skill_tools(tmp_path: Path):
@@ -369,10 +330,6 @@ def test_runtime_none_keeps_read_skill_without_computer_tools(tmp_path: Path):
                 astrbot_file_read_tool=_tool(
                     "astrbot_file_read_tool", actions=("tool.file_read",)
                 ),
-                astrbot_create_skill_payload=_tool(
-                    "astrbot_create_skill_payload",
-                    actions=("extension.manage",),
-                ),
             ),
         )
     )
@@ -381,9 +338,6 @@ def test_runtime_none_keeps_read_skill_without_computer_tools(tmp_path: Path):
     assert "astrbot_execute_python" not in names
     assert "astrbot_file_write_tool" not in names
     assert "astrbot_file_read_tool" not in names
-    assert "astrbot_create_skill_payload" not in names
-    for neo in NEO_LIFECYCLE_TOOLS:
-        assert neo not in names
 
 
 def test_social_surface_strips_webchat_instance_actions(tmp_path: Path):
@@ -471,13 +425,7 @@ def test_im_instance_operator_keeps_full_instance_tool_group(tmp_path: Path):
         astrbot_file_write_tool=_tool(
             "astrbot_file_write_tool", actions=("tool.file_write",)
         ),
-        astrbot_execute_browser=_tool(
-            "astrbot_execute_browser", actions=("tool.browser_control",)
-        ),
         writable_mcp=_tool("writable_mcp", actions=("tool.mcp_write",)),
-        astrbot_cua_screenshot=_tool(
-            "astrbot_cua_screenshot", actions=("tool.computer_use",)
-        ),
     )
     names = assemble_tool_catalog_names(
         ToolCatalogInputs(
@@ -494,9 +442,7 @@ def test_im_instance_operator_keeps_full_instance_tool_group(tmp_path: Path):
     assert "astrbot_execute_shell" in names
     assert "astrbot_execute_python" in names
     assert "astrbot_file_write_tool" in names
-    assert "astrbot_execute_browser" in names
     assert "writable_mcp" in names
-    assert "astrbot_cua_screenshot" in names
 
 
 def test_im_elevated_actions_follow_expanded_instance_tool_group(
@@ -570,94 +516,6 @@ def test_skills_like_does_not_change_catalog_set(tmp_path: Path):
     assert tuple(sorted(light.names())) == names
     for tool in light.tools:
         assert tool.parameters == {"type": "object", "properties": {}}
-
-
-def test_neo_lifecycle_tools_are_on_demand_computer_layer():
-    none_names = sandbox_computer_tool_names(booter="shipyard_neo")
-    assert "astrbot_create_skill_payload" in none_names
-    runtime_none = assemble_tool_catalog_names(
-        ToolCatalogInputs(
-            snapshot=freeze_skill_snapshot([], runtime="none"),
-            prompt_tools=None,
-            surface="webchat_authenticated",
-            computer_use_runtime="none",
-            plugin_names=None,
-            registered_tools=_registered(
-                **{
-                    name: _tool(name, actions=("extension.manage",))
-                    for name in NEO_LIFECYCLE_TOOLS
-                }
-            ),
-            elevated_instance_tool_actions=frozenset({"tool.local_exec"}),
-        )
-    )
-    for name in NEO_LIFECYCLE_TOOLS:
-        assert name not in runtime_none
-
-
-@pytest.mark.asyncio
-async def test_read_skill_sandbox_path_stays_under_snapshot_root():
-    snapshot = freeze_skill_snapshot(
-        [
-            SkillInfo(
-                name="sb",
-                description="sandbox",
-                path="/tmp/evil/sb/SKILL.md",
-                active=True,
-                source_type="sandbox_only",
-                sandbox_exists=True,
-                local_exists=False,
-            )
-        ],
-        runtime="sandbox",
-        sandbox_root="/workspace",
-    )
-    frozen = snapshot.get("sb")
-    assert frozen is not None
-    reads: list[str] = []
-
-    class _Fs:
-        async def read_file(self, remote: str):
-            reads.append(remote)
-            return {"success": True, "content": "# sandbox"}
-
-    class _Booter:
-        fs = _Fs()
-
-    class _Runtime:
-        async def get_booter(self, *_args, **_kwargs):
-            return _Booter()
-
-    tool = ReadSkillTool()
-    event = MagicMock()
-    event.get_extra.return_value = snapshot
-    event.unified_msg_origin = "umo"
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            event=event,
-            context=SimpleNamespace(computer_runtime=_Runtime()),
-        )
-    )
-    result = await tool.call(context, name="sb", path="refs/a.md")
-    assert reads == ["/workspace/skills/sb/refs/a.md"]
-    assert "Skill: sb" in result
-    assert "Path: refs/a.md" in result
-    assert "# sandbox" in result
-
-    escaped_snapshot = replace(
-        snapshot,
-        skills=(
-            replace(
-                frozen,
-                resolved_root="/tmp/evil/sb",
-                runtime_copy="/tmp/evil/sb/SKILL.md",
-            ),
-        ),
-    )
-    event.get_extra.return_value = escaped_snapshot
-    escaped = await tool.call(context, name="sb")
-    assert escaped == GENERIC_SKILL_READ_ERROR
-    assert reads == ["/workspace/skills/sb/refs/a.md"]
 
 
 @pytest.mark.asyncio

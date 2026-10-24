@@ -1,11 +1,5 @@
 <script setup lang="ts">
 import { useModuleI18n } from '@/i18n/composables';
-import type { SkillMode } from '../skillsHelpers';
-
-defineProps<{
-  mode: SkillMode;
-}>();
-
 const emit = defineEmits<{
   (e: 'refresh'): void;
   (e: 'upload'): void;
@@ -30,11 +24,7 @@ const { tm } = useModuleI18n('features/extension');
         />
       </template>
     </v-tooltip>
-    <v-tooltip
-      v-if="mode === 'local'"
-      :text="tm('skills.upload')"
-      location="left"
-    >
+    <v-tooltip :text="tm('skills.upload')" location="left">
       <template #activator="{ props }">
         <v-btn
           v-bind="props"

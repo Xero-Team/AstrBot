@@ -76,129 +76,6 @@ async def test_install_pip_package_returns_generic_error_message(
 
 
 @pytest.mark.asyncio
-async def test_neo_skills_routes(
-    app: FastAPI,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    monkeypatch,
-):
-    provider_settings = core_lifecycle_td.astrbot_config.setdefault(
-        "provider_settings", {}
-    )
-    sandbox = provider_settings.setdefault("sandbox", {})
-    sandbox["shipyard_neo_endpoint"] = "http://neo.test"
-    sandbox["shipyard_neo_access_token"] = "neo-token"
-
-    fake_shipyard_neo_module = SimpleNamespace(BayClient=_FakeNeoBayClient)
-    monkeypatch.setitem(sys.modules, "shipyard_neo", fake_shipyard_neo_module)
-
-    async def _fake_sync_release(self, client, **kwargs):
-        _ = self, client, kwargs
-        return SimpleNamespace(
-            skill_key="neo.demo",
-            local_skill_name="neo_demo",
-            release_id="rel-2",
-            candidate_id="cand-1",
-            payload_ref="pref-1",
-            map_path="data/skills/neo_skill_map.json",
-            synced_at="2026-01-01T00:00:00Z",
-        )
-
-    async def _fake_sync_skills_to_active_sandboxes():
-        return
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.NeoSkillSyncManager.sync_release",
-        _fake_sync_release,
-    )
-    monkeypatch.setattr(
-        core_lifecycle_td.services.computer_runtime,
-        "sync_skills_to_active_sandboxes",
-        _fake_sync_skills_to_active_sandboxes,
-    )
-
-    test_client = DashboardTestClient(app)
-
-    response = await test_client.get(
-        "/api/v1/skills/neo/candidates", headers=authenticated_header
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert isinstance(data["data"], list)
-    assert data["data"][0]["id"] == "cand-1"
-
-    response = await test_client.get(
-        "/api/v1/skills/neo/releases", headers=authenticated_header
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert isinstance(data["data"], list)
-    assert data["data"][0]["id"] == "rel-1"
-
-    response = await test_client.get(
-        "/api/v1/skills/neo/payload?payload_ref=pref-1", headers=authenticated_header
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["payload_ref"] == "pref-1"
-
-    response = await test_client.post(
-        "/api/v1/skills/neo/evaluate",
-        json={"candidate_id": "cand-1", "passed": True, "score": 0.95},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["candidate_id"] == "cand-1"
-    assert data["data"]["passed"] is True
-
-    response = await test_client.post(
-        "/api/v1/skills/neo/evaluate",
-        json={"candidate_id": "cand-1", "passed": "false", "score": 0.0},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["passed"] is False
-
-    response = await test_client.post(
-        "/api/v1/skills/neo/promote",
-        json={"candidate_id": "cand-1", "stage": "stable"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["release"]["id"] == "rel-2"
-    assert data["data"]["sync"]["local_skill_name"] == "neo_demo"
-
-    response = await test_client.post(
-        "/api/v1/skills/neo/rollback",
-        json={"release_id": "rel-2"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["rolled_back_release_id"] == "rel-2"
-
-    response = await test_client.post(
-        "/api/v1/skills/neo/sync",
-        json={"release_id": "rel-2"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["skill_key"] == "neo.demo"
-
-
-@pytest.mark.asyncio
 async def test_batch_upload_skills_returns_error_when_all_files_invalid(
     app: FastAPI,
     authenticated_header: dict,
@@ -230,9 +107,6 @@ async def test_batch_upload_skills_accepts_zip_files(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    async def _fake_sync_skills_to_active_sandboxes():
-        return
-
     def _fake_install_skill_from_zip(
         self,
         zip_path: str,
@@ -245,11 +119,6 @@ async def test_batch_upload_skills_accepts_zip_files(
         assert skill_name_hint == "demo_skill"
         return "demo_skill"
 
-    monkeypatch.setattr(
-        core_lifecycle_td.services.computer_runtime,
-        "sync_skills_to_active_sandboxes",
-        _fake_sync_skills_to_active_sandboxes,
-    )
     monkeypatch.setattr(
         "astrbot.dashboard.services.skills_service.SkillManager.install_skill_from_zip",
         _fake_install_skill_from_zip,
@@ -295,14 +164,6 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
     skills_dir.mkdir()
     temp_dir.mkdir()
 
-    async def _fake_sync_skills_to_active_sandboxes():
-        return
-
-    monkeypatch.setattr(
-        core_lifecycle_td.services.computer_runtime,
-        "sync_skills_to_active_sandboxes",
-        _fake_sync_skills_to_active_sandboxes,
-    )
     monkeypatch.setattr(
         "astrbot.core.skills.skill_manager.get_astrbot_data_path",
         lambda: str(data_dir),
@@ -371,9 +232,6 @@ async def test_batch_upload_skills_partial_success(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    async def _fake_sync_skills_to_active_sandboxes():
-        return
-
     def _fake_install_skill_from_zip(
         self,
         zip_path: str,
@@ -387,11 +245,6 @@ async def test_batch_upload_skills_partial_success(
             return "ok_skill"
         raise RuntimeError("install failed")
 
-    monkeypatch.setattr(
-        core_lifecycle_td.services.computer_runtime,
-        "sync_skills_to_active_sandboxes",
-        _fake_sync_skills_to_active_sandboxes,
-    )
     monkeypatch.setattr(
         "astrbot.dashboard.services.skills_service.SkillManager.install_skill_from_zip",
         _fake_install_skill_from_zip,
@@ -492,9 +345,6 @@ async def test_skill_file_browser_and_editor_security(
     tmp_path,
     require_symlink,
 ):
-    async def _fake_sync_skills_to_active_sandboxes():
-        return
-
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "demo_skill"
     skill_dir.mkdir(parents=True)
@@ -523,11 +373,6 @@ async def test_skill_file_browser_and_editor_security(
         app.state.services.skills,
         "skill_manager",
         test_skill_manager,
-    )
-    monkeypatch.setattr(
-        core_lifecycle_td.services.computer_runtime,
-        "sync_skills_to_active_sandboxes",
-        _fake_sync_skills_to_active_sandboxes,
     )
 
     test_client = DashboardTestClient(app)

@@ -1,16 +1,12 @@
 import csv
 import io
-import json
 import os
-import shlex
-import uuid
 from pathlib import Path
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 import astrbot.core.message.components as Comp
-from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -91,7 +87,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             },
                             "path": {
                                 "type": "string",
-                                "description": "File path for `image`, `record`, `video`, or `file` types. Both local path and sandbox path are supported.",
+                                "description": "File path for `image`, `record`, `video`, or `file` types.",
                             },
                             "url": {
                                 "type": "string",
@@ -117,7 +113,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         }
     )
 
-    async def _resolve_path_from_sandbox(
+    async def _resolve_component_path(
         self,
         context: ContextWrapper[AstrAgentContext],
         path: str,
@@ -158,35 +154,6 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         f"Blocked path: {local_candidate}."
                     )
 
-        # Local runtime has no separate sandbox: the workspace and local-file
-        # branches above already enforced the caller's permissions, so probing
-        # the host shell here would bypass them and expose host paths.
-        if is_local_runtime(context):
-            raise FileNotFoundError(f"{component_type} path does not exist: {path}")
-
-        try:
-            sb = await context.context.context.computer_runtime.get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
-            quoted_path = shlex.quote(path)
-            result = await sb.shell.exec(f"test -f {quoted_path} && echo '_&exists_'")
-            if "_&exists_" in json.dumps(result):
-                name = _remote_basename(path) or os.path.basename(path)
-                session_temp = session_temp_roots(
-                    context.context.event.unified_msg_origin
-                )[1]
-                session_temp.mkdir(parents=True, exist_ok=True)
-                local_path = os.path.join(
-                    str(session_temp), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
-                )
-                await sb.download_file(path, local_path)
-                logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
-                return local_path, True
-        except Exception as exc:
-            logger.warning(f"Failed to check/download file from sandbox: {exc}")
-            raise
-
         raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
     async def _build_media_component(
@@ -206,7 +173,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 f"{component_type} component."
             )
         if path:
-            local_path, _ = await self._resolve_path_from_sandbox(
+            local_path, _ = await self._resolve_component_path(
                 context, path, component_type=component_type
             )
             if component_type == "image":

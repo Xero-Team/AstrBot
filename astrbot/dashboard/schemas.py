@@ -763,16 +763,6 @@ class SkillUpdateRequest(BaseModel):
     active: bool
 
 
-class SkillNeoRequest(OpenModel):
-    skill_name: str | None = None
-    skill_key: str | None = None
-    name: str | None = None
-    candidate_id: str | None = None
-    release_id: str | None = None
-    profile_id: str | None = None
-    payload: dict[str, Any] | None = None
-
-
 class ConversationRef(BaseModel):
     user_id: str
     cid: str

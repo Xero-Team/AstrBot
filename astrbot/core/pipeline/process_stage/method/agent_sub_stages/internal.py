@@ -20,7 +20,6 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.request_preparation import (
-    cua_pixel_mode_from_settings,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
@@ -168,7 +167,6 @@ class InternalAgentSubStage:
         self.llm_safety_mode = self.main_agent_cfg.llm_safety_mode
         self.safety_mode_strategy = self.main_agent_cfg.safety_mode_strategy
         self.computer_use_runtime = self.main_agent_cfg.computer_use_runtime
-        self.sandbox_cfg = self.main_agent_cfg.sandbox_cfg
         self.add_cron_tools = self.main_agent_cfg.add_cron_tools
 
     def _prepare_group_sender_concurrency(
@@ -272,9 +270,6 @@ class InternalAgentSubStage:
             image_compress_enabled=enabled,
             image_max_size=max_size,
             image_quality=quality,
-            warn_unresized_images=cua_pixel_mode_from_settings(
-                settings if isinstance(settings, dict) else None
-            ),
         )
         req.image_urls = prepared.image_urls
         req.audio_urls = prepared.audio_urls

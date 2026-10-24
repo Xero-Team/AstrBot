@@ -125,10 +125,6 @@ import type {
   DeleteMcpServerResponses,
   DeleteMemoryFactData,
   DeleteMemoryFactResponses,
-  DeleteNeoSkillCandidateData,
-  DeleteNeoSkillCandidateResponses,
-  DeleteNeoSkillReleaseData,
-  DeleteNeoSkillReleaseResponses,
   DeletePluginConfigFileData,
   DeletePluginConfigFileResponses,
   DeletePluginSourceData,
@@ -161,8 +157,6 @@ import type {
   DownloadOpenApiFileResponses,
   DownloadSkillData,
   DownloadSkillResponses,
-  EvaluateNeoSkillCandidateData,
-  EvaluateNeoSkillCandidateResponses,
   ExportConversationsData,
   ExportConversationsResponses,
   ExportLogsData,
@@ -236,8 +230,6 @@ import type {
   GetMemoryFactResponses,
   GetMemoryStatsData,
   GetMemoryStatsResponses,
-  GetNeoSkillPayloadData,
-  GetNeoSkillPayloadResponses,
   GetOidcStatusData,
   GetOidcStatusResponses,
   GetPluginChangelogData,
@@ -414,10 +406,6 @@ import type {
   ListMemoryOperationsResponses,
   ListMemoryProfilesData,
   ListMemoryProfilesResponses,
-  ListNeoSkillCandidatesData,
-  ListNeoSkillCandidatesResponses,
-  ListNeoSkillReleasesData,
-  ListNeoSkillReleasesResponses,
   ListPluginConfigFilesData,
   ListPluginConfigFilesResponses,
   ListPluginMarketCategoriesData,
@@ -470,8 +458,6 @@ import type {
   OidcCallbackData,
   OpenChatWebSocketData,
   OpenUnifiedChatWebSocketData,
-  PromoteNeoSkillCandidateData,
-  PromoteNeoSkillCandidateResponses,
   ReadMcpResourceData,
   ReadMcpResourceResponses,
   ReceivePlatformWebhookData,
@@ -529,8 +515,6 @@ import type {
   RevokeChatShareResponses,
   RevokeMcpOAuthData,
   RevokeMcpOAuthResponses,
-  RollbackNeoSkillReleaseData,
-  RollbackNeoSkillReleaseResponses,
   RunCronJobData,
   RunCronJobResponses,
   SearchDataFilesData,
@@ -580,8 +564,6 @@ import type {
   SwitchCodingCliProviderResponses,
   SyncModelScopeMcpServersData,
   SyncModelScopeMcpServersResponses,
-  SyncNeoSkillReleaseData,
-  SyncNeoSkillReleaseResponses,
   TestBotData,
   TestBotResponses,
   TestGhproxyConnectionData,
@@ -4787,183 +4769,6 @@ export const updateSkillFile = <ThrowOnError extends boolean = false>(
     ...options,
     headers: {
       'Content-Type': 'text/plain',
-      ...options.headers,
-    },
-  });
-
-/**
- * List Shipyard Neo skill candidates
- */
-export const listNeoSkillCandidates = <ThrowOnError extends boolean = false>(
-  options?: Options<ListNeoSkillCandidatesData, ThrowOnError>,
-): RequestResult<ListNeoSkillCandidatesResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<
-    ListNeoSkillCandidatesResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/candidates',
-    ...options,
-  });
-
-/**
- * List Shipyard Neo skill releases
- */
-export const listNeoSkillReleases = <ThrowOnError extends boolean = false>(
-  options?: Options<ListNeoSkillReleasesData, ThrowOnError>,
-): RequestResult<ListNeoSkillReleasesResponses, unknown, ThrowOnError> =>
-  (options?.client ?? client).get<
-    ListNeoSkillReleasesResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/releases',
-    ...options,
-  });
-
-/**
- * Get a Shipyard Neo skill payload
- */
-export const getNeoSkillPayload = <ThrowOnError extends boolean = false>(
-  options: Options<GetNeoSkillPayloadData, ThrowOnError>,
-): RequestResult<GetNeoSkillPayloadResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).get<
-    GetNeoSkillPayloadResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/payload',
-    ...options,
-  });
-
-/**
- * Evaluate a Shipyard Neo skill candidate
- */
-export const evaluateNeoSkillCandidate = <ThrowOnError extends boolean = false>(
-  options: Options<EvaluateNeoSkillCandidateData, ThrowOnError>,
-): RequestResult<EvaluateNeoSkillCandidateResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    EvaluateNeoSkillCandidateResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/evaluate',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Promote a Shipyard Neo skill candidate
- */
-export const promoteNeoSkillCandidate = <ThrowOnError extends boolean = false>(
-  options: Options<PromoteNeoSkillCandidateData, ThrowOnError>,
-): RequestResult<PromoteNeoSkillCandidateResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    PromoteNeoSkillCandidateResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/promote',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Roll back a Shipyard Neo skill release
- */
-export const rollbackNeoSkillRelease = <ThrowOnError extends boolean = false>(
-  options: Options<RollbackNeoSkillReleaseData, ThrowOnError>,
-): RequestResult<RollbackNeoSkillReleaseResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    RollbackNeoSkillReleaseResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/rollback',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Sync a Shipyard Neo skill release
- */
-export const syncNeoSkillRelease = <ThrowOnError extends boolean = false>(
-  options: Options<SyncNeoSkillReleaseData, ThrowOnError>,
-): RequestResult<SyncNeoSkillReleaseResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    SyncNeoSkillReleaseResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/sync',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Delete a Shipyard Neo skill candidate
- */
-export const deleteNeoSkillCandidate = <ThrowOnError extends boolean = false>(
-  options: Options<DeleteNeoSkillCandidateData, ThrowOnError>,
-): RequestResult<DeleteNeoSkillCandidateResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    DeleteNeoSkillCandidateResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/candidates/delete',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-/**
- * Delete a Shipyard Neo skill release
- */
-export const deleteNeoSkillRelease = <ThrowOnError extends boolean = false>(
-  options: Options<DeleteNeoSkillReleaseData, ThrowOnError>,
-): RequestResult<DeleteNeoSkillReleaseResponses, unknown, ThrowOnError> =>
-  (options.client ?? client).post<
-    DeleteNeoSkillReleaseResponses,
-    unknown,
-    ThrowOnError
-  >({
-    responseType: 'json',
-    security: [{ name: 'X-API-Key', type: 'apiKey' }],
-    url: '/api/v1/skills/neo/releases/delete',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
       ...options.headers,
     },
   });

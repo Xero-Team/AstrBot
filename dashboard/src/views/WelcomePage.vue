@@ -502,7 +502,7 @@ async function syncDefaultConfigProviderIfNeeded() {
 function normalizeComputerAccessRuntime(
   runtime: unknown,
 ): ComputerAccessRuntime {
-  return runtime === 'local' || runtime === 'sandbox' ? 'local' : 'none';
+  return runtime === 'local' ? 'local' : 'none';
 }
 
 function syncComputerAccessRuntime(configData: DefaultConfigPayload) {
@@ -513,9 +513,7 @@ function syncComputerAccessRuntime(configData: DefaultConfigPayload) {
   computerAccessRuntime.value = normalizedRuntime;
   savedComputerAccessRuntime.value = normalizedRuntime;
   computerAccessStepState.value =
-    currentRuntime === 'local' ||
-    currentRuntime === 'none' ||
-    currentRuntime === 'sandbox'
+    currentRuntime === 'local' || currentRuntime === 'none'
       ? 'completed'
       : 'pending';
 }

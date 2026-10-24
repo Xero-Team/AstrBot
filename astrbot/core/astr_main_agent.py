@@ -22,6 +22,7 @@ from astrbot.core.agent.loop_policy import (
     is_btw_enabled,
     is_work_loop_enabled,
     loop_mode_of,
+    normalize_computer_use_runtime,
     resolve_computer_runtime,
     route_is_available_in_loop,
     work_loop_is_read_only,
@@ -29,7 +30,6 @@ from astrbot.core.agent.loop_policy import (
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.request_preparation import (
     clone_provider_request,
-    cua_pixel_mode_from_settings,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
@@ -41,7 +41,6 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
@@ -218,10 +217,9 @@ class MainAgentBuildConfig:
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
     computer_use_runtime: str = "none"
-    """The runtime for agent computer use: none, local, or sandbox."""
+    """The runtime for agent computer use: none or local."""
     allow_computer_tools: bool = True
     """Whether request tools may include computer capabilities."""
-    sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
@@ -331,8 +329,9 @@ def local_agent_runtime_from_profile(
         "safety_mode_strategy": runner_config.get(
             "safety_mode_strategy", "system_prompt"
         ),
-        "computer_use_runtime": settings.get("computer_use_runtime", "none"),
-        "sandbox_cfg": _mapping(settings.get("sandbox")),
+        "computer_use_runtime": normalize_computer_use_runtime(
+            settings.get("computer_use_runtime", "none")
+        ),
         "add_cron_tools": proactive_cfg.get("add_cron_tools", True),
         "provider_settings": settings,
         "fallback_provider_ids": coerce_provider_ids(
@@ -759,7 +758,7 @@ def _append_skills_prompt(
     event: AstrMessageEvent,
     plugin_context: CoreExecutionContext,
 ) -> SkillSnapshot:
-    runtime = str(cfg.get("computer_use_runtime", "none") or "none")
+    runtime = normalize_computer_use_runtime(cfg.get("computer_use_runtime", "none"))
     profile = plugin_context.get_config(umo=event.unified_msg_origin)
     btw_config = btw_config_for(profile)
     btw_enabled = is_btw_enabled(profile)
@@ -771,7 +770,7 @@ def _append_skills_prompt(
             builtin_skill_catalog=plugin_context.catalogs.builtin_skills,
         )
         skills = _filter_skills_for_current_config(
-            skill_manager.list_skills(active_only=True, runtime=runtime),
+            skill_manager.list_skills(active_only=True),
             profile,
             plugin_context.catalogs.plugins,
         )
@@ -1450,17 +1449,6 @@ def _assemble_request_tool_catalog(
     elevated_instance_tool_actions = elevated_instance_tool_actions_from_metadata(
         metadata if isinstance(metadata, dict) else None
     )
-    computer_runtime = getattr(plugin_context, "computer_runtime", None)
-    existing_booter = None
-    if computer_runtime is not None:
-        getter = getattr(computer_runtime, "get_session_booter", None)
-        if callable(getter):
-            existing_booter = getter(req.session_id or event.unified_msg_origin)
-    sandbox_capabilities = None
-    if existing_booter is not None:
-        capabilities = getattr(existing_booter, "capabilities", None)
-        if isinstance(capabilities, list | tuple):
-            sandbox_capabilities = capabilities
     cfg = plugin_context.get_config(umo=event.unified_msg_origin)
     provider_settings = cfg.get("provider_settings", {})
     ltm_settings = cfg.get("provider_ltm_settings", {})
@@ -1515,8 +1503,6 @@ def _assemble_request_tool_catalog(
         proactive_messaging=bool(event.platform_meta.support_proactive_message),
         kb_agentic_mode=config.kb_agentic_mode,
         add_cron_tools=config.add_cron_tools,
-        sandbox_booter=str(config.sandbox_cfg.get("booter", "shipyard_neo")),
-        sandbox_capabilities=sandbox_capabilities,
         elevated_instance_tool_actions=elevated_instance_tool_actions,
         plugins=plugin_context.catalogs.plugins,
         btw_config=dict(btw_config) if btw_config else None,
@@ -1591,54 +1577,6 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
             "Unsupported llm_safety_mode strategy: %s.",
             config.safety_mode_strategy,
         )
-
-
-def _apply_sandbox_tools(
-    config: MainAgentBuildConfig,
-    req: ProviderRequest,
-    session_id: str,
-    tool_manager: FunctionToolManager,
-    existing_booter: object | None = None,
-) -> None:
-    _ = session_id
-    _ = tool_manager
-    if req.func_tool is None:
-        req.func_tool = ToolSet()
-    if req.system_prompt is None:
-        req.system_prompt = ""
-    booter = config.sandbox_cfg.get("booter", "shipyard_neo")
-    if booter == "shipyard_neo":
-        req.system_prompt += (
-            "\n[Shipyard Neo File Path Rule]\n"
-            "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
-            "always pass paths relative to the sandbox workspace root. "
-            "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
-        )
-        req.system_prompt += (
-            "\n[Neo Skill Lifecycle Workflow]\n"
-            "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
-            "Preferred sequence:\n"
-            "1) Use `astrbot_create_skill_payload` to store canonical payload content and get `payload_ref`.\n"
-            "2) Use `astrbot_create_skill_candidate` with `skill_key` + `source_execution_ids` (and optional `payload_ref`) to create a candidate.\n"
-            "3) Use `astrbot_promote_skill_candidate` to release: `stage=canary` for trial; `stage=stable` for production.\n"
-            "For stable release, set `sync_to_local=true` to sync `payload.skill_markdown` into local `SKILL.md`.\n"
-            "Do not treat ad-hoc generated files as reusable Neo skills unless they are captured via payload/candidate/release.\n"
-            "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly.\n"
-        )
-        _ = existing_booter
-    if booter == "cua":
-        req.system_prompt += (
-            "\n[CUA Desktop Control]\n"
-            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
-            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
-            "After each visible step, call `astrbot_cua_screenshot` with "
-            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
-            "monitor progress. When typing, inspect the screenshot first and confirm "
-            "the target field is focused and empty or safe to append to. Use "
-            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
-            "for text input; use text=`\\n` for Enter.\n"
-        )
-    req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
 def _apply_web_search_citation_prompt(
@@ -1793,15 +1731,7 @@ async def _prepare_request_for_agent(
     _apply_btw_work_loop_prompt(req, event, plugin_context, config)
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
-    if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(
-            config,
-            req,
-            req.session_id,
-            plugin_context.catalogs.tools,
-            plugin_context.computer_runtime.get_session_booter(req.session_id),
-        )
-    elif config.computer_use_runtime == "local":
+    if config.computer_use_runtime == "local":
         await _apply_local_env_tools(req, plugin_context, event)
     return True
 
@@ -2322,9 +2252,6 @@ async def build_main_agent(
             image_compress_enabled=compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
-            warn_unresized_images=cua_pixel_mode_from_settings(
-                config.provider_settings
-            ),
         )
     event.set_extra("provider_request", req)
 

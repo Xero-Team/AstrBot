@@ -43,18 +43,12 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.tool_catalog import tool_blocked_in_loop, tool_is_available_in_loop
 from astrbot.core.tools.computer_tools import (
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
     ExecuteShellTool,
-    FileDownloadTool,
     FileEditTool,
     FileReadTool,
-    FileUploadTool,
     FileWriteTool,
     GrepTool,
     LocalPythonTool,
-    PythonTool,
     ShellSessionTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -322,40 +316,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         runtime: str,
         tool_mgr,
-        booter: str | None = None,
     ) -> dict[str, FunctionTool]:
-        booter = "" if booter is None else str(booter).lower()
-        if runtime == "sandbox":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            python_tool = tool_mgr.get_builtin_tool(PythonTool)
-            upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
-            download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            tools = {
-                shell_tool.name: shell_tool,
-                python_tool.name: python_tool,
-                upload_tool.name: upload_tool,
-                download_tool.name: download_tool,
-                read_tool.name: read_tool,
-                write_tool.name: write_tool,
-                edit_tool.name: edit_tool,
-                grep_tool.name: grep_tool,
-            }
-            if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
-                tools.update(
-                    {
-                        screenshot_tool.name: screenshot_tool,
-                        mouse_click_tool.name: mouse_click_tool,
-                        keyboard_type_tool.name: keyboard_type_tool,
-                    }
-                )
-            return tools
         if runtime == "local":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
             session_tool = tool_mgr.get_builtin_tool(ShellSessionTool)
@@ -451,7 +412,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
-            provider_settings.get("sandbox", {}).get("booter"),
         )
 
         # Keep prompt semantics aligned with the main agent: tools=None means

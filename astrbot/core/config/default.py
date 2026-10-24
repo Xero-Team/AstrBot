@@ -3,7 +3,6 @@
 import os
 
 from astrbot import __version__
-from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.config.migrations import CONFIG_SCHEMA_REVISION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -193,19 +192,6 @@ DEFAULT_CONFIG = {
         },
         "computer_use_runtime": "none",
         "computer_use_local_permissions": get_local_permission_defaults(),
-        "sandbox": {
-            "booter": "shipyard_neo",
-            "shipyard_neo_endpoint": "",
-            "shipyard_neo_access_token": "",
-            "shipyard_neo_profile": "python-default",
-            "shipyard_neo_ttl": 3600,
-            "cua_image": CUA_DEFAULT_CONFIG["image"],
-            "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
-            "cua_idle_timeout": CUA_DEFAULT_CONFIG["idle_timeout"],
-            "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
-            "cua_local": CUA_DEFAULT_CONFIG["local"],
-            "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
-        },
         "image_compress_enabled": True,
         "image_compress_options": {
             "max_size": 1024,
@@ -4136,11 +4122,10 @@ CONFIG_METADATA_3 = {
                     "provider_settings.computer_use_runtime": {
                         "description": "Computer Use Runtime",
                         "type": "string",
-                        "options": ["none", "local", "sandbox"],
+                        "options": ["none", "local"],
                         "labels": [
                             "不允许任何环境",
                             "本机环境",
-                            "第三方沙箱环境",
                         ],
                         "hint": "选择 Computer Use 运行环境。",
                     },
@@ -4175,110 +4160,6 @@ CONFIG_METADATA_3 = {
                         },
                         "condition": {
                             "provider_settings.computer_use_runtime": "local",
-                        },
-                    },
-                    "provider_settings.sandbox.booter": {
-                        "description": "沙箱环境驱动器",
-                        "docs": "use/astrbot-agent-sandbox.html",
-                        "type": "string",
-                        "options": ["shipyard_neo", "cua"],
-                        "labels": ["Shipyard Neo", "CUA"],
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_neo_endpoint": {
-                        "description": "Shipyard Neo API Endpoint",
-                        "type": "string",
-                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。仅支持 http/https，且不能指向云元数据地址。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_neo_access_token": {
-                        "description": "Shipyard Neo Access Token",
-                        "type": "string",
-                        "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_neo_profile": {
-                        "description": "Shipyard Neo Profile",
-                        "type": "string",
-                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_neo_ttl": {
-                        "description": "Shipyard Neo Sandbox TTL",
-                        "type": "int",
-                        "hint": "Shipyard Neo 沙箱生存时间（秒）。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_image": {
-                        "description": "CUA Image",
-                        "type": "string",
-                        "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_os_type": {
-                        "description": "CUA OS Type",
-                        "type": "string",
-                        "options": ["linux", "macos", "windows", "android"],
-                        "labels": ["Linux", "macOS", "Windows", "Android"],
-                        "hint": "CUA 沙箱操作系统类型，默认 linux。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_idle_timeout": {
-                        "description": "CUA Idle Timeout",
-                        "type": "int",
-                        "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it.",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_telemetry_enabled": {
-                        "description": "CUA Telemetry",
-                        "type": "bool",
-                        "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_local": {
-                        "description": "CUA Local Sandbox",
-                        "type": "bool",
-                        "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_api_key": {
-                        "description": "CUA API Key",
-                        "type": "string",
-                        "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。",
-                        "obvious_hint": True,
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                            "provider_settings.sandbox.cua_local": False,
                         },
                     },
                 },
@@ -4490,7 +4371,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_options.max_size": {
                         "description": "输入图片最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。系统会在必要时进一步压缩，使每张输出严格小于 512 KiB。CUA 沙箱下输入图片默认不缩放，以保持像素坐标 1:1；若仍超过 512 KiB 才会继续缩小。",
+                        "hint": "压缩后图片的最长边，单位为像素。仅缩小、从不放大。系统会在必要时进一步压缩，使每张输出严格小于 512 KiB。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },
@@ -5117,8 +4998,8 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
         "btw.work_loop.computer_use_runtime": {
             "description": "工作循环 Computer Use 运行时",
             "type": "string",
-            "options": ["inherit", "none", "local", "sandbox"],
-            "labels": ["继承", "无", "本地", "沙箱"],
+            "options": ["inherit", "none", "local"],
+            "labels": ["继承", "无", "本地"],
             "hint": "inherit 沿用当前 Computer Use 配置。对话循环始终禁用电脑和文件工具；工作循环仍须满足已有角色、路径和沙箱授权规则。",
             "condition": {"btw.enabled": True},
         },
@@ -5149,7 +5030,7 @@ CONFIG_METADATA_3["ai_group"]["metadata"]["btw"] = {
         "btw.work_loop.coding_agents": {
             "description": "第三方编码代理",
             "type": "list",
-            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex、OpenCode）。每项包含 id、type、command、模型、输出上限、权限模式与可写目录；委派会启动本地进程并写入文件，因此还要求工作循环的 Computer Use 运行时为 local（sandbox 下委派等于绕过沙箱），并通过 tool.local_exec 与 tool.file_write 的授权。Claude Code 以非交互方式（-p）运行，没有终端可以回答权限询问：acceptEdits 只自动放行编辑，需要跑 shell 命令的任务会一直等到超时，这类任务要显式选择 bypassPermissions。代理使用的 provider 由「第三方agent配置」页面统一管理，切换的是该 CLI 自己的全局配置。",
+            "hint": "可委派写入任务的本地 CLI 代理（如 Claude Code、Codex、OpenCode）。每项包含 id、type、command、模型、输出上限、权限模式与可写目录；委派会启动本地进程并写入文件，因此还要求工作循环的 Computer Use 运行时为 local，并通过 tool.local_exec 与 tool.file_write 的授权。Claude Code 以非交互方式（-p）运行，没有终端可以回答权限询问：acceptEdits 只自动放行编辑，需要跑 shell 命令的任务会一直等到超时，这类任务要显式选择 bypassPermissions。代理使用的 provider 由「第三方agent配置」页面统一管理，切换的是该 CLI 自己的全局配置。",
             "_special": "select_coding_agents",
             # The editor is a list of cards, one per agent; half of a row is
             # not enough to lay one out.

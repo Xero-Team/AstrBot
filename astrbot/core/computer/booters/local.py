@@ -39,7 +39,7 @@ from astrbot.core.utils.astrbot_path import (
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
-from .shipyard_search_file_util import _truncate_long_lines
+from .search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
     re.compile(r"(^|[;&|() ])rm(?:\.exe)?\s+-[a-z-]*r[a-z-]*(?:\s|$)"),
@@ -1382,16 +1382,6 @@ class LocalBooter(ComputerBooter):
     @property
     def shell(self) -> ShellComponent:
         return self._shell
-
-    async def upload_file(self, path: str, file_name: str) -> dict:
-        raise NotImplementedError(
-            "LocalBooter does not support upload_file operation. Use shell instead."
-        )
-
-    async def download_file(self, remote_path: str, local_path: str) -> None:
-        raise NotImplementedError(
-            "LocalBooter does not support download_file operation. Use shell instead."
-        )
 
     async def available(self) -> bool:
         return True

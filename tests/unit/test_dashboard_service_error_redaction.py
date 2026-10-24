@@ -1,5 +1,4 @@
 import logging
-import sys
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -312,100 +311,6 @@ async def test_memory_refresh_failure_state_and_log_are_redacted(caplog) -> None
     assert task["status"] == "failed"
     assert task["error"] == "Memory profile refresh failed"
     _assert_no_sensitive_values(task["error"], caplog.text)
-
-
-@pytest.mark.asyncio
-async def test_neo_operation_failure_is_generic_and_log_is_redacted(
-    monkeypatch,
-    caplog,
-) -> None:
-    class FailingBayClient:
-        def __init__(self, **_kwargs) -> None:
-            pass
-
-        async def __aenter__(self):
-            return object()
-
-        async def __aexit__(self, _exc_type, _exc, _traceback) -> bool:
-            return False
-
-    service = SkillsService.__new__(SkillsService)
-    monkeypatch.setattr(
-        service,
-        "get_neo_client_config",
-        lambda: ("https://neo.example", "neo-access-token"),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "shipyard_neo",
-        SimpleNamespace(BayClient=FailingBayClient),
-    )
-
-    async def failing_operation(_client):
-        raise RuntimeError(_SENSITIVE_ERROR)
-
-    with caplog.at_level(logging.ERROR, logger="astrbot"):
-        result = await service.with_neo_client(failing_operation)
-
-    assert result.ok is False
-    assert result.message == "Neo operation failed"
-    _assert_no_sensitive_values(result.message, caplog.text)
-
-
-@pytest.mark.asyncio
-async def test_neo_promotion_sync_error_is_generic_and_log_is_redacted(
-    monkeypatch,
-    caplog,
-) -> None:
-    class FailingSyncManager:
-        def __init__(self, *, sync_active_sandboxes) -> None:
-            self.sync_active_sandboxes = sync_active_sandboxes
-
-        async def promote_with_optional_sync(self, _client, **_kwargs):
-            return {
-                "release": {"id": "release-1"},
-                "sync": None,
-                "rollback": {"id": "release-1"},
-                "sync_error": _SENSITIVE_ERROR,
-            }
-
-    service = SkillsService.__new__(SkillsService)
-    service.demo_mode = False
-    service.computer_runtime = SimpleNamespace(
-        sync_skills_to_active_sandboxes=AsyncMock()
-    )
-
-    async def run_neo_operation(operation):
-        return await operation(object())
-
-    monkeypatch.setattr(service, "with_neo_client", run_neo_operation)
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.NeoSkillSyncManager",
-        FailingSyncManager,
-    )
-
-    with caplog.at_level(logging.ERROR, logger="astrbot"):
-        result = await service.promote_neo_candidate(
-            {"candidate_id": "candidate-1", "stage": "stable"}
-        )
-
-    assert result.ok is False
-    assert result.message == "Stable promotion failed and has been rolled back."
-    _assert_no_sensitive_values(result.message, caplog.text)
-
-
-@pytest.mark.asyncio
-async def test_neo_configuration_validation_message_remains_specific() -> None:
-    service = SkillsService.__new__(SkillsService)
-    service.config = {"provider_settings": {"sandbox": {}}}
-
-    result = await service.with_neo_client(lambda _client: None)
-
-    assert result.ok is False
-    assert result.message == (
-        "Shipyard Neo endpoint or access token not configured. "
-        "Set them in Dashboard or ensure Bay's credentials.json is accessible."
-    )
 
 
 @pytest.mark.asyncio

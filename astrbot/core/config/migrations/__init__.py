@@ -9,7 +9,7 @@ value survives the rename.
 
 from __future__ import annotations
 
-CONFIG_SCHEMA_REVISION = 4
+CONFIG_SCHEMA_REVISION = 5
 
 
 class ConfigMigrationError(RuntimeError):
@@ -115,6 +115,29 @@ def _migrate_trace_storage(conf: dict) -> bool:
     return True
 
 
+def _migrate_retired_computer_use_runtime(conf: dict) -> bool:
+    """Fail closed after removing the remote sandbox runtimes."""
+    changed = False
+    provider_settings = conf.get("provider_settings")
+    if isinstance(provider_settings, dict):
+        if provider_settings.get("computer_use_runtime") == "sandbox":
+            provider_settings["computer_use_runtime"] = "none"
+            changed = True
+        if "sandbox" in provider_settings:
+            provider_settings.pop("sandbox", None)
+            changed = True
+
+    btw = conf.get("btw")
+    work_loop = btw.get("work_loop") if isinstance(btw, dict) else None
+    if (
+        isinstance(work_loop, dict)
+        and work_loop.get("computer_use_runtime") == "sandbox"
+    ):
+        work_loop["computer_use_runtime"] = "none"
+        changed = True
+    return changed
+
+
 def migrate_config_dict(conf: dict) -> bool:
     """Bring a raw configuration document to the current revision.
 
@@ -155,6 +178,8 @@ def migrate_config_dict(conf: dict) -> bool:
             pass
         elif revision == 3:
             changed |= _migrate_trace_storage(conf)
+        elif revision == 4:
+            changed |= _migrate_retired_computer_use_runtime(conf)
         revision += 1
         changed = True
 

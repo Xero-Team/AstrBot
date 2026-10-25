@@ -118,6 +118,11 @@ class RateLimitStage(Stage):
             self.locks[session_id] = lock
         return lock
 
+    def _session_is_locked(self, session_id: str) -> bool:
+        """Return whether another task currently owns this session's lock."""
+        lock = self.locks.get(session_id)
+        return lock is not None and lock.locked()
+
     def _prune_idle_sessions(
         self,
         now: datetime,
@@ -128,7 +133,9 @@ class RateLimitStage(Stage):
             empty_sessions = [
                 session_id
                 for session_id, timestamps in self.event_timestamps.items()
-                if not timestamps and session_id != active_session_id
+                if not timestamps
+                and session_id != active_session_id
+                and not self._session_is_locked(session_id)
             ]
             for session_id in empty_sessions:
                 self.event_timestamps.pop(session_id, None)
@@ -137,7 +144,9 @@ class RateLimitStage(Stage):
         idle_sessions = [
             session_id
             for session_id, timestamps in self.event_timestamps.items()
-            if not timestamps and session_id != active_session_id
+            if not timestamps
+            and session_id != active_session_id
+            and not self._session_is_locked(session_id)
         ]
         for session_id in idle_sessions:
             self.event_timestamps.pop(session_id, None)
@@ -153,6 +162,8 @@ class RateLimitStage(Stage):
         )
         while len(self.event_timestamps) > self.max_sessions and sessions_by_last_seen:
             _, session_id = sessions_by_last_seen.pop(0)
+            if self._session_is_locked(session_id):
+                continue
             timestamps = self.event_timestamps.get(session_id)
             if timestamps and now - timestamps[-1] > self.rate_limit_time:
                 self.event_timestamps.pop(session_id, None)

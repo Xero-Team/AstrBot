@@ -155,3 +155,16 @@ def test_idle_session_locks_are_released():
     del lock
 
     assert "session-a" not in limiter.locks
+
+
+@pytest.mark.asyncio
+async def test_prune_keeps_state_for_a_session_holding_its_lock():
+    limiter = rate_limit_stage.RateLimitStage()
+    limiter.event_timestamps["busy"]  # Create the empty queue other sessions prune.
+
+    async with limiter._lock_for("busy"):
+        limiter._prune_idle_sessions(
+            real_datetime.now(),
+            active_session_id="other",
+        )
+        assert "busy" in limiter.event_timestamps

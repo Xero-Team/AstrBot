@@ -275,7 +275,7 @@ high-risk run.
 
 This does not grant access to global Dashboard operations such as changing
 accounts, providers, plugins, system settings, exports, or restarts. The
-account's Prompt, tool, sandbox, and path restrictions still apply. Anonymous
+account's Prompt, tool, local-isolation, and path restrictions still apply. Anonymous
 WebChat, API keys, IM messages, plugins, and background continuations cannot
 reuse this authorization. IM senders use a different path: bind the Subject ID
 from `/session info` as `instance_operator` on that config. See

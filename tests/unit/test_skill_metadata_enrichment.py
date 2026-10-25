@@ -422,7 +422,10 @@ def test_skills_service_exposes_runtime_plugin_activation_for_inventory(
         plugins=catalogs.plugins,
     )
 
-    skills = {item["name"]: item for item in service.get_skills()["skills"]}
+    inventory = service.get_skills()
+    assert inventory["runtime"] == "local"
+    assert "sandbox_cache" not in inventory
+    skills = {item["name"]: item for item in inventory["skills"]}
 
     assert skills["active_plugin-skill"]["plugin_active"] is True
     assert (

@@ -4115,7 +4115,7 @@ CONFIG_METADATA_3 = {
             },
             "agent_computer_use": {
                 "description": "Agent Computer Use",
-                "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。",
+                "hint": "让 AstrBot 访问和使用本机环境，以执行更复杂的任务。",
                 "docs": "use/computer.html",
                 "type": "object",
                 "items": {

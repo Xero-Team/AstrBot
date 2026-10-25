@@ -83,9 +83,6 @@ export type SkillInventoryItem = {
 export type SkillInventoryData = {
   skills: Array<SkillInventoryItem>;
   runtime: string;
-  sandbox_cache: {
-    [key: string]: unknown;
-  };
 };
 
 export type SkillInventoryResponse = {

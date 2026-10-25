@@ -5767,7 +5767,7 @@
       },
       "SkillInventoryData": {
         "type": "object",
-        "required": ["skills", "runtime", "sandbox_cache"],
+        "required": ["skills", "runtime"],
         "properties": {
           "skills": {
             "type": "array",
@@ -5777,10 +5777,6 @@
           },
           "runtime": {
             "type": "string"
-          },
-          "sandbox_cache": {
-            "type": "object",
-            "additionalProperties": true
           }
         },
         "additionalProperties": false

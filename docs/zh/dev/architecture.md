@@ -198,7 +198,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 工具来源包括内置工具、插件工具和 MCP 工具。MCP 仅支持 stdio 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
 
-Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`），路径锁在请求级 Skill 快照内。用户说明见 [技能 Skills](/use/skills)。
+Skills 可来自 `data/skills`、插件 `skills/` 和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`），路径锁在请求级 Skill 快照内。用户说明见 [技能 Skills](/use/skills)。
 
 工具目录由 `astrbot/core/tool_catalog.py` 的 `assemble_tool_catalog()` 一次计算。输入是冻结的 Skill 快照、提示词三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再物化 `ToolSet`。请求上已有的工具回灌时仍走同一套表面硬裁。`_apply_local_env_tools()` 只写本地运行时提示词。`tool_schema_mode=skills_like` 只做两阶段轻 schema，不收目录。
 

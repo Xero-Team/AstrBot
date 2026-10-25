@@ -215,7 +215,9 @@ class ProviderRequest:
                         target_format="wav",
                     )
                 except Exception as exc:
-                    logger.warning("音频预处理失败，将忽略。错误: %s", exc)
+                    logger.warning(
+                        "音频预处理失败，将忽略。错误: %s", safe_error("", exc)
+                    )
                     continue
                 if not audio_data:
                     logger.warning("音频预处理结果为空，将忽略。")

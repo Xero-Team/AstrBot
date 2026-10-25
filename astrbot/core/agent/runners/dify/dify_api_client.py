@@ -72,7 +72,7 @@ class DifyAPIClient:
         payload = locals()
         payload.pop("self")
         payload.pop("timeout_seconds")
-        logger.info(f"chat_messages payload: {payload}")
+        logger.debug("Dify chat request started")
         async with self.session.post(
             url,
             json=payload,

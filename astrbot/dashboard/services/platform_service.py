@@ -5,6 +5,7 @@ from astrbot.core.log import log_context
 from astrbot.core.platform.catalog import PlatformCatalog
 from astrbot.core.platform.discovery import discover_platform_adapter
 from astrbot.core.platform.provisioning import PlatformProvisioningValidationError
+from astrbot.core.utils.error_redaction import safe_error
 
 
 class PlatformServiceError(Exception):
@@ -148,5 +149,7 @@ class PlatformService:
         except PlatformProvisioningValidationError as exc:
             raise PlatformServiceError(str(exc), 400) from exc
         except Exception as exc:
-            logger.error(f"处理平台一键创建请求失败: {exc}", exc_info=True)
-            raise PlatformServiceError(str(exc), 500) from exc
+            logger.error(
+                "处理平台一键创建请求失败: %s", safe_error("", exc), exc_info=True
+            )
+            raise PlatformServiceError("Platform provisioning failed", 500) from exc

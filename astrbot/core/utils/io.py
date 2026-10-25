@@ -51,7 +51,13 @@ def _safe_url_for_log(url: str) -> str:
     if parsed.scheme in {"http", "https"}:
         filename = Path(unquote(parsed.path or "")).name
         suffix = f" file={filename!r}" if filename else ""
-        return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={len(url)}"
+        try:
+            port = f":{parsed.port}" if parsed.port else ""
+        except ValueError:
+            port = ""
+        return (
+            f"{parsed.scheme} URL host={parsed.hostname!r}{port}{suffix} len={len(url)}"
+        )
     return f"URL len={len(url)}"
 
 

@@ -15,6 +15,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 
 from astrbot import logger
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
+from astrbot.core.utils.error_redaction import safe_error
 
 
 class SlackWebhookClient:
@@ -94,7 +95,7 @@ class SlackWebhookClient:
             if not hmac.compare_digest(my_signature, signature):
                 logger.warning("Slack request signature verification failed")
                 return Response("Invalid signature", status_code=400)
-            logger.info(f"Received Slack event: {event_data}")
+            logger.info("Received Slack event type=%s", event_data.get("type"))
 
             # 处理 URL 验证事件
             if event_data.get("type") == "url_verification":
@@ -107,7 +108,7 @@ class SlackWebhookClient:
             return Response("", status_code=200)
 
         except Exception as e:
-            logger.error(f"处理 Slack 事件时出错: {e}")
+            logger.error("处理 Slack 事件时出错: %s", safe_error("", e))
             return Response("Internal Server Error", status_code=500)
 
     async def start(self) -> None:

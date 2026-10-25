@@ -1,5 +1,6 @@
 from astrbot.api import logger, safe_error, star
 from astrbot.api.event import AstrMessageEvent
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 from .reply import reply_i18n
 
@@ -85,14 +86,17 @@ class PluginCommands:
         if self.context.runtime_info.demo_mode:
             await reply_i18n(self.context, event, "plugin.install.demo")
             return
-        logger.info("Preparing to install plugin from %s", plugin_repo)
+        logger.info(
+            "Preparing to install plugin from %s",
+            redact_sensitive_text(plugin_repo),
+        )
         try:
             await self.context.runtime_info.install_plugin(plugin_repo)
         except RuntimeError:
             await reply_i18n(self.context, event, "plugin.install.unavailable")
             return
         except Exception as exc:
-            logger.error("Plugin installation failed: %s", exc)
+            logger.error("Plugin installation failed: %s", safe_error("", exc))
             await reply_i18n(
                 self.context,
                 event,

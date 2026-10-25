@@ -92,25 +92,56 @@ function ipv4Private(address) {
     || (a === 203 && b === 0 && c === 113);
 }
 
+function ipv6Hextets(address) {
+  const cleaned = address.toLocaleLowerCase('en-US').split('%')[0];
+  const halves = cleaned.split('::');
+  if (halves.length > 2) return null;
+  const parseSide = (side) => {
+    if (!side) return [];
+    const parts = side.split(':');
+    const output = [];
+    for (const part of parts) {
+      if (part.includes('.')) {
+        const v4 = part.split('.').map(Number);
+        if (v4.length !== 4 || v4.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+        output.push((v4[0] << 8) | v4[1], (v4[2] << 8) | v4[3]);
+        continue;
+      }
+      if (!/^[0-9a-f]{1,4}$/.test(part)) return null;
+      output.push(Number.parseInt(part, 16));
+    }
+    return output;
+  };
+  const left = parseSide(halves[0]);
+  const right = parseSide(halves[1] || '');
+  if (left === null || right === null) return null;
+  if (halves.length === 1) return left.length === 8 ? left : null;
+  const missing = 8 - left.length - right.length;
+  if (missing < 1) return null;
+  return [...left, ...Array(missing).fill(0), ...right];
+}
+
 function ipv6Private(address) {
-  const normalized = address.toLocaleLowerCase('en-US').split('%')[0];
-  if (normalized === '::' || normalized === '::1') return true;
-  if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('ff') || /^fe[89ab]/.test(normalized)) return true;
-  if (normalized.startsWith('64:ff9b:') || normalized.startsWith('100:')
-    || normalized.startsWith('2001:db8:') || normalized.startsWith('2002:')) return true;
-  const mappedDotted = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mappedDotted) return ipv4Private(mappedDotted[1]);
-  const mappedHex = normalized.match(/::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (mappedHex) {
-    const high = Number.parseInt(mappedHex[1], 16);
-    const low = Number.parseInt(mappedHex[2], 16);
-    return ipv4Private(`${high >>> 8}.${high & 255}.${low >>> 8}.${low & 255}`);
+  const h = ipv6Hextets(address);
+  if (!h) return true;
+  if (h.every((part) => part === 0)) return true;
+  if (h.slice(0, 7).every((part) => part === 0) && h[7] === 1) return true;
+  if ((h[0] & 0xfe00) === 0xfc00) return true;
+  if ((h[0] & 0xffc0) === 0xfe80) return true;
+  if ((h[0] & 0xffc0) === 0xfec0) return true;
+  if ((h[0] & 0xff00) === 0xff00) return true;
+  if (h[0] === 0x2001 && h[1] === 0x0db8) return true;
+  if (h[0] === 0x2002) return true;
+  if (h[0] === 0x0064 && h[1] === 0xff9b) return true;
+  if (h[0] === 0x0100 && h.slice(1, 4).every((part) => part === 0)) return true;
+
+  const embedded = (high, low) =>
+    ipv4Private(`${high >>> 8}.${high & 255}.${low >>> 8}.${low & 255}`);
+  if (h.slice(0, 4).every((part) => part === 0) && (h[4] === 0 || h[4] === 0xffff)) {
+    return embedded(h[6], h[7]);
   }
-  const compatibleHex = normalized.match(/^::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (compatibleHex) {
-    const high = Number.parseInt(compatibleHex[1], 16);
-    const low = Number.parseInt(compatibleHex[2], 16);
-    return ipv4Private(`${high >>> 8}.${high & 255}.${low >>> 8}.${low & 255}`);
+  if (h.slice(0, 5).every((part) => part === 0) && h[5] === 0xffff) {
+    return embedded(h[6], h[7]);
   }
   return false;
 }

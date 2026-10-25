@@ -33,10 +33,11 @@ _VALIDATION_RATE_WINDOW_SECONDS = 60
 
 
 def _is_fresh_timestamp(value: object) -> bool:
-    if not isinstance(value, str) or not value.isdigit():
+    if not isinstance(value, str) or not value.isdigit() or len(value) > 19:
         return False
     timestamp = int(value)
-    if len(value) >= 13:
+    # QQ timestamps may be seconds, milliseconds, microseconds, or nanoseconds.
+    while timestamp > 10**11:
         timestamp //= 1000
     return abs(time.time() - timestamp) <= _SIGNATURE_MAX_SKEW_SECONDS
 

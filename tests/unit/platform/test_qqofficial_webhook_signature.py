@@ -228,6 +228,41 @@ async def test_qq_webhook_callback_rejects_stale_signed_event() -> None:
 
 
 @pytest.mark.asyncio
+async def test_qq_webhook_callback_accepts_millisecond_signature_timestamp() -> None:
+    secret = "test-secret"
+    timestamp = str(int(time.time() * 1000))
+    body = b'{"op":12,"d":0}'
+    signature = _sign_qq_webhook_payload(secret, timestamp, body)
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = secret
+
+    result = await webhook.handle_callback(
+        FakeRequest(
+            body,
+            {
+                _SIGNATURE_TIMESTAMP_HEADER: timestamp,
+                _SIGNATURE_HEADER: signature,
+            },
+        )
+    )
+
+    assert result == {"opcode": 12}
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_callback_rejects_oversized_signature_timestamp() -> None:
+    body = b'{"op":12,"d":0}'
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = "test-secret"
+
+    result = await webhook.handle_callback(
+        FakeRequest(body, {_SIGNATURE_TIMESTAMP_HEADER: "9" * 5000})
+    )
+
+    assert result == ({"error": "Invalid signature"}, 401)
+
+
+@pytest.mark.asyncio
 async def test_qq_webhook_callback_lazily_creates_botpy_connection():
     secret = "test-secret"
     timestamp = _now_ts()

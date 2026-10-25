@@ -98,6 +98,7 @@ class SatoriPlatformAdapter(Platform):
         session: MessageSession,
         message_chain: MessageChain,
     ):
+        # Lazy import: the event module imports this adapter only for typing.
         from .satori_event import SatoriPlatformEvent
 
         await SatoriPlatformEvent.send_with_adapter(
@@ -793,6 +794,7 @@ class SatoriPlatformAdapter(Platform):
         Returns:
             Created Satori message event.
         """
+        # Lazy import: the event module imports this adapter only for typing.
         from .satori_event import SatoriPlatformEvent
 
         return SatoriPlatformEvent(

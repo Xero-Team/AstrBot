@@ -257,6 +257,7 @@ The static import graph, including `TYPE_CHECKING` edges, must stay acyclic. A f
 | `astrbot.core.platform.contracts.onebot` ↔ `astrbot.core.platform.contracts.telegram`              | `get_capability_descriptor`                                        | Telegram adapts the historical OneBot contract module.                                                           |
 | `astrbot.core.db.migrations.doc` ↔ `astrbot.core.db.vec_db.document_storage`                       | `_initial_schema`                                                  | Document storage imports the migration sequence module.                                                          |
 | `astrbot.core.platform.sources.napcat.napcat_platform_adapter` ↔ `...napcat.message_event`         | `create_event`                                                     | The event module imports the adapter only for typing; the adapter constructs the event on demand.                |
+| `astrbot.core.platform.sources.satori.satori_adapter` ↔ `...satori.satori_event`                   | `send_by_session` / `create_event`                                 | The event module imports the adapter only for typing; the adapter constructs the event on demand.                |
 | `astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter` ↔ `...weixin_oc.weixin_oc_event`       | `create_event`                                                     | The event module imports the adapter only for typing; the adapter constructs the event on demand.                |
 
 ## Unified Authorization

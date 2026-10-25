@@ -257,6 +257,7 @@ Tool Loop 每完成一次模型调用都会发出 `agent_stats`，包括工具�
 | `astrbot.core.platform.contracts.onebot` ↔ `astrbot.core.platform.contracts.telegram`              | `get_capability_descriptor`                                       | Telegram 适配历史 OneBot 契约模块。                                             |
 | `astrbot.core.db.migrations.doc` ↔ `astrbot.core.db.vec_db.document_storage`                       | `_initial_schema`                                                 | 文档存储导入迁移序列模块。                                                      |
 | `astrbot.core.platform.sources.napcat.napcat_platform_adapter` ↔ `...napcat.message_event`         | `create_event`                                                    | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
+| `astrbot.core.platform.sources.satori.satori_adapter` ↔ `...satori.satori_event`                   | `send_by_session` / `create_event`                                | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
 | `astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter` ↔ `...weixin_oc.weixin_oc_event`       | `create_event`                                                    | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
 
 ## 统一授权系统

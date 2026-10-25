@@ -65,6 +65,7 @@ qrcode>=8.2
 qq-botpy==1.2.1
 rapidfuzz>=3.14.6
 rank-bm25>=0.2.2
+regex>=2026.9.29
 requests>=2.34.2
 rich>=15.0.0
 scikit-image>=0.26.0

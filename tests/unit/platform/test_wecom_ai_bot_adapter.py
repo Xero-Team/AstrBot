@@ -403,6 +403,37 @@ async def test_wecom_ai_bot_process_stream_aggregates_plain_and_images_and_marks
 
 
 @pytest.mark.asyncio
+async def test_wecom_ai_bot_stream_keeps_images_across_polls():
+    adapter = _adapter()
+    adapter.api_client = SimpleNamespace(
+        encrypt_message=AsyncMock(return_value="encrypted-mixed")
+    )
+    queue = asyncio.Queue()
+    adapter.queue_mgr = SimpleNamespace(
+        has_back_queue=MagicMock(return_value=True),
+        get_or_create_back_queue=MagicMock(return_value=queue),
+        remove_queues=MagicMock(),
+    )
+    callback_params = {"nonce": "n1", "timestamp": "t1"}
+    stream_message = {"msgtype": "stream", "stream": {"id": "stream-4"}}
+
+    await queue.put({"type": "plain", "data": "Hel", "streaming": False})
+    await queue.put({"type": "image", "image_data": "b25l"})
+    await adapter._process_message(stream_message, callback_params)
+
+    await queue.put({"type": "plain", "data": "lo", "streaming": False})
+    await queue.put({"type": "image", "image_data": "dHdv"})
+    await queue.put({"type": "complete"})
+    await adapter._process_message(stream_message, callback_params)
+
+    final_message = adapter.api_client.encrypt_message.await_args.args[0]
+    assert "b25l" in final_message
+    assert "dHdv" in final_message
+    assert "Hello" in final_message
+    assert "stream-4" not in adapter._stream_image_cache
+
+
+@pytest.mark.asyncio
 async def test_wecom_ai_bot_process_event_enter_chat_returns_welcome_message():
     adapter = _adapter()
     adapter.friend_message_welcome_text = "welcome"

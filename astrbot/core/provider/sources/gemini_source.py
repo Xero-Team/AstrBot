@@ -106,18 +106,18 @@ class ProviderGoogleGenAI(Provider):
             **httpx_client_kwargs(route),
         }
 
-        # Track every replaced client so terminate() closes all of them when
-        # _init_client runs repeatedly (e.g. via set_key).
+        # Key rotation only replaces the SDK wrapper. The HTTP transport is
+        # shared across rotations and closed by terminate(): closing it here
+        # would abort requests and response streams still using the old key.
         previous_client = getattr(self, "client", None)
         if previous_client is not None:
             self._schedule_client_close(previous_client)
-        if self._http_client is not None:
-            self._schedule_client_close(self._http_client)
 
-        self._http_client = httpx.AsyncClient(
-            event_hooks={"request": [self._enforce_astrbot_user_agent]},
-            **async_client_kwargs,
-        )
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(
+                event_hooks={"request": [self._enforce_astrbot_user_agent]},
+                **async_client_kwargs,
+            )
         http_options.httpx_async_client = self._http_client
 
         self.client = genai.Client(

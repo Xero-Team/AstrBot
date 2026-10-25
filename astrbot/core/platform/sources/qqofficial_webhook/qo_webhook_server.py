@@ -299,12 +299,6 @@ class QQOfficialWebhook:
                             self._extra_data_cache.pop(
                                 next(iter(self._extra_data_cache))
                             )
-                        while (
-                            len(self._extra_data_cache) > _EXTRA_DATA_CACHE_MAX_ENTRIES
-                        ):
-                            self._extra_data_cache.pop(
-                                next(iter(self._extra_data_cache))
-                            )
             try:
                 func = connection.parser[event]
             except KeyError:

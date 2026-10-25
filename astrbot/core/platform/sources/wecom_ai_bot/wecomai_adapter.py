@@ -317,9 +317,9 @@ class WecomAIBotAdapter(Platform):
                 self._stream_plain_cache.pop(stream_id, None)
                 self._stream_plain_cache[stream_id] = cached_plain_content
                 if image_base64:
-                    self._stream_image_cache.pop(stream_id, None)
+                    cached_images = self._stream_image_cache.pop(stream_id, [])
                     self._stream_image_cache[stream_id] = [
-                        *self._stream_image_cache.get(stream_id, []),
+                        *cached_images,
                         *image_base64,
                     ]
                 self._trim_stream_caches()

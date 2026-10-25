@@ -9,6 +9,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 
 _SHIPYARD_NEO_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
@@ -64,7 +65,10 @@ class NeoSkillToolBase(FunctionTool):
             result = await neo_call(client, sandbox)
             return _to_json_text(result)
         except Exception as e:
-            return f"{self.error_prefix} {error_action}: {str(e)}"
+            return safe_error(
+                f"{self.error_prefix} {error_action}: ",
+                e,
+            )
 
 
 @builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
@@ -429,7 +433,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 if rollback_json:
                     return (
                         "Error promoting skill candidate: stable release synced failed; "
-                        f"auto rollback succeeded. sync_error={result['sync_error']}; "
+                        f"auto rollback succeeded. sync_error={redact_sensitive_text(str(result['sync_error']))}; "
                         f"rollback={_to_json_text(rollback_json)}"
                     )
             return _to_json_text(
@@ -440,7 +444,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 }
             )
         except Exception as e:
-            return f"Error promoting skill candidate: {str(e)}"
+            return safe_error("Error promoting skill candidate: ", e)
 
 
 @builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)

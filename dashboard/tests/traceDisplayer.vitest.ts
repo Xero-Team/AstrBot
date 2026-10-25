@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({
   sources: [] as Array<{
     close: ReturnType<typeof vi.fn>;
     onerror: (() => void) | null;
+    onopen: (() => void) | null;
+    onmessage: ((event: { data: string; lastEventId?: string }) => void) | null;
   }>,
 }));
 
@@ -34,6 +36,9 @@ vi.mock('event-source-polyfill', () => ({
   EventSourcePolyfill: class {
     close = vi.fn();
     onerror: (() => void) | null = null;
+    onopen: (() => void) | null = null;
+    onmessage:
+      ((event: { data: string; lastEventId?: string }) => void) | null = null;
 
     constructor() {
       state.sources.push(this);
@@ -74,6 +79,53 @@ describe('TraceDisplayer', () => {
     await vi.runAllTimersAsync();
 
     expect(state.sources).toHaveLength(1);
+  });
+
+  it('inserts an unknown live trace on the default first page', async () => {
+    const wrapper = mountWithVuetify(TraceDisplayer);
+    await flushPromises();
+
+    state.sources[0]!.onmessage?.({
+      lastEventId: '1',
+      data: JSON.stringify({
+        type: 'trace',
+        trace: {
+          trace_id: 'tr-new',
+          name: 'new trace',
+          state: 'ok',
+          start_time_unix_nano: '1000000000',
+          updated_time_unix_nano: '2000000000',
+          attributes: { 'astrbot.umo': 'qq:GroupMessage:1' },
+        },
+        spans: [
+          {
+            span_id: 'tr-new',
+            trace_id: 'tr-new',
+            parent_span_id: null,
+            name: 'message',
+            start_time_unix_nano: '1000000000',
+            end_time_unix_nano: '2000000000',
+            attributes: {},
+          },
+        ],
+      }),
+    });
+    await flushPromises();
+
+    const row = wrapper.find('[data-trace-id="tr-new"]');
+    expect(row.exists()).toBe(true);
+    expect(row.classes()).toContain('trace-list-row--entering');
+  });
+
+  it('refreshes history from the toolbar button', async () => {
+    const wrapper = mountWithVuetify(TraceDisplayer);
+    await flushPromises();
+    const calls = state.history.mock.calls.length;
+
+    await wrapper.find('.refresh-button').trigger('click');
+    await flushPromises();
+
+    expect(state.history.mock.calls.length).toBe(calls + 1);
   });
 
   it('renders table chrome from the trace catalog', async () => {

@@ -31,14 +31,6 @@ from astrbot.dashboard.services.config_service import MAX_FILE_BYTES
 
 from .api.app import create_dashboard_asgi_app
 
-try:
-    from python_multipart.multipart import parse_options_header
-except ImportError:  # pragma: no cover
-    try:
-        from multipart.multipart import parse_options_header
-    except ImportError:
-        parse_options_header = None
-
 _MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 _BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
     ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
@@ -98,12 +90,7 @@ def _check_body_limit(
     if content_length is None:
         if method not in _BODY_METHODS:
             return None
-        media_type = (
-            parse_options_header(content_type)[0] if parse_options_header else b""
-        )
-        if media_type == b"multipart/form-data":
-            return 411, "Content-Length header is required for uploads"
-        return None
+        return 411, "Content-Length header is required for request bodies"
     limit = default_limit
     if "/config-files" in path:
         limit = MAX_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES

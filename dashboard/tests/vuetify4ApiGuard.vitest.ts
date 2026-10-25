@@ -54,6 +54,8 @@ describe('Vuetify 4 API usage', () => {
     expect(t2iEditor).toContain('sandbox="allow-scripts"');
     expect(t2iEditor).not.toContain('allow-same-origin');
     expect(t2iEditor).toContain('referrerpolicy="no-referrer"');
+    // A sandboxed opaque origin cannot be reloaded through contentWindow.
+    expect(t2iEditor).not.toContain('contentWindow.location');
   });
 
   it('does not pass props removed in Vuetify 4', () => {

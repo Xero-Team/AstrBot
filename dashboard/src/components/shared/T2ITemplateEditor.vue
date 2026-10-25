@@ -670,8 +670,12 @@ const refreshPreview = () => {
   previewLoading.value = true;
   void syncPreviewVersion();
   void nextTick(() => {
-    if (previewFrame.value?.contentWindow) {
-      previewFrame.value.contentWindow.location.reload();
+    const frame = previewFrame.value;
+    if (frame) {
+      // The sandbox gives the frame an opaque origin, so reloading through
+      // the frame's Location object throws a cross-origin SecurityError.
+      // Re-assigning ``srcdoc`` reloads the frame from the parent document.
+      frame.srcdoc = previewContent.value;
     }
     setTimeout(() => (previewLoading.value = false), 500);
   });

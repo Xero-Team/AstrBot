@@ -5,6 +5,8 @@ from astrbot.core.skills._skill_inventory import (
     SkillInfo,
     _normalize_skill_markdown_path,
     _read_skill_frontmatter,
+    _resolve_skill_dir,
+    _validate_skill_dir_name,
 )
 
 
@@ -252,30 +254,43 @@ class SkillManagerListingMixin:
         config["skills"] = skill_configs
         self._save_config(config)
 
+    def _lookup_skill_dir(self, name: str) -> Path | None:
+        try:
+            return _resolve_skill_dir(self.skills_root, name)
+        except OSError, ValueError:
+            return None
+
     def is_plugin_skill(self, name: str) -> bool:
-        skill_dir = Path(self.skills_root) / name
-        if _normalize_skill_markdown_path(skill_dir) is not None:
+        skill_dir = self._lookup_skill_dir(name)
+        if (
+            skill_dir is not None
+            and _normalize_skill_markdown_path(skill_dir) is not None
+        ):
             return False
         return self._get_plugin_skill_dir(name) is not None
 
     def is_builtin_skill(self, name: str) -> bool:
-        skill_dir = Path(self.skills_root) / name
-        if _normalize_skill_markdown_path(skill_dir) is not None:
+        skill_dir = self._lookup_skill_dir(name)
+        if (
+            skill_dir is not None
+            and _normalize_skill_markdown_path(skill_dir) is not None
+        ):
             return False
         if self._get_plugin_skill_dir(name) is not None:
             return False
         return self._get_builtin_skill_dir(name) is not None
 
     def set_skill_active(self, name: str, active: bool) -> None:
-        if self.is_plugin_skill(name):
+        skill_name = _validate_skill_dir_name(name)
+        if self.is_plugin_skill(skill_name):
             raise PermissionError(
                 "Plugin-provided skill cannot be enabled/disabled from local skill management."
             )
-        if self.is_builtin_skill(name):
+        if self.is_builtin_skill(skill_name):
             raise PermissionError(
                 "Builtin preset skill cannot be enabled/disabled from local skill management."
             )
         config = self._load_config()
         config.setdefault("skills", {})
-        config["skills"][name] = {"active": bool(active)}
+        config["skills"][skill_name] = {"active": bool(active)}
         self._save_config(config)

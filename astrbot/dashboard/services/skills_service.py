@@ -17,7 +17,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.dashboard.upload_utils import save_upload_to_path
 
-_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SKILL_NAME_RE = re.compile(r"^(?!\.{1,2}$)[A-Za-z0-9._-]+$")
 _SKILL_FILE_MAX_BYTES = 512 * 1024
 _EDITABLE_SKILL_FILE_SUFFIXES = {
     ".css",
@@ -103,6 +103,15 @@ class SkillsService:
                 "You are not permitted to do this operation in demo mode"
             )
 
+    @staticmethod
+    def _validate_skill_name(name: object) -> str:
+        skill_name = str(name or "").strip()
+        if not skill_name:
+            raise SkillsServiceError("Missing skill name")
+        if not _SKILL_NAME_RE.fullmatch(skill_name):
+            raise SkillsServiceError("Invalid skill name")
+        return skill_name
+
     def _is_readonly_skill(self, name: str) -> bool:
         return self.skill_manager.is_plugin_skill(
             name
@@ -116,11 +125,7 @@ class SkillsService:
             )
 
     def resolve_local_skill_dir(self, name: str) -> Path:
-        skill_name = str(name or "").strip()
-        if not skill_name:
-            raise SkillsServiceError("Missing skill name")
-        if not _SKILL_NAME_RE.match(skill_name):
-            raise SkillsServiceError("Invalid skill name")
+        skill_name = self._validate_skill_name(name)
 
         skill_mgr = self.skill_manager
         plugin_skill_dir = skill_mgr._get_plugin_skill_dir(skill_name)
@@ -383,11 +388,7 @@ class SkillsService:
         )
 
     def prepare_skill_archive(self, name: str) -> SkillArchive:
-        skill_name = str(name or "").strip()
-        if not skill_name:
-            raise SkillsServiceError("Missing skill name")
-        if not _SKILL_NAME_RE.match(skill_name):
-            raise SkillsServiceError("Invalid skill name")
+        skill_name = self._validate_skill_name(name)
 
         skill_mgr = self.skill_manager
         if skill_mgr.is_plugin_skill(skill_name):
@@ -400,10 +401,12 @@ class SkillsService:
                 status_code=403,
             )
 
-        skill_dir = Path(skill_mgr.skills_root) / skill_name
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_dir.is_dir() or not skill_md.exists():
-            raise SkillsServiceError("Local skill not found", status_code=404)
+        skill_dir = self.resolve_local_skill_dir(skill_name)
+        skills_root = Path(skill_mgr.skills_root).resolve(strict=True)
+        try:
+            archive_base_dir = skill_dir.relative_to(skills_root).as_posix()
+        except ValueError as exc:
+            raise SkillsServiceError("Invalid skill path") from exc
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -415,15 +418,15 @@ class SkillsService:
         shutil.make_archive(
             str(zip_base),
             "zip",
-            root_dir=str(skill_mgr.skills_root),
-            base_dir=skill_name,
+            root_dir=str(skills_root),
+            base_dir=archive_base_dir,
         )
         return SkillArchive(path=zip_path, filename=f"{skill_name}.zip")
 
     def list_skill_files(self, name: str, relative_path: str | None = "") -> dict:
-        skill_name = str(name or "").strip()
-        readonly = self._is_readonly_skill(skill_name)
+        skill_name = self._validate_skill_name(name)
         skill_dir = self.resolve_local_skill_dir(skill_name)
+        readonly = self._is_readonly_skill(skill_name)
         target_dir = self.resolve_skill_relative_path(
             skill_dir,
             relative_path,
@@ -519,22 +522,18 @@ class SkillsService:
     def update_skill(self, data: object) -> dict:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
-        name = payload.get("name")
         active = payload.get("active")
-        if not name:
-            raise SkillsServiceError("Missing skill name")
+        skill_name = self._validate_skill_name(payload.get("name"))
         if not isinstance(active, bool):
             raise SkillsServiceError("Missing skill active state")
-        self._ensure_skill_mutable(str(name))
-        self.skill_manager.set_skill_active(name, active)
-        return {"name": name, "active": active}
+        self._ensure_skill_mutable(skill_name)
+        self.skill_manager.set_skill_active(skill_name, active)
+        return {"name": skill_name, "active": active}
 
     async def delete_skill(self, data: object) -> dict:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
-        name = payload.get("name")
-        if not name:
-            raise SkillsServiceError("Missing skill name")
-        self._ensure_skill_mutable(str(name))
-        self.skill_manager.delete_skill(name)
-        return {"name": name}
+        skill_name = self._validate_skill_name(payload.get("name"))
+        self._ensure_skill_mutable(skill_name)
+        self.skill_manager.delete_skill(skill_name)
+        return {"name": skill_name}

@@ -84,6 +84,8 @@ def test_internal_help_template_is_not_selectable_for_generic_rendering():
     from astrbot.core.utils.t2i.template_manager import public_template_name
 
     assert public_template_name("astrbot_help") == "base"
+    assert public_template_name("AstrBot_Help") == "base"
+    assert public_template_name(" ASTRBOT_HELP ") == "base"
     assert public_template_name("custom") == "custom"
     assert public_template_name(None) == "base"
 
@@ -94,5 +96,6 @@ async def test_t2i_service_rejects_internal_template_as_active():
 
     service = T2iService.__new__(T2iService)
 
-    with pytest.raises(T2iServiceError):
-        await service.set_active_template("astrbot_help")
+    for name in ("astrbot_help", "AstrBot_Help", " ASTRBOT_HELP "):
+        with pytest.raises(T2iServiceError):
+            await service.set_active_template(name)

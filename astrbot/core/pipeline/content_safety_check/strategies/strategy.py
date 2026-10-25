@@ -6,6 +6,7 @@ from . import ContentSafetyStrategy
 class StrategySelector:
     def __init__(self, config: dict) -> None:
         self.enabled_strategies: list[ContentSafetyStrategy] = []
+        self.unavailable = False
         if config["internal_keywords"]["enable"]:
             from .keywords import KeywordsStrategy
 
@@ -16,17 +17,20 @@ class StrategySelector:
             try:
                 from .baidu_aip import BaiduAipStrategy
             except ImportError:
-                logger.warning("使用百度内容审核应该先 pip install baidu-aip")
-                return
-            self.enabled_strategies.append(
-                BaiduAipStrategy(
-                    config["baidu_aip"]["app_id"],
-                    config["baidu_aip"]["api_key"],
-                    config["baidu_aip"]["secret_key"],
-                ),
-            )
+                logger.error("使用百度内容审核应该先 pip install baidu-aip")
+                self.unavailable = True
+            else:
+                self.enabled_strategies.append(
+                    BaiduAipStrategy(
+                        config["baidu_aip"]["app_id"],
+                        config["baidu_aip"]["api_key"],
+                        config["baidu_aip"]["secret_key"],
+                    ),
+                )
 
     async def check(self, content: str) -> tuple[bool, str]:
+        if self.unavailable:
+            return False, "内容安全检查暂时不可用"
         for strategy in self.enabled_strategies:
             ok, info = await strategy.check(content)
             if not ok:

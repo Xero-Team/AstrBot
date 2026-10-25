@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -132,3 +133,29 @@ def test_stale_active_import_path_does_not_block_other_backups(
     other_path.write_bytes(b"zip")
     result = service.rename_backup({"filename": "other.zip", "new_name": "renamed.zip"})
     assert result == {"old_filename": "other.zip", "new_filename": "renamed.zip"}
+
+
+def test_backup_mutations_reject_non_zip_names_and_chunk_directory(
+    tmp_path: Path,
+) -> None:
+    service = _make_service(tmp_path)
+    (tmp_path / ".chunks").mkdir()
+
+    for filename in (".chunks", "C:foo.zip", "..", "nested/../../x.zip"):
+        with pytest.raises(BackupServiceError):
+            service.delete_backup({"filename": filename})
+        with pytest.raises(BackupServiceError):
+            service.prepare_download(filename=filename)
+
+    assert (tmp_path / ".chunks").is_dir()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink creation needs extra privileges")
+def test_backup_download_rejects_symlink_escape(tmp_path: Path) -> None:
+    service = _make_service(tmp_path)
+    outside = tmp_path.parent / "outside.zip"
+    outside.write_bytes(b"zip")
+    (tmp_path / "link.zip").symlink_to(outside)
+
+    with pytest.raises(BackupServiceError):
+        service.prepare_download(filename="link.zip")

@@ -33,6 +33,25 @@ MAX_DIRECT_UPLOAD_BYTES = 128 * 1024 * 1024
 _BACKGROUND_TASK_ERROR = "Backup task failed"
 
 
+def validate_backup_filename(filename: str | None, *, missing: str) -> str:
+    """Return one plain .zip filename inside the configured backup directory."""
+    if not filename:
+        raise BackupServiceError(missing)
+    name = str(filename).strip()
+    if (
+        not name
+        or name in {".", "..", ".zip"}
+        or ".." in name
+        or "/" in name
+        or "\\" in name
+        or Path(name).is_absolute()
+        or (len(name) >= 2 and name[1] == ":")
+        or not name.lower().endswith(".zip")
+    ):
+        raise BackupServiceError("无效的文件名")
+    return name
+
+
 class BackupServiceError(Exception):
     def __init__(self, message: str, *, status_code: int = 200) -> None:
         super().__init__(message)
@@ -89,11 +108,14 @@ class BackupService:
 
     @staticmethod
     def _validate_backup_filename(filename: str | None, *, missing: str) -> str:
-        if not filename:
-            raise BackupServiceError(missing)
-        if ".." in filename or "/" in filename or "\\" in filename:
-            raise BackupServiceError("无效的文件名")
-        return filename
+        return validate_backup_filename(filename, missing=missing)
+
+    def _resolve_backup_path(self, filename: str) -> Path:
+        root = Path(self.backup_dir).resolve(strict=False)
+        path = (root / filename).resolve(strict=False)
+        if not path.is_relative_to(root) or not path.is_file():
+            raise BackupServiceError(f"备份文件不存在: {filename}")
+        return path
 
     def _init_task(self, task_id: str, task_type: str, status: str = "pending") -> None:
         self.backup_tasks[task_id] = {
@@ -454,9 +476,7 @@ class BackupService:
             payload.get("filename"),
             missing="缺少 filename 参数",
         )
-        zip_path = os.path.join(self.backup_dir, filename)
-        if not os.path.exists(zip_path):
-            raise BackupServiceError(f"备份文件不存在: {filename}")
+        zip_path = str(self._resolve_backup_path(filename))
 
         kb_manager = self.knowledge_base_manager
         importer = AstrBotImporter(
@@ -478,9 +498,7 @@ class BackupService:
                 "请先确认导入。导入将会清空并覆盖现有数据，此操作不可撤销。"
             )
 
-        zip_path = os.path.join(self.backup_dir, filename)
-        if not os.path.exists(zip_path):
-            raise BackupServiceError(f"备份文件不存在: {filename}")
+        zip_path = str(self._resolve_backup_path(filename))
 
         self._claim_data_task()
         task_id = str(uuid.uuid4())
@@ -575,10 +593,8 @@ class BackupService:
             raise BackupServiceError("缺少参数 filename")
 
         filename = self._validate_backup_filename(filename, missing="缺少参数 filename")
-        file_path = os.path.join(self.backup_dir, filename)
-        if not os.path.exists(file_path):
-            raise BackupServiceError("备份文件不存在")
-        return BackupDownload(path=file_path, filename=filename)
+        file_path = self._resolve_backup_path(filename)
+        return BackupDownload(path=str(file_path), filename=filename)
 
     def _is_active_import(self, file_path: str) -> bool:
         active = self._active_import_path
@@ -595,11 +611,9 @@ class BackupService:
             payload.get("filename"),
             missing="缺少参数 filename",
         )
-        file_path = os.path.join(self.backup_dir, filename)
-        if self._is_active_import(file_path):
+        file_path = self._resolve_backup_path(filename)
+        if self._is_active_import(str(file_path)):
             raise BackupServiceError("该备份正在导入，无法删除")
-        if not os.path.exists(file_path):
-            raise BackupServiceError("备份文件不存在")
 
         os.remove(file_path)
         return None, "删除备份成功"
@@ -621,12 +635,10 @@ class BackupService:
             raise BackupServiceError("新文件名无效")
 
         new_filename = f"{new_name}.zip"
-        old_path = os.path.join(self.backup_dir, filename)
-        if not os.path.exists(old_path):
-            raise BackupServiceError("备份文件不存在")
+        old_path = self._resolve_backup_path(filename)
 
         new_path = os.path.join(self.backup_dir, new_filename)
-        if self._is_active_import(old_path):
+        if self._is_active_import(str(old_path)):
             raise BackupServiceError("该备份正在导入，无法重命名")
         if os.path.exists(new_path):
             raise BackupServiceError(f"文件名 '{new_filename}' 已存在")

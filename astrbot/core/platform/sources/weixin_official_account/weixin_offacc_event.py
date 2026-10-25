@@ -166,7 +166,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         self,
         kind: str,
         error: Exception,
-    ) -> PlatformSendResult:
+    ) -> PlatformSendResult | None:
         logger.error(
             "微信公众平台上传%s失败: %s",
             kind,

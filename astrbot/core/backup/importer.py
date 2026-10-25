@@ -10,7 +10,6 @@
 import asyncio
 import json
 import os
-import re
 import shutil
 import zipfile
 from dataclasses import dataclass, field
@@ -43,7 +42,11 @@ from ._importer_files import (
     list_directory_archive_files,
     validate_path_within,
 )
-from ._importer_kb import clear_kb_data, import_kb_metadata_tables
+from ._importer_kb import (
+    _validate_kb_id,
+    clear_kb_data,
+    import_kb_metadata_tables,
+)
 from ._importer_platform_stats import (
     InvalidCountWarnLimiter,
     merge_platform_stats_rows,
@@ -75,18 +78,6 @@ def _get_major_version(version_str: str) -> str:
 
 def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
     return validate_path_within(target_path, base_dir)
-
-
-_KB_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
-
-
-def _validate_kb_id(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    kb_id = value.strip()
-    if not kb_id or kb_id in {".", ".."} or not _KB_ID_RE.fullmatch(kb_id):
-        return None
-    return kb_id
 
 
 def _archive_member_size_allowed(zf: zipfile.ZipFile, name: str) -> bool:

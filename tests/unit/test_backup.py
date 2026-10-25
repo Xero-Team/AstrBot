@@ -1830,3 +1830,58 @@ async def test_kb_vector_index_skips_oversized_member(tmp_path, monkeypatch):
 
     assert not (kb_dir / "index.faiss").exists()
     assert any("向量索引" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_kb_metadata_import_skips_unsafe_kb_ids():
+    """Metadata rows must not smuggle unsafe ids past the file-import guard."""
+    from astrbot.core.backup._importer_kb import import_kb_metadata_tables
+
+    class _SessionContext:
+        async def __aenter__(self):
+            return None
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class _Session:
+        def __init__(self):
+            self.added = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        def begin(self):
+            return _SessionContext()
+
+        def begin_nested(self):
+            return _SessionContext()
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def flush(self):
+            return None
+
+    session = _Session()
+    kb_manager = SimpleNamespace(kb_db=SimpleNamespace(get_db=lambda: session))
+
+    imported: dict[str, int] = {}
+    await import_kb_metadata_tables(
+        kb_manager,
+        {
+            "knowledge_bases": [
+                {"kb_id": "../escape", "kb_name": "escape"},
+                {"kb_id": "..", "kb_name": "parent"},
+                {"kb_id": "safe-kb_1", "kb_name": "safe"},
+            ]
+        },
+        imported,
+        lambda row, _model: dict(row),
+    )
+
+    assert imported["kb_knowledge_bases"] == 1
+    assert [record.kb_id for record in session.added] == ["safe-kb_1"]

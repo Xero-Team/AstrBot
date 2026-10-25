@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from astrbot.core.computer.computer_client import ComputerRuntime
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not sys.platform.startswith(("linux", "darwin")),
+    reason="The Local sandbox proxy is not supported on this platform.",
+)
 async def test_runtime_starts_and_stops_one_local_proxy() -> None:
     runtime = ComputerRuntime()
     try:

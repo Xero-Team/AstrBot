@@ -1,6 +1,7 @@
 """Tests for local Computer Use configuration change logging."""
 
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from astrbot.dashboard.services.config_service import (
@@ -153,7 +154,7 @@ class TestLogComputerConfigChanges:
                         "filesystem": {"deny_read": []},
                         "unix_sockets": {
                             "mode": "deny",
-                            "allowed_paths": ["/tmp/api.sock"],
+                            "allowed_paths": [str(Path("/tmp/api.sock"))],
                         },
                         "allow_network": True,
                     }

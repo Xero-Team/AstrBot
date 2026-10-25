@@ -25,6 +25,7 @@ BRIDGE_SOCKS_PORT = 31080
 _READY_TIMEOUT_SECONDS = 10.0
 _RELAY_IDLE_SECONDS = 300.0
 _SOCKET_POLL_SECONDS = 1.0
+_MAX_RELAY_CONNECTIONS = 64
 
 
 def _install_filter(mode: str) -> None:
@@ -112,17 +113,33 @@ def _close_inherited_descriptors() -> None:
                 raise
 
 
-def _relay(left: socket.socket, right: socket.socket) -> None:
+def _close_quietly(*sockets: socket.socket | None) -> None:
+    for current in sockets:
+        if current is None:
+            continue
+        try:
+            current.close()
+        except OSError:
+            # The socket may already be closed by the peer or the relay.
+            pass
+
+
+def _relay(
+    left: socket.socket,
+    right: socket.socket,
+    stop: threading.Event,
+) -> None:
     sockets = [left, right]
+    last_activity = time.monotonic()
     try:
-        for current in sockets:
-            current.setblocking(False)
-        while True:
+        while not stop.is_set():
             readable, _, errored = select.select(
-                sockets, [], sockets, _RELAY_IDLE_SECONDS
+                sockets, [], sockets, _SOCKET_POLL_SECONDS
             )
             if not readable and not errored:
-                return
+                if time.monotonic() - last_activity >= _RELAY_IDLE_SECONDS:
+                    return
+                continue
             for current in errored:
                 return
             for current in readable:
@@ -132,15 +149,33 @@ def _relay(left: socket.socket, right: socket.socket) -> None:
                     try:
                         other.shutdown(socket.SHUT_WR)
                     except OSError:
+                        # The opposite direction is already closed.
                         pass
                     return
                 other.sendall(chunk)
+                last_activity = time.monotonic()
     finally:
-        for current in sockets:
-            try:
-                current.close()
-            except OSError:
-                pass
+        _close_quietly(*sockets)
+
+
+def _handle_connection(
+    client: socket.socket,
+    unix_path: str,
+    stop: threading.Event,
+    slots: threading.BoundedSemaphore,
+) -> None:
+    upstream: socket.socket | None = None
+    try:
+        upstream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        upstream.settimeout(_READY_TIMEOUT_SECONDS)
+        upstream.connect(unix_path)
+        upstream.settimeout(None)
+        client.settimeout(None)
+        _relay(client, upstream, stop)
+    except OSError:
+        _close_quietly(client, upstream)
+    finally:
+        slots.release()
 
 
 def _bridge_loop(
@@ -148,6 +183,7 @@ def _bridge_loop(
     unix_path: str,
     stop: threading.Event,
     failures: list[BaseException],
+    slots: threading.BoundedSemaphore,
 ) -> None:
     listener.settimeout(_SOCKET_POLL_SECONDS)
     while not stop.is_set():
@@ -160,17 +196,15 @@ def _bridge_loop(
                 return
             failures.append(exc)
             return
-        try:
-            upstream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            upstream.settimeout(_READY_TIMEOUT_SECONDS)
-            upstream.connect(unix_path)
-            upstream.settimeout(None)
-            _relay(client, upstream)
-        except OSError:
-            try:
-                client.close()
-            except OSError:
-                pass
+        if not slots.acquire(blocking=False):
+            _close_quietly(client)
+            continue
+        threading.Thread(
+            target=_handle_connection,
+            args=(client, unix_path, stop, slots),
+            name="sandbox-bridge-relay",
+            daemon=True,
+        ).start()
 
 
 def _wait_for_child(
@@ -198,6 +232,7 @@ def _wait_for_child(
             try:
                 os.kill(child, signal.SIGKILL)
             except ProcessLookupError:
+                # The child already exited before the failure kill.
                 pass
         time.sleep(0.01)
 
@@ -253,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
             os.execvpe(  # noqa: S606  # workload argv is built by the host sandbox launcher
                 workload[0], workload, os.environ
             )
-        except BaseException as exc:  # noqa: BLE001  # child must report and exit
+        except Exception as exc:  # child must report and exit
             try:
                 sys.stderr.write(f"sandbox workload failed to start: {exc}\n")
                 sys.stderr.flush()
@@ -280,16 +315,17 @@ def main(argv: list[str] | None = None) -> int:
 
     stop = threading.Event()
     failures: list[BaseException] = []
+    slots = threading.BoundedSemaphore(_MAX_RELAY_CONNECTIONS)
     threads = [
         threading.Thread(
             target=_bridge_loop,
-            args=(listeners[0], http_socket, stop, failures),
+            args=(listeners[0], http_socket, stop, failures, slots),
             name="sandbox-bridge-http",
             daemon=True,
         ),
         threading.Thread(
             target=_bridge_loop,
-            args=(listeners[1], socks_socket, stop, failures),
+            args=(listeners[1], socks_socket, stop, failures, slots),
             name="sandbox-bridge-socks",
             daemon=True,
         ),
@@ -319,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
             os.execvpe(  # noqa: S606  # workload argv is built by the host sandbox launcher
                 workload[0], workload, os.environ
             )
-        except BaseException as exc:  # noqa: BLE001  # child must report and exit
+        except Exception as exc:  # child must report and exit
             try:
                 sys.stderr.write(f"sandbox workload failed to start: {exc}\n")
                 sys.stderr.flush()
@@ -335,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             os.kill(child, signum)
         except ProcessLookupError:
+            # The child already exited before the signal was forwarded.
             pass
 
     for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -346,6 +383,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             listener.close()
         except OSError:
+            # Listener sockets may already be closed by the child branch.
             pass
     if received_signal and exit_code == 0:
         exit_code = 128 + received_signal

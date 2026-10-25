@@ -493,12 +493,13 @@ def test_network_enabled_without_proxy_fails_closed(monkeypatch, tmp_path):
         network="allowlist",
         socket_mode="deny",
     )
-    monkeypatch.setattr(bubblewrap.shutil, "which", lambda name: f"/usr/bin/{name}")
-    with pytest.raises(RuntimeError, match="requires the runtime Local proxy"):
-        bubblewrap.BubblewrapProcessSandbox().build_command(
-            [sys.executable, "-c", "pass"],
-            spec,
-        )
+    if sys.platform.startswith("linux"):
+        monkeypatch.setattr(bubblewrap.shutil, "which", lambda name: f"/usr/bin/{name}")
+        with pytest.raises(RuntimeError, match="requires the runtime Local proxy"):
+            bubblewrap.BubblewrapProcessSandbox().build_command(
+                [sys.executable, "-c", "pass"],
+                spec,
+            )
     monkeypatch.setattr(
         seatbelt.shutil, "which", lambda name, **kwargs: f"/usr/bin/{name}"
     )

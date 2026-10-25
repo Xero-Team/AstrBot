@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -229,7 +230,14 @@ class ProcessSandbox(ABC):
         Case variants of proxy variables are always overridden after caller
         environment values so an explicit ``no_proxy`` cannot bypass policy.
         """
-        environment = {"PATH": os.defpath, **(extra or {})}
+        python_path = str(Path(sys.executable).resolve().parent)
+        fallback_paths = [
+            entry for entry in os.defpath.split(os.pathsep) if entry and entry != "."
+        ]
+        environment = {
+            "PATH": os.pathsep.join((python_path, *fallback_paths)),
+            **(extra or {}),
+        }
         if spec.proxy is not None:
             proxy = spec.proxy
             environment["ASTRBOT_SANDBOX_PROXY_TOKEN"] = proxy.token

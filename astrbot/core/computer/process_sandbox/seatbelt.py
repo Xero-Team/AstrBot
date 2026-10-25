@@ -116,8 +116,8 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             if spec.policy.network.enabled:
                 allowed_endpoints = "\n".join(
                     (
-                        f'(allow network-outbound (remote ip "127.0.0.1:{spec.proxy.http_port}"))',
-                        f'(allow network-outbound (remote ip "127.0.0.1:{spec.proxy.socks_port}"))',
+                        f'(allow network-outbound (remote ip "localhost:{spec.proxy.http_port}"))',
+                        f'(allow network-outbound (remote ip "localhost:{spec.proxy.socks_port}"))',
                     )
                 )
                 profile = profile.replace(

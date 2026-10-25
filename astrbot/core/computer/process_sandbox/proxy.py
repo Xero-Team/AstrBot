@@ -22,6 +22,7 @@ import stat
 import sys
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +49,7 @@ MAX_REQUEST_LINE = 8 * 1024
 MAX_HEADERS = 100
 READINESS_TIMEOUT_SECONDS = 10.0
 IDLE_TUNNEL_SECONDS = 300.0
+_IDLE_CHECK_SECONDS = 1.0
 
 _HOP_BY_HOP_HEADERS = frozenset(
     {
@@ -539,7 +541,7 @@ class LocalProxyServer:
     def _thread_main(self) -> None:
         try:
             asyncio.run(self._serve())
-        except BaseException as exc:  # noqa: BLE001  # surfaced to the starting caller
+        except Exception as exc:  # surfaced to the starting caller
             self._startup_error = exc
             self._ready.set()
             self._cleanup_paths()
@@ -585,7 +587,7 @@ class LocalProxyServer:
             if self.state in {"stopping", "stopped"}:
                 self._stop_event.set()
             await self._stop_event.wait()
-        except BaseException as exc:  # noqa: BLE001  # readiness reports startup failure
+        except Exception as exc:  # readiness reports startup failure
             self._startup_error = exc
             self._ready.set()
         finally:
@@ -980,14 +982,12 @@ class LocalProxyServer:
             close_tunnel()
             return
         try:
-            await asyncio.wait_for(
-                self._pump_both(
-                    client_reader,
-                    client_writer,
-                    upstream_reader,
-                    upstream_writer,
-                ),
-                timeout=IDLE_TUNNEL_SECONDS,
+            await self._pump_both(
+                client_reader,
+                client_writer,
+                upstream_reader,
+                upstream_writer,
+                idle_timeout=IDLE_TUNNEL_SECONDS,
             )
         except TimeoutError:
             lease.violations.record("network", "idle tunnel timed out")
@@ -1004,24 +1004,36 @@ class LocalProxyServer:
         client_writer: asyncio.StreamWriter,
         upstream_reader: asyncio.StreamReader,
         upstream_writer: asyncio.StreamWriter,
+        *,
+        idle_timeout: float = IDLE_TUNNEL_SECONDS,
     ) -> None:
+        activity = [time.monotonic()]
+
         async def pump(
             source: asyncio.StreamReader,
             destination: asyncio.StreamWriter,
         ) -> None:
             while chunk := await source.read(65536):
+                activity[0] = time.monotonic()
                 destination.write(chunk)
                 await destination.drain()
+                activity[0] = time.monotonic()
 
         tasks = {
             asyncio.create_task(pump(client_reader, upstream_writer)),
             asyncio.create_task(pump(upstream_reader, client_writer)),
         }
         try:
-            done, pending = await asyncio.wait(
-                tasks,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+            while True:
+                done, pending = await asyncio.wait(
+                    tasks,
+                    timeout=_IDLE_CHECK_SECONDS,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if done:
+                    break
+                if time.monotonic() - activity[0] >= idle_timeout:
+                    raise TimeoutError
             for task in pending:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
@@ -1032,6 +1044,7 @@ class LocalProxyServer:
             for task in tasks:
                 if not task.done():
                     task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _handle_socks(
         self,

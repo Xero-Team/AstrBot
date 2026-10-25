@@ -82,7 +82,6 @@ from astrbot.core.tool_catalog import (
     resolve_catalog_surface,
 )
 from astrbot.core.tools.computer_tools import (
-    LOCAL_NETWORK_POLICY_NOTICE,
     get_local_permission_policy,
     normalize_umo_for_workspace,
     resolve_local_permission_role,
@@ -623,9 +622,6 @@ async def _apply_local_env_tools(
     notice = local_policy.network_notice
     if local_policy.allow_execution and notice not in (req.system_prompt or ""):
         req.system_prompt = f"{req.system_prompt or ''}\n{notice}\n"
-
-
-_LOCAL_OFF_NOTICE = LOCAL_NETWORK_POLICY_NOTICE
 
 
 def _has_enabled_coding_agent(profile: object) -> bool:

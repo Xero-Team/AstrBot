@@ -1,4 +1,5 @@
 import sys
+import threading
 
 from astrbot import logger
 
@@ -13,6 +14,7 @@ class ComputerRuntime:
     def __init__(self) -> None:
         self._local_booter: ComputerBooter | None = None
         self._local_proxy: LocalProxyServer | None = None
+        self._proxy_start_lock = threading.Lock()
         self._terminated = False
 
     def _ensure_active(self) -> None:
@@ -34,11 +36,13 @@ class ComputerRuntime:
     def get_local_proxy(self) -> LocalProxyServer:
         """Return the runtime-owned proxy, starting it on first sandboxed use."""
         self._ensure_active()
-        if self._local_proxy is None or self._local_proxy.state in {"stopped"}:
-            proxy = LocalProxyServer()
-            proxy.start()
-            self._local_proxy = proxy
-        return self._local_proxy
+        with self._proxy_start_lock:
+            self._ensure_active()
+            if self._local_proxy is None or self._local_proxy.state in {"stopped"}:
+                proxy = LocalProxyServer()
+                proxy.start()
+                self._local_proxy = proxy
+            return self._local_proxy
 
     async def terminate(self) -> None:
         """Terminate the local booter and proxy owned by this runtime."""
@@ -52,7 +56,8 @@ class ComputerRuntime:
                 await local_booter.shutdown()
             except Exception as exc:
                 logger.warning("Failed to terminate local computer runtime: %s", exc)
-        proxy, self._local_proxy = self._local_proxy, None
+        with self._proxy_start_lock:
+            proxy, self._local_proxy = self._local_proxy, None
         if proxy is not None:
             try:
                 await proxy.stop()

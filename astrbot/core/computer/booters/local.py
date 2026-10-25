@@ -509,8 +509,6 @@ class LocalShellComponent(ShellComponent):
         output_dir.mkdir(parents=True, exist_ok=True)
         proxy = None
         lease = None
-        if spec is not None:
-            proxy, lease, spec = _attach_proxy_lease(spec, self.proxy_provider)
 
         async with self._sessions_lock:
             if len(self._sessions) >= self.max_sessions:
@@ -519,9 +517,16 @@ class LocalShellComponent(ShellComponent):
                 raise PermissionError(
                     "Local shell permissions changed; retry the command."
                 )
-            output_file = tempfile.TemporaryFile(mode="w+b", dir=output_dir)
+            output_file: BinaryIO | None = None
             output_lock = threading.Lock()
             try:
+                if spec is not None:
+                    proxy, lease, spec = await asyncio.to_thread(
+                        _attach_proxy_lease,
+                        spec,
+                        self.proxy_provider,
+                    )
+                output_file = tempfile.TemporaryFile(mode="w+b", dir=output_dir)
                 if spec is not None:
                     process = await create_process_sandbox().spawn_shell(
                         command,
@@ -560,11 +565,13 @@ class LocalShellComponent(ShellComponent):
                             command, **process_kwargs
                         )
             except BaseException:
-                output_file.close()
+                if output_file is not None:
+                    output_file.close()
                 if proxy is not None and lease is not None:
                     proxy.drop_lease(lease)
                 raise
 
+            assert output_file is not None
             output_event = asyncio.Event()
 
             async def capture_output() -> None:

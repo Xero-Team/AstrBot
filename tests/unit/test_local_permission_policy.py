@@ -216,6 +216,7 @@ async def test_native_admin_policy_does_not_require_isolation(monkeypatch) -> No
 @pytest.mark.asyncio
 async def test_host_unrestricted_with_a_deny_rule_requires_isolation(
     monkeypatch,
+    tmp_path,
 ) -> None:
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
@@ -230,7 +231,7 @@ async def test_host_unrestricted_with_a_deny_rule_requires_isolation(
                 mode="unrestricted",
                 private=True,
                 loopback=True,
-                deny_read=("/secret",),
+                deny_read=(str(tmp_path / "secret"),),
                 socket_mode="allow_all",
             )
         },
@@ -260,10 +261,15 @@ async def test_malformed_saved_policy_fails_closed(monkeypatch) -> None:
     assert policy.allow_execution is False
     assert policy.execution_disabled_reason
     assert "invalid" in policy.execution_disabled_reason.lower()
+    assert await check_local_file_permission(context) is not None
 
 
 @pytest.mark.asyncio
-async def test_sandbox_policy_notice_is_mode_specific() -> None:
+async def test_sandbox_policy_notice_is_mode_specific(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.util.get_process_sandbox_status",
+        lambda: {"status": "detected"},
+    )
     context = _make_context(
         effective_role=Role.INSTANCE_OPERATOR,
         permissions={

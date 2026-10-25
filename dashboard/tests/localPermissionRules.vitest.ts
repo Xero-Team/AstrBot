@@ -32,6 +32,8 @@ describe('localPermissionRules', () => {
     expect(validatePathRule('/tmp/[', 'linux')).toMatch(/unclosed/);
     expect(validateUnixPathRule('/tmp/*.sock', 'darwin')).toMatch(/literal/);
     expect(validateUnixPathRule('/tmp/api.sock', 'darwin')).toBeNull();
+    expect(validatePathRule('C:\\Users\\operator\\.ssh', 'windows')).toBeNull();
+    expect(validatePathRule('C:\\Users\\operator\\.ssh', 'win32')).toBeNull();
   });
 
   it('bounds validation errors and rule counts', () => {

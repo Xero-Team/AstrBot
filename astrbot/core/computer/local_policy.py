@@ -409,7 +409,9 @@ def _literal_anchor(value: str) -> str:
 
 def _expand_path(value: str) -> str:
     if value == "~" or value.startswith("~/"):
-        return str(Path(value).expanduser())
+        # Admin-supplied policy rule; the expansion only feeds the literal
+        # glob-anchor existence check for a configured deny rule.
+        return str(Path(value).expanduser())  # lgtm[py/path-injection]
     return value
 
 

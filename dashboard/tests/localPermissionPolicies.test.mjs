@@ -167,12 +167,13 @@ test('editing one role does not overwrite another role', () => {
   assert.equal(saved().member.network.mode, 'off');
 });
 
-test('enabling execution while isolation is unavailable requires the native tuple', () => {
+test('enabling execution while isolation is unavailable keeps the grant so the native tuple can be completed', () => {
   const { component, saved } = setup('unavailable', {
     member: { ...restrictedMember, allow_execution: false },
   });
   component.updatePermission('member', { allow_execution: true });
-  assert.equal(saved().member.allow_execution, false);
+  assert.equal(saved().member.allow_execution, true);
+  assert.equal(saved().member.network.mode, 'off');
   component.updatePermission('member', {
     allow_execution: true,
     filesystem_scope: 'host',

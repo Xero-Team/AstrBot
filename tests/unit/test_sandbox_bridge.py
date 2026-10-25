@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -132,3 +134,73 @@ def test_filter_only_bridge_closes_inherited_descriptors() -> None:
     finally:
         os.close(read_fd)
         os.close(write_fd)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="The bridge relay uses Unix sockets.",
+)
+def test_bridge_serves_concurrent_connections(tmp_path: Path) -> None:
+    unix_path = tmp_path / "echo.sock"
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(unix_path))
+    server.listen(8)
+    server.settimeout(0.2)
+    server_stop = threading.Event()
+
+    def echo(connection: socket.socket) -> None:
+        try:
+            while data := connection.recv(4096):
+                connection.sendall(b"echo:" + data)
+        except OSError:
+            return
+        finally:
+            connection.close()
+
+    def serve() -> None:
+        while not server_stop.is_set():
+            try:
+                connection, _ = server.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                return
+            threading.Thread(target=echo, args=(connection,), daemon=True).start()
+
+    server_thread = threading.Thread(target=serve, daemon=True)
+    server_thread.start()
+
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(8)
+    port = listener.getsockname()[1]
+    stop = threading.Event()
+    failures: list[BaseException] = []
+    slots = threading.BoundedSemaphore(4)
+    loop = threading.Thread(
+        target=bridge._bridge_loop,  # noqa: SLF001
+        args=(listener, str(unix_path), stop, failures, slots),
+        daemon=True,
+    )
+    loop.start()
+
+    first = socket.create_connection(("127.0.0.1", port), timeout=2)
+    try:
+        second = socket.create_connection(("127.0.0.1", port), timeout=2)
+        try:
+            second.sendall(b"ping")
+            assert second.recv(64) == b"echo:ping"
+        finally:
+            second.close()
+    finally:
+        first.close()
+        stop.set()
+        listener.close()
+        server_stop.set()
+        server.close()
+        loop.join(3)
+        server_thread.join(3)
+
+    assert failures == []
+    assert not loop.is_alive()
+    assert not server_thread.is_alive()

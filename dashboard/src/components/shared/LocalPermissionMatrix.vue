@@ -523,14 +523,6 @@ function updatePermission(
     },
     defaults.value[role],
   );
-  if (
-    isolationUnavailable.value &&
-    changes.allow_execution === true &&
-    !isNativePolicy(updated)
-  ) {
-    updated.allow_execution = false;
-    updated.network.mode = 'off';
-  }
   emit('update:modelValue', {
     ...(props.modelValue || {}),
     [role]: updated,

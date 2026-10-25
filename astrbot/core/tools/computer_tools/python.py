@@ -71,6 +71,17 @@ async def handle_result(
     if text:
         resp.content.append(mcp.types.TextContent(type="text", text=text))
 
+    violations = data.get("violations") or []
+    if violations:
+        details = "; ".join(
+            f"{violation.get('kind', 'policy')}: {violation.get('reason', '')}"
+            + (f" ({violation['target']})" if violation.get("target") else "")
+            for violation in violations
+        )
+        resp.content.append(
+            mcp.types.TextContent(type="text", text=f"sandbox denials: {details}")
+        )
+
     if not resp.content:
         resp.content.append(mcp.types.TextContent(type="text", text="No output."))
 

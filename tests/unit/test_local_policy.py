@@ -189,7 +189,7 @@ def test_validation_never_silently_drops_a_deny_rule(tmp_path: Path) -> None:
         "unix_sockets": {"mode": "deny", "allowed_paths": []},
     }
     policy, errors = sandbox_policy_from_config(value, role="member")
-    assert policy.filesystem.deny_read == (str(secret),)
+    assert policy.filesystem.deny_read == (secret.as_posix(),)
     assert any("filesystem.deny_read" in error for error in errors)
 
 
@@ -262,14 +262,14 @@ def test_macos_only_socket_paths_are_rejected_on_linux(tmp_path: Path) -> None:
         value, role="member", platform="darwin"
     )
     assert mac_errors == []
-    assert policy.unix_sockets.allowed_paths == (str(socket_path),)
+    assert policy.unix_sockets.allowed_paths == (socket_path.as_posix(),)
 
 
-def test_socket_allow_all_rejects_allowed_paths() -> None:
+def test_socket_allow_all_rejects_allowed_paths(tmp_path: Path) -> None:
     value = {
         "unix_sockets": {
             "mode": "allow_all",
-            "allowed_paths": ["/tmp/socket"],
+            "allowed_paths": [str(tmp_path / "socket")],
         }
     }
     _policy, errors = sandbox_policy_from_config(value, role="admin", platform="darwin")
@@ -342,11 +342,11 @@ def test_nested_rule_values_round_trip(tmp_path: Path) -> None:
             denied_domains=("blocked.example.com",),
         ),
         filesystem=LocalFilesystemPolicy(
-            deny_read=(str(secret),),
-            deny_write=(str(tmp_path),),
+            deny_read=(secret.as_posix(),),
+            deny_write=(tmp_path.as_posix(),),
         ),
         unix_sockets=LocalUnixSocketPolicy(
-            mode="deny", allowed_paths=(str(socket_path),)
+            mode="deny", allowed_paths=(socket_path.as_posix(),)
         ),
     )
     parsed, errors = sandbox_policy_from_config(

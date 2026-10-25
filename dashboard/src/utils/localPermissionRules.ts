@@ -154,7 +154,8 @@ export function validatePathRule(
   if (normalized.split('/').includes('..')) {
     return 'Filesystem rules must not contain `..` components.';
   }
-  if (platform !== 'win32') {
+  const isWindows = platform === 'win32' || platform === 'windows';
+  if (!isWindows) {
     if (DRIVE_PREFIX.test(normalized) || normalized.startsWith('//')) {
       return 'Filesystem rules use a Windows path on this platform.';
     }

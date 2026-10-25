@@ -30,18 +30,24 @@ from astrbot.core.computer.process_sandbox import (
 )
 from astrbot.core.computer.process_sandbox.proxy import LocalProxyServer
 
-pytestmark = pytest.mark.skipif(
-    not (
-        (sys.platform.startswith("linux") and shutil.which("bwrap"))
-        or (sys.platform == "darwin" and Path("/usr/bin/sandbox-exec").exists())
-    ),
-    reason="Requires the verified Local sandbox backend for this OS.",
+_BACKEND_AVAILABLE = (sys.platform.startswith("linux") and shutil.which("bwrap")) or (
+    sys.platform == "darwin" and Path("/usr/bin/sandbox-exec").exists()
 )
+
+
+@pytest.fixture(autouse=True)
+def _require_local_sandbox_backend(request: pytest.FixtureRequest) -> None:
+    if request.node.name == "test_ci_backend_is_available":
+        return
+    if not _BACKEND_AVAILABLE:
+        pytest.skip("Requires the verified Local sandbox backend for this OS.")
 
 
 def test_ci_backend_is_available() -> None:
     if not os.environ.get("CI"):
         pytest.skip("The backend prerequisite is asserted in CI.")
+    if sys.platform not in {"linux", "darwin"}:
+        pytest.skip("The CI backend matrix runs on Linux and macOS only.")
     info = detect_local_runtime_info()
     assert info["sandbox"]["status"] == "detected", info
 

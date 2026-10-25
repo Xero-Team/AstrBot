@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -205,8 +205,12 @@ def get_local_permission_policy(
         )
 
     if validation_errors:
+        # A dropped deny rule would otherwise leave file tools fail-open.
         return LocalPermissionPolicy(
-            sandbox=sandbox.without_execution(),
+            sandbox=replace(
+                sandbox.without_execution(),
+                filesystem_scope="none",
+            ),
             execution_disabled_reason=(
                 "The saved Local permission policy is invalid and execution was "
                 "blocked. Fix the Local Permission Policies configuration in "

@@ -14,6 +14,11 @@ from astrbot.core.computer.local_policy import (
 from astrbot.core.computer.process_sandbox import SandboxProxyEndpoint, SandboxSpec
 from astrbot.core.computer.process_sandbox.seatbelt import SeatbeltProcessSandbox
 
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Seatbelt profiles use macOS path and CA semantics.",
+)
+
 
 def _sandbox(monkeypatch) -> SeatbeltProcessSandbox:
     monkeypatch.setattr(
@@ -80,8 +85,8 @@ def test_proxy_modes_allow_only_exact_loopback_ports(monkeypatch, tmp_path) -> N
         command = _command(monkeypatch, spec)
         profile = _profile(command)
         assert "(deny network*)" in profile
-        assert "127.0.0.1:43210" in profile
-        assert "127.0.0.1:43211" in profile
+        assert "localhost:43210" in profile
+        assert "localhost:43211" in profile
         assert "(allow network*)" not in profile
         assert "secret-token" not in " ".join(command)
 

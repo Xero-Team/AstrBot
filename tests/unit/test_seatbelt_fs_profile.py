@@ -11,6 +11,11 @@ from astrbot.core.computer.local_policy import LocalFilesystemPolicy, LocalSandb
 from astrbot.core.computer.process_sandbox import SandboxSpec
 from astrbot.core.computer.process_sandbox.seatbelt import SeatbeltProcessSandbox
 
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Seatbelt profiles use macOS path semantics.",
+)
+
 
 def _profile(monkeypatch, tmp_path: Path, policy: LocalSandboxPolicy) -> str:
     monkeypatch.setattr(

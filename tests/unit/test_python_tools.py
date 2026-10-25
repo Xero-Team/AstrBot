@@ -6,7 +6,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.auth.models import Role
-from astrbot.core.tools.computer_tools.python import LocalPythonTool
+from astrbot.core.tools.computer_tools.python import LocalPythonTool, handle_result
 from tests.fixtures.auth import attach_authorized_tool_context
 
 
@@ -261,3 +261,27 @@ async def test_local_python_omits_network_policy_notice(tmp_path, monkeypatch):
     python_exec.side_effect = RuntimeError("execution failed")
     result = await LocalPythonTool().call(context, code="print('ok')")
     assert result == "Error executing code: execution failed"
+
+
+@pytest.mark.asyncio
+async def test_handle_result_reports_sandbox_denials():
+    event = SimpleNamespace(get_platform_name=lambda: "cli")
+    result = await handle_result(
+        {
+            "data": {
+                "output": {"text": "ok", "images": []},
+                "error": "",
+                "violations": [
+                    {
+                        "kind": "network",
+                        "reason": "denied by policy",
+                        "target": "example.com",
+                    }
+                ],
+            }
+        },
+        event,
+    )
+    text = " ".join(part.text for part in result.content)
+    assert "sandbox denials" in text
+    assert "network: denied by policy (example.com)" in text

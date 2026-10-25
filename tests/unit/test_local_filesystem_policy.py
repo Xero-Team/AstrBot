@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -115,6 +116,10 @@ def test_glob_traversal_limit_fails_closed(monkeypatch, tmp_path: Path) -> None:
     assert MAX_VISITED_DIRECTORIES == 10_000
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows chmod does not make directories unreadable.",
+)
 def test_unreadable_traversal_fails_closed(tmp_path: Path) -> None:
     blocked = tmp_path / "blocked"
     blocked.mkdir()

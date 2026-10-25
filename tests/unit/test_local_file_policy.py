@@ -195,7 +195,7 @@ async def test_grep_with_denies_uses_complete_sandbox_spec(
         assert "needle" in result
         assert captured
         spec = captured[0]
-        assert spec.policy.filesystem.deny_read == (str(secret),)
+        assert spec.policy.filesystem.deny_read == (secret.as_posix(),)
         assert spec.policy.network.mode == "off"
         assert spec.policy.unix_sockets.mode == "deny"
         assert spec.workspace == workspace.resolve()

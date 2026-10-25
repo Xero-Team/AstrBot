@@ -50,25 +50,3 @@ async def test_replaced_listener_remains_tracked_after_old_task_finishes():
 
     assert queue_manager._listener_tasks.get("conversation-1") is new_listener
     await queue_manager.clear_listener()
-
-
-@pytest.mark.asyncio
-async def test_replacing_listener_keeps_new_task_tracked():
-    queue_manager = WebChatQueueManager()
-
-    async def _callback(_data: tuple) -> None:
-        return None
-
-    queue_manager.set_listener(_callback)
-    queue_manager.get_or_create_queue("conversation-1")
-    old_listener = queue_manager._listener_tasks["conversation-1"]
-
-    queue_manager.remove_queue("conversation-1")
-    queue_manager.get_or_create_queue("conversation-1")
-    new_listener = queue_manager._listener_tasks["conversation-1"]
-
-    await asyncio.gather(old_listener, return_exceptions=True)
-    await asyncio.sleep(0)
-
-    assert queue_manager._listener_tasks.get("conversation-1") is new_listener
-    await queue_manager.clear_listener()

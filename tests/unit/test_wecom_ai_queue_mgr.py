@@ -80,25 +80,3 @@ async def test_replaced_wecom_listener_remains_tracked() -> None:
 
     assert queue_mgr._listener_tasks.get("stream-1") is new_listener
     await queue_mgr.clear_listener()
-
-
-@pytest.mark.asyncio
-async def test_replacing_listener_keeps_new_wecom_task_tracked():
-    queue_mgr = WecomAIQueueMgr()
-
-    async def _callback(_data: dict) -> None:
-        return None
-
-    queue_mgr.set_listener(_callback)
-    queue_mgr.get_or_create_queue("stream-1")
-    old_listener = queue_mgr._listener_tasks["stream-1"]
-
-    queue_mgr.remove_queue("stream-1")
-    queue_mgr.get_or_create_queue("stream-1")
-    new_listener = queue_mgr._listener_tasks["stream-1"]
-
-    await asyncio.gather(old_listener, return_exceptions=True)
-    await asyncio.sleep(0)
-
-    assert queue_mgr._listener_tasks.get("stream-1") is new_listener
-    await queue_mgr.clear_listener()

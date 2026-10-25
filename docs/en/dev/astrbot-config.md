@@ -181,7 +181,7 @@ The old `provider_settings.streaming_segmented` field has been removed. Do not a
 ### Computer Use and local isolation
 
 - `computer_use_runtime` is `none` or `local` and defaults to `none`. Legacy `sandbox` values and unknown runtimes are treated as `none`; the retired `provider_settings.sandbox` block is removed.
-- `computer_use_require_admin` is no longer a runtime authorization switch. Computer capabilities use the unified `tool.local_exec`, `tool.file_read`, and `tool.file_write` actions. `tool.computer_use` is reserved for third-party computer-use tools; no built-in tool currently declares it. WebChat still requires step-up for instance tools; IM skips step-up when the sender is bound as `instance_operator` on that config.
+- `computer_use_require_admin` is no longer a runtime authorization switch. Computer capabilities use unified actions such as `tool.local_exec`, `tool.python_exec`, `tool.file_read`, and `tool.file_write`. `tool.computer_use` is reserved for third-party computer-use tools; no built-in tool currently declares it. WebChat still requires step-up for instance tools; IM skips step-up when the sender is bound as `instance_operator` on that config.
   Local mode operates directly on the AstrBot host and belongs only in a trusted environment. Local process isolation requires bubblewrap on Linux or Seatbelt on macOS; when it is unavailable, restricted execution fails closed. Continue to restrict administrators, Prompt tools, and external network access.
 
 ### Search and images

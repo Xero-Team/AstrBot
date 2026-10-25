@@ -34,9 +34,20 @@ def _session_payload(config_id: str, session: WorkSession) -> dict[str, Any]:
 class BtwService:
     """Expose work-session progress without owning a pipeline's manager."""
 
-    async def list_work_sessions(self) -> list[dict[str, Any]]:
-        """Return retained work sessions across all registered profiles."""
+    async def list_work_sessions(
+        self,
+        *,
+        config_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return retained work sessions, optionally scoped to one profile."""
+        sessions = await runtime_registry.list_work_sessions()
+        if config_id is not None:
+            sessions = [
+                (session_config_id, session)
+                for session_config_id, session in sessions
+                if session_config_id == config_id
+            ]
         return [
-            _session_payload(config_id, session)
-            for config_id, session in await runtime_registry.list_work_sessions()
+            _session_payload(session_config_id, session)
+            for session_config_id, session in sessions
         ]

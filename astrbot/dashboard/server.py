@@ -98,12 +98,7 @@ def _check_body_limit(
     if content_length is None:
         if method not in _BODY_METHODS:
             return None
-        media_type = (
-            parse_options_header(content_type)[0] if parse_options_header else b""
-        )
-        if media_type == b"multipart/form-data":
-            return 411, "Content-Length header is required for uploads"
-        return None
+        return 411, "Content-Length header is required for request bodies"
     limit = default_limit
     if "/config-files" in path:
         limit = MAX_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES

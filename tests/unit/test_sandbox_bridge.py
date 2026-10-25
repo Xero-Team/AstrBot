@@ -6,7 +6,9 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -140,13 +142,19 @@ def test_filter_only_bridge_closes_inherited_descriptors() -> None:
     sys.platform == "win32",
     reason="The bridge relay uses Unix sockets.",
 )
-def test_bridge_serves_concurrent_connections(tmp_path: Path) -> None:
-    unix_path = tmp_path / "echo.sock"
+def test_bridge_serves_concurrent_connections() -> None:
+    with tempfile.TemporaryDirectory(prefix="astrbot-bridge-") as directory:
+        _assert_bridge_serves_concurrent_connections(Path(directory))
+
+
+def _assert_bridge_serves_concurrent_connections(directory: Path) -> None:
+    unix_path = directory / "s.sock"
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(unix_path))
     server.listen(8)
     server.settimeout(0.2)
     server_stop = threading.Event()
+    echoes: list[threading.Thread] = []
 
     def echo(connection: socket.socket) -> None:
         try:
@@ -165,7 +173,9 @@ def test_bridge_serves_concurrent_connections(tmp_path: Path) -> None:
                 continue
             except OSError:
                 return
-            threading.Thread(target=echo, args=(connection,), daemon=True).start()
+            thread = threading.Thread(target=echo, args=(connection,), daemon=True)
+            echoes.append(thread)
+            thread.start()
 
     server_thread = threading.Thread(target=serve, daemon=True)
     server_thread.start()
@@ -200,7 +210,12 @@ def test_bridge_serves_concurrent_connections(tmp_path: Path) -> None:
         server.close()
         loop.join(3)
         server_thread.join(3)
+        for thread in echoes:
+            thread.join(3)
+        # Relay threads poll the stop event once per second.
+        time.sleep(1.1)
 
     assert failures == []
     assert not loop.is_alive()
     assert not server_thread.is_alive()
+    assert all(not thread.is_alive() for thread in echoes)

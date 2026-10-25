@@ -230,7 +230,7 @@ class ProcessSandbox(ABC):
         Case variants of proxy variables are always overridden after caller
         environment values so an explicit ``no_proxy`` cannot bypass policy.
         """
-        python_path = str(Path(sys.executable).resolve().parent)
+        python_path = str(Path(sys.executable).parent)
         fallback_paths = [
             entry for entry in os.defpath.split(os.pathsep) if entry and entry != "."
         ]

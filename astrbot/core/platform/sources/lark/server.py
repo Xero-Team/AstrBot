@@ -186,17 +186,27 @@ class LarkWebhookServer:
 
         timestamp = request.headers.get("X-Lark-Request-Timestamp", "")
         nonce = request.headers.get("X-Lark-Request-Nonce", "")
-        if not timestamp or not nonce:
+        # Feishu only sends these headers with Encrypt Key configured. A
+        # verification-token-only deployment has no signature to protect, so
+        # its callbacks must still be accepted without replay headers.
+        if self.encrypt_key and not (timestamp and nonce):
             logger.error("[Lark Webhook] 缺少请求时间戳或 nonce")
             return {"error": "Missing signature headers"}, 401
-        try:
-            request_timestamp = int(timestamp)
-        except TypeError, ValueError:
-            logger.error("[Lark Webhook] 请求时间戳无效")
-            return {"error": "Invalid signature timestamp"}, 401
-        if abs(time.time() - request_timestamp) > SIGNATURE_TIMESTAMP_WINDOW_SECONDS:
-            logger.error("[Lark Webhook] 请求时间戳超出允许窗口")
-            return {"error": "Signature timestamp expired"}, 401
+        if timestamp or nonce:
+            if not (timestamp and nonce):
+                logger.error("[Lark Webhook] 缺少请求时间戳或 nonce")
+                return {"error": "Missing signature headers"}, 401
+            try:
+                request_timestamp = int(timestamp)
+            except TypeError, ValueError:
+                logger.error("[Lark Webhook] 请求时间戳无效")
+                return {"error": "Invalid signature timestamp"}, 401
+            if (
+                abs(time.time() - request_timestamp)
+                > SIGNATURE_TIMESTAMP_WINDOW_SECONDS
+            ):
+                logger.error("[Lark Webhook] 请求时间戳超出允许窗口")
+                return {"error": "Signature timestamp expired"}, 401
 
         # 如果配置了 encrypt_key，进行签名验证
         if self.encrypt_key:
@@ -233,7 +243,7 @@ class LarkWebhookServer:
                 logger.error("[Lark Webhook] Verification Token 不匹配。")
                 return {"error": "Invalid verification token"}, 401
 
-        if not _remember_nonce(self._seen_nonces, nonce, timestamp):
+        if timestamp and not _remember_nonce(self._seen_nonces, nonce, timestamp):
             logger.warning("[Lark Webhook] 重放的 nonce，拒绝事件")
             return {"error": "Replay detected"}, 401
 

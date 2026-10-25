@@ -891,3 +891,54 @@ async def test_v1_provider_embedding_dimension_requires_write_capability(
 
     assert response.status_code == 403
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_v1_provider_embedding_dimension_allows_manage_without_credentials_write(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.dashboard.api.auth import object_resource
+
+    calls: list[dict] = []
+
+    async def fake_get_embedding_dimension(config):
+        calls.append(config)
+        return {"embedding_dimensions": 3}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.providers,
+        "get_embedding_dimension",
+        fake_get_embedding_dimension,
+    )
+
+    provider_id = "demo-embed-managed"
+    fake_core_lifecycle.astrbot_config["provider"].append(
+        {
+            "id": provider_id,
+            "type": "openai_embedding",
+            "enable": True,
+            "api_key": "secret-api-key",
+            "model": "text-embedding-3-small",
+        }
+    )
+    raw_key = "provider-embedding-manage-key"
+    fake_db.add_api_key(raw_key, ["provider"])
+    subject_id = f"api-key:key-{raw_key}"
+    resource = object_resource("provider", provider_id, config_id="default")
+    fake_db.capabilities.add(
+        (subject_id, "provider.manage", resource.type, resource.id)
+    )
+
+    response = await asgi_client.post(
+        f"/api/v1/providers/{provider_id}/embedding-dimension",
+        json={"config": {"model": "text-embedding-3-large"}},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["model"] == "text-embedding-3-large"
+    assert calls[0]["api_key"] == "secret-api-key"

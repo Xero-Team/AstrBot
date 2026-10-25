@@ -611,11 +611,12 @@ class KnowledgeBaseUrlImportRequest(OpenModel):
         return self
 
 
-class KnowledgeBaseRetrieveRequest(OpenModel):
-    query: str | None = None
-    top_k: int | None = None
-    threshold: float | None = None
-    rerank: bool | None = None
+class KnowledgeBaseRetrieveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=50)
+    debug: bool = False
 
 
 class MemoryFactCreateRequest(OpenModel):

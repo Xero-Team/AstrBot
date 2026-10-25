@@ -24,6 +24,7 @@
     "step3HelpClose": "Close",
     "step3SelectLabel": "Computer Access",
     "step3Allow": "Allow",
+    "step3Sandbox": "Third-party sandbox",
     "step3Deny": "Disallow",
     "configure": "Configure",
     "save": "Save",

@@ -24,6 +24,7 @@
     "step3HelpClose": "关闭",
     "step3SelectLabel": "电脑访问权限",
     "step3Allow": "允许",
+    "step3Sandbox": "第三方沙箱环境",
     "step3Deny": "不允许",
     "configure": "去配置",
     "save": "保存",

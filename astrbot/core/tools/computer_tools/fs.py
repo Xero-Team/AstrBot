@@ -647,8 +647,11 @@ class GrepTool(FunctionTool):
         local_env: bool,
         umo: str,
     ) -> list[str]:
+        requested_path = path.strip() if isinstance(path, str) else ""
         normalized = (
-            [_resolve_tool_path(path, local_env=local_env, umo=umo)] if path else []
+            [_resolve_tool_path(requested_path, local_env=local_env, umo=umo)]
+            if requested_path
+            else []
         )
         if not normalized:
             if restricted:

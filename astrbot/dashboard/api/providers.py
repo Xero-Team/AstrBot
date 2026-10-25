@@ -107,11 +107,10 @@ async def _authorize_provider_resource(
     write: bool = False,
 ) -> None:
     service = request.app.state.services.providers
-    config_id = (
-        request.query_params.get("config_id")
-        or request.headers.get("X-AstrBot-Config-Id")
-        or "default"
-    )
+    # Provider and provider-source records live only in the default profile.
+    # Authorizing a caller-supplied config id would let an instance binding for
+    # another profile approve a write to the global provider store.
+    config_id = "default"
     credentials_changed = write and _contains_provider_credentials(config or {})
     if write and isinstance(config, dict) and not credentials_changed:
         # A full provider/source replacement can delete an existing credential

@@ -150,7 +150,6 @@ async function getEmbeddingDimensions(providerConfig: Record<string, unknown>) {
       response.data.status !== 'error' &&
       response.data.data?.embedding_dimensions
     ) {
-      console.log(response.data.data.embedding_dimensions);
       providerConfig.embedding_dimensions =
         response.data.data.embedding_dimensions;
       useToast().success(
@@ -159,8 +158,8 @@ async function getEmbeddingDimensions(providerConfig: Record<string, unknown>) {
     } else {
       useToast().error(response.data.message as string);
     }
-  } catch (error) {
-    console.error('Error getting embedding dimensions:', error);
+  } catch {
+    useToast().error('获取嵌入维度失败');
   } finally {
     loadingEmbeddingDim.value = false;
   }

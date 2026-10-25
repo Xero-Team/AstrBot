@@ -620,14 +620,12 @@ async def _apply_local_env_tools(
     )
     await resolve_local_permission_role(run_context)
     local_policy = get_local_permission_policy(run_context)
-    if (
-        local_policy.allow_execution
-        and not local_policy.allow_network
-        and LOCAL_NETWORK_POLICY_NOTICE not in (req.system_prompt or "")
-    ):
-        req.system_prompt = (
-            f"{req.system_prompt or ''}\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
-        )
+    notice = local_policy.network_notice
+    if local_policy.allow_execution and notice not in (req.system_prompt or ""):
+        req.system_prompt = f"{req.system_prompt or ''}\n{notice}\n"
+
+
+_LOCAL_OFF_NOTICE = LOCAL_NETWORK_POLICY_NOTICE
 
 
 def _has_enabled_coding_agent(profile: object) -> bool:

@@ -84,8 +84,16 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
                 "computer_use_local_permissions": {
                     "admin": {
                         "allow_execution": True,
-                        "allow_network": True,
                         "filesystem_scope": "host",
+                        "network": {
+                            "mode": "unrestricted",
+                            "allowed_domains": [],
+                            "denied_domains": [],
+                            "allow_private_network": True,
+                            "allow_loopback": True,
+                        },
+                        "filesystem": {"deny_read": [], "deny_write": []},
+                        "unix_sockets": {"mode": "allow_all", "allowed_paths": []},
                     }
                 },
             }
@@ -116,9 +124,7 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         timeout_seconds=30,
         silent=False,
         cwd=str(workspace.resolve(strict=False)),
-        sandboxed=False,
-        allow_network=True,
-        filesystem_scope="host",
+        spec=None,
     )
 
 
@@ -145,8 +151,16 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
                 "computer_use_local_permissions": {
                     "admin": {
                         "allow_execution": True,
-                        "allow_network": True,
                         "filesystem_scope": "host",
+                        "network": {
+                            "mode": "unrestricted",
+                            "allowed_domains": [],
+                            "denied_domains": [],
+                            "allow_private_network": True,
+                            "allow_loopback": True,
+                        },
+                        "filesystem": {"deny_read": [], "deny_write": []},
+                        "unix_sockets": {"mode": "allow_all", "allowed_paths": []},
                     }
                 },
             }
@@ -175,9 +189,7 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
         timeout_seconds=12,
         silent=False,
         cwd=str((tmp_path / "onebot_GroupMessage_12345").resolve(strict=False)),
-        sandboxed=False,
-        allow_network=True,
-        filesystem_scope="host",
+        spec=None,
     )
 
 
@@ -211,8 +223,16 @@ async def test_local_python_omits_network_policy_notice(tmp_path, monkeypatch):
                 "computer_use_local_permissions": {
                     "admin": {
                         "allow_execution": True,
-                        "allow_network": False,
                         "filesystem_scope": "host",
+                        "network": {
+                            "mode": "off",
+                            "allowed_domains": [],
+                            "denied_domains": [],
+                            "allow_private_network": False,
+                            "allow_loopback": False,
+                        },
+                        "filesystem": {"deny_read": [], "deny_write": []},
+                        "unix_sockets": {"mode": "deny", "allowed_paths": []},
                     }
                 },
             }

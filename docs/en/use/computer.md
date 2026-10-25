@@ -67,9 +67,67 @@ The local Shell tool includes basic blocking for dangerous commands such as `rm 
 
 In the local permission table, open the **File access scope** menu to read each option's description. **Workspace** restricts access to the session workspace, temporary directories, and skill files. **Entire environment** (formerly **Host files**) allows access to files permitted by the account running AstrBot. In Docker, this means files inside the container and mounted files, not all files on the Docker host. **Disabled** prevents file access through local Computer Use tools. These descriptions now appear under the corresponding menu options instead of below the table. Hover over or tap the question mark after “All files in the environment where AstrBot runs.” for details about account permissions and Docker file access.
 
-New installations use the same defaults on Windows, Linux, and macOS: members get workspace files without execution, while administrators get entire-environment execution with networking. Existing saved permissions are preserved, including a member file access scope that was explicitly set to **Disabled**. The legacy Windows member default has the same saved value as a deliberate opt-out, so the fork does not rewrite it during upgrade; choose **Workspace** in the permission table when member file access is wanted. This administrator default runs Local code directly under the AstrBot account with entire-environment file access and networking; on Linux and macOS it does not use process isolation. Choose workspace scope when that access is not appropriate.
+New installations use the same nested defaults on Windows, Linux, and macOS. Members get workspace files without execution, network mode `off`, and Unix socket mode `deny`. Administrators get entire-environment execution, network mode `unrestricted`, both private-network and loopback flags enabled, no filesystem deny rules, and Unix socket mode `allow_all`. Existing saved permissions are preserved, including a member file access scope that was explicitly set to **Disabled**. The legacy Windows member default has the same saved value as a deliberate opt-out, so the fork does not rewrite it during upgrade; choose **Workspace** in the permission table when member file access is wanted.
 
-If a saved policy requires Local process isolation but isolation is unavailable, code execution and execution network access are disabled without widening file access or rewriting the saved policy. Workspace files without execution and entire-environment execution with networking remain available. The permission matrix keeps saved checks and marks unavailable execution as **Inactive**; hover over or select the adjacent help icon to see the cause. Restoring isolation and restarting AstrBot makes the saved policy effective again.
+Native execution is exactly the administrator tuple `host` / `unrestricted` / both address flags enabled / no deny rules / socket `allow_all`. It runs directly under the AstrBot account without process isolation and provides none of the sandbox guarantees described below. Any deviation, including a workspace scope, a domain rule, a disabled address flag, a filesystem deny rule, or a socket deny mode, requires a real sandbox backend. If that backend is unavailable, code execution is disabled without widening file access or rewriting the saved policy. The permission matrix marks unavailable execution as **Inactive**; hover over or select the adjacent help icon to see the cause. Restoring isolation and restarting AstrBot makes the saved policy effective again.
+
+### Nested sandbox policy
+
+Each role stores this shape under `provider_settings.computer_use_local_permissions.<role>`:
+
+```json
+{
+  "allow_execution": true,
+  "filesystem_scope": "workspace",
+  "network": {
+    "mode": "allowlist",
+    "allowed_domains": ["example.com", "*.example.org:8443"],
+    "denied_domains": ["blocked.example.com"],
+    "allow_private_network": false,
+    "allow_loopback": false
+  },
+  "filesystem": {
+    "deny_read": ["~/.ssh", "/srv/private-secret.env"],
+    "deny_write": ["/srv/shared"]
+  },
+  "unix_sockets": {
+    "mode": "deny",
+    "allowed_paths": []
+  }
+}
+```
+
+`filesystem_scope=none` forces execution off and network off. Execution off forces network off. Network mode `off` forces socket mode `deny` with no allowed paths. The old flat `allow_network` key is migrated once, then never read at runtime. A legacy `allow_network=true` becomes `unrestricted` with both address flags enabled so its previous reachability is preserved; `false` or a missing value becomes `off`.
+
+### Network policy
+
+- `off`: sandboxed workloads cannot use direct IP, host loopback, or Unix-socket egress. Only the isolated loopback inside the sandbox is available for its own IPC.
+- `allowlist`: only approved destinations can leave through the authenticated AstrBot proxy. `allowed_domains` entries are exact names, `*.example.com` subdomain rules, canonical IP literals, or `*`, with an optional port. Deny rules always win.
+- `unrestricted`: no domain allowlist, but traffic still goes through the proxy. It does not mean direct IP egress. Built-in metadata, link-local, multicast, unspecified, reserved, broadcast, and host-interface guards still apply.
+
+`allow_private_network` and `allow_loopback` opt into RFC1918/ULA/CGNAT and loopback classes. Metadata, link-local, multicast, unspecified, reserved, broadcast, and host-interface addresses stay denied. A canonical IP literal in the allowlist explicitly permits that IP and port even when its class is otherwise blocked, unless a more specific deny rule wins. IPv4-mapped, 6to4, NAT64, and other embedded IPv4 forms only add denials.
+
+The proxy performs host-side DNS once, pins the numeric address for the connection, and never asks the sandbox to resolve names. HTTPS uses `CONNECT`, so normal certificate verification succeeds with the host's system or certifi CA store. Plain `http://` absolute-form requests are supported; absolute-form `https://` is rejected because TLS termination/MITM is out of scope. `Proxy-Authorization` authenticates exactly one invocation lease and is consumed, never forwarded. Direct SSH, Git-over-SSH, and SOCKS-only workloads that bypass the configured HTTP/SOCKS proxy are not covered.
+
+Proxy tokens are random per invocation and reach the sandbox only through inherited environment variables, never launcher argv or inline Python source. The following environment names are overridden after any caller values, in every case variant: `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY`; `NO_PROXY`/`no_proxy` are empty. Supported SOCKS clients use `socks5h` so the proxy, not the workload, resolves the hostname.
+
+### Filesystem deny policy
+
+`deny_read` and `deny_write` accept absolute or `~`-based host paths. `~` expands against the AstrBot OS account at configuration/load time, not the sandbox `HOME`. Paths and globs use `pathlib.PurePath.full_match` style `*`, `?`, `[]`, and `**` semantics with normalized separators, must have a literal existing traversal anchor, and reject trailing separators, NUL bytes, and platform-inappropriate drive or UNC forms. A relative or anchorless pattern such as `**/.env` is invalid instead of silently scanning `/`.
+
+On Linux, deny masks are applied after every workspace, host, Python-prefix, and proxy grant. A write denial binds the target read-only; a read denial masks files with an empty file and directories with a writable tmpfs whose contents disappear when the process exits. Globs expand once at launch with at most 1,024 masks and 10,000 visited directories. A missing literal target, an unreadable traversal, or an overflow fails the whole launch; rules never create their targets. A glob cannot cover paths created after launch.
+
+On macOS, the same bounded expansion produces literal Seatbelt deny rules ordered after every grant. File tools, document reads, image conversions, and grep use the same resolved policy in workspace and host scope. Read/write/edit checks run before opening a file or creating parents. A denied symlink or resolved target fails. These masks are launch-time path masks, not inode-level secret isolation: a preexisting hard-link alias can still reference the same inode outside a denied path. File tools continue to reject multiply linked files and symlinks, but process-level hard-link aliases are a documented limitation.
+
+Local grep applies deny masks through the sandbox backend. If the required `rg` executable or backend is unavailable, the tool fails closed with a generic error; it never falls back to direct host execution.
+
+### Unix sockets
+
+- Linux `deny` blocks `socket(AF_UNIX)`, `socket(AF_VSOCK)`, `socketpair(AF_UNIX)`, and `io_uring_setup` with `EACCES` in the workload branch. The unfiltered bridge is forked first and keeps working through the proxy Unix sockets; the workload inherits no Unix, ring, or bridge descriptor. `allow_all` installs no deny filter.
+- macOS `deny` blocks Unix socket family creation and pathname/abstract connections. `allowed_paths` is macOS-only and accepts normalized literal socket paths, not globs. Linux rejects nonempty `allowed_paths` instead of ignoring them. `allow_all` on macOS reopens outbound Unix sockets as a whole rather than per path.
+- Network mode `off` always uses socket mode `deny`. Windows does not support process isolation; its native file security remains separate from these settings.
+
+When any sandbox component fails, a required backend or filter is missing, or the kernel/architecture is unsupported, execution fails closed. There is no native fallback. Active tunnels close, leases are revoked, and tools receive a bounded generic error. Denial logs and results contain only bounded reason and redacted target metadata; tokens, credentials, and host paths are not returned to the model.
 
 Windows supports workspace-scoped file reading, writing, and editing through native file handles. File operations reject symbolic links, directory junctions, and multiply linked files. Local process isolation is still unsupported on native Windows; administrators can execute code with entire-environment access and networking.
 

@@ -440,7 +440,10 @@
           "admin": "Administrator"
         },
         "modes": {
-          "none": "Disabled"
+          "none": "Disabled",
+          "off": "Off",
+          "allowlist": "Allowlist",
+          "unrestricted": "Unrestricted"
         },
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
@@ -479,6 +482,42 @@
             "unavailable": "{backend} · Installed but cannot start",
             "unsupported": "Unsupported"
           }
+        },
+        "sockets": {
+          "deny": "Deny Unix sockets",
+          "allowAll": "Allow all Unix sockets"
+        },
+        "networkRules": "Rules",
+        "denyRules": "Deny rules",
+        "socketRules": "Sockets",
+        "nativeWarning": "Native execution is selected for at least one role. It runs without OS isolation, has host file access and unrestricted network access, and provides no sandbox guarantee.",
+        "globWarning": "Linux filesystem glob rules are expanded once at launch and cannot cover paths created later.",
+        "hardLinkWarning": "Filesystem masks and file tools reject multi-link files, but preexisting hard-link aliases can still expose inode content outside a denied path.",
+        "networkDialog": {
+          "title": "Network rules",
+          "private": "Allow private network destinations",
+          "loopback": "Allow loopback destinations",
+          "allowed": "Allowed domains",
+          "denied": "Denied domains",
+          "hint": "One per line. Entries are exact names, *.example.com subdomain rules, IP literals, or * with an optional :port."
+        },
+        "filesystemDialog": {
+          "title": "Filesystem deny rules",
+          "read": "Deny read",
+          "write": "Deny write",
+          "hint": "Absolute or ~-based paths and launch-time globs, one per line."
+        },
+        "socketDialog": {
+          "title": "Unix socket rules",
+          "mode": "Unix socket mode",
+          "paths": "Allowed socket paths",
+          "macHint": "macOS only: normalized literal socket paths reopened after the family deny.",
+          "linuxHint": "Linux uses an all-or-nothing seccomp decision. Per-path allowlists are macOS-only.",
+          "offHint": "Network mode off always forces Unix socket mode deny with no allowed paths."
+        },
+        "dialog": {
+          "cancel": "Cancel",
+          "save": "Save"
         }
       }
     },

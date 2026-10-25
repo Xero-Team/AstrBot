@@ -16,7 +16,7 @@ import time
 import uuid
 from _thread import LockType
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, BinaryIO, cast
 
@@ -28,9 +28,14 @@ from astrbot.core.computer.file_read_utils import (
 from astrbot.core.computer.local_file_security import read_fd_at
 from astrbot.core.computer.process_sandbox import (
     SandboxProcess,
+    SandboxProxyEndpoint,
     SandboxSpec,
     SandboxTimeoutError,
     create_process_sandbox,
+)
+from astrbot.core.computer.process_sandbox.bridge import (
+    BRIDGE_HTTP_PORT,
+    BRIDGE_SOCKS_PORT,
 )
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
@@ -242,6 +247,110 @@ def _signal_posix_process_group(pid: int, sig: int) -> bool:
         return False
 
 
+def _attach_proxy_lease(
+    spec: SandboxSpec,
+    proxy_provider: Callable[[], Any] | None,
+) -> tuple[Any, Any, SandboxSpec]:
+    """Attach one runtime-owned proxy lease to a sandboxed spec."""
+    if not spec.policy.network.enabled:
+        return None, None, spec
+    if proxy_provider is None:
+        raise RuntimeError(
+            "Sandboxed network access requires the runtime Local proxy, "
+            "which is unavailable. Execution was blocked."
+        )
+    proxy = proxy_provider()
+    lease = proxy.create_lease(spec.policy)
+    platform = "linux" if sys.platform.startswith("linux") else sys.platform
+    endpoint = SandboxProxyEndpoint(
+        token=lease.token,
+        http_socket=(str(proxy.http_socket) if platform == "linux" else None),
+        socks_socket=(str(proxy.socks_socket) if platform == "linux" else None),
+        http_port=BRIDGE_HTTP_PORT if platform == "linux" else int(proxy.http_port),
+        socks_port=BRIDGE_SOCKS_PORT if platform == "linux" else int(proxy.socks_port),
+        platform=platform,
+    )
+    return proxy, lease, replace(spec, proxy=endpoint)
+
+
+def _search_path_allowed(spec: SandboxSpec, search_path: Path) -> bool:
+    """Return whether a search root stays inside a workspace-scoped sandbox."""
+    if spec.policy.filesystem_scope != "workspace":
+        return True
+    return any(
+        search_path == root or search_path.is_relative_to(root)
+        for root in (spec.workspace, spec.workspace.resolve())
+    )
+
+
+def _run_sandboxed_search(
+    *,
+    pattern: str,
+    search_path: Path,
+    glob: str | None,
+    after_context: int | None,
+    before_context: int | None,
+    spec: SandboxSpec,
+) -> dict[str, Any]:
+    """Run ripgrep through the complete sandbox spec or fail closed."""
+    rg_path = shutil.which("rg")
+    if not rg_path:
+        return {
+            "success": False,
+            "content": "",
+            "error": "The required file search backend is unavailable.",
+        }
+    command = [
+        str(Path(rg_path).resolve()),
+        "--color=never",
+        "-n",
+        "--max-columns",
+        "1000",
+        "-e",
+        pattern,
+    ]
+    if glob:
+        command.extend(["-g", glob])
+    if after_context is not None:
+        command.extend(["-A", str(after_context)])
+    if before_context is not None:
+        command.extend(["-B", str(before_context)])
+    command.extend(["--", str(search_path)])
+    if not _search_path_allowed(spec, search_path):
+        return {
+            "success": False,
+            "content": "",
+            "error": "File search path is outside the sandbox workspace.",
+        }
+    try:
+        result = create_process_sandbox().run(command, spec, timeout=30)
+    except SandboxTimeoutError:
+        return {
+            "success": False,
+            "content": "",
+            "error": "File search timed out after 30 seconds.",
+        }
+    except OSError, RuntimeError:
+        return {
+            "success": False,
+            "content": "",
+            "error": "The required file search backend is unavailable.",
+        }
+    stdout = _decode_shell_output(result.stdout)
+    if result.returncode in (0, 1):
+        return {
+            "success": True,
+            "content": _truncate_long_lines(stdout if result.returncode == 0 else ""),
+        }
+    return {
+        "success": False,
+        "content": "",
+        "error": _decode_shell_output(result.stderr)
+        or f"ripgrep exited with code {result.returncode}",
+        "exit_code": result.returncode,
+    }
+
+
 @dataclass
 class LocalShellComponent(ShellComponent):
     _sessions: dict[str, _LocalShellSession] = field(default_factory=dict, init=False)
@@ -249,6 +358,7 @@ class LocalShellComponent(ShellComponent):
     max_sessions: int = 16
     max_output_bytes: int = 4 * 1024 * 1024
     session_ttl_seconds: int = 30 * 60
+    proxy_provider: Callable[[], Any] | None = None
 
     async def exec(  # noqa: ASYNC109
         self,
@@ -371,14 +481,11 @@ class LocalShellComponent(ShellComponent):
         sender_id: str = "",
         allowed_root: str | None = None,
         creator_is_admin: bool = False,
-        sandboxed: bool = False,
+        spec: SandboxSpec | None = None,
         permission_check: Callable[[], bool] | None = None,
-        allow_network: bool = False,
-        filesystem_scope: str = "workspace",
-        readable_roots: tuple[Path, ...] = (),
-        writable_roots: tuple[Path, ...] = (),
     ) -> dict[str, Any]:  # noqa: ASYNC109
         """Start a runtime-owned interactive shell session."""
+        sandboxed = spec is not None
         if not sandboxed and not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
         if not 0 <= yield_time_ms <= 300_000:
@@ -386,8 +493,12 @@ class LocalShellComponent(ShellComponent):
         if timeout is not None and timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         max_output_chars = max(1, min(max_output_chars, 100_000))
-        working_dir = Path(cwd or get_astrbot_root()).resolve(strict=False)
-        boundary = Path(allowed_root or get_astrbot_root()).resolve(strict=False)
+        working_dir = Path(
+            (spec.workspace if spec is not None else None) or cwd or get_astrbot_root()
+        ).resolve(strict=False)
+        boundary = Path(
+            spec.workspace if spec is not None else (allowed_root or get_astrbot_root())
+        ).resolve(strict=False)
         if not working_dir.is_relative_to(boundary):
             raise PermissionError("Shell cwd is outside the allowed workspace")
         working_dir.mkdir(parents=True, exist_ok=True)
@@ -396,6 +507,10 @@ class LocalShellComponent(ShellComponent):
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
         output_dir = Path(get_astrbot_system_tmp_path())
         output_dir.mkdir(parents=True, exist_ok=True)
+        proxy = None
+        lease = None
+        if spec is not None:
+            proxy, lease, spec = _attach_proxy_lease(spec, self.proxy_provider)
 
         async with self._sessions_lock:
             if len(self._sessions) >= self.max_sessions:
@@ -407,16 +522,10 @@ class LocalShellComponent(ShellComponent):
             output_file = tempfile.TemporaryFile(mode="w+b", dir=output_dir)
             output_lock = threading.Lock()
             try:
-                if sandboxed:
+                if spec is not None:
                     process = await create_process_sandbox().spawn_shell(
                         command,
-                        SandboxSpec(
-                            workspace=working_dir,
-                            allow_network=allow_network,
-                            filesystem_scope=filesystem_scope,
-                            readable_roots=readable_roots,
-                            writable_roots=writable_roots,
-                        ),
+                        spec,
                         env={str(k): str(v) for k, v in (env or {}).items()},
                     )
                 else:
@@ -452,6 +561,8 @@ class LocalShellComponent(ShellComponent):
                         )
             except BaseException:
                 output_file.close()
+                if proxy is not None and lease is not None:
+                    proxy.drop_lease(lease)
                 raise
 
             output_event = asyncio.Event()
@@ -505,8 +616,13 @@ class LocalShellComponent(ShellComponent):
                 reader_task=reader_task,
                 wait_task=wait_task,
                 permission_check=permission_check,
+                proxy=proxy,
+                lease=lease,
             )
             self._sessions[session_id] = session
+            wait_task.add_done_callback(
+                lambda _task: self._release_session_lease(session)
+            )
 
         if permission_check is not None and not permission_check():
             await self.shutdown_sessions(invalid_only=True)
@@ -623,6 +739,8 @@ class LocalShellComponent(ShellComponent):
             "has_more": has_more,
             "session_closed": session.process.returncode is not None and not has_more,
         }
+        if session.lease is not None:
+            result["violations"] = session.lease.snapshot_violations()
         if result["session_closed"]:
             await self._remove_session(session)
         return result
@@ -791,6 +909,21 @@ class LocalShellComponent(ShellComponent):
             )
         return session
 
+    @staticmethod
+    def _release_session_lease(session: _LocalShellSession) -> None:
+        """Release a session lease on natural completion, not another poll."""
+        if session.proxy is None or session.lease is None:
+            return
+        proxy, session.proxy = session.proxy, None
+        lease = session.lease
+        if lease is None or session.lease_released:
+            return
+        session.lease_released = True
+        try:
+            proxy.drop_lease(lease)
+        except Exception as exc:  # noqa: BLE001  # cleanup must not break polling
+            logger.warning("Failed to release Local proxy lease: %s", exc)
+
     def _session_status(self, session: _LocalShellSession) -> str:
         if session.process.returncode is None:
             return "running"
@@ -901,10 +1034,15 @@ class _LocalShellSession:
     timed_out: bool = False
     terminated: bool = False
     output_limited: bool = False
+    proxy: Any | None = None
+    lease: Any | None = None
+    lease_released: bool = False
 
 
 @dataclass
 class LocalPythonComponent(PythonComponent):
+    proxy_provider: Callable[[], Any] | None = None
+
     async def exec(
         self,
         code: str,
@@ -912,25 +1050,26 @@ class LocalPythonComponent(PythonComponent):
         timeout_seconds: int = 30,
         silent: bool = False,
         cwd: str | None = None,
-        sandboxed: bool = False,
-        allow_network: bool = False,
-        filesystem_scope: str = "workspace",
-        readable_roots: tuple[Path, ...] = (),
-        writable_roots: tuple[Path, ...] = (),
+        spec: SandboxSpec | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
+            proxy = None
+            lease = None
+            effective_spec = spec
             try:
-                working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root())
-                if sandboxed:
+                working_dir = Path(
+                    (effective_spec.workspace if effective_spec is not None else None)
+                    or cwd
+                    or get_astrbot_root()
+                ).resolve()
+                if effective_spec is not None:
+                    proxy, lease, effective_spec = _attach_proxy_lease(
+                        effective_spec,
+                        self.proxy_provider,
+                    )
                     result = create_process_sandbox().run(
                         [sys.executable, "-c", code],
-                        SandboxSpec(
-                            workspace=working_dir,
-                            allow_network=allow_network,
-                            filesystem_scope=filesystem_scope,
-                            readable_roots=readable_roots,
-                            writable_roots=writable_roots,
-                        ),
+                        effective_spec,
                         timeout=timeout_seconds,
                         output_limit=_LOCAL_SANDBOX_MAX_OUTPUT_BYTES,
                         discard_stdout=silent,
@@ -964,12 +1103,13 @@ class LocalPythonComponent(PythonComponent):
                     if result.returncode != 0 or stdout_limited or stderr_limited
                     else ""
                 )
-                return {
-                    "data": {
-                        "output": {"text": stdout, "images": []},
-                        "error": execution_error,
-                    }
+                data: dict[str, Any] = {
+                    "output": {"text": stdout, "images": []},
+                    "error": execution_error,
                 }
+                if lease is not None:
+                    data["violations"] = lease.snapshot_violations()
+                return {"data": data}
             except SandboxTimeoutError, subprocess.TimeoutExpired:
                 return {
                     "data": {
@@ -977,6 +1117,9 @@ class LocalPythonComponent(PythonComponent):
                         "error": "Execution timed out.",
                     }
                 }
+            finally:
+                if proxy is not None and lease is not None:
+                    proxy.drop_lease(lease)
 
         return await asyncio.to_thread(_run)
 
@@ -1034,76 +1177,22 @@ class LocalFileSystemComponent(FileSystemComponent):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
-        sandboxed: bool = False,
-        sandbox_root: str | None = None,
+        spec: SandboxSpec | None = None,
         reject_multi_link_files: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            search_path = Path(path or get_astrbot_root()).resolve(strict=False)
-            if sandboxed:
-                if not sandbox_root:
-                    return {
-                        "success": False,
-                        "content": "",
-                        "error": "A sandbox root is required for restricted Local search.",
-                    }
-                rg_path = shutil.which("rg")
-                if not rg_path:
-                    return {
-                        "success": False,
-                        "content": "",
-                        "error": "The ripgrep (rg) executable is required for sandboxed file search.",
-                    }
-                command = [
-                    str(Path(rg_path).resolve()),
-                    "--color=never",
-                    "-n",
-                    "--max-columns",
-                    "1000",
-                    "-e",
-                    pattern,
-                ]
-                if glob:
-                    command.extend(["-g", glob])
-                if after_context is not None:
-                    command.extend(["-A", str(after_context)])
-                if before_context is not None:
-                    command.extend(["-B", str(before_context)])
-                command.extend(["--", str(search_path)])
-                try:
-                    result = create_process_sandbox().run(
-                        command,
-                        SandboxSpec(
-                            workspace=Path(sandbox_root),
-                            workspace_writable=False,
-                        ),
-                        timeout=30,
-                    )
-                except (SandboxTimeoutError, OSError) as exc:
-                    return {
-                        "success": False,
-                        "content": "",
-                        "error": (
-                            "File search timed out after 30 seconds."
-                            if isinstance(exc, SandboxTimeoutError)
-                            else f"Unable to start ripgrep: {exc}"
-                        ),
-                    }
-                stdout = _decode_shell_output(result.stdout)
-                if result.returncode in (0, 1):
-                    return {
-                        "success": True,
-                        "content": _truncate_long_lines(
-                            stdout if result.returncode == 0 else ""
-                        ),
-                    }
-                return {
-                    "success": False,
-                    "content": "",
-                    "error": _decode_shell_output(result.stderr)
-                    or f"ripgrep exited with code {result.returncode}",
-                    "exit_code": result.returncode,
-                }
+            search_path = Path(
+                path or (spec.workspace if spec is not None else get_astrbot_root())
+            ).resolve(strict=False)
+            if spec is not None:
+                return _run_sandboxed_search(
+                    pattern=pattern,
+                    search_path=search_path,
+                    glob=glob,
+                    after_context=after_context,
+                    before_context=before_context,
+                    spec=spec,
+                )
             rg_path = shutil.which("rg")
             if rg_path:
                 if reject_multi_link_files:
@@ -1358,10 +1447,15 @@ class LocalFileSystemComponent(FileSystemComponent):
 
 
 class LocalBooter(ComputerBooter):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        proxy_provider: Callable[[], Any] | None = None,
+    ) -> None:
+        self._proxy_provider = proxy_provider
         self._fs = LocalFileSystemComponent()
-        self._python = LocalPythonComponent()
-        self._shell = LocalShellComponent()
+        self._python = LocalPythonComponent(proxy_provider=proxy_provider)
+        self._shell = LocalShellComponent(proxy_provider=proxy_provider)
 
     async def boot(self, session_id: str) -> None:
         logger.info(f"Local computer booter initialized for session: {session_id}")

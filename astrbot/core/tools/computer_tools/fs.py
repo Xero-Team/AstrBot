@@ -20,7 +20,7 @@ Local path resolution rule:
 
 import os
 import stat
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -30,6 +30,12 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
+from astrbot.core.computer.local_policy import (
+    LocalNetworkPolicy,
+    LocalUnixSocketPolicy,
+)
+from astrbot.core.computer.process_sandbox import SandboxSpec
+from astrbot.core.computer.process_sandbox.fs_policy import DenyRuleSet
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
@@ -126,6 +132,27 @@ def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     if not is_local_runtime(context):
         return False
     return get_local_permission_policy(context).filesystem_scope != "host"
+
+
+def _local_deny_rules(
+    context: ContextWrapper[AstrAgentContext],
+) -> DenyRuleSet:
+    """Return deny rules for the caller's resolved Local policy."""
+    return DenyRuleSet(get_local_permission_policy(context).filesystem)
+
+
+def _reject_denied_access(
+    rules: DenyRuleSet,
+    path: str,
+    access: str,
+) -> None:
+    """Reject a denied path before opening or creating its parent directories."""
+    if access not in {"read", "write", "edit"}:
+        raise ValueError(f"Unsupported file access mode: {access}.")
+    if rules.matches(Path(path), access):  # type: ignore[arg-type]
+        raise PermissionError(
+            "Access denied by the configured Local filesystem policy."
+        )
 
 
 def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
@@ -291,6 +318,13 @@ class FileReadTool(FunctionTool):
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
+            deny_rules = _local_deny_rules(context) if local_env else None
+            if deny_rules is not None:
+                _reject_denied_access(
+                    deny_rules,
+                    normalized_path,
+                    "read",
+                )
             if local_env and os.path.isdir(normalized_path):
                 return (
                     f"Error: '{normalized_path}' is a directory, not a file. "
@@ -299,11 +333,17 @@ class FileReadTool(FunctionTool):
             offset, limit = self._validate_read_window(offset, limit)
             sb = context.context.context.computer_runtime.get_local_booter()
             file_descriptor = None
-            if restricted:
+            if restricted or (deny_rules is not None and not deny_rules.empty):
+                allowed_roots = (
+                    _read_allowed_roots(context.context.event.unified_msg_origin)
+                    if restricted
+                    else (Path(Path(normalized_path).anchor),)
+                )
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
-                    _read_allowed_roots(context.context.event.unified_msg_origin),
+                    allowed_roots,
                     access="read",
+                    deny_policy=(deny_rules.policy if deny_rules is not None else None),
                 )
             try:
                 return await read_file_tool_result(
@@ -378,15 +418,24 @@ class FileWriteTool(FunctionTool):
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
+            deny_rules = _local_deny_rules(context) if local_env else None
+            if deny_rules is not None:
+                _reject_denied_access(deny_rules, normalized_path, "write")
             sb = context.context.context.computer_runtime.get_local_booter()
             filesystem = cast(Any, sb.fs)
             file_descriptor = None
-            if restricted:
+            if restricted or (deny_rules is not None and not deny_rules.empty):
+                allowed_roots = (
+                    _write_allowed_roots(context.context.event.unified_msg_origin)
+                    if restricted
+                    else (Path(Path(normalized_path).anchor),)
+                )
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
-                    _write_allowed_roots(context.context.event.unified_msg_origin),
+                    allowed_roots,
                     access="write",
                     create_parents=True,
+                    deny_policy=(deny_rules.policy if deny_rules is not None else None),
                 )
             try:
                 result = await filesystem.write_file(
@@ -479,6 +528,9 @@ class FileEditTool(FunctionTool):
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
+            deny_rules = _local_deny_rules(context) if local_env else None
+            if deny_rules is not None:
+                _reject_denied_access(deny_rules, normalized_path, "edit")
             attempts = [(old, new)]
             decoded = (_decode_escaped_text(old), _decode_escaped_text(new))
             if decoded != (old, new):
@@ -486,11 +538,17 @@ class FileEditTool(FunctionTool):
             sb = context.context.context.computer_runtime.get_local_booter()
             filesystem = cast(Any, sb.fs)
             file_descriptor = None
-            if restricted:
+            if restricted or (deny_rules is not None and not deny_rules.empty):
+                allowed_roots = (
+                    _write_allowed_roots(umo)
+                    if restricted
+                    else (Path(Path(normalized_path).anchor),)
+                )
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
-                    _write_allowed_roots(umo),
+                    allowed_roots,
                     access="edit",
+                    deny_policy=(deny_rules.policy if deny_rules is not None else None),
                 )
             try:
                 result = {"success": False}
@@ -720,13 +778,30 @@ class GrepTool(FunctionTool):
             sb = context.context.context.computer_runtime.get_local_booter()
             contents: list[str] = []
             filesystem = cast(Any, sb.fs)
+            deny_rules = _local_deny_rules(context) if local_env else None
             for search_path in search_paths:
+                spec = None
+                if local_env and deny_rules is not None and not deny_rules.empty:
+                    search_root = Path(search_path)
+                    if not search_root.is_dir():
+                        search_root = search_root.parent
+                    grep_policy = replace(
+                        get_local_permission_policy(context).sandbox,
+                        network=LocalNetworkPolicy(mode="off"),
+                        unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+                    )
+                    spec = SandboxSpec(
+                        workspace=search_root,
+                        policy=grep_policy,
+                        workspace_writable=False,
+                    )
                 result = await filesystem.search_files(
                     pattern=normalized_pattern,
                     path=search_path,
                     glob=glob,
                     after_context=after_context,
                     before_context=before_context,
+                    spec=spec,
                     **({"reject_multi_link_files": True} if restricted else {}),
                 )
                 if not result.get("success", False):

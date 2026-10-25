@@ -5,7 +5,8 @@ import subprocess  # noqa: S404  # subprocess is an intentional runtime dependen
 import sys
 from pathlib import Path
 
-from .base import SandboxSpec
+from .base import SandboxSpec, sandbox_ca_file
+from .fs_policy import DenyPolicyError, DenyRuleSet
 from .unix import UnixProcessSandbox, build_resource_limited_argv
 
 _PROFILE = """
@@ -53,6 +54,18 @@ _PROFILE = """
     (literal "/private/etc/passwd"))
 (deny network*)
 """
+_MAX_PROFILE_BYTES = 1024 * 1024
+_MAX_PROFILE_RULES = 4096
+_BOOTSTRAP = """
+import os
+import sys
+
+os.environ["HOME"] = sys.argv[1]
+os.environ["TMPDIR"] = sys.argv[2]
+os.environ["LANG"] = "C.UTF-8"
+workload = sys.argv[4:]
+os.execvpe(workload[0], workload, os.environ)
+"""
 _READ_ONLY_PROFILE = _PROFILE.replace(
     '(allow file-write*\n    (subpath (param "WORKSPACE")))',
     "(deny file-write*)",
@@ -76,6 +89,10 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
                 "Seatbelt (`/usr/bin/sandbox-exec`) is required for restricted "
                 "Local execution on macOS."
             )
+        if spec.policy.network.enabled and spec.proxy is None:
+            raise RuntimeError(
+                "Sandboxed network access requires the runtime Local proxy."
+            )
 
         executable_path = (
             Path(argv[0]).resolve()
@@ -83,7 +100,7 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             else Path(sys.executable).resolve()
         )
         profile = _PROFILE if spec.workspace_writable else _READ_ONLY_PROFILE
-        if spec.filesystem_scope == "host":
+        if spec.policy.filesystem_scope == "host":
             profile = profile.replace(
                 '(import "system.sb")',
                 '(import "system.sb")\n\n'
@@ -95,11 +112,48 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
                 '    (literal "/private/etc/passwd"))\n',
                 "",
             )
-        if spec.allow_network:
-            profile = profile.replace("(deny network*)", "(allow network*)")
+        if spec.proxy is not None:
+            if spec.policy.network.enabled:
+                allowed_endpoints = "\n".join(
+                    (
+                        f'(allow network-outbound (remote ip "127.0.0.1:{spec.proxy.http_port}"))',
+                        f'(allow network-outbound (remote ip "127.0.0.1:{spec.proxy.socks_port}"))',
+                    )
+                )
+                profile = profile.replace(
+                    "(deny network*)",
+                    f"(deny network*)\n{allowed_endpoints}",
+                )
+        if spec.policy.unix_sockets.mode == "allow_all":
+            profile += "\n(allow network-outbound (remote unix-socket))\n"
+        else:
+            escaped_sockets = "\n".join(
+                f'(allow network-outbound (remote unix-socket (path-literal "{self._escape(Path(path))}")))'
+                for path in spec.policy.unix_sockets.allowed_paths
+            )
+            if escaped_sockets:
+                profile += f"\n{escaped_sockets}\n"
+
+        ca_paths = tuple(
+            path
+            for path in (
+                Path("/etc/ssl"),
+                Path("/private/etc/ssl"),
+                Path("/usr/local/share/ca-certificates"),
+                Path("/System/Library/Keychains"),
+                Path("/Library/Keychains"),
+            )
+            if path.exists()
+        )
+        custom_ca = sandbox_ca_file()
+        if custom_ca is not None:
+            ca_paths = (*ca_paths, custom_ca)
+        if spec.proxy is not None:
+            for path in ca_paths:
+                profile += f'\n(allow file-read* (subpath "{self._escape(path)}"))\n'
 
         root_definitions: list[str] = []
-        if spec.filesystem_scope == "workspace":
+        if spec.policy.filesystem_scope == "workspace":
             writable_roots = {root.resolve() for root in spec.writable_roots}
             readable_roots = {
                 root.resolve()
@@ -130,12 +184,35 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             "\n    ".join(executable_rules),
         )
 
-        environment = [
-            *(f"{key}={value}" for key, value in sorted(env.items())),
-            f"PATH={Path(sys.executable).parent}:/usr/bin:/bin",
-            f"HOME={workspace}",
-            f"TMPDIR={workspace}",
-            "LANG=C.UTF-8",
+        for ca_path in ca_paths:
+            selector = "subpath" if ca_path.is_dir() else "literal"
+            profile += f'\n(deny file-write* ({selector} "{self._escape(ca_path)}"))\n'
+
+        deny_rules = DenyRuleSet(spec.policy.filesystem)
+        if not deny_rules.empty:
+            try:
+                denied = deny_rules.expand_for_launch()
+            except DenyPolicyError as exc:
+                raise RuntimeError(str(exc)) from exc
+            for mask in denied:
+                selector = "subpath" if mask.is_directory else "literal"
+                path = self._escape(mask.target)
+                operation = "file-read*" if mask.mode == "read" else "file-write*"
+                profile += f'\n(deny {operation} ({selector} "{path}"))\n'
+
+        if len(profile.encode("utf-8")) > _MAX_PROFILE_BYTES:
+            raise RuntimeError("The Seatbelt profile exceeds its fixed size budget.")
+        if profile.count("\n") > _MAX_PROFILE_RULES:
+            raise RuntimeError("The Seatbelt profile exceeds its fixed rule budget.")
+        bootstrap = [
+            str(Path(sys.executable).resolve()),
+            "-S",
+            "-c",
+            _BOOTSTRAP,
+            str(workspace),
+            str(workspace),
+            "C.UTF-8",
+            *argv,
         ]
         return [
             seatbelt_path,
@@ -149,11 +226,13 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             f"PYTHON_BASE_PREFIX={Path(sys.base_prefix).resolve()}",
             "-p",
             profile,
-            "/usr/bin/env",
-            "-i",
-            *environment,
-            *build_resource_limited_argv(argv, spec.limits),
+            *build_resource_limited_argv(bootstrap, spec.limits),
         ]
+
+    @staticmethod
+    def _escape(path: Path) -> str:
+        """Escape a literal path for a Seatbelt string."""
+        return str(path).replace("\\", "\\\\").replace('"', '\\"')
 
     def _executable_read_paths(self, executable_path: Path) -> tuple[Path, ...]:
         """Collect executable and dynamic-library paths needed by Seatbelt.

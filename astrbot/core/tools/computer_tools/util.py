@@ -6,8 +6,16 @@ from typing import Literal
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.auth.models import INSTANCE_TOOL_ROLES, Resource, Role
+from astrbot.core.computer.local_policy import (
+    LocalFilesystemPolicy,
+    LocalNetworkPolicy,
+    LocalSandboxPolicy,
+    LocalUnixSocketPolicy,
+    build_local_network_notice,
+    default_policy,
+    sandbox_policy_from_config,
+)
 from astrbot.core.computer.process_sandbox import get_process_sandbox_status
-from astrbot.core.config.default import get_local_permission_defaults
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
@@ -20,11 +28,13 @@ def normalize_umo_for_workspace(umo: str) -> str:
     return normalized or "unknown"
 
 
-LOCAL_NETWORK_POLICY_NOTICE = (
-    "Sandbox policy: Network access is disabled for local Shell/Python execution. "
-    "Do not retry the same network operation with another command, Python, "
-    "HTTP/HTTPS, or disabled certificate verification; these do not change the policy. "
-    "Local offline operations are still allowed."
+LOCAL_NETWORK_POLICY_NOTICE = build_local_network_notice(
+    LocalSandboxPolicy(
+        allow_execution=True,
+        filesystem_scope="workspace",
+        network=LocalNetworkPolicy(mode="off"),
+        unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+    )
 )
 
 
@@ -33,23 +43,54 @@ class LocalPermissionPolicy:
     """Resolved Local computer permissions for one caller.
 
     Args:
-        allow_execution: Whether Shell and Python execution is allowed.
-        allow_network: Whether the execution environment may use the network.
-        filesystem_scope: Host or workspace access, or none to disable Local tools.
-        execution_disabled_reason: Isolation failure that disabled execution, if any.
+        sandbox: Complete immutable Local policy.
+        execution_disabled_reason: Isolation or configuration failure that
+            blocked execution, if any. The configured policy is preserved so
+            file tools and diagnostics still see the requested restrictions.
     """
 
-    allow_execution: bool
-    allow_network: bool
-    filesystem_scope: Literal["none", "workspace", "host"]
+    sandbox: LocalSandboxPolicy
     execution_disabled_reason: str | None = None
+
+    @property
+    def allow_execution(self) -> bool:
+        """Return whether Shell and Python execution is allowed."""
+        return self.sandbox.allow_execution
+
+    @property
+    def allow_network(self) -> bool:
+        """Return whether sandboxed network access is enabled."""
+        return self.sandbox.network.enabled
+
+    @property
+    def filesystem_scope(self) -> Literal["none", "workspace", "host"]:
+        """Return the resolved filesystem access scope."""
+        return self.sandbox.filesystem_scope
+
+    @property
+    def network(self) -> LocalNetworkPolicy:
+        """Return the resolved network policy."""
+        return self.sandbox.network
+
+    @property
+    def filesystem(self) -> LocalFilesystemPolicy:
+        """Return the resolved filesystem deny policy."""
+        return self.sandbox.filesystem
+
+    @property
+    def unix_sockets(self) -> LocalUnixSocketPolicy:
+        """Return the resolved Unix socket policy."""
+        return self.sandbox.unix_sockets
 
     @property
     def requires_sandbox(self) -> bool:
         """Return whether execution needs operating-system isolation."""
-        return self.allow_execution and (
-            not self.allow_network or self.filesystem_scope != "host"
-        )
+        return self.sandbox.requires_sandbox
+
+    @property
+    def network_notice(self) -> str:
+        """Return the bounded prompt notice for this policy."""
+        return build_local_network_notice(self.sandbox)
 
 
 def workspace_root(umo: str) -> Path:
@@ -143,53 +184,54 @@ def get_local_permission_policy(
     Returns:
         Normalized policy. If required isolation is unavailable, execution is
         disabled without widening file access or changing the saved policy.
-        Unknown roles use the member policy.
+        Unknown roles use the member policy. Malformed persisted policies fail
+        closed instead of falling back to native execution.
     """
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
     )
     provider_settings = cfg.get("provider_settings", {})
     role = "admin" if (role or _local_permission_role(context)) == "admin" else "member"
-    defaults = get_local_permission_defaults()[role]
 
     permissions = provider_settings.get("computer_use_local_permissions")
     role_policy = permissions.get(role) if isinstance(permissions, dict) else None
-    if not isinstance(role_policy, dict):
-        role_policy = {}
+    if role_policy is None:
+        sandbox = default_policy(role)
+        validation_errors: list[str] = []
+    else:
+        sandbox, validation_errors = sandbox_policy_from_config(
+            role_policy,
+            role=role,
+        )
 
-    filesystem_scope = role_policy.get("filesystem_scope", defaults["filesystem_scope"])
-    if filesystem_scope not in {"none", "workspace", "host"}:
-        filesystem_scope = defaults["filesystem_scope"]
-    allow_execution = (
-        filesystem_scope != "none"
-        and role_policy.get("allow_execution", defaults["allow_execution"]) is True
-    )
-    allow_network = (
-        allow_execution
-        and role_policy.get("allow_network", defaults["allow_network"]) is True
-    )
-    policy = LocalPermissionPolicy(
-        allow_execution=allow_execution,
-        allow_network=allow_network,
-        filesystem_scope=filesystem_scope,
-    )
+    if validation_errors:
+        return LocalPermissionPolicy(
+            sandbox=sandbox.without_execution(),
+            execution_disabled_reason=(
+                "The saved Local permission policy is invalid and execution was "
+                "blocked. Fix the Local Permission Policies configuration in "
+                "AstrBot WebUI. Validation errors: " + "; ".join(validation_errors[:4])
+            ),
+        )
+
+    policy = LocalPermissionPolicy(sandbox=sandbox)
     if (
         provider_settings.get("computer_use_runtime") == "local"
         and policy.requires_sandbox
     ):
-        sandbox = get_process_sandbox_status()
-        if sandbox["status"] != "detected":
-            backend = sandbox.get("backend") or "Local process isolation"
+        sandbox_status = get_process_sandbox_status()
+        if sandbox_status["status"] != "detected":
+            backend = sandbox_status.get("backend") or "Local process isolation"
             reason = {
                 "missing": f"{backend} is not installed",
                 "unsupported": "Local process isolation is not supported on this platform",
                 "unavailable": f"{backend} failed its startup probe",
-            }.get(sandbox["status"], "Local process isolation is unavailable")
-            if sandbox.get("error"):
-                reason += f": {sandbox['error']}"
-            if sandbox["status"] == "unsupported":
+            }.get(sandbox_status["status"], "Local process isolation is unavailable")
+            if sandbox_status.get("error"):
+                reason += f": {sandbox_status['error']}"
+            if sandbox_status["status"] == "unsupported":
                 recovery = "Run AstrBot in an environment that supports Local process isolation."
-            elif sandbox["status"] == "missing" and backend == "bubblewrap":
+            elif sandbox_status["status"] == "missing" and backend == "bubblewrap":
                 recovery = (
                     "Install bubblewrap on the AstrBot host, then restart AstrBot."
                 )
@@ -203,35 +245,30 @@ def get_local_permission_policy(
                     f"Fix the {backend} startup failure shown above, "
                     "then restart AstrBot."
                 )
-            permission_changes = []
-            if policy.filesystem_scope != "host":
-                permission_changes.append(
-                    "set file access scope to `Entire environment`"
-                )
-            if not policy.allow_network:
-                permission_changes.append(
-                    "turn `Allow code execution` off and on again "
-                    "(this also enables execution network access)"
-                )
             return LocalPermissionPolicy(
-                allow_execution=False,
-                allow_network=False,
-                filesystem_scope=policy.filesystem_scope,
+                sandbox=policy.sandbox.without_execution(),
                 execution_disabled_reason=(
                     "The Agent Computer Use runtime is the local environment (`local`). "
                     f"The current user role is `{role}`; its configured Local permission "
-                    "policy is: code execution enabled, execution network access "
-                    f"{'enabled' if policy.allow_network else 'disabled'}, "
-                    f"file access scope `{policy.filesystem_scope}`. "
+                    "policy is: code execution enabled, network mode "
+                    f"`{policy.network.mode}`, "
+                    f"file access scope `{policy.filesystem_scope}`, "
+                    f"{len(policy.filesystem.deny_read)} read deny rules, "
+                    f"{len(policy.filesystem.deny_write)} write deny rules, "
+                    f"Unix socket mode `{policy.unix_sockets.mode}`. "
                     "These restrictions require Local process isolation, "
                     f"but {reason}. Code execution is blocked. "
                     "Ask an AstrBot administrator to choose:\n"
                     f"1. Keep the configured restrictions: {recovery}\n"
-                    "2. Allow execution without Local isolation: "
-                    f"{' and '.join(permission_changes)} for this role in AstrBot "
-                    "WebUI -> Config -> AI -> Capabilities -> Agent Computer Use -> "
-                    "Local Permission Policies. (Warning: this permits code execution "
-                    "with access to the entire environment and network, without isolation)."
+                    "2. Explicitly allow native execution without Local isolation by "
+                    "setting file access scope to `Entire environment`, network mode "
+                    "to `unrestricted`, enabling both private-network and loopback "
+                    "access, clearing all filesystem deny rules, and setting Unix "
+                    "socket mode to `allow_all` for this role in AstrBot WebUI -> "
+                    "Config -> AI -> Capabilities -> Agent Computer Use -> "
+                    "Local Permission Policies. (Warning: native execution permits "
+                    "code execution with access to the entire environment and "
+                    "network, without any sandbox guarantee)."
                 ),
             )
     return policy

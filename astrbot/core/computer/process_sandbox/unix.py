@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import signal as signal_module
 import subprocess  # noqa: S404  # subprocess is an intentional runtime dependency
 import sys
 import tempfile
+import time
 from abc import abstractmethod
 from pathlib import Path
 
@@ -133,23 +135,36 @@ class UnixProcessSandbox(ProcessSandbox):
         if output_limit is not None and output_limit <= 0:
             raise ValueError("Sandbox output limit must be greater than 0.")
 
+        command = self.build_command(argv, spec, env=env)
+        ready_path = _bridge_ready_path(command)
         with (
             tempfile.TemporaryFile() as stdout_file,
             tempfile.TemporaryFile() as stderr_file,
         ):
+            process = subprocess.Popen(  # noqa: S603  # argv is built internally; sandbox/blocklist is the boundary
+                command,
+                cwd=spec.workspace.resolve(),
+                env=self._launch_environment(
+                    spec,
+                    {str(k): str(v) for k, v in (env or {}).items()},
+                ),
+                stdout=subprocess.DEVNULL if discard_stdout else stdout_file,
+                stderr=stderr_file,
+            )
             try:
-                result = subprocess.run(  # noqa: S603  # argv is built internally; sandbox/blocklist is the boundary
-                    self.build_command(argv, spec, env=env),
-                    cwd=spec.workspace.resolve(),
-                    env={"PATH": os.defpath},
-                    timeout=timeout,
-                    stdout=subprocess.DEVNULL if discard_stdout else stdout_file,
-                    stderr=stderr_file,
-                )
+                if ready_path is not None:
+                    _wait_for_bridge_ready(process, ready_path)
+                process.communicate(timeout=timeout)
             except subprocess.TimeoutExpired as exc:
+                _kill_process_tree(process)
                 raise SandboxTimeoutError(
                     f"Sandbox command timed out after {timeout} seconds."
                 ) from exc
+            except BaseException:
+                _kill_process_tree(process)
+                raise
+            finally:
+                _remove_ready_file(ready_path)
 
             read_size = None if output_limit is None else output_limit + 1
             if discard_stdout:
@@ -160,7 +175,7 @@ class UnixProcessSandbox(ProcessSandbox):
             stderr_file.seek(0)
             stderr = stderr_file.read(read_size)
         return SandboxRunResult(
-            returncode=result.returncode,
+            returncode=process.returncode,
             stdout=stdout[:output_limit] if output_limit is not None else stdout,
             stderr=stderr[:output_limit] if output_limit is not None else stderr,
             stdout_limited=output_limit is not None and len(stdout) > output_limit,
@@ -184,15 +199,34 @@ class UnixProcessSandbox(ProcessSandbox):
         Returns:
             Process adapter whose lifecycle methods affect the process group.
         """
+        platform_command = self.build_command(["/bin/sh", "-c", command], spec, env=env)
+        ready_path = _bridge_ready_path(platform_command)
         process = await asyncio.create_subprocess_exec(
-            *self.build_command(["/bin/sh", "-c", command], spec, env=env),
+            *platform_command,
             cwd=spec.workspace.resolve(),
-            env={"PATH": os.defpath},
+            env=self._launch_environment(
+                spec,
+                {str(k): str(v) for k, v in (env or {}).items()},
+            ),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             start_new_session=True,
         )
+        if ready_path is not None:
+            try:
+                await asyncio.to_thread(
+                    _wait_for_bridge_ready,
+                    process,
+                    ready_path,
+                )
+            except BaseException:
+                _kill_process_tree(process)
+                with contextlib.suppress(Exception):
+                    await process.wait()
+                _remove_ready_file(ready_path)
+                raise
+            _remove_ready_file(ready_path)
         return UnixSandboxProcess(process)
 
     @abstractmethod
@@ -204,6 +238,66 @@ class UnixProcessSandbox(ProcessSandbox):
         env: dict[str, str],
     ) -> list[str]:
         """Build a Unix sandbox command after common input validation."""
+
+
+def _bridge_ready_path(command: list[str]) -> Path | None:
+    """Extract the bridge readiness path from a built launcher command."""
+    try:
+        index = command.index("--ready-file")
+    except ValueError:
+        return None
+    if index + 1 >= len(command):
+        raise RuntimeError("The sandbox bridge command is missing its ready path.")
+    return Path(command[index + 1])
+
+
+def _wait_for_bridge_ready(
+    process: subprocess.Popen | asyncio.subprocess.Process,
+    ready_path: Path,
+    *,
+    timeout: float = 10.0,
+) -> None:
+    """Wait for the in-sandbox bridge readiness marker or fail closed."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if ready_path.is_file():
+            return
+        if process.returncode is not None:
+            raise RuntimeError("The Local sandbox bridge exited before becoming ready.")
+        time.sleep(0.02)
+    raise TimeoutError("The Local sandbox bridge did not become ready.")
+
+
+def _remove_ready_file(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+
+def _kill_process_tree(process: subprocess.Popen | asyncio.subprocess.Process) -> None:
+    """Terminate a launcher process group without masking the original error."""
+    if process.returncode is not None:
+        return
+    try:
+        os.killpg(process.pid, signal_module.SIGKILL)
+    except ProcessLookupError, PermissionError:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            return
+    try:
+        if isinstance(process, subprocess.Popen):
+            process.wait(timeout=5)
+        else:
+            # The caller owns waiting for asyncio processes.
+            pass
+    except OSError, subprocess.TimeoutExpired:
+        return
 
 
 def build_resource_limited_argv(

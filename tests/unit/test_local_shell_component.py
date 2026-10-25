@@ -12,6 +12,11 @@ import pytest
 
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.local_policy import (
+    LocalNetworkPolicy,
+    LocalSandboxPolicy,
+    LocalUnixSocketPolicy,
+)
 
 
 def _powershell_quote(value: str) -> str:
@@ -658,7 +663,15 @@ async def test_exec_managed_skips_blocklist_inside_sandbox(tmp_path, monkeypatch
             owner_id="owner",
             cwd=str(tmp_path),
             allowed_root=str(tmp_path),
-            sandboxed=True,
+            spec=local_booter.SandboxSpec(
+                workspace=tmp_path,
+                policy=LocalSandboxPolicy(
+                    allow_execution=True,
+                    filesystem_scope="workspace",
+                    network=LocalNetworkPolicy(mode="off"),
+                    unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+                ),
+            ),
         )
 
 

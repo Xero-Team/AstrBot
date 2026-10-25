@@ -1058,3 +1058,88 @@ async def test_delete_profile_preserves_more_specific_routes_for_other_profiles(
             "telegram:group:room-123": "conf-c",
         }
     )
+
+
+def test_bot_reads_redact_sensitive_fields() -> None:
+    config = {
+        "platform": [
+            {
+                "id": "bot-1",
+                "type": "webchat",
+                "token": "secret-token",
+                "bot_token": "secret-bot-token",
+                "api_key": "secret-api-key",
+            }
+        ]
+    }
+    runtime = _runtime(config=config)
+    service = config_service.BotConfigService(
+        runtime.astrbot_config,
+        runtime.catalogs.platforms,
+        SimpleNamespace(),
+    )
+
+    listed = service.list_bots()["bots"][0]
+    detail = service.get_bot("bot-1")["bot"]
+
+    for payload in (listed, detail):
+        assert payload["token"] == config_service.REDACTED_SECRET_PLACEHOLDER
+        assert payload["bot_token"] == config_service.REDACTED_SECRET_PLACEHOLDER
+        assert payload["api_key"] == config_service.REDACTED_SECRET_PLACEHOLDER
+
+    assert config["platform"][0]["token"] == "secret-token"
+    assert config["platform"][0]["bot_token"] == "secret-bot-token"
+    assert config["platform"][0]["api_key"] == "secret-api-key"
+
+
+@pytest.mark.asyncio
+async def test_bot_update_restores_redacted_placeholders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: list[dict] = []
+
+    async def fake_save(post_config, _current_config, is_core=False):
+        _ = is_core
+        saved.append(copy.deepcopy(post_config))
+        return True
+
+    monkeypatch.setattr(config_service, "save_config_async", fake_save)
+    platform_manager = SimpleNamespace(
+        load_platform=AsyncMock(),
+        reload=AsyncMock(),
+        terminate_platform=AsyncMock(),
+    )
+    config = {
+        "platform": [
+            {
+                "id": "bot-1",
+                "type": "webchat",
+                "enable": True,
+                "token": "secret-token",
+                "bot_token": "secret-bot-token",
+            }
+        ]
+    }
+    service = config_service.BotConfigService(
+        config,
+        PlatformCatalog(),
+        platform_manager,
+    )
+
+    await service.update_bot(
+        "bot-1",
+        {
+            "id": "bot-1",
+            "type": "webchat",
+            "enable": False,
+            "token": config_service.REDACTED_SECRET_PLACEHOLDER,
+            "bot_token": config_service.REDACTED_SECRET_PLACEHOLDER,
+        },
+    )
+
+    assert saved[0]["platform"][0]["token"] == "secret-token"
+    assert saved[0]["platform"][0]["bot_token"] == "secret-bot-token"
+    assert saved[0]["platform"][0]["enable"] is False
+    reloaded = platform_manager.reload.await_args.args[0]
+    assert reloaded["token"] == "secret-token"
+    assert reloaded["bot_token"] == "secret-bot-token"

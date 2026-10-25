@@ -71,9 +71,21 @@ class TemplateManager:
 
     def _get_user_template_path(self, name: str) -> Path:
         """获取用户模板的完整路径，防止路径遍历漏洞。"""
-        if ".." in name or "/" in name or "\\" in name:
+        if (
+            not name
+            or name in {".", ".."}
+            or ".." in name
+            or "/" in name
+            or "\\" in name
+            or ":" in name
+            or any(ord(char) < 32 for char in name)
+        ):
             raise ValueError("模板名称包含非法字符。")
-        return self.user_template_dir / f"{name}.html"
+        root = self.user_template_dir.resolve(strict=False)
+        path = (root / f"{name}.html").resolve(strict=False)
+        if path.parent != root:
+            raise ValueError("模板名称包含非法字符。")
+        return path
 
     @staticmethod
     def _read_file(path: Path) -> str:

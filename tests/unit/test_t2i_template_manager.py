@@ -78,3 +78,14 @@ def test_builtin_base_template_stays_offline():
     assert "{{ rendered_html | safe }}" in content
     assert "markdown-source" not in content
     assert "marked.min.js" not in content
+
+
+def test_user_template_path_rejects_drive_relative_and_dot_names(template_paths):
+    _, user_dir = template_paths
+    manager = TemplateManager()
+
+    for name in ("", ".", "..", "C:foo", "a/b", "a\\b", "a\x00b"):
+        with pytest.raises(ValueError):
+            manager._get_user_template_path(name)
+
+    assert manager._get_user_template_path("demo").parent == user_dir.resolve()

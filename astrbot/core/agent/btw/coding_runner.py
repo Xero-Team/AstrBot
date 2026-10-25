@@ -20,7 +20,6 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Mapping
-from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -440,8 +439,9 @@ async def _wait_for_exit(
     finally:
         if not waiter.done():
             waiter.cancel()
-            with suppress(asyncio.CancelledError):
-                await asyncio.gather(waiter, return_exceptions=True)
+            # ``return_exceptions=True`` absorbs the waiter's own cancellation
+            # while an outer cancellation still propagates from this await.
+            await asyncio.gather(waiter, return_exceptions=True)
     return STATUS_COMPLETED
 
 

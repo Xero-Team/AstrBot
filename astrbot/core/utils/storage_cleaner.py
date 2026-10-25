@@ -157,7 +157,6 @@ class StorageCleaner:
                 if file_path in active_log_files and not file_path.is_symlink():
                     flags = (
                         os.O_WRONLY
-                        | os.O_TRUNC
                         | getattr(os, "O_NOFOLLOW", 0)
                         | getattr(os, "O_NONBLOCK", 0)
                         | getattr(os, "O_BINARY", 0)
@@ -166,6 +165,7 @@ class StorageCleaner:
                     try:
                         if not stat.S_ISREG(os.fstat(fd).st_mode):
                             raise OSError("not a regular file")
+                        os.ftruncate(fd, 0)
                     finally:
                         os.close(fd)
                     truncated_files += 1

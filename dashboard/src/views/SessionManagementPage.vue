@@ -99,6 +99,7 @@
             :items-length="totalItems"
             :item-value="tableItemValue"
             :is-sender-target="isSenderTarget"
+            :items-per-page-options="[10, 25, 50, 100]"
             @update:options="onTableOptionsUpdate"
             @edit-rule="openRuleEditor"
             @delete-rules="confirmDeleteRules"

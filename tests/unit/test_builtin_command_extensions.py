@@ -1297,6 +1297,8 @@ def test_sender_key_from_token_mints_raw_ids_like_admission():
     assert sender_key_from_token(event, " 99 ") == "im:napcat:bot:99"
     assert sender_key_from_token(event, "im:napcat:bot:other") == "im:napcat:bot:other"
     assert sender_key_from_token(event, "IM:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_key_from_token(event, "im:other:bot:99") is None
+    assert sender_key_from_token(event, "im:napcat:other:99") is None
     assert sender_key_from_token(event, "im:foo") is None
     assert sender_key_from_token(event, "im:napcat:bot:") is None
     assert sender_key_from_token(event, "  ") is None

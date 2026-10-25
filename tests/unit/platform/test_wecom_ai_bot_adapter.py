@@ -549,3 +549,18 @@ async def test_wecom_ai_long_connection_background_dispatch_allows_command_respo
     await asyncio.wait_for(command_finished.wait(), timeout=1.0)
     if client._message_tasks:
         await asyncio.gather(*list(client._message_tasks), return_exceptions=True)
+
+
+def test_stream_caches_are_bounded():
+    adapter = _adapter()
+    adapter._stream_plain_cache = {f"stream-{index}": "text" for index in range(1100)}
+    adapter._stream_image_cache = {
+        f"stream-{index}": ["image"] for index in range(1100)
+    }
+
+    adapter._trim_stream_caches()
+
+    assert len(adapter._stream_plain_cache) == 1024
+    assert len(adapter._stream_image_cache) == 1024
+    assert "stream-0" not in adapter._stream_plain_cache
+    assert "stream-1099" in adapter._stream_plain_cache

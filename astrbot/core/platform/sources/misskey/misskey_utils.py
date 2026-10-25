@@ -401,6 +401,15 @@ def process_at_mention(
     return message_parts, raw_text
 
 
+_MAX_USER_CACHE_ENTRIES = 1024
+
+
+def _bound_user_cache(user_cache: dict[str, Any]) -> None:
+    """Drop the oldest cache entries so long-running adapters stay bounded."""
+    while len(user_cache) > _MAX_USER_CACHE_ENTRIES:
+        user_cache.pop(next(iter(user_cache)))
+
+
 def cache_user_info(
     user_cache: dict[str, Any],
     sender_info: dict[str, Any],
@@ -427,6 +436,7 @@ def cache_user_info(
         }
 
     user_cache[sender_info["sender_id"]] = user_cache_data
+    _bound_user_cache(user_cache)
 
 
 def cache_room_info(
@@ -448,6 +458,7 @@ def cache_room_info(
             "visibility": "specified",
             "visible_user_ids": [bot_self_id],
         }
+        _bound_user_cache(user_cache)
 
 
 async def resolve_component_url_or_path(

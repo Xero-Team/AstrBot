@@ -159,3 +159,15 @@ def test_backup_download_rejects_symlink_escape(tmp_path: Path) -> None:
 
     with pytest.raises(BackupServiceError):
         service.prepare_download(filename="link.zip")
+
+
+def test_backup_task_history_is_bounded(tmp_path: Path) -> None:
+    service = _make_service(tmp_path)
+
+    for index in range(200):
+        service._init_task(f"task-{index}", "export", status="completed")
+
+    assert len(service.backup_tasks) == 128
+    assert len(service.backup_progress) == 128
+    assert "task-0" not in service.backup_tasks
+    assert "task-199" in service.backup_tasks

@@ -1,8 +1,6 @@
 import inspect
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar, cast
-
-T = TypeVar("T")
+from typing import Any, cast
 
 
 async def resolve_maybe_awaitable[T](value: T | Awaitable[T]) -> T:

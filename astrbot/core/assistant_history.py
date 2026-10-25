@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, cast
+from weakref import WeakValueDictionary
 
 from astrbot import logger
 from astrbot.core.agent.history_sanitizer import sanitize_history_for_storage
@@ -21,6 +22,7 @@ from astrbot.core.platform.send_result import DeliveryReceipt
 from astrbot.core.utils.error_redaction import safe_error
 
 _HISTORY_RECEIPT_LIMIT = 256
+_LATEST_SEQUENCE_LIMIT = 4096
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,8 +91,8 @@ class AssistantHistoryCommitter:
     """Serialize final projections so an older snapshot cannot overwrite newer data."""
 
     def __init__(self) -> None:
-        self._locks: dict[str, asyncio.Lock] = {}
-        self._latest_sequence_by_conversation: dict[str, int] = {}
+        self._locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+        self._latest_sequence_by_conversation: OrderedDict[str, int] = OrderedDict()
         self._structure_receipts: OrderedDict[str, tuple[tuple[Any, ...], ...]] = (
             OrderedDict()
         )
@@ -100,6 +102,19 @@ class AssistantHistoryCommitter:
         """Allocate an in-process order token before Agent execution begins."""
         self._sequence += 1
         return self._sequence
+
+    def _prune_latest_sequences(self) -> None:
+        """Drop idle conversation counters while preserving in-flight ordering."""
+        overflow = len(self._latest_sequence_by_conversation) - _LATEST_SEQUENCE_LIMIT
+        if overflow <= 0:
+            return
+        for conversation_id in list(self._latest_sequence_by_conversation):
+            if overflow <= 0:
+                break
+            if conversation_id in self._locks:
+                continue
+            self._latest_sequence_by_conversation.pop(conversation_id, None)
+            overflow -= 1
 
     async def commit(
         self,
@@ -112,6 +127,7 @@ class AssistantHistoryCommitter:
             return False
 
         lock = self._locks.setdefault(pending.conversation_id, asyncio.Lock())
+        self._prune_latest_sequences()
         async with lock:
             previous = self._latest_sequence_by_conversation.get(
                 pending.conversation_id,
@@ -157,6 +173,9 @@ class AssistantHistoryCommitter:
             if pending.sequence:
                 self._latest_sequence_by_conversation[pending.conversation_id] = (
                     pending.sequence
+                )
+                self._latest_sequence_by_conversation.move_to_end(
+                    pending.conversation_id
                 )
             _remember_structure_receipt(
                 self._structure_receipts,

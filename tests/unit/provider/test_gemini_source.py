@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
@@ -793,6 +794,51 @@ def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
     assert provider._stale_http_clients[0] is not provider._http_client
     assert provider.client.api_key == "key-b"
     assert provider.client.http_options.httpx_async_client is provider._http_client
+
+
+@pytest.mark.asyncio
+async def test_gemini_set_key_closes_replaced_clients(monkeypatch):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.request_headers = {}
+    provider.timeout = 30
+    provider.api_base = "https://gemini.example"
+    provider.chosen_api_key = "key-a"
+
+    old_http = SimpleNamespace(aclose=AsyncMock())
+    old_genai = SimpleNamespace(aclose=AsyncMock())
+    provider._http_client = old_http
+    provider.client = old_genai
+    provider._stale_http_clients = []
+    provider._close_tasks = set()
+
+    class FakeAsyncClient:
+        def __init__(self, **_kwargs):
+            self.closed = False
+
+        async def aclose(self):
+            self.closed = True
+
+    class FakeHttpOptions:
+        def __init__(self, **kwargs):
+            self.httpx_async_client = None
+            self.base_url = kwargs["base_url"]
+            self.timeout = kwargs["timeout"]
+
+    class FakeGenAIClient:
+        def __init__(self, *, api_key, http_options):
+            self.aio = SimpleNamespace(api_key=api_key, http_options=http_options)
+
+    monkeypatch.setattr(gemini_source_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(gemini_source_module.types, "HttpOptions", FakeHttpOptions)
+    monkeypatch.setattr(gemini_source_module.genai, "Client", FakeGenAIClient)
+
+    provider.set_key("key-b")
+    await asyncio.gather(*list(provider._close_tasks), return_exceptions=True)
+
+    old_http.aclose.assert_awaited_once()
+    old_genai.aclose.assert_awaited_once()
+    assert provider._close_tasks == set()
 
 
 @pytest.mark.asyncio

@@ -259,6 +259,9 @@ async def _multipart_parts(
         or not isinstance(metadata_values[0], UploadFile)
         or not isinstance(file_values[0], UploadFile)
     ):
+        for _name, value in parts:
+            if isinstance(value, UploadFile):
+                await value.close()
         raise ApiError("Invalid multipart upload", status_code=422)
     metadata_file = metadata_values[0]
     upload = file_values[0]

@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import weakref
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -188,7 +189,7 @@ def test_agent_and_command_types_are_independent_and_persisted(persisted, captur
     assert persisted.flush()
     summary = persisted.list_traces()["traces"][0]
     assert summary["has_commands"] is True and summary["has_models"] is True
-    with sqlite3.connect(persisted.path) as connection:
+    with closing(sqlite3.connect(persisted.path)) as connection, connection:
         summary.pop("has_commands")
         connection.execute(
             "UPDATE traces SET data=? WHERE trace_id=?",
@@ -451,7 +452,7 @@ def test_retention_deletes_whole_traces(persisted, capture):
     for frame in capture:
         assert persisted.append(frame)
     assert persisted.flush(timeout=15), persisted.last_error
-    with sqlite3.connect(persisted.path) as connection:
+    with closing(sqlite3.connect(persisted.path)) as connection, connection:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute(
             "UPDATE traces SET updated_ns=?", (time.time_ns() - 8 * 86400 * 10**9,)
@@ -512,7 +513,7 @@ def test_orphan_cleanup_preserves_live_and_pending_traces(
         lost.record("pipeline_end", status="success")
         assert persisted.dropped == 1
         # Even a finished owner must remain protected until queued frames drain.
-        with sqlite3.connect(persisted.path) as connection:
+        with closing(sqlite3.connect(persisted.path)) as connection, connection:
             persisted._interrupt_inactive(connection)
             assert connection.execute(
                 "SELECT trace_id FROM protected_traces WHERE trace_id=?",
@@ -523,7 +524,7 @@ def test_orphan_cleanup_preserves_live_and_pending_traces(
         assert persisted.flush()
         assert not persisted._pending_traces
         assert lost.trace_id not in persisted._active_traces
-        with sqlite3.connect(persisted.path) as connection:
+        with closing(sqlite3.connect(persisted.path)) as connection, connection:
             persisted._interrupt_inactive(connection)
         detail = persisted.get_trace(lost.trace_id)
         assert detail["trace"]["state"] == "interrupted"
@@ -585,7 +586,7 @@ def test_capacity_prunes_complete_traces_with_cascade(persisted, capture):
             assert persisted.flush()
     assert persisted.flush()
     persisted.config["trace"]["db_max_mb"] = 1
-    with sqlite3.connect(persisted.path) as connection:
+    with closing(sqlite3.connect(persisted.path)) as connection, connection:
         connection.execute("PRAGMA foreign_keys=ON")
         persisted._prune(connection)
         assert connection.execute("PRAGMA max_page_count").fetchone()[0] == 8192
@@ -626,7 +627,7 @@ async def test_background_broker_delivery_is_bounded_and_wakes_reader():
 
 def test_foreign_database_is_not_modified(tmp_path):
     path = tmp_path / "business.db"
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("CREATE TABLE important(value TEXT)")
         connection.execute("INSERT INTO important VALUES ('keep')")
     store = TraceStore(path, {})
@@ -634,7 +635,7 @@ def test_foreign_database_is_not_modified(tmp_path):
         assert store._ready.wait(5)
         assert store._failed
         assert not store.append({})
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection, connection:
             assert connection.execute("SELECT * FROM important").fetchall() == [
                 ("keep",)
             ]
@@ -682,7 +683,7 @@ def test_log_cleanup_protects_databases(tmp_path):
     logs.mkdir()
     for name in ("traces.db", "traces.db-wal", "traces.db-shm", "astrbot.log"):
         (logs / name).write_bytes(b"keep")
-    with sqlite3.connect(logs / "old-custom-name") as connection:
+    with closing(sqlite3.connect(logs / "old-custom-name")) as connection, connection:
         connection.execute("CREATE TABLE important(value TEXT)")
     (logs / "old-custom-name-wal").write_bytes(b"keep")
     cleaner = StorageCleaner(
@@ -762,7 +763,7 @@ def test_trace_usage_and_cleanup_preserve_running_traces(
         assert result["status"]["traces"]["size_bytes"] > 0
         assert result["status"]["logs"]["size_bytes"] == 0
         assert store.list_traces()["total"] == 0
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection, connection:
             for table in ("traces", "spans", "events"):
                 assert (
                     connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]

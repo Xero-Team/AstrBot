@@ -1,6 +1,7 @@
 import asyncio
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
+from weakref import WeakValueDictionary
 
 from astrbot import logger
 from astrbot.core.config.astrbot_config import RateLimitStrategy
@@ -21,7 +22,7 @@ class RateLimitStage(Stage):
         # 存储每个会话的请求时间队列
         self.event_timestamps: defaultdict[str, deque[datetime]] = defaultdict(deque)
         # 为每个会话设置一个锁，避免并发冲突
-        self.locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self.locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         # 限流参数
         self.rate_limit_count: int = 0
         self.rate_limit_time: timedelta = timedelta(0)
@@ -75,7 +76,7 @@ class RateLimitStage(Stage):
 
         umo = event.unified_msg_origin
 
-        async with self.locks[umo]:  # 确保同一会话不会并发修改队列
+        async with self._lock_for(umo):  # 确保同一会话不会并发修改队列
             now = datetime.now()
             # 检查并处理限流，可能需要多次检查直到满足条件
             while True:
@@ -110,6 +111,13 @@ class RateLimitStage(Stage):
                         )
                         break
 
+    def _lock_for(self, session_id: str) -> asyncio.Lock:
+        lock = self.locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self.locks[session_id] = lock
+        return lock
+
     def _prune_idle_sessions(
         self,
         now: datetime,
@@ -120,25 +128,19 @@ class RateLimitStage(Stage):
             empty_sessions = [
                 session_id
                 for session_id, timestamps in self.event_timestamps.items()
-                if not timestamps
-                and session_id != active_session_id
-                and not self.locks.get(session_id, asyncio.Lock()).locked()
+                if not timestamps and session_id != active_session_id
             ]
             for session_id in empty_sessions:
                 self.event_timestamps.pop(session_id, None)
-                self.locks.pop(session_id, None)
             return
 
         idle_sessions = [
             session_id
             for session_id, timestamps in self.event_timestamps.items()
-            if not timestamps
-            and session_id != active_session_id
-            and not self.locks.get(session_id, asyncio.Lock()).locked()
+            if not timestamps and session_id != active_session_id
         ]
         for session_id in idle_sessions:
             self.event_timestamps.pop(session_id, None)
-            self.locks.pop(session_id, None)
             if len(self.event_timestamps) <= self.max_sessions:
                 return
 
@@ -154,7 +156,6 @@ class RateLimitStage(Stage):
             timestamps = self.event_timestamps.get(session_id)
             if timestamps and now - timestamps[-1] > self.rate_limit_time:
                 self.event_timestamps.pop(session_id, None)
-                self.locks.pop(session_id, None)
 
     def _remove_expired_timestamps(
         self,

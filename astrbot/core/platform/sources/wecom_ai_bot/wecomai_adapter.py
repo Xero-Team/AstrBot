@@ -44,6 +44,8 @@ from .wecomai_utils import (
 )
 from .wecomai_webhook import WecomAIBotWebhookClient, WecomAIBotWebhookError
 
+_STREAM_CACHE_MAX_ENTRIES = 1024
+
 
 class WecomAIQueueListener:
     """企业微信智能机器人队列监听器，参考webchat的QueueListener设计"""
@@ -183,6 +185,12 @@ class WecomAIBotAdapter(Platform):
             except WecomAIBotWebhookError as e:
                 logger.error("企业微信消息推送 webhook 配置无效: %s", e)
 
+    def _trim_stream_caches(self) -> None:
+        """Bound caches left behind by streams the client stops polling."""
+        for cache in (self._stream_plain_cache, self._stream_image_cache):
+            while len(cache) > _STREAM_CACHE_MAX_ENTRIES:
+                cache.pop(next(iter(cache)))
+
     async def _handle_queued_message(self, data: dict) -> None:
         """处理队列中的消息，类似webchat的callback"""
         try:
@@ -306,12 +314,15 @@ class WecomAIBotAdapter(Platform):
                 f"Aggregated content: {latest_plain_content}, image: {len(image_base64)}, finish: {finish}",
             )
             if not finish:
+                self._stream_plain_cache.pop(stream_id, None)
                 self._stream_plain_cache[stream_id] = cached_plain_content
                 if image_base64:
+                    self._stream_image_cache.pop(stream_id, None)
                     self._stream_image_cache[stream_id] = [
                         *self._stream_image_cache.get(stream_id, []),
                         *image_base64,
                     ]
+                self._trim_stream_caches()
             else:
                 image_base64 = [
                     *self._stream_image_cache.pop(stream_id, []),

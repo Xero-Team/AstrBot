@@ -169,9 +169,12 @@ class WebChatQueueManager:
             name=f"webchat_listener_{conversation_id}",
         )
         self._listener_tasks[conversation_id] = task
-        task.add_done_callback(
-            lambda _: self._listener_tasks.pop(conversation_id, None)
-        )
+
+        def _listener_done(done: asyncio.Task) -> None:
+            if self._listener_tasks.get(conversation_id) is done:
+                self._listener_tasks.pop(conversation_id, None)
+
+        task.add_done_callback(_listener_done)
         logger.debug(f"Started listener for conversation: {conversation_id}")
 
     async def _listen_to_queue(
@@ -197,8 +200,11 @@ class WebChatQueueManager:
                     continue
                 listener_callback = self._listener_callback
 
-                async def _run_listener_callback() -> None:
-                    await listener_callback(data)
+                async def _run_listener_callback(
+                    payload: tuple = data,
+                    callback: Callable[[tuple], Awaitable[None]] = listener_callback,
+                ) -> None:
+                    await callback(payload)
 
                 task = asyncio.create_task(
                     _run_listener_callback(),

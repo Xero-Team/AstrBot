@@ -294,3 +294,16 @@ def test_memory_confidence_parser_keeps_zero_and_rejects_non_finite():
         MemoryService._parse_confidence(math.inf, 0.6)
     with pytest.raises(MemoryServiceError):
         MemoryService._parse_confidence(10**400, 0.6)
+
+
+def test_memory_refresh_task_history_is_bounded():
+    service = MemoryService.__new__(MemoryService)
+    service.refresh_tasks = {
+        f"task-{index}": {"status": "completed"} for index in range(200)
+    }
+
+    service._prune_refresh_tasks()
+
+    assert len(service.refresh_tasks) == 128
+    assert "task-0" not in service.refresh_tasks
+    assert "task-199" in service.refresh_tasks

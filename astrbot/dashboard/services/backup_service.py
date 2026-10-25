@@ -31,6 +31,8 @@ CHUNK_SIZE = 1024 * 1024
 MAX_BACKUP_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
 MAX_DIRECT_UPLOAD_BYTES = 128 * 1024 * 1024
 _BACKGROUND_TASK_ERROR = "Backup task failed"
+_MAX_TASK_HISTORY = 128
+_ACTIVE_TASK_STATUSES = frozenset({"pending", "processing"})
 
 
 def validate_backup_filename(filename: str | None, *, missing: str) -> str:
@@ -143,6 +145,21 @@ class BackupService:
             "total": 100,
             "message": "",
         }
+        self._prune_task_history()
+
+    def _prune_task_history(self) -> None:
+        """Retain bounded terminal task history for progress polling."""
+        overflow = len(self.backup_tasks) - _MAX_TASK_HISTORY
+        if overflow <= 0:
+            return
+        for task_id, info in list(self.backup_tasks.items()):
+            if overflow <= 0:
+                break
+            if info["status"] in _ACTIVE_TASK_STATUSES:
+                continue
+            self.backup_tasks.pop(task_id, None)
+            self.backup_progress.pop(task_id, None)
+            overflow -= 1
 
     def _set_task_result(
         self,

@@ -318,52 +318,54 @@ class PluginDashboardService:
         upload: UploadFile,
         principal: DashboardSessionPrincipal,
     ) -> dict[str, Any]:
-        instance, snapshot, action = await self._resolve_action(
-            extension_id,
-            action_id,
-            instance_id,
-            expected_generation,
-            DashboardActionKind.UPLOAD,
-            principal,
-        )
-        if _json_size(fields) > MAX_UPLOAD_METADATA_BYTES:
-            raise ApiError("Upload metadata is too large", status_code=413)
-        await self._consume_rate(principal.username, extension_id, "upload")
-        spec = action.spec
-        assert isinstance(spec, DashboardUploadAction)
-        model = self._validate_input(spec.fields_model, fields)
-        filename = (upload.filename or "").strip()
-        if (
-            not filename
-            or len(filename.encode("utf-8")) > MAX_UPLOAD_FILENAME_BYTES
-            or any(
-                character in filename for character in ("\x00", "\r", "\n", "/", "\\")
-            )
-        ):
-            raise ApiError("Invalid upload filename", status_code=422)
-        extension = Path(filename).suffix.lower()
-        if spec.allowed_extensions and extension not in spec.allowed_extensions:
-            raise ApiError("Upload file type is not allowed", status_code=415)
-        content_type = (
-            (upload.content_type or "application/octet-stream")
-            .split(";", 1)[0]
-            .strip()
-            .lower()
-        )
-        if (
-            spec.allowed_content_types
-            and content_type not in spec.allowed_content_types
-        ):
-            raise ApiError("Upload media type is not allowed", status_code=415)
-        limit = min(spec.max_file_bytes, MAX_UPLOAD_FILE_BYTES)
-        temp_root = Path(get_astrbot_temp_path()) / "plugin_dashboard_uploads"
-        temp_root.mkdir(parents=True, exist_ok=True)
-        descriptor, temp_name = tempfile.mkstemp(prefix="upload_", dir=temp_root)
-        os.close(descriptor)
-        temp_path = Path(temp_name)
-        size = 0
-        sample = bytearray()
+        temp_path: Path | None = None
         try:
+            instance, snapshot, action = await self._resolve_action(
+                extension_id,
+                action_id,
+                instance_id,
+                expected_generation,
+                DashboardActionKind.UPLOAD,
+                principal,
+            )
+            if _json_size(fields) > MAX_UPLOAD_METADATA_BYTES:
+                raise ApiError("Upload metadata is too large", status_code=413)
+            await self._consume_rate(principal.username, extension_id, "upload")
+            spec = action.spec
+            assert isinstance(spec, DashboardUploadAction)
+            model = self._validate_input(spec.fields_model, fields)
+            filename = (upload.filename or "").strip()
+            if (
+                not filename
+                or len(filename.encode("utf-8")) > MAX_UPLOAD_FILENAME_BYTES
+                or any(
+                    character in filename
+                    for character in ("\x00", "\r", "\n", "/", "\\")
+                )
+            ):
+                raise ApiError("Invalid upload filename", status_code=422)
+            extension = Path(filename).suffix.lower()
+            if spec.allowed_extensions and extension not in spec.allowed_extensions:
+                raise ApiError("Upload file type is not allowed", status_code=415)
+            content_type = (
+                (upload.content_type or "application/octet-stream")
+                .split(";", 1)[0]
+                .strip()
+                .lower()
+            )
+            if (
+                spec.allowed_content_types
+                and content_type not in spec.allowed_content_types
+            ):
+                raise ApiError("Upload media type is not allowed", status_code=415)
+            limit = min(spec.max_file_bytes, MAX_UPLOAD_FILE_BYTES)
+            temp_root = Path(get_astrbot_temp_path()) / "plugin_dashboard_uploads"
+            temp_root.mkdir(parents=True, exist_ok=True)
+            descriptor, temp_name = tempfile.mkstemp(prefix="upload_", dir=temp_root)
+            os.close(descriptor)
+            temp_path = Path(temp_name)
+            size = 0
+            sample = bytearray()
             with temp_path.open("wb") as destination:
                 while chunk := await upload.read(64 * 1024):
                     size += len(chunk)
@@ -398,7 +400,8 @@ class PluginDashboardService:
             return data
         finally:
             await upload.close()
-            temp_path.unlink(missing_ok=True)
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
 
     async def invoke_file(
         self,

@@ -18,6 +18,7 @@ from astrbot import logger
 from astrbot.core.utils.error_redaction import safe_error
 
 COALESCED = object()
+MAX_CHAT_PACING_ENTRIES = 4096
 
 
 class TelegramDeliveryLimiter:
@@ -49,6 +50,7 @@ class TelegramDeliveryLimiter:
         self._next_global = 0.0
         self._next_chat: dict[str, float] = {}
         self._generations: dict[str, int] = {}
+        self._coalesce_active: dict[str, int] = {}
         self._stats: Counter[str] = Counter()
 
     @classmethod
@@ -100,6 +102,10 @@ class TelegramDeliveryLimiter:
             scheduled = max(now, self._next_global, self._next_chat.get(chat_id, 0.0))
             self._next_global = scheduled + self.global_interval
             self._next_chat[chat_id] = scheduled + self.chat_interval
+            if len(self._next_chat) > MAX_CHAT_PACING_ENTRIES:
+                self._next_chat = {
+                    key: value for key, value in self._next_chat.items() if value > now
+                }
             wait_for = scheduled - now
         if wait_for > 0:
             await self._sleep(wait_for)
@@ -114,64 +120,78 @@ class TelegramDeliveryLimiter:
     ) -> Any:
         """Run one Bot API call under pacing and bounded RetryAfter recovery."""
 
-        key_generation = (
-            self._generations.get(coalesce_key, 0) if coalesce_key is not None else None
-        )
-        started = self._clock()
-        retries = 0
-        while True:
-            if (
-                coalesce_key is not None
-                and self._generations.get(coalesce_key, 0) != key_generation
-            ):
-                self._stats["coalesced"] += 1
-                return COALESCED
-            await self._reserve(str(chat_id))
-            if (
-                coalesce_key is not None
-                and self._generations.get(coalesce_key, 0) != key_generation
-            ):
-                self._stats["coalesced"] += 1
-                return COALESCED
-            try:
-                result = operation()
-                if inspect.isawaitable(result):
-                    result = await result
-                self._stats["sent"] += 1
-                return result
-            except asyncio.CancelledError:
-                self._stats["cancelled"] += 1
-                raise
-            except RetryAfter as error:
-                self._stats["retry_after"] += 1
-                if not retryable or retries >= self.max_retries:
-                    self._stats["retry_exhausted"] += 1
+        coalescing = coalesce_key is not None
+        if coalescing:
+            self._coalesce_active[coalesce_key] = (
+                self._coalesce_active.get(coalesce_key, 0) + 1
+            )
+        try:
+            key_generation = (
+                self._generations.get(coalesce_key, 0) if coalescing else None
+            )
+            started = self._clock()
+            retries = 0
+            while True:
+                if (
+                    coalescing
+                    and self._generations.get(coalesce_key, 0) != key_generation
+                ):
+                    self._stats["coalesced"] += 1
+                    return COALESCED
+                await self._reserve(str(chat_id))
+                if (
+                    coalescing
+                    and self._generations.get(coalesce_key, 0) != key_generation
+                ):
+                    self._stats["coalesced"] += 1
+                    return COALESCED
+                try:
+                    result = operation()
+                    if inspect.isawaitable(result):
+                        result = await result
+                    self._stats["sent"] += 1
+                    return result
+                except asyncio.CancelledError:
+                    self._stats["cancelled"] += 1
                     raise
-                elapsed = self._clock() - started
-                remaining = self.retry_budget - elapsed
-                raw_delay = error.retry_after
-                if isinstance(raw_delay, timedelta):
-                    delay = max(0.0, raw_delay.total_seconds())
+                except RetryAfter as error:
+                    self._stats["retry_after"] += 1
+                    if not retryable or retries >= self.max_retries:
+                        self._stats["retry_exhausted"] += 1
+                        raise
+                    elapsed = self._clock() - started
+                    remaining = self.retry_budget - elapsed
+                    raw_delay = error.retry_after
+                    if isinstance(raw_delay, timedelta):
+                        delay = max(0.0, raw_delay.total_seconds())
+                    else:
+                        delay = max(0.0, float(raw_delay))
+                    if remaining <= 0 or not math.isfinite(delay) or delay > remaining:
+                        self._stats["retry_exhausted"] += 1
+                        raise
+                    retries += 1
+                    self._stats["retried"] += 1
+                    logger.warning(
+                        "[Telegram] delivery rate limited; waiting %.2fs before retry (%s/%s)",
+                        delay,
+                        retries,
+                        self.max_retries,
+                    )
+                    await self._sleep(delay)
+                except Exception as error:
+                    self._stats["failed"] += 1
+                    logger.debug(
+                        "[Telegram] delivery call failed: %s", safe_error("", error)
+                    )
+                    raise
+        finally:
+            if coalescing:
+                remaining_uses = self._coalesce_active.get(coalesce_key, 1) - 1
+                if remaining_uses <= 0:
+                    self._coalesce_active.pop(coalesce_key, None)
+                    self._generations.pop(coalesce_key, None)
                 else:
-                    delay = max(0.0, float(raw_delay))
-                if remaining <= 0 or not math.isfinite(delay) or delay > remaining:
-                    self._stats["retry_exhausted"] += 1
-                    raise
-                retries += 1
-                self._stats["retried"] += 1
-                logger.warning(
-                    "[Telegram] delivery rate limited; waiting %.2fs before retry (%s/%s)",
-                    delay,
-                    retries,
-                    self.max_retries,
-                )
-                await self._sleep(delay)
-            except Exception as error:
-                self._stats["failed"] += 1
-                logger.debug(
-                    "[Telegram] delivery call failed: %s", safe_error("", error)
-                )
-                raise
+                    self._coalesce_active[coalesce_key] = remaining_uses
 
 
 class LimitedTelegramClient:

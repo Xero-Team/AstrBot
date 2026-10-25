@@ -118,7 +118,10 @@ async def upload_skill(
     service: SkillsService = Depends(get_service),
 ):
     await _authorize_skill_collection(request, auth, write=True)
-    return await _run(lambda: service.upload_skill(file))
+    try:
+        return await _run(lambda: service.upload_skill(file))
+    finally:
+        await file.close()
 
 
 @router.post("/skills/batch")
@@ -129,7 +132,11 @@ async def upload_skills_batch(
     service: SkillsService = Depends(get_service),
 ):
     await _authorize_skill_collection(request, auth, write=True)
-    return await _run(lambda: service.batch_upload_skills(files))
+    try:
+        return await _run(lambda: service.batch_upload_skills(files))
+    finally:
+        for file in files:
+            await file.close()
 
 
 @router.get("/skills/{skill_name:path}/archive", responses=_ARCHIVE_RESPONSE)

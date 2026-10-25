@@ -816,14 +816,20 @@ class ProviderOpenAIResponses(Provider):
         if abort_signal is None:
             return await task
         abort = asyncio.create_task(abort_signal.wait())
-        done, _ = await asyncio.wait({task, abort}, return_when=asyncio.FIRST_COMPLETED)
-        if abort in done:
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-            raise asyncio.CancelledError("OpenAI Responses request aborted")
-        abort.cancel()
-        await asyncio.gather(abort, return_exceptions=True)
-        return await task
+        try:
+            done, _ = await asyncio.wait(
+                {task, abort}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if abort in done:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                raise asyncio.CancelledError("OpenAI Responses request aborted")
+            return await task
+        finally:
+            for pending in (task, abort):
+                if not pending.done():
+                    pending.cancel()
+            await asyncio.gather(task, abort, return_exceptions=True)
 
     async def _prepare_state_continuation(
         self,
@@ -1184,15 +1190,17 @@ class ProviderOpenAIResponses(Provider):
                     AsyncIterator[Any],
                     await retry_provider_request(
                         "OpenAI Responses",
-                        lambda: client.responses.retrieve(
-                            replay_response_id,
-                            stream=True,
-                            starting_after=(
-                                state.last_sequence_number
-                                if state.last_sequence_number is not None
-                                else 0
-                            ),
-                            **self._request_extra_headers_kwargs(conversation_id),
+                        lambda replay_response_id=replay_response_id: (
+                            client.responses.retrieve(
+                                replay_response_id,
+                                stream=True,
+                                starting_after=(
+                                    state.last_sequence_number
+                                    if state.last_sequence_number is not None
+                                    else 0
+                                ),
+                                **self._request_extra_headers_kwargs(conversation_id),
+                            )
                         ),
                         max_attempts=kwargs.get("request_max_retries"),
                     ),

@@ -245,19 +245,19 @@ Tool Loop 每完成一次模型调用都会发出 `agent_stats`，包括工具�
 
 静态导入图（含 `TYPE_CHECKING` 边）必须保持无环。少量运行时环是有意保留的：每个环都由函数内惰性导入闭合，因此不会在模块初始化时执行。改动这些路径时，请保留导入处的说明注释。
 
-| 模块对                                                                                             | 惰性导入位置                                        | 为什么安全                                                                      |
-| -------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `astrbot.core.execution_context` ↔ `astr_agent_context`、`astr_agent_tool_exec`、`astr_main_agent` | `execution_context.py` 的 `AgentRequestRunner` 设置 | Agent 模块在模块级导入 `CoreExecutionContext`；运行时只在构造完成后才加载它们。 |
-| `astrbot.core.astr_agent_tool_exec` ↔ `astr_main_agent`                                            | `FunctionToolExecutor` 的转交路径                   | `astr_main_agent` 在模块级导入该执行器。                                        |
-| `astrbot.core.execution_context` ↔ `tools.computer_tools`（含 `fs`、`util`、`message_tools`）      | `execution_context.py` 的本地运行时设置             | 电脑工具导入 `astr_agent_context`，后者又导入执行上下文。                       |
-| `astrbot.core.command.catalog` ↔ `astrbot.core.command.occupancy`                                  | `build_catalog`                                     | `occupancy` 在模块级导入目录模块。                                              |
-| `astrbot.core.command.occupancy` ↔ `astrbot.core.pipeline.turn_router`                             | 前缀校验                                            | 路由器导入命令包，命令包经目录到达 `occupancy`。                                |
-| `astrbot.core.star.star_handler` ↔ `astrbot.core.star.filter.command`                              | Handler 物化                                        | 命令过滤器在模块级导入 Handler 元数据。                                         |
-| `astrbot.core.subagent_orchestrator` ↔ `astrbot.core.astr_agent_context`                           | `reload_from_config`                                | Agent 上下文导入执行上下文，执行上下文的模块作用域到达该编排器。                |
-| `astrbot.core.platform.contracts.onebot` ↔ `astrbot.core.platform.contracts.telegram`              | `get_capability_descriptor`                         | Telegram 适配历史 OneBot 契约模块。                                             |
-| `astrbot.core.db.migrations.doc` ↔ `astrbot.core.db.vec_db.document_storage`                       | `_initial_schema`                                   | 文档存储导入迁移序列模块。                                                      |
-| `astrbot.core.platform.sources.napcat.napcat_platform_adapter` ↔ `...napcat.message_event`         | `create_event`                                      | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
-| `astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter` ↔ `...weixin_oc.weixin_oc_event`       | `create_event`                                      | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
+| 模块对                                                                                             | 惰性导入位置                                                      | 为什么安全                                                                      |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `astrbot.core.execution_context` ↔ `astr_agent_context`、`astr_agent_tool_exec`、`astr_main_agent` | `execution_context.py` 的 `llm_generate` / `tool_loop_agent` 设置 | Agent 模块在模块级导入 `CoreExecutionContext`；运行时只在构造完成后才加载它们。 |
+| `astrbot.core.astr_agent_tool_exec` ↔ `astr_main_agent`                                            | `FunctionToolExecutor` 的转交路径                                 | `astr_main_agent` 在模块级导入该执行器。                                        |
+| `astrbot.core.execution_context` ↔ `tools.computer_tools`（含 `fs`、`util`、`message_tools`）      | `execution_context.py` 的本地运行时设置                           | 电脑工具导入 `astr_agent_context`，后者又导入执行上下文。                       |
+| `astrbot.core.command.catalog` ↔ `astrbot.core.command.occupancy`                                  | `build_command_catalog`                                           | `occupancy` 在模块级导入目录模块。                                              |
+| `astrbot.core.command.occupancy` ↔ `astrbot.core.pipeline.turn_router`                             | 前缀校验                                                          | 路由器导入命令包，命令包经目录到达 `occupancy`。                                |
+| `astrbot.core.star.star_handler` ↔ `astrbot.core.star.filter.command`                              | Handler 物化                                                      | 命令过滤器在模块级导入 Handler 元数据。                                         |
+| `astrbot.core.subagent_orchestrator` ↔ `astrbot.core.astr_agent_context`                           | `reload_from_config`                                              | Agent 上下文导入执行上下文，执行上下文的模块作用域到达该编排器。                |
+| `astrbot.core.platform.contracts.onebot` ↔ `astrbot.core.platform.contracts.telegram`              | `get_capability_descriptor`                                       | Telegram 适配历史 OneBot 契约模块。                                             |
+| `astrbot.core.db.migrations.doc` ↔ `astrbot.core.db.vec_db.document_storage`                       | `_initial_schema`                                                 | 文档存储导入迁移序列模块。                                                      |
+| `astrbot.core.platform.sources.napcat.napcat_platform_adapter` ↔ `...napcat.message_event`         | `create_event`                                                    | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
+| `astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter` ↔ `...weixin_oc.weixin_oc_event`       | `create_event`                                                    | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
 
 ## 统一授权系统
 

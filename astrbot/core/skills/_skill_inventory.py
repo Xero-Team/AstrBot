@@ -24,16 +24,17 @@ def _validate_skill_dir_name(name: str | None) -> str:
 def _resolve_skill_dir(root: str | Path, name: str | None) -> Path:
     """Resolve one skill directory and prove it stays under ``root``.
 
-    ``os.path.realpath`` normalizes ``..`` segments and follows symlinks before
-    the prefix check, so a symlinked skill cannot escape the skills root.
+    Both the joined path and its real path are normalized and prefix-checked, so
+    a symlinked skill cannot escape the skills root.
     """
     skill_name = _validate_skill_dir_name(name)
     root_path = Path(root).resolve(strict=True)
-    skill_dir = root_path / skill_name
+    root_prefix = os.path.join(str(root_path), "")
+    skill_dir = Path(os.path.normpath(root_path / skill_name))
+    if not str(skill_dir).startswith(root_prefix):
+        raise ValueError("Invalid skill path.")
     resolved = os.path.realpath(skill_dir)
-    if resolved == str(root_path) or not resolved.startswith(
-        os.path.join(str(root_path), "")
-    ):
+    if resolved == str(root_path) or not resolved.startswith(root_prefix):
         raise ValueError("Invalid skill path.")
     return skill_dir
 

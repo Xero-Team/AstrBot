@@ -5,7 +5,6 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PROFILE="neo"
 RUN_SYNC=true
 RUN_LINT=true
 RUN_QUALITY=false
@@ -19,9 +18,8 @@ Usage:
   scripts/pr_test_env.sh [options]
 
 Options:
-  --profile <neo|full>  Test profile. Default: neo
   --with-dashboard      Build dashboard before finishing checks
-  --no-dashboard        Disable dashboard build (even for full profile)
+  --no-dashboard        Disable the auto-enabled dashboard build
   --skip-sync           Skip `uv sync`
   --skip-lint           Skip `ruff format --check` and `ruff check`
   --with-quality        Run focused type, security, dependency, and complexity checks
@@ -36,14 +34,6 @@ EOF
 
 while (($# > 0)); do
   case "$1" in
-    --profile)
-      PROFILE="${2:-}"
-      if [[ "$PROFILE" != "neo" && "$PROFILE" != "full" ]]; then
-        echo "Unsupported profile: $PROFILE" >&2
-        exit 1
-      fi
-      shift 2
-      ;;
     --with-dashboard)
       RUN_DASHBOARD=true
       DASHBOARD_MODE="force-on"
@@ -82,11 +72,10 @@ while (($# > 0)); do
   esac
 done
 
-if [[ "$PROFILE" == "full" && "$DASHBOARD_MODE" == "auto" ]]; then
+if [[ "$DASHBOARD_MODE" == "auto" ]]; then
   RUN_DASHBOARD=true
 fi
 
-echo "==> Profile: $PROFILE"
 echo "==> Sync dependencies: $RUN_SYNC"
 echo "==> Run lint: $RUN_LINT"
 echo "==> Run quality checks: $RUN_QUALITY"
@@ -154,22 +143,11 @@ if [[ -n "${PYTEST_ARGS:-}" ]]; then
     python3 -c 'import os, shlex, sys; sys.stdout.buffer.write(b"\0".join(arg.encode() for arg in shlex.split(os.environ["PYTEST_ARGS"])))'
   )
 fi
-if [[ "$PROFILE" == "neo" ]]; then
-  NEO_TESTS=(
-    "tests/unit/test_neo_skill_sync.py"
-    "tests/unit/test_neo_skill_tools.py"
-    "tests/unit/test_computer_skill_sync.py"
-    "tests/unit/test_skill_manager_sandbox_cache.py"
-    "tests/unit/dashboard/test_dashboard.py::test_neo_skills_routes"
-  )
-  uv run pytest -q "${NEO_TESTS[@]}" "${pytest_args[@]}"
-else
-  pytest_cmd=(uv run pytest --cov=astrbot --cov-branch -v)
-  if [[ -n "${PYTEST_DEBUG:-}" ]]; then
-    pytest_cmd+=(-o log_cli=true -o log_level=DEBUG)
-  fi
-  "${pytest_cmd[@]}" "${pytest_args[@]}"
+pytest_cmd=(uv run pytest --cov=astrbot --cov-branch -v)
+if [[ -n "${PYTEST_DEBUG:-}" ]]; then
+  pytest_cmd+=(-o log_cli=true -o log_level=DEBUG)
 fi
+"${pytest_cmd[@]}" "${pytest_args[@]}"
 
 run_smoke_test() {
   if ! command -v curl >/dev/null 2>&1; then

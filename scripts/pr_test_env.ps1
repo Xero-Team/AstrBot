@@ -1,6 +1,4 @@
 param(
-    [ValidateSet("neo", "full")]
-    [string]$TestProfile = "neo",
     [switch]$WithDashboard,
     [switch]$NoDashboard,
     [switch]$SkipSync,
@@ -29,7 +27,7 @@ if ($NoDashboard) {
     $runDashboard = $false
     $dashboardMode = "force-off"
 }
-if ($TestProfile -eq "full" -and $dashboardMode -eq "auto") {
+if ($dashboardMode -eq "auto") {
     $runDashboard = $true
 }
 
@@ -162,7 +160,6 @@ function Run-SmokeTest {
     }
 }
 
-Write-Host "==> Profile: $TestProfile"
 Write-Host "==> Sync dependencies: $runSync"
 Write-Host "==> Run lint: $runLint"
 Write-Host "==> Run quality checks: $runQuality"
@@ -233,24 +230,12 @@ $pytestArgs = [System.Collections.Generic.List[string]]::new()
 $pytestArgs.Add("run")
 $pytestArgs.Add("pytest")
 
-if ($TestProfile -eq "neo") {
-    $pytestArgs.AddRange([string[]]@(
-            "-q",
-            "tests/unit/test_neo_skill_sync.py",
-            "tests/unit/test_neo_skill_tools.py",
-            "tests/unit/test_computer_skill_sync.py",
-            "tests/unit/test_skill_manager_sandbox_cache.py",
-            "tests/unit/dashboard/test_dashboard.py::test_neo_skills_routes"
-        ))
+$pytestCmd = [System.Collections.Generic.List[string]]::new()
+$pytestCmd.AddRange([string[]]@("--cov=astrbot", "--cov-branch", "-v"))
+if (-not [string]::IsNullOrWhiteSpace($env:PYTEST_DEBUG)) {
+    $pytestCmd.AddRange([string[]]@("-o", "log_cli=true", "-o", "log_level=DEBUG"))
 }
-else {
-    $pytestCmd = [System.Collections.Generic.List[string]]::new()
-    $pytestCmd.AddRange([string[]]@("--cov=astrbot", "--cov-branch", "-v"))
-    if (-not [string]::IsNullOrWhiteSpace($env:PYTEST_DEBUG)) {
-        $pytestCmd.AddRange([string[]]@("-o", "log_cli=true", "-o", "log_level=DEBUG"))
-    }
-    $pytestArgs.AddRange($pytestCmd)
-}
+$pytestArgs.AddRange($pytestCmd)
 
 $extraPytestArgs = [string[]](Split-CommandLineArgs -Value $env:PYTEST_ARGS)
 if ($extraPytestArgs -and $extraPytestArgs.Count -gt 0) {

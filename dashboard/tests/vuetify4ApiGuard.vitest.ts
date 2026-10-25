@@ -48,6 +48,20 @@ describe('Vuetify 4 API usage', () => {
     expect(collectMatches(/\bitem\.raw\b/)).toEqual([]);
   });
 
+  it('keeps the T2I preview in a sandboxed opaque origin', () => {
+    const t2iEditor = readSource('src/components/shared/T2ITemplateEditor.vue');
+
+    expect(t2iEditor).toContain('sandbox="allow-scripts"');
+    expect(t2iEditor).not.toContain('allow-same-origin');
+    expect(t2iEditor).toContain('referrerpolicy="no-referrer"');
+    // A sandboxed opaque origin cannot be reloaded through contentWindow.
+    expect(t2iEditor).not.toContain('contentWindow.location');
+    // Remount through a changing key: reassigning an unchanged srcdoc does not
+    // trigger a navigation.
+    expect(t2iEditor).toContain(':key="previewKey"');
+    expect(t2iEditor).not.toContain('frame.srcdoc =');
+  });
+
   it('does not pass props removed in Vuetify 4', () => {
     const app = readSource('src/App.vue');
     const fullLayout = readSource('src/layouts/full/FullLayout.vue');

@@ -861,3 +861,21 @@ async def test_file_edit_still_decodes_escapes_when_the_text_does_not_match(
 
     assert "Replaced" in result or "replaced" in result.lower()
     assert (workspace / "notes.txt").read_text(encoding="utf-8") == "alpha\ngamma\n"
+
+
+def test_grep_whitespace_path_uses_default_scope():
+    tool = fs_tools.GrepTool()
+    umo = "qq:friend:user-1"
+
+    assert tool._normalize_search_paths(
+        " ",
+        restricted=True,
+        local_env=True,
+        umo=umo,
+    ) == [str(root) for root in fs_tools._read_allowed_roots(umo)]
+    assert tool._normalize_search_paths(
+        "\t",
+        restricted=False,
+        local_env=True,
+        umo=umo,
+    ) == [str(fs_tools._workspace_root(umo))]

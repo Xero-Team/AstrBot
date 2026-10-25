@@ -178,7 +178,6 @@ const { tm: t } = useModuleI18n('features/knowledge-base/detail');
 
 const props = defineProps<{
   kbId: string;
-  kbName: string;
 }>();
 
 // 状态
@@ -210,7 +209,6 @@ const performRetrieval = async () => {
   try {
     const response = await knowledgeApi.retrieve(props.kbId, {
       query: query.value,
-      kb_names: [props.kbName],
       top_k: topK.value,
       debug: debugMode.value,
     });

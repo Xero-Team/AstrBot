@@ -967,7 +967,7 @@ export type KnowledgeDocument = {
 export type KnowledgeRetrieveRequest = {
   query: string;
   top_k?: number;
-  score_threshold?: number;
+  debug?: boolean;
 };
 
 export type MemoryFactCreateRequest = {

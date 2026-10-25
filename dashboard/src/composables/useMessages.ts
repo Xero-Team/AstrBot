@@ -989,7 +989,7 @@ export function useMessages(options: UseMessagesOptions) {
     }
 
     const token = localStorage.getItem('token') || '';
-    const ws = new WebSocket(chatApi.unifiedWebSocketUrl(token));
+    const ws = new WebSocket(chatApi.unifiedWebSocketUrl(), ['astrbot', token]);
     chatWebSockets.set(sessionId, ws);
 
     ws.onmessage = (event) => {

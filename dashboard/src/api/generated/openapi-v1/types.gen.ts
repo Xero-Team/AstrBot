@@ -2909,9 +2909,7 @@ export type OpenChatWebSocketData = {
 export type OpenUnifiedChatWebSocketData = {
   body?: never;
   path?: never;
-  query: {
-    token: string;
-  };
+  query?: never;
   url: '/api/v1/unified-chat/ws';
 };
 

@@ -171,10 +171,13 @@ def _evaluate_send_message_tool(config: dict[str, Any]) -> list[dict[str, Any]]:
                         "when `platform[].msg_push_webhook_url` is configured."
                     ),
                 ),
-                BuiltinToolConfigCondition(
-                    key="platform[].msg_push_webhook_url",
-                    operator="truthy",
-                ).evaluate({"platform[]": {"msg_push_webhook_url": webhook}}),
+                _custom_condition(
+                    "platform[].msg_push_webhook_url",
+                    matched=True,
+                    message=(
+                        "The configured webhook is available for proactive messages."
+                    ),
+                ),
             ]
 
         return [

@@ -1222,17 +1222,28 @@ class KnowledgeBaseService:
 
     async def retrieve(self, data: object) -> dict[str, Any]:
         payload = self._payload(data)
-        query = payload.get("query")
-        kb_names = payload.get("kb_names")
-        debug = payload.get("debug", False)
+        query = str(payload.get("query") or "").strip()
+        kb_id = str(payload.get("kb_id") or "").strip()
+        debug = bool(payload.get("debug", False))
 
         if not query:
             raise KnowledgeBaseServiceError("缺少参数 query")
-        kb_manager = self.get_kb_manager()
-        if not kb_names or not isinstance(kb_names, list):
-            raise KnowledgeBaseServiceError("缺少参数 kb_names 或格式错误")
+        if not kb_id:
+            raise KnowledgeBaseServiceError("缺少参数 kb_id")
+        top_k_value = payload.get("top_k", 5)
+        if not isinstance(top_k_value, int) or isinstance(top_k_value, bool):
+            raise KnowledgeBaseServiceError("参数 top_k 格式错误")
+        top_k = max(1, min(top_k_value, 50))
 
-        top_k = payload.get("top_k", 5)
+        kb_manager = self.get_kb_manager()
+        kb_helper = await kb_manager.get_kb(kb_id)
+        if kb_helper is None:
+            raise KnowledgeBaseServiceError("知识库不存在", status_code=404)
+        kb_name = str(kb_helper.kb.kb_name or "").strip()
+        if not kb_name:
+            raise KnowledgeBaseServiceError("知识库名称无效")
+        kb_names = [kb_name]
+
         results = await kb_manager.retrieve(
             query=query,
             kb_names=kb_names,

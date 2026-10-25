@@ -42,13 +42,12 @@ class TestCheckBodyLimit:
             is None
         )
 
-    def test_json_without_content_length_passes(self):
-        assert (
-            _check_body_limit(
-                "/api/v1/chat", None, "application/json", default_limit=DEFAULT_LIMIT
-            )
-            is None
+    def test_json_without_content_length_is_rejected(self):
+        result = _check_body_limit(
+            "/api/v1/chat", None, "application/json", default_limit=DEFAULT_LIMIT
         )
+        assert result is not None
+        assert result[0] == 411
 
     def test_over_default_limit_rejected(self):
         result = _check_body_limit(

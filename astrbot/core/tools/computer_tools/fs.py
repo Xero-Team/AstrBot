@@ -3,9 +3,6 @@
 Tool exposure from the main agent:
 - Local runtime exposes `astrbot_read_file_tool`, `astrbot_file_write_tool`,
   `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
-- Sandbox runtime exposes `astrbot_upload_file`, `astrbot_download_file`,
-  `astrbot_read_file_tool`, `astrbot_file_write_tool`,
-  `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
 
 Authorization uses `tool.file_read` and `tool.file_write`. High-risk writes
 require Dashboard step-up. This module only applies path constraints after
@@ -16,17 +13,13 @@ the authorization service has already allowed the action.
   `data/workspaces/{normalized_umo}`, and temporary directories.
 - Local write/edit: restricted to the workspace and temporary directories.
   Skill catalogs are read-only.
-- Sandbox path boundaries are enforced by the sandbox runtime.
 
 Local path resolution rule:
-- In local runtime, relative paths are resolved under
-  `data/workspaces/{normalized_umo}`.
-- In sandbox runtime, relative paths are passed through unchanged.
+- Relative paths are resolved under `data/workspaces/{normalized_umo}`.
 """
 
 import os
 import stat
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -37,18 +30,14 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
-from astrbot.core.message.components import File, Image
-from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
-    get_astrbot_temp_path,
 )
 
 from ..registry import builtin_tool
 from . import util as computer_util
 from .util import (
-    check_admin_permission,
     check_local_file_permission,
     get_local_permission_policy,
     is_local_runtime,
@@ -57,22 +46,18 @@ from .util import (
 )
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": ("local", "sandbox"),
+    "provider_settings.computer_use_runtime": "local",
 }
-_SANDBOX_RUNTIME_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": "sandbox",
-}
-_IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _remote_basename(path: str) -> str:
-    # Sandbox paths may come from POSIX or Windows runtimes; normalize separators
-    # without interpreting the path against the host filesystem.
+    # Display names may come from POSIX or Windows path spellings; normalize
+    # separators without interpreting the path against the host filesystem.
     return path.replace("\\", "/").rstrip("/").split("/")[-1]
 
 
 def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> list[str]:
-    """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
+    """Labels for the allowed directories in a restricted, non-admin local environment."""
     normalized_umo = normalize_umo_for_workspace(umo)
     labels = [
         "data/skills",
@@ -312,10 +297,7 @@ class FileReadTool(FunctionTool):
                     "Use a file path instead, or use 'astrbot_execute_shell' to list directory contents."
                 )
             offset, limit = self._validate_read_window(offset, limit)
-            sb = await context.context.context.computer_runtime.get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
+            sb = context.context.context.computer_runtime.get_local_booter()
             file_descriptor = None
             if restricted:
                 file_descriptor = open_file_in_allowed_roots(
@@ -396,10 +378,7 @@ class FileWriteTool(FunctionTool):
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
-            sb = await context.context.context.computer_runtime.get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
+            sb = context.context.context.computer_runtime.get_local_booter()
             filesystem = cast(Any, sb.fs)
             file_descriptor = None
             if restricted:
@@ -504,10 +483,7 @@ class FileEditTool(FunctionTool):
             decoded = (_decode_escaped_text(old), _decode_escaped_text(new))
             if decoded != (old, new):
                 attempts.append(decoded)
-            sb = await context.context.context.computer_runtime.get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
+            sb = context.context.context.computer_runtime.get_local_booter()
             filesystem = cast(Any, sb.fs)
             file_descriptor = None
             if restricted:
@@ -670,8 +646,11 @@ class GrepTool(FunctionTool):
         local_env: bool,
         umo: str,
     ) -> list[str]:
+        requested_path = path.strip() if isinstance(path, str) else ""
         normalized = (
-            [_resolve_tool_path(path, local_env=local_env, umo=umo)] if path else []
+            [_resolve_tool_path(requested_path, local_env=local_env, umo=umo)]
+            if requested_path
+            else []
         )
         if not normalized:
             if restricted:
@@ -738,10 +717,7 @@ class GrepTool(FunctionTool):
                 kwargs.get("-C"),
             )
             has_context = (after_context or 0) > 0 or (before_context or 0) > 0
-            sb = await context.context.context.computer_runtime.get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
+            sb = context.context.context.computer_runtime.get_local_booter()
             contents: list[str] = []
             filesystem = cast(Any, sb.fs)
             for search_path in search_paths:
@@ -774,158 +750,3 @@ class GrepTool(FunctionTool):
         except Exception as exc:
             logger.error(f"Error searching files: {exc}")
             return f"Error searching files: {exc}"
-
-
-@builtin_tool(
-    config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",)
-)
-@dataclass
-class FileUploadTool(FunctionTool):
-    name: str = "astrbot_upload_file"
-    description: str = (
-        "Transfer a file FROM the host machine INTO the sandbox so that sandbox "
-        "code can access it. Use this when the user sends/attaches a file and you "
-        "need to process it inside the sandbox. The local_path must point to an "
-        "existing file on the host filesystem."
-    )
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "local_path": {
-                    "type": "string",
-                    "description": "Absolute path to the file on the host filesystem that will be copied into the sandbox.",
-                },
-                # "remote_path": {
-                #     "type": "string",
-                #     "description": "The filename to use in the sandbox. If not provided, file will be saved to the working directory with the same name as the local file.",
-                # },
-            },
-            "required": ["local_path"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        **kwargs: Any,
-    ) -> ToolExecResult:
-        local_path: str = kwargs["local_path"]
-        if permission_error := await check_admin_permission(
-            context, "File upload/download"
-        ):
-            return permission_error
-        sb = await context.context.context.computer_runtime.get_booter(
-            context.context.context,
-            context.context.event.unified_msg_origin,
-        )
-        try:
-            # Check if file exists
-            if not os.path.exists(local_path):
-                return f"Error: File does not exist: {local_path}"
-
-            if not os.path.isfile(local_path):
-                return f"Error: Path is not a file: {local_path}"
-
-            # Use basename if sandbox_filename is not provided
-            remote_path = os.path.basename(local_path)
-
-            # Upload file to sandbox
-            result = await sb.upload_file(local_path, remote_path)
-            logger.debug(f"Upload result: {result}")
-            success = result.get("success", False)
-
-            if not success:
-                return f"Error uploading file: {result.get('message', 'Unknown error')}"
-
-            file_path = result.get("file_path", "")
-            logger.info(f"File {local_path} uploaded to sandbox at {file_path}")
-
-            return f"File uploaded successfully to {file_path}"
-        except Exception as e:
-            logger.error(f"Error uploading file {local_path}: {e}")
-            return f"Error uploading file: {str(e)}"
-
-
-@builtin_tool(
-    config=_SANDBOX_RUNTIME_TOOL_CONFIG, required_actions=("tool.file_write",)
-)
-@dataclass
-class FileDownloadTool(FunctionTool):
-    name: str = "astrbot_download_file"
-    description: str = (
-        "Transfer a file FROM the sandbox OUT to the host and optionally send it "
-        "to the user. Use this ONLY when the user asks to retrieve/export a file "
-        "that was created or modified inside the sandbox."
-    )
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "remote_path": {
-                    "type": "string",
-                    "description": "Path of the file inside the sandbox to copy out to the host.",
-                },
-                "also_send_to_user": {
-                    "type": "boolean",
-                    "description": "Whether to also send the downloaded file to the user via message. Defaults to true.",
-                },
-            },
-            "required": ["remote_path"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        **kwargs: Any,
-    ) -> ToolExecResult:
-        remote_path: str = kwargs["remote_path"]
-        also_send_to_user: bool = kwargs.get("also_send_to_user", True)
-        if permission_error := await check_admin_permission(
-            context, "File upload/download"
-        ):
-            return permission_error
-        sb = await context.context.context.computer_runtime.get_booter(
-            context.context.context,
-            context.context.event.unified_msg_origin,
-        )
-        try:
-            name = _remote_basename(remote_path) or os.path.basename(remote_path)
-
-            local_path = os.path.join(
-                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex}_{name}"
-            )
-
-            # Download file from sandbox
-            await sb.download_file(remote_path, local_path)
-            logger.info(f"File {remote_path} downloaded from sandbox to {local_path}")
-
-            if also_send_to_user:
-                try:
-                    name = _remote_basename(remote_path) or os.path.basename(local_path)
-                    if Path(local_path).suffix.lower() in _IMAGE_FILE_SUFFIXES:
-                        message_component = Image.fromFileSystem(local_path)
-                        sent_as = "image"
-                    else:
-                        message_component = File(name=name, file=local_path)
-                        sent_as = "file"
-                    await context.context.event.send(
-                        MessageChain(chain=[message_component])
-                    )
-                except Exception as e:
-                    logger.error(f"Error sending file message: {e}")
-                    return (
-                        f"File downloaded successfully to {local_path} "
-                        f"but sending to user failed: {e}"
-                    )
-
-                return (
-                    f"File downloaded successfully to {local_path} "
-                    f"and sent to user as {sent_as}."
-                )
-
-            return f"File downloaded successfully to {local_path}"
-        except Exception as e:
-            logger.error(f"Error downloading file {remote_path}: {e}")
-            return f"Error downloading file: {str(e)}"

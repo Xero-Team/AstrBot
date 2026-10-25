@@ -21,6 +21,8 @@ export function loadDiagram({ rendererDir, diagramType, defaultExample, argv = p
   const inputPath = path.resolve(argv[2] || path.join(skillRoot, 'examples', defaultExample));
   const diagram = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
   validateSchema(diagramType, diagram);
+  validateSemanticIds(diagramType, diagram);
+  validateSemanticReferences(diagramType, diagram);
   validateGuidedViews(diagramType, diagram);
   validateRelationshipIds(diagramType, diagram);
   validateEngineeringProfile(diagramType, diagram);
@@ -107,6 +109,66 @@ export function validateRelationshipIds(diagramType, diagram) {
     throwDiagnosticProblems('Relationship identity validation failed', problems, {
       code: 'relationship/duplicate-id',
       subject: { diagramType, collection },
+    });
+  }
+}
+
+// Semantic identity is a cross-entry fact: JSON Schema can only require that
+// an id is a well-formed string. Every renderer builds its node index as a Map,
+// so a duplicate silently replaces the earlier node and a dangling reference
+// silently drops an edge or boundary. Fail in the shared loader instead of
+// leaving the author to diagnose layout symptoms.
+export function validateSemanticIds(diagramType, diagram) {
+  const collection = SEMANTIC_COLLECTIONS[diagramType];
+  const items = collection && Array.isArray(diagram[collection]) ? diagram[collection] : [];
+  const seen = new Set();
+  const problems = [];
+
+  items.forEach((item, index) => {
+    if (seen.has(item.id)) {
+      problems.push(`/${collection}/${index}/id duplicates semantic id ${JSON.stringify(item.id)}`);
+    }
+    seen.add(item.id);
+  });
+
+  if (problems.length) {
+    throwDiagnosticProblems('Semantic identity validation failed', problems, {
+      code: 'semantic/duplicate-id',
+      subject: { diagramType, collection },
+    });
+  }
+}
+
+const SEMANTIC_REFERENCES = {
+  architecture: [
+    { collection: 'boundaries', field: 'wraps', target: 'components', many: true },
+    { collection: 'connections', field: 'from', target: 'components' },
+    { collection: 'connections', field: 'to', target: 'components' },
+  ],
+};
+
+export function validateSemanticReferences(diagramType, diagram) {
+  const rules = SEMANTIC_REFERENCES[diagramType];
+  if (!rules) return;
+  const ids = new Set((diagram[SEMANTIC_COLLECTIONS[diagramType]] || []).map((item) => item.id));
+  const problems = [];
+
+  for (const rule of rules) {
+    const items = Array.isArray(diagram[rule.collection]) ? diagram[rule.collection] : [];
+    items.forEach((item, index) => {
+      const values = rule.many ? item[rule.field] : [item[rule.field]];
+      (Array.isArray(values) ? values : []).forEach((value, valueIndex) => {
+        if (typeof value !== 'string' || ids.has(value)) return;
+        const suffix = rule.many ? `/${valueIndex}` : '';
+        problems.push(`/${rule.collection}/${index}/${rule.field}${suffix} references unknown ${rule.target.slice(0, -1)} id ${JSON.stringify(value)}`);
+      });
+    });
+  }
+
+  if (problems.length) {
+    throwDiagnosticProblems('Semantic reference validation failed', problems, {
+      code: 'semantic/unknown-reference',
+      subject: { diagramType },
     });
   }
 }

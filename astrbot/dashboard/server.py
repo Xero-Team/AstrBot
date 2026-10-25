@@ -31,14 +31,6 @@ from astrbot.dashboard.services.config_service import MAX_FILE_BYTES
 
 from .api.app import create_dashboard_asgi_app
 
-try:
-    from python_multipart.multipart import parse_options_header
-except ImportError:  # pragma: no cover
-    try:
-        from multipart.multipart import parse_options_header
-    except ImportError:
-        parse_options_header = None
-
 _MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 _BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
     ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
@@ -98,12 +90,7 @@ def _check_body_limit(
     if content_length is None:
         if method not in _BODY_METHODS:
             return None
-        media_type = (
-            parse_options_header(content_type)[0] if parse_options_header else b""
-        )
-        if media_type == b"multipart/form-data":
-            return 411, "Content-Length header is required for uploads"
-        return None
+        return 411, "Content-Length header is required for request bodies"
     limit = default_limit
     if "/config-files" in path:
         limit = MAX_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES
@@ -555,23 +542,20 @@ class AstrBotDashboard:
         )
 
         if not cert_file or not key_file:
-            logger.warning(
-                "dashboard.ssl.enable is set, but cert_file or key_file is missing. SSL disabled.",
+            raise RuntimeError(
+                "dashboard.ssl.enable is set, but cert_file or key_file is missing"
             )
-            return False, {}
 
         cert_path = Path(cert_file).expanduser()
         key_path = Path(key_file).expanduser()
         if not cert_path.is_file():
-            logger.warning(
-                f"dashboard.ssl.enable is set, but cert file is missing: {cert_path}. SSL disabled.",
+            raise RuntimeError(
+                f"dashboard.ssl.enable is set, but cert file is missing: {cert_path}"
             )
-            return False, {}
         if not key_path.is_file():
-            logger.warning(
-                f"dashboard.ssl.enable is set, but key file is missing: {key_path}. SSL disabled.",
+            raise RuntimeError(
+                f"dashboard.ssl.enable is set, but key file is missing: {key_path}"
             )
-            return False, {}
 
         resolved_ssl_config = {
             "certfile": str(cert_path.resolve()),
@@ -581,10 +565,10 @@ class AstrBotDashboard:
         if ca_certs:
             ca_path = Path(ca_certs).expanduser()
             if not ca_path.is_file():
-                logger.warning(
-                    f"dashboard.ssl.enable is set, but CA cert file is missing: {ca_path}. SSL disabled.",
+                raise RuntimeError(
+                    "dashboard.ssl.enable is set, but CA cert file is missing: "
+                    f"{ca_path}"
                 )
-                return False, {}
             resolved_ssl_config["ca_certs"] = str(ca_path.resolve())
 
         return True, resolved_ssl_config
@@ -612,6 +596,9 @@ class AstrBotDashboard:
             or dashboard_config.get("host", "127.0.0.1")
         )
         enable = dashboard_config.get("enable", True)
+        if not enable:
+            logger.info("WebUI disabled.")
+            return None
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
             ssl_config = {}
@@ -626,10 +613,6 @@ class AstrBotDashboard:
                 ssl_config,
             )
         scheme = "https" if ssl_enable else "http"
-
-        if not enable:
-            logger.info("WebUI disabled.")
-            return None
 
         logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == str(ipaddress.IPv4Address(0)):

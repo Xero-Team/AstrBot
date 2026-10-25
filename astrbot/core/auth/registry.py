@@ -118,6 +118,7 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.mcp_write": _INSTANCE_AND_ABOVE,
     "tool.computer_use": _INSTANCE_AND_ABOVE,
     "tool.web_search": _SESSION_AND_ABOVE,
+    "tool.kb_read": _SESSION_AND_ABOVE,
     "tool.session_history": _SESSION_AND_ABOVE,
     "tool.memory_read": _SESSION_AND_ABOVE,
     "tool.memory_write": _SESSION_OWNER_AND_ABOVE,
@@ -400,9 +401,6 @@ def dashboard_api_capability_specs(
         collection = Resource.named("skill", "collection")
         specs.append(("extension.read", collection.type, collection.id))
         specs.append(("extension.manage", collection.type, collection.id))
-        for neo_collection in ("neo-candidates", "neo-releases"):
-            named = Resource.named("skill", neo_collection)
-            specs.append(("extension.read", named.type, named.id))
     return tuple(dict.fromkeys(specs))
 
 

@@ -80,6 +80,36 @@ def _validate_config_route_ids(config_ids: set[str]) -> None:
             raise ApiError("Invalid config id", status_code=400) from exc
 
 
+async def _authorize_config_route_targets(
+    request: Request,
+    auth: AuthContext,
+    config_ids: set[str],
+    *,
+    tolerate_invalid: bool = False,
+) -> None:
+    for config_id in config_ids:
+        if config_id == "default":
+            continue
+        try:
+            await _authorize_config_resource(
+                request,
+                auth,
+                config_id=config_id,
+                write=True,
+            )
+        except AuthorizationValueError:
+            if tolerate_invalid:
+                continue
+            raise ApiError("Invalid config id", status_code=400) from None
+
+
+def _persisted_config_route_targets(service: ConfigRoutingService) -> set[str]:
+    routing = service.list_routes().get("routing", {})
+    if not isinstance(routing, dict):
+        return set()
+    return {value for value in routing.values() if isinstance(value, str)}
+
+
 async def _can_read_config(
     request: Request,
     auth: AuthContext,
@@ -328,7 +358,18 @@ async def replace_config_routes(
     service: ConfigRoutingService = Depends(get_routing_service),
 ):
     await _authorize_config_route_collection(request, auth, write=True)
-    _validate_config_route_ids(set(payload.routing.values()))
+    new_targets = set(payload.routing.values())
+    _validate_config_route_ids(new_targets)
+    await _authorize_config_route_targets(request, auth, new_targets)
+    # Replacing the mapping can remove routes from profiles the caller must not
+    # modify, so authorize the targets that the replacement unbinds as well.
+    removed_targets = _persisted_config_route_targets(service) - new_targets
+    await _authorize_config_route_targets(
+        request,
+        auth,
+        removed_targets,
+        tolerate_invalid=True,
+    )
     await service.replace_route_mapping(payload.routing)
     return ok(message="更新成功")
 
@@ -343,6 +384,16 @@ async def upsert_config_route(
 ):
     await _authorize_config_route_collection(request, auth, write=True)
     _validate_config_route_ids({payload.config_id})
+    await _authorize_config_route_targets(request, auth, {payload.config_id})
+    current_config_id = service.list_routes().get("routing", {}).get(umo)
+    if isinstance(current_config_id, str) and current_config_id != payload.config_id:
+        # Rebinding a session removes its previous profile binding.
+        await _authorize_config_route_targets(
+            request,
+            auth,
+            {current_config_id},
+            tolerate_invalid=True,
+        )
     await service.set_route(umo, payload.config_id)
     return ok(message="更新成功")
 
@@ -355,5 +406,15 @@ async def delete_config_route(
     service: ConfigRoutingService = Depends(get_routing_service),
 ):
     await _authorize_config_route_collection(request, auth, write=True)
+    current_config_id = service.list_routes().get("routing", {}).get(umo)
+    if isinstance(current_config_id, str):
+        # Persisted routing data may predate route-id validation. Deleting a
+        # mapping whose target id is malformed cannot affect any profile.
+        await _authorize_config_route_targets(
+            request,
+            auth,
+            {current_config_id},
+            tolerate_invalid=True,
+        )
     await service.delete_route_by_umo(umo)
     return ok(message="删除成功")

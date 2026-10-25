@@ -706,27 +706,6 @@ def _log_computer_config_changes(
                     new_value,
                 )
 
-    old_sandbox = old_ps.get("sandbox", {})
-    new_sandbox = new_ps.get("sandbox", {})
-    all_keys = set(old_sandbox.keys()) | set(new_sandbox.keys())
-    for key in sorted(all_keys):
-        old_val = old_sandbox.get(key)
-        new_val = new_sandbox.get(key)
-        if old_val == new_val:
-            continue
-        if "token" in key or "secret" in key:
-            old_display = "***" if old_val else "(empty)"
-            new_display = "***" if new_val else "(empty)"
-        else:
-            old_display = old_val
-            new_display = new_val
-        log_info(
-            "[Computer] Config changed: sandbox.%s %s -> %s",
-            key,
-            old_display,
-            new_display,
-        )
-
 
 def _get_nested_value(data: dict, path: tuple[str, ...]) -> Any:
     current = data
@@ -756,48 +735,6 @@ def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
         if posted != _get_nested_value(old_config, path):
             return True
     return False
-
-
-async def _validate_neo_connectivity(post_config: dict) -> str | None:
-    ps = post_config.get("provider_settings", {})
-    runtime = ps.get("computer_use_runtime", "none")
-    sandbox = ps.get("sandbox", {})
-    booter = sandbox.get("booter", "")
-
-    if runtime != "sandbox" or booter != "shipyard_neo":
-        return None
-
-    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
-    if not endpoint:
-        return "⚠️ Shipyard Neo endpoint 未设置"
-
-    access_token = sandbox.get("shipyard_neo_access_token", "")
-    if not access_token:
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
-
-        access_token = _discover_bay_credentials(endpoint)
-
-    if not access_token:
-        return (
-            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
-            "或确保 Bay 的 credentials.json 可被自动发现。"
-        )
-
-    from astrbot.core.utils.outbound_http import (
-        SHIPYARD_NEO_HEALTH,
-        fetch_text,
-    )
-
-    health_url = f"{endpoint}/health"
-    try:
-        status, _body, _headers = await fetch_text(health_url, SHIPYARD_NEO_HEALTH)
-    except Exception:
-        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
-
-    if status != 200:
-        return f"⚠️ Bay 健康检查失败 (HTTP {status})，请确认 Bay 正在运行: {endpoint}"
-
-    return None
 
 
 async def save_config_async(
@@ -1053,9 +990,6 @@ class ConfigProfileService:
             if booter is not None and isinstance(booter.shell, LocalShellComponent):
                 await booter.shell.shutdown_sessions(invalid_only=True)
         await self.core_control.reload_pipeline_scheduler(config_id)
-        warning = await _validate_neo_connectivity(config)
-        if warning:
-            return f"保存成功。{warning}"
         return "保存成功~"
 
     async def _verify_config_2fa(
@@ -1202,7 +1136,9 @@ class ConfigDisplayService:
                 continue
             if not plugin_md.config:
                 break
-            result["config"] = plugin_md.config
+            result["config"] = _redact_sensitive_config(
+                copy.deepcopy(dict(plugin_md.config))
+            )
             result["metadata"] = {
                 plugin_name: {
                     "description": f"{plugin_name} 配置",
@@ -1371,6 +1307,8 @@ class ConfigFileService:
             previous = copy.deepcopy(dict(metadata.config))
         except TypeError, ValueError:
             previous = None
+        if previous is not None:
+            _restore_redacted_sensitive_config(post_configs, previous)
         committed = await metadata.config.save_config_async(post_configs)
         _require_config_save_commit(committed)
         try:
@@ -1593,14 +1531,14 @@ class BotConfigService:
                 continue
             if type_ and bot.get("type") != type_:
                 continue
-            bots.append(copy.deepcopy(bot))
+            bots.append(_redact_sensitive_config(bot))
         return {"bots": bots}
 
     def get_bot(self, bot_id: str) -> dict:
         bot = self._find_bot(bot_id)
         if bot is None:
             raise DashboardValidationError(f"Bot {bot_id} not found")
-        return {"bot": copy.deepcopy(bot)}
+        return {"bot": _redact_sensitive_config(bot)}
 
     def get_bot_stats(self) -> dict:
         return self.platform_manager.get_all_stats()
@@ -1621,18 +1559,25 @@ class BotConfigService:
     async def update_bot(self, bot_id: str, config: dict) -> None:
         if config.get("id") != bot_id:
             raise DashboardValidationError("Bot id cannot be changed")
-        ensure_platform_webhook_config(config)
+        current_bot = self._find_bot(bot_id)
+        if current_bot is None:
+            raise DashboardValidationError(f"Bot {bot_id} not found")
+
+        restored = copy.deepcopy(config)
+        _restore_redacted_sensitive_config(restored, current_bot)
+        ensure_platform_webhook_config(restored)
+
         next_config = copy.deepcopy(dict(self.config))
         for idx, bot in enumerate(next_config.get("platform", [])):
             if bot.get("id") == bot_id:
-                next_config["platform"][idx] = copy.deepcopy(config)
+                next_config["platform"][idx] = copy.deepcopy(restored)
                 committed = await save_config_async(
                     next_config,
                     self.config,
                     is_core=True,
                 )
                 _require_config_save_commit(committed)
-                await self.platform_manager.reload(config)
+                await self.platform_manager.reload(restored)
                 return
         raise DashboardValidationError(f"Bot {bot_id} not found")
 

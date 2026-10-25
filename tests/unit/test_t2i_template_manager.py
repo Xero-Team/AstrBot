@@ -78,3 +78,35 @@ def test_builtin_base_template_stays_offline():
     assert "{{ rendered_html | safe }}" in content
     assert "markdown-source" not in content
     assert "marked.min.js" not in content
+
+
+def test_internal_help_template_is_not_selectable_for_generic_rendering():
+    from astrbot.core.utils.t2i.template_manager import public_template_name
+
+    assert public_template_name("astrbot_help") == "base"
+    assert public_template_name("AstrBot_Help") == "base"
+    assert public_template_name(" ASTRBOT_HELP ") == "base"
+    assert public_template_name("custom") == "custom"
+    assert public_template_name(None) == "base"
+
+
+@pytest.mark.asyncio
+async def test_t2i_service_rejects_internal_template_as_active():
+    from astrbot.dashboard.services.t2i_service import T2iService, T2iServiceError
+
+    service = T2iService.__new__(T2iService)
+
+    for name in ("astrbot_help", "AstrBot_Help", " ASTRBOT_HELP "):
+        with pytest.raises(T2iServiceError):
+            await service.set_active_template(name)
+
+
+def test_user_template_path_rejects_drive_relative_and_dot_names(template_paths):
+    _, user_dir = template_paths
+    manager = TemplateManager()
+
+    for name in ("", ".", "..", "C:foo", "a/b", "a\\b", "a\x00b"):
+        with pytest.raises(ValueError):
+            manager._get_user_template_path(name)
+
+    assert manager._get_user_template_path("demo").parent == user_dir.resolve()

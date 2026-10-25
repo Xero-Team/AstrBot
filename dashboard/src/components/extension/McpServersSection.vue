@@ -546,6 +546,7 @@ import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.v
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
 import FloatingActionStack from '@/components/ui/FloatingActionStack.vue';
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
+import { safeHttpUrl } from '@/utils/safeUrl';
 import { stepUpHeaders } from '@/utils/stepUp';
 import {
   askForConfirmation as askForConfirmationDialog,
@@ -803,7 +804,12 @@ async function startAuthorization(server: McpServerItem) {
     });
     const data = response.data.data;
     if (isRecord(data) && typeof data.authorization_url === 'string') {
-      window.open(data.authorization_url, '_blank', 'noopener,noreferrer');
+      const safeUrl = safeHttpUrl(data.authorization_url);
+      if (!safeUrl) {
+        showError(tm('mcpServers.auth.invalidUrl'));
+        return;
+      }
+      window.open(safeUrl, '_blank', 'noopener,noreferrer');
       return;
     }
     showMessage(tm('mcpServers.auth.pending'), 'success');

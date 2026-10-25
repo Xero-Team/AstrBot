@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from astrbot.core.skills._skill_frontmatter import (
     SkillFrontmatter,
@@ -16,12 +16,7 @@ from astrbot.core.skills._skill_fs import (
     list_regular_skill_files,
     read_nofollow_capped,
 )
-from astrbot.core.skills._skill_inventory import (
-    SANDBOX_WORKSPACE_ROOT,
-    SkillInfo,
-    _default_sandbox_skill_path,
-    _normalize_cached_sandbox_skill_path,
-)
+from astrbot.core.skills._skill_inventory import SkillInfo
 
 SKILL_SNAPSHOT_EXTRA_KEY = "skill_snapshot"
 PROMPT_TOOLS_EXTRA_KEY = "prompt_tools"
@@ -38,7 +33,6 @@ class FrozenSkill:
     description: str
     declared_tools: tuple[str, ...]
     plugin_name: str = ""
-    host_readable: bool = True
     skill_markdown: str | None = None
     file_bodies: tuple[tuple[str, str], ...] = ()
 
@@ -55,7 +49,6 @@ class FrozenSkill:
 class SkillSnapshot:
     skills: tuple[FrozenSkill, ...]
     runtime: str
-    sandbox_root: str = SANDBOX_WORKSPACE_ROOT
 
     def get(self, name: str) -> FrozenSkill | None:
         for skill in self.skills:
@@ -79,7 +72,6 @@ def freeze_skill_snapshot(
     skills: Sequence[SkillInfo],
     *,
     runtime: str,
-    sandbox_root: str = SANDBOX_WORKSPACE_ROOT,
 ) -> SkillSnapshot:
     """Freeze the enabled Skill set for one request.
 
@@ -92,74 +84,10 @@ def freeze_skill_snapshot(
         if skill.name in seen:
             continue
         seen.add(skill.name)
-        frozen_skill = _freeze_one_skill(
-            skill,
-            runtime=runtime,
-            sandbox_root=sandbox_root,
-        )
+        frozen_skill = _freeze_host_skill(skill)
         if frozen_skill is not None:
             frozen.append(frozen_skill)
-    return SkillSnapshot(
-        skills=tuple(frozen),
-        runtime=runtime,
-        sandbox_root=sandbox_root,
-    )
-
-
-def _freeze_one_skill(
-    skill: SkillInfo,
-    *,
-    runtime: str,
-    sandbox_root: str,
-) -> FrozenSkill | None:
-    if _uses_sandbox_copy(skill, runtime):
-        return _freeze_sandbox_skill(skill, sandbox_root=sandbox_root)
-    return _freeze_host_skill(skill)
-
-
-def _uses_sandbox_copy(skill: SkillInfo, runtime: str) -> bool:
-    if runtime != "sandbox":
-        return False
-    return skill.source_type in {"sandbox_only", "both"} or skill.sandbox_exists
-
-
-def _freeze_sandbox_skill(
-    skill: SkillInfo,
-    *,
-    sandbox_root: str,
-) -> FrozenSkill | None:
-    runtime_copy = _validated_sandbox_skill_path(
-        skill.name,
-        skill.path,
-        sandbox_root=sandbox_root,
-    )
-    if runtime_copy is None:
-        return None
-    root = str(PurePosixPath(runtime_copy).parent)
-    frontmatter = _host_frontmatter_if_available(skill)
-    declared_tools = (
-        frontmatter.tools if frontmatter is not None else skill.declared_tools
-    )
-    description = (
-        frontmatter.description
-        if frontmatter is not None and frontmatter.description
-        else skill.description
-    )
-    identity = _sandbox_identity(skill, runtime_copy, declared_tools)
-    return FrozenSkill(
-        name=skill.name,
-        source_type=skill.source_type,
-        source_label=skill.source_label,
-        resolved_root=root,
-        runtime_copy=runtime_copy,
-        identity=identity,
-        description=description,
-        declared_tools=tuple(declared_tools),
-        plugin_name=skill.plugin_name,
-        host_readable=False,
-        skill_markdown=None,
-        file_bodies=(),
-    )
+    return SkillSnapshot(skills=tuple(frozen), runtime=runtime)
 
 
 def _freeze_host_skill(skill: SkillInfo) -> FrozenSkill | None:
@@ -197,7 +125,6 @@ def _freeze_host_skill(skill: SkillInfo) -> FrozenSkill | None:
         description=description,
         declared_tools=tuple(declared_tools),
         plugin_name=skill.plugin_name,
-        host_readable=True,
         skill_markdown=text or None,
         file_bodies=bodies,
     )
@@ -223,65 +150,5 @@ def _freeze_host_skill_files(root: Path) -> tuple[tuple[str, str], ...]:
     return tuple(bodies)
 
 
-def _host_frontmatter_if_available(skill: SkillInfo) -> SkillFrontmatter | None:
-    if not skill.local_exists:
-        return None
-    path = Path(skill.host_path or skill.path)
-    if path.name != "SKILL.md":
-        return None
-    try:
-        root = path.parent.resolve()
-        if not root.is_dir() or root.is_symlink():
-            return None
-        text = read_nofollow_capped(root, "SKILL.md")
-    except OSError:
-        return None
-    return parse_skill_frontmatter(text)
-
-
-def _sandbox_identity(
-    skill: SkillInfo,
-    runtime_copy: str,
-    declared_tools: Iterable[str],
-) -> str:
-    payload = "\n".join(
-        (
-            skill.name,
-            skill.source_type,
-            runtime_copy,
-            skill.description,
-            ",".join(declared_tools),
-        )
-    )
-    return _digest(payload.encode("utf-8"))
-
-
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def _validated_sandbox_skill_path(
-    name: str,
-    path: str,
-    *,
-    sandbox_root: str,
-) -> str | None:
-    normalized = _normalize_cached_sandbox_skill_path(name, path)
-    if not _sandbox_path_under_root(normalized, sandbox_root):
-        fallback = _default_sandbox_skill_path(name)
-        if not _sandbox_path_under_root(fallback, sandbox_root):
-            return None
-        return fallback
-    return normalized
-
-
-def _sandbox_path_under_root(path: str, sandbox_root: str) -> bool:
-    pure = PurePosixPath(path)
-    root = PurePosixPath(sandbox_root)
-    if ".." in pure.parts or ".." in root.parts:
-        return False
-    try:
-        pure.relative_to(root)
-    except ValueError:
-        return False
-    return True

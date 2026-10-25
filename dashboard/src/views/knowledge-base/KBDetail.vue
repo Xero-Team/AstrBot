@@ -179,7 +179,7 @@
 
         <!-- 知识库检索 -->
         <v-window-item value="retrieval">
-          <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name || ''" />
+          <RetrievalTab :kb-id="kbId" />
         </v-window-item>
 
         <!-- 设置 -->

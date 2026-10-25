@@ -11,6 +11,15 @@ from .reply import reply_i18n
 _SESSION_SERVICE_CONFIG_KEY = "session_service_config"
 
 
+def _event_sender_scope(event: AstrMessageEvent) -> tuple[str, str]:
+    platform_id = event.get_platform_id()
+    if not (isinstance(platform_id, str) and platform_id.strip()):
+        name = event.get_platform_name()
+        platform_id = name if isinstance(name, str) and name.strip() else "unknown"
+    bot_id = str(event.get_self_id() or "").strip() or "default"
+    return platform_id, bot_id
+
+
 def sender_key_from_token(event: AstrMessageEvent, token: str) -> str | None:
     """Mint a sender overlay key from a raw sender id or a full ``im:`` id.
 
@@ -25,16 +34,33 @@ def sender_key_from_token(event: AstrMessageEvent, token: str) -> str | None:
     sender_id = token.strip()
     if not sender_id:
         return None
+    platform_id, bot_id = _event_sender_scope(event)
     if sender_id.lower().startswith("im:"):
+        parts = sender_id.split(":", 3)
+        if len(parts) != 4:
+            return None
+        try:
+            # Compare canonical subject components: platform and bot ids that
+            # are not plain identifiers are base64-encoded by ``Subject.im``.
+            token_subject = Subject.im(
+                platform_instance=parts[1].strip(),
+                bot_account_id=parts[2].strip(),
+                sender_id=parts[3].strip(),
+            )
+            event_subject = Subject.im(
+                platform_instance=platform_id,
+                bot_account_id=bot_id,
+                sender_id=parts[3].strip(),
+            )
+        except ValueError:
+            return None
+        if token_subject.id != event_subject.id:
+            return None
         return sender_admission_key_from_id(sender_id)
-    platform_id = event.get_platform_id()
-    if not (isinstance(platform_id, str) and platform_id.strip()):
-        name = event.get_platform_name()
-        platform_id = name if isinstance(name, str) and name.strip() else "unknown"
     try:
         return Subject.im(
             platform_instance=platform_id,
-            bot_account_id=str(event.get_self_id() or "").strip() or "default",
+            bot_account_id=bot_id,
             sender_id=sender_id,
         ).id
     except ValueError:

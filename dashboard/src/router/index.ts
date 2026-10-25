@@ -39,11 +39,12 @@ router.beforeEach(async (to, from) => {
     return '/welcome';
   }
 
-  if (to.matched.some((record) => record.meta.requiresAuth)) {
-    if (authRequired && !auth.has_token()) {
-      auth.returnUrl = to.fullPath;
-      return '/auth/login';
-    }
+  const explicitlyPublic = to.matched.some(
+    (record) => record.meta.requiresAuth === false,
+  );
+  if (authRequired && !explicitlyPublic && !auth.has_token()) {
+    auth.returnUrl = to.fullPath;
+    return '/auth/login';
   }
 });
 

@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
@@ -869,15 +870,55 @@ async def test_retrieve_rejects_invalid_request_shapes():
     service = _make_service()
 
     with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 query"):
-        await service.retrieve({"kb_names": ["demo"]})
+        await service.retrieve({"kb_id": "demo"})
 
-    with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 kb_names 或格式错误"):
-        await service.retrieve({"query": "astrbot", "kb_names": "demo"})
+    with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 kb_id"):
+        await service.retrieve({"query": "astrbot"})
+
+
+@pytest.mark.asyncio
+async def test_retrieve_uses_path_kb_id_and_ignores_body_kb_names():
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(
+        return_value=SimpleNamespace(kb=SimpleNamespace(kb_name="kb-a-name"))
+    )
+    kb_manager.retrieve = AsyncMock(return_value=None)
+    service = _make_service(kb_manager=kb_manager)
+
+    await service.retrieve({"query": "astrbot", "kb_id": "kb-a", "kb_names": ["kb-b"]})
+
+    kb_manager.get_kb.assert_awaited_once_with("kb-a")
+    kb_manager.retrieve.assert_awaited_once_with(
+        query="astrbot",
+        kb_names=["kb-a-name"],
+        top_m_final=5,
+    )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_clamps_top_k():
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(
+        return_value=SimpleNamespace(kb=SimpleNamespace(kb_name="demo"))
+    )
+    kb_manager.retrieve = AsyncMock(return_value=None)
+    service = _make_service(kb_manager=kb_manager)
+
+    await service.retrieve({"query": "astrbot", "kb_id": "kb-1", "top_k": 999})
+
+    kb_manager.retrieve.assert_awaited_once_with(
+        query="astrbot",
+        kb_names=["demo"],
+        top_m_final=50,
+    )
 
 
 @pytest.mark.asyncio
 async def test_retrieve_redacts_debug_visualization_errors(monkeypatch):
     kb_manager = MagicMock(retrieve=AsyncMock(return_value=None))
+    kb_manager.get_kb = AsyncMock(
+        return_value=SimpleNamespace(kb=SimpleNamespace(kb_name="demo"))
+    )
     service = _make_service(kb_manager=kb_manager)
     sensitive_error = (
         "api_key=top-secret Bearer token-123 password=dashboard-password "
@@ -905,7 +946,7 @@ async def test_retrieve_redacts_debug_visualization_errors(monkeypatch):
     )
 
     result = await service.retrieve(
-        {"query": "astrbot", "kb_names": ["demo"], "top_k": 3, "debug": True}
+        {"query": "astrbot", "kb_id": "kb-1", "top_k": 3, "debug": True}
     )
 
     assert result == {

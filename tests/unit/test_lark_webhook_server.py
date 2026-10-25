@@ -189,6 +189,13 @@ async def test_lark_webhook_signature_accepts_and_rejects():
     )
     assert rejected == ({"error": "Invalid signature"}, 401)
 
+    replayed = await server.handle_callback(
+        _FakeRequest(
+            body=body, event_data={"type": "event_callback"}, headers=valid_headers
+        )
+    )
+    assert replayed == ({"error": "Replay detected"}, 401)
+
 
 @pytest.mark.asyncio
 async def test_lark_webhook_rejects_stale_and_invalid_timestamps():
@@ -268,6 +275,8 @@ async def test_lark_webhook_accepts_matching_verification_token():
         event_queue=SimpleNamespace(),
     )
 
+    # Feishu does not send signature headers unless Encrypt Key is configured,
+    # so a verification-token-only deployment must work without them.
     accepted = await server.handle_callback(
         _FakeRequest(
             body=b"{}",
@@ -329,6 +338,10 @@ async def test_lark_webhook_treats_non_ascii_credentials_as_mismatch():
             event_data={
                 "type": "event_callback",
                 "header": {"token": "令牌"},
+            },
+            headers={
+                "X-Lark-Request-Timestamp": str(int(time.time())),
+                "X-Lark-Request-Nonce": "non-ascii-token-nonce",
             },
         )
     )

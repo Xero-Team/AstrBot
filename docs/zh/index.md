@@ -23,7 +23,7 @@ features:
     details: 使用 Python 3.15、uv 与锁定的前端工具链，可通过源码或本地容器构建部署
   - icon: 🧩
     title: 高扩展性
-    details: 提供插件、MCP、Skills、SubAgent、知识库与 Agent 沙箱能力
+    details: 提供插件、MCP、Skills、SubAgent、知识库与 Agent 本地隔离执行能力
   - icon: 🌟
     title: AI
     details: 支持 OpenAI、Anthropic、Gemini 等多种大模型接入，内置知识库和 Agent 智能体

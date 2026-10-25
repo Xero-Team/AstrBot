@@ -1297,6 +1297,8 @@ def test_sender_key_from_token_mints_raw_ids_like_admission():
     assert sender_key_from_token(event, " 99 ") == "im:napcat:bot:99"
     assert sender_key_from_token(event, "im:napcat:bot:other") == "im:napcat:bot:other"
     assert sender_key_from_token(event, "IM:napcat:bot:other") == "im:napcat:bot:other"
+    assert sender_key_from_token(event, "im:other:bot:99") is None
+    assert sender_key_from_token(event, "im:napcat:other:99") is None
     assert sender_key_from_token(event, "im:foo") is None
     assert sender_key_from_token(event, "im:napcat:bot:") is None
     assert sender_key_from_token(event, "  ") is None
@@ -1986,3 +1988,21 @@ async def test_bot_enable_clears_blocked_state_after_authorization():
 
     assert settings["session_enabled"] is True
     assert settings["session_blocked"] is False
+
+
+def test_sender_key_from_token_normalizes_platform_components():
+    from astrbot.api import Subject
+
+    event = DummyEvent(
+        message_str="user block",
+        platform_id="my platform",
+        platform_name="custom",
+    )
+    minted = Subject.im(
+        platform_instance="my platform",
+        bot_account_id="bot",
+        sender_id="99",
+    ).id
+    assert sender_key_from_token(event, minted) == minted
+    assert sender_key_from_token(event, "im:my platform:bot:99") == minted
+    assert sender_key_from_token(event, "im:other:bot:99") is None

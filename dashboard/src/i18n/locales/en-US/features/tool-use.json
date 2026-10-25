@@ -40,6 +40,7 @@
       "untrusted": "MCP content is untrusted. Select an item explicitly; it is not added to model context automatically."
     },
     "auth": {
+      "invalidUrl": "The authorization URL is not a valid http(s) URL.",
       "pending": "OAuth authorization is waiting for the browser flow."
     }
   },

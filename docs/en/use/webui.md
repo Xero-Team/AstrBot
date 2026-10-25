@@ -130,7 +130,7 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 System-wide settings have moved from the old Config → System Config route to **Settings** at the bottom of the sidebar. The page groups General, Appearance, Network, Security, Maintenance, and OpenAPI settings. The `Network` group holds the HTTP proxy, Python package sources, and GitHub mirror; for the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker#configure-an-http-proxy-in-docker). System changes are saved automatically and a restart notice appears when required.
 
-Backups under `Maintenance` include session aliases, model usage statistics, OpenAPI access keys, and MCP server configuration. Workspace files require a separate backup. TOTP trusted devices are excluded; replacing data from a backup clears existing device trust and requires device verification again. Older backups cannot recover data they did not include: export a new backup from the original instance before migrating. If a backup has no MCP configuration, the target instance's MCP configuration is kept.
+Backups under `Maintenance` include session aliases, scheduled tasks, model usage statistics, OpenAPI access keys, and MCP server configuration. Workspace files require a separate backup. TOTP trusted devices are excluded; replacing data from a backup clears existing device trust and requires device verification again. Older backups cannot recover data they did not include: export a new backup from the original instance before migrating. If a backup has no MCP configuration, the target instance's MCP configuration is kept.
 
 Config profiles still control routed Agent, model, message-processing, and plugin behavior. Do not confuse profile settings with the system-level network and security controls under Settings.
 
@@ -275,7 +275,7 @@ high-risk run.
 
 This does not grant access to global Dashboard operations such as changing
 accounts, providers, plugins, system settings, exports, or restarts. The
-account's Prompt, tool, sandbox, and path restrictions still apply. Anonymous
+account's Prompt, tool, local-isolation, and path restrictions still apply. Anonymous
 WebChat, API keys, IM messages, plugins, and background continuations cannot
 reuse this authorization. IM senders use a different path: bind the Subject ID
 from `/session info` as `instance_operator` on that config. See

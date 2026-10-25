@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { safeHttpUrl } from '@/utils/safeUrl';
 import { useModuleI18n } from '@/i18n/composables';
 import PluginPlatformChip from '@/components/shared/PluginPlatformChip.vue';
 import { usePluginI18n } from '@/utils/pluginI18n';
@@ -32,6 +33,9 @@ const normalizePlatformList = (platforms: unknown) => {
 const platformDisplayList = computed(() =>
   normalizePlatformList(props.plugin?.support_platforms),
 );
+
+const socialLink = computed(() => safeHttpUrl(props.plugin?.social_link));
+const repoLink = computed(() => safeHttpUrl(props.plugin?.repo));
 
 const cardDescription = computed(() =>
   pluginShortDesc(
@@ -104,9 +108,10 @@ const handleOpen = () => {
             class="plugin-meta-icon"
           ></v-icon>
           <a
-            v-if="plugin?.social_link"
-            :href="plugin.social_link"
+            v-if="socialLink"
+            :href="socialLink"
             target="_blank"
+            rel="noopener noreferrer"
             class="plugin-author text-subtitle-2 font-weight-medium"
             @click.stop
           >
@@ -145,13 +150,14 @@ const handleOpen = () => {
       </div>
       <v-spacer></v-spacer>
       <v-btn
-        v-if="plugin?.repo"
+        v-if="repoLink"
         color="secondary"
         size="small"
         variant="tonal"
         class="market-action-btn"
-        :href="plugin.repo"
+        :href="repoLink"
         target="_blank"
+        rel="noopener noreferrer"
       >
         <v-icon icon="mdi-github" start size="small"></v-icon>
         {{ tm('buttons.viewRepo') }}

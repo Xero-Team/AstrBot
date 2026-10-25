@@ -178,8 +178,10 @@
             </v-toolbar>
             <div class="flex-grow-1 preview-container">
               <iframe
-                ref="previewFrame"
+                :key="previewKey"
                 :srcdoc="previewContent"
+                sandbox="allow-scripts"
+                referrerpolicy="no-referrer"
                 class="t2i-template-editor__preview-frame"
               />
             </div>
@@ -341,7 +343,7 @@ const resetDialog = ref(false);
 const deleteDialog = ref(false);
 const applyAndCloseDialog = ref(false);
 
-const previewFrame = ref<HTMLIFrameElement | null>(null);
+const previewKey = ref(0);
 
 // --- 编辑器配置 ---
 const editorTheme = computed(() => 'vs-light');
@@ -664,15 +666,15 @@ const confirmApplyAndClose = async () => {
   closeDialog();
 };
 
-const refreshPreview = () => {
+const refreshPreview = async () => {
   previewLoading.value = true;
-  void syncPreviewVersion();
-  void nextTick(() => {
-    if (previewFrame.value?.contentWindow) {
-      previewFrame.value.contentWindow.location.reload();
-    }
-    setTimeout(() => (previewLoading.value = false), 500);
-  });
+  await syncPreviewVersion();
+  await nextTick();
+  // The sandbox gives the frame an opaque origin, so the parent cannot reload
+  // it through the frame's Location object. Changing the key remounts the
+  // frame, which reloads ``srcdoc`` even when its value did not change.
+  previewKey.value += 1;
+  setTimeout(() => (previewLoading.value = false), 500);
 };
 
 const closeDialog = () => {

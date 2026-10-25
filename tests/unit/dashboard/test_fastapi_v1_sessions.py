@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot.core.auth.models import Resource
 from tests.unit.dashboard.fastapi_v1_support import *  # noqa: F403
 
 
@@ -10,6 +11,9 @@ async def test_v1_mcp_enabled_patch_updates_stored_active_flag(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
+    fake_core_lifecycle.provider_manager.tool_manager.config["mcpServers"][
+        "demo-server"
+    ]["env"] = {"GITHUB_TOKEN": "stored-token"}
     response = await asgi_client.patch(
         "/api/v1/mcp/servers/demo-server/enabled",
         json={"enabled": False},
@@ -22,6 +26,7 @@ async def test_v1_mcp_enabled_patch_updates_stored_active_flag(
     assert data["message"] == "Successfully updated MCP server demo-server"
     mcp_servers = fake_core_lifecycle.provider_manager.tool_manager.config["mcpServers"]
     assert mcp_servers["demo-server"]["active"] is False
+    assert mcp_servers["demo-server"]["env"] == {"GITHUB_TOKEN": "stored-token"}
 
 
 @pytest.mark.asyncio
@@ -33,6 +38,9 @@ async def test_v1_mcp_list_never_returns_configured_header_secrets(
     fake_tools.config["mcpServers"]["demo-server"]["headers"] = {
         "Authorization": "Bearer dashboard-must-not-see-this"
     }
+    fake_tools.config["mcpServers"]["demo-server"]["env"] = {
+        "GITHUB_TOKEN": "dashboard-must-not-see-this-either"
+    }
 
     response = await asgi_client.get("/api/v1/mcp/servers", headers=_jwt_headers())
 
@@ -41,7 +49,10 @@ async def test_v1_mcp_list_never_returns_configured_header_secrets(
         item for item in response.json()["data"] if item["name"] == "demo-server"
     )
     assert "headers" not in server
+    assert "env" not in server
     assert server["headers_configured"] is True
+    assert server["env_configured"] is True
+    assert "dashboard-must-not-see-this" not in response.text
 
 
 @pytest.mark.asyncio
@@ -106,6 +117,36 @@ async def test_v1_mcp_scope_accepts_api_key(
     data = response.json()
     assert data["status"] == "ok"
     assert any(server["name"] == "demo-server" for server in data["data"])
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_test_rejects_inline_config_for_read_only_principal(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+):
+    raw_key = "abk_fastapi_v1_mcp_read_only"
+    fake_db.add_api_key(raw_key, scopes=["mcp"])
+    subject_id = f"api-key:key-{raw_key}"
+    fake_db.capabilities = {
+        capability
+        for capability in fake_db.capabilities
+        if not (capability[0] == subject_id and capability[1] == "tool.mcp_write")
+    }
+    read_resource = Resource.named("dashboard-api", "post-mcp")
+    fake_db.capabilities.add(
+        (subject_id, "tool.mcp_read", read_resource.type, read_resource.id)
+    )
+    fake_tools = fake_core_lifecycle.provider_manager.tool_manager
+
+    response = await asgi_client.post(
+        "/api/v1/mcp/servers/demo-server/test",
+        json={"url": "https://example.com/demo", "transport": "streamable_http"},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 403
+    assert fake_tools.tested_configs == []
 
 
 @pytest.mark.asyncio
@@ -472,27 +513,6 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
         headers={"X-API-Key": raw_key},
     )
     assert named.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_v1_neo_skill_sync_accepts_skill_key_target(
-    asgi_app: FastAPI,
-    asgi_client: httpx.AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    async def fake_sync(data):
-        return {"synced": data["skill_key"]}
-
-    monkeypatch.setattr(asgi_app.state.services.skills, "sync_neo_release", fake_sync)
-
-    response = await asgi_client.post(
-        "/api/v1/skills/neo/sync",
-        json={"skill_key": "neo.demo"},
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["data"] == {"synced": "neo.demo"}
 
 
 @pytest.mark.asyncio
@@ -1062,3 +1082,96 @@ async def test_v1_session_authorization_covers_every_declared_target(
         headers=headers,
     )
     assert scope_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_messages_reject_body_cid(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[dict] = []
+
+    async def fake_update_history(data):
+        calls.append(data)
+        return {"message": "ok"}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.conversations,
+        "update_history",
+        fake_update_history,
+    )
+
+    response = await asgi_client.put(
+        "/api/v1/conversations/path-conversation/messages",
+        params={"user_id": "webchat:user"},
+        json={"history": [], "cid": "victim-conversation"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_messages_use_path_cid(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[dict] = []
+
+    async def fake_update_history(data):
+        calls.append(data)
+        return {"message": "ok"}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.conversations,
+        "update_history",
+        fake_update_history,
+    )
+
+    response = await asgi_client.put(
+        "/api/v1/conversations/path-conversation/messages",
+        params={"user_id": "webchat:user"},
+        json={"history": []},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "user_id": "webchat:user",
+            "cid": "path-conversation",
+            "history": [],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_patch_rejects_body_cid(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[dict] = []
+
+    async def fake_update_conversation(data):
+        calls.append(data)
+        return {"message": "ok"}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.conversations,
+        "update_conversation",
+        fake_update_conversation,
+    )
+
+    response = await asgi_client.patch(
+        "/api/v1/conversations/path-conversation",
+        params={"user_id": "webchat:user"},
+        json={"title": "Renamed", "cid": "victim-conversation"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 422
+    assert calls == []

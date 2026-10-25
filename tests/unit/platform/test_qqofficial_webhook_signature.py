@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -17,6 +18,10 @@ from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_server import (
     _sign_qq_webhook_payload,
     _verify_qq_webhook_signature,
 )
+
+
+def _now_ts() -> str:
+    return str(int(time.time()))
 
 
 class FakeRequest:
@@ -38,7 +43,7 @@ class FakeBotpyClient:
 
 def test_qq_webhook_signature_verification_accepts_valid_signature():
     secret = "test-secret"
-    timestamp = "1710000000"
+    timestamp = _now_ts()
     body = b'{"op":12,"d":0}'
     signature = _sign_qq_webhook_payload(secret, timestamp, body)
 
@@ -47,7 +52,7 @@ def test_qq_webhook_signature_verification_accepts_valid_signature():
 
 def test_qq_webhook_signature_verification_rejects_tampered_body():
     secret = "test-secret"
-    timestamp = "1710000000"
+    timestamp = _now_ts()
     body = b'{"op":12,"d":0}'
     signature = _sign_qq_webhook_payload(secret, timestamp, body)
 
@@ -92,7 +97,7 @@ async def test_qq_webhook_callback_rejects_missing_signature():
 @pytest.mark.asyncio
 async def test_qq_webhook_callback_accepts_unsigned_validation():
     secret = "test-secret"
-    event_ts = "1710000000"
+    event_ts = _now_ts()
     plain_token = "plain-token"
     body = json.dumps(
         {"op": 13, "d": {"event_ts": event_ts, "plain_token": plain_token}},
@@ -110,9 +115,157 @@ async def test_qq_webhook_callback_accepts_unsigned_validation():
 
 
 @pytest.mark.asyncio
-async def test_qq_webhook_callback_lazily_creates_botpy_connection():
+@pytest.mark.parametrize("data", [None, [], "text", 1])
+async def test_qq_webhook_validation_rejects_non_object_data(data) -> None:
+    body = json.dumps({"op": 13, "d": data}, separators=(",", ":")).encode("utf-8")
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = "test-secret"
+
+    result = await webhook.handle_callback(FakeRequest(body))
+
+    assert result == ({"error": "Invalid validation payload"}, 400)
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_validation_rejects_arbitrary_plain_token() -> None:
+    body = json.dumps(
+        {
+            "op": 13,
+            "d": {
+                "event_ts": _now_ts(),
+                "plain_token": '{"op":0,"d":{"id":"forged"}}',
+            },
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = "test-secret"
+
+    result = await webhook.handle_callback(FakeRequest(body))
+
+    assert result == ({"error": "Invalid validation payload"}, 400)
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_validation_rejects_stale_event_timestamp() -> None:
+    body = json.dumps(
+        {"op": 13, "d": {"event_ts": "1710000000", "plain_token": "plain-token"}},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = "test-secret"
+
+    result = await webhook.handle_callback(FakeRequest(body))
+
+    assert result == ({"error": "Invalid validation payload"}, 400)
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_validation_rejects_mismatched_appid_header() -> None:
+    body = json.dumps(
+        {
+            "op": 13,
+            "d": {"event_ts": _now_ts(), "plain_token": "plain-token"},
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = "test-secret"
+    webhook.appid = "123"
+
+    result = await webhook.handle_callback(FakeRequest(body, {"X-Bot-Appid": "999"}))
+
+    assert result == ({"error": "Invalid validation payload"}, 403)
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_validation_is_rate_limited() -> None:
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = "test-secret"
+    event_ts = _now_ts()
+
+    results = []
+    for index in range(11):
+        body = json.dumps(
+            {
+                "op": 13,
+                "d": {
+                    "event_ts": event_ts,
+                    "plain_token": f"token{index:04d}",
+                },
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+        results.append(await webhook.handle_callback(FakeRequest(body)))
+
+    assert all(isinstance(result, dict) for result in results[:10])
+    assert results[10] == ({"error": "Too many validation attempts"}, 429)
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_callback_rejects_stale_signed_event() -> None:
     secret = "test-secret"
     timestamp = "1710000000"
+    body = json.dumps(
+        {"op": 0, "t": "MESSAGE_CREATE", "id": "event-id", "d": {"id": "message-id"}},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    signature = _sign_qq_webhook_payload(secret, timestamp, body)
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = secret
+
+    result = await webhook.handle_callback(
+        FakeRequest(
+            body,
+            {
+                _SIGNATURE_TIMESTAMP_HEADER: timestamp,
+                _SIGNATURE_HEADER: signature,
+            },
+        )
+    )
+
+    assert result == ({"error": "Invalid signature"}, 401)
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_callback_accepts_millisecond_signature_timestamp() -> None:
+    secret = "test-secret"
+    timestamp = str(int(time.time() * 1000))
+    body = b'{"op":12,"d":0}'
+    signature = _sign_qq_webhook_payload(secret, timestamp, body)
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = secret
+
+    result = await webhook.handle_callback(
+        FakeRequest(
+            body,
+            {
+                _SIGNATURE_TIMESTAMP_HEADER: timestamp,
+                _SIGNATURE_HEADER: signature,
+            },
+        )
+    )
+
+    assert result == {"opcode": 12}
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_callback_rejects_oversized_signature_timestamp() -> None:
+    body = b'{"op":12,"d":0}'
+    webhook = object.__new__(QQOfficialWebhook)
+    webhook.secret = "test-secret"
+
+    result = await webhook.handle_callback(
+        FakeRequest(body, {_SIGNATURE_TIMESTAMP_HEADER: "9" * 5000})
+    )
+
+    assert result == ({"error": "Invalid signature"}, 401)
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_callback_lazily_creates_botpy_connection():
+    secret = "test-secret"
+    timestamp = _now_ts()
     body = json.dumps(
         {"op": 0, "t": "UNKNOWN_EVENT", "id": "event-id", "d": {"id": "message-id"}},
         separators=(",", ":"),
@@ -145,7 +298,7 @@ async def test_qq_webhook_callback_lazily_creates_botpy_connection():
 @pytest.mark.asyncio
 async def test_qq_webhook_callback_deduplicates_retried_dispatch_event():
     secret = "test-secret"
-    timestamp = "1710000000"
+    timestamp = _now_ts()
     dispatched: list[dict] = []
     body = json.dumps(
         {"op": 0, "t": "MESSAGE_CREATE", "id": "event-id", "d": {"id": "message-id"}},
@@ -168,15 +321,19 @@ async def test_qq_webhook_callback_deduplicates_retried_dispatch_event():
     first = await webhook.handle_callback(FakeRequest(body, headers))
     second = await webhook.handle_callback(FakeRequest(body, headers))
 
+    webhook._seen_event_ids["event-id"] = time.monotonic() - 599
+    third = await webhook.handle_callback(FakeRequest(body, headers))
+
     assert first == {"opcode": 12}
     assert second == {"opcode": 12}
+    assert third == {"opcode": 12}
     assert dispatched == [json.loads(body.decode("utf-8"))]
 
 
 @pytest.mark.asyncio
 async def test_qq_webhook_callback_caches_extra_data_for_known_dispatch_event():
     secret = "test-secret"
-    timestamp = "1710000000"
+    timestamp = _now_ts()
     dispatched: list[dict] = []
     payload = {
         "op": 0,
@@ -221,7 +378,7 @@ async def test_qq_webhook_callback_caches_extra_data_for_known_dispatch_event():
 @pytest.mark.asyncio
 async def test_qq_webhook_callback_clears_cached_extra_data_for_unknown_parser_event():
     secret = "test-secret"
-    timestamp = "1710000000"
+    timestamp = _now_ts()
     payload = {
         "op": 0,
         "t": "UNKNOWN_EVENT",

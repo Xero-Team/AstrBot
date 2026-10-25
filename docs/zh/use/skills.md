@@ -28,23 +28,19 @@ AstrBot 会从多个位置发现 Skills：
 
 - **本地 Skills**：通过 WebUI 上传或放置在 `data/skills/<skill_name>/SKILL.md`，会显示在 WebUI 的 Skills 管理页面中。
 - **插件内置 Skills**：插件可以在自己的 `skills/` 目录中提供 Skills。它们会显示在 WebUI 中，但由插件管理，因此不能在本地 Skills 页面删除或编辑。
-- **Sandbox 预置 Skills**：使用 sandbox 运行环境时，AstrBot 会读取沙盒中已发现的 Skills，并在请求时提供给 Agent。
 - **工作区 Skills**：当前会话 workspace 下的 `skills/<skill_name>/SKILL.md`。目前仅在 local 运行环境下注入，路径通常是 `data/workspaces/{normalized_umo}/skills/<skill_name>/SKILL.md`。
 
 工作区 Skills 是**请求级**能力：local 运行环境下，AstrBot 会在每次构建请求时检测当前会话 workspace 下的 `skills/` 目录，并把合法的 Skills 拼进本次请求的 Skills 清单。它们暂时不会显示在 WebUI 的 Skills 管理页面，也不会写入全局 Skills 配置。
 
-如果提示词配置为“选择指定 Skills”，该列表只用于筛选本地、插件内置和 sandbox Skills；工作区 Skills 仍会作为当前请求的一部分被检测并注入。只有提示词明确配置为“不使用任何 Skills”时，才会同时禁用工作区 Skills。
+如果提示词配置为“选择指定 Skills”，该列表只用于筛选本地和插件内置 Skills；工作区 Skills 仍会作为当前请求的一部分被检测并注入。只有提示词明确配置为“不使用任何 Skills”时，才会同时禁用工作区 Skills。
 
 当不同来源出现同名 Skill 时，请求中的优先级如下：
 
 1. 如果当前提示词明确配置为“不使用任何 Skills”，则不会注入任何 Skills，包括工作区 Skills。
 2. 如果当前提示词配置了指定 Skills 列表，该列表不会过滤工作区 Skills。
-3. 当前会话的工作区 Skill 优先级最高。同名时，它会覆盖本地、插件或 sandbox 中的同名 Skill，仅对当前请求生效。
-4. 本地 Skills 优先于插件内置 Skills 和 sandbox-only Skills。
-5. 插件内置 Skills 优先于 sandbox-only Skills。
-6. sandbox-only Skills 只会在没有同名本地、插件或工作区 Skill 时作为可用 Skill 注入。
-
-如果本地 Skill 已同步到 sandbox，AstrBot 会把它视为同一个 Skill；在 sandbox 运行环境下，请求中会优先使用 sandbox 内可读取的路径。工作区 Skills 暂不会自动同步到 sandbox。
+3. 当前会话的工作区 Skill 优先级最高。同名时，它会覆盖本地或插件中的同名 Skill，仅对当前请求生效。
+4. 本地 Skills 优先于插件内置 Skills。
+5. 插件内置 Skills 只会在没有同名本地或工作区 Skill 时注入。
 
 ## 加载步骤
 
@@ -56,10 +52,9 @@ AstrBot 会从多个位置发现 Skills：
 
 Skills 是按需加载的任务手册。手册里的脚本仍需要执行环境，但读手册本身不再依赖 Shell。
 
-目前，AstrBot 提供两种执行环境：
+目前，AstrBot 提供一种执行环境：
 
 - Local（Agent 将在你的 AstrBot 运行环境中运行。**请谨慎使用，因为这会允许 Agent 在你的环境执行任意代码，可能带来安全风险**）
-- Sandbox（Agent 在隔离化的沙盒环境中运行。**需要先启动 AstrBot 沙盒模式**，请参考：[沙盒模式](/use/astrbot-agent-sandbox)）
 
 你可以在 **配置文件 → 选择配置文件 → AI 配置 → 能力 → 使用电脑能力** 中选择默认的执行环境。未开启电脑能力时，仍可通过 `read_skill` 读取记忆、检索类 Skill 手册。
 

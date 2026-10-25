@@ -431,6 +431,9 @@ class KookPlatformAdapter(Platform):
             file_type = file[0]
             file_name = file[1]
             file_url = file[2]
+            if not file_url.startswith(("http://", "https://")):
+                logger.warning("[KOOK] 屏蔽非http文件url")
+                continue
             if file_type == KookModuleType.FILE:
                 message.append(File(name=file_name, file=file_url))
             elif file_type == KookModuleType.VIDEO:

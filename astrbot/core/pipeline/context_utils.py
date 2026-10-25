@@ -9,6 +9,7 @@ from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.star.star_handler import EventType, HandlerRegistry
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 
 async def call_handler(
@@ -124,7 +125,7 @@ async def call_event_hook(
         except KeyboardInterrupt, SystemExit:
             raise
         except Exception:
-            logger.error(traceback.format_exc())
+            logger.error(redact_sensitive_text(traceback.format_exc()))
             event.trace.record(
                 "handler_end",
                 kind="plugin_handler",

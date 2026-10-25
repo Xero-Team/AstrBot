@@ -7,6 +7,7 @@
     :style="chipStyle"
     :href="url"
     target="_blank"
+    rel="noopener noreferrer"
     clickable
   >
     <v-icon start size="x-small" color="">mdi-link-variant</v-icon>
@@ -16,6 +17,7 @@
 
 <script setup lang="ts">
 import { computed, inject, unref, useSlots, type VNode } from 'vue';
+import { safeHttpUrl } from '@/utils/safeUrl';
 
 interface RefNodeProp {
   content?: string;
@@ -60,7 +62,7 @@ const resultData = computed(() => {
   return results?.[refIndex.value] || null;
 });
 
-const url = computed(() => resultData.value?.url || '');
+const url = computed(() => safeHttpUrl(resultData.value?.url) || '');
 
 const domain = computed(() => {
   if (!url.value) return '';

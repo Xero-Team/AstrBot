@@ -11,6 +11,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 from ...hooks import BaseAgentRunHooks
@@ -137,7 +138,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         )
 
     async def _finish_with_error(self, err_msg: str) -> AgentResponse:
-        err_text = f"DeerFlow request failed: {err_msg}"
+        err_text = f"DeerFlow request failed: {redact_sensitive_text(err_msg)}"
         err_chain = MessageChain().message(err_text)
         self.final_llm_resp = LLMResponse(
             role="err",
@@ -295,7 +296,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             raise
         except Exception as e:
             err_msg = self._format_exception(e)
-            logger.error(f"DeerFlow request failed: {err_msg}", exc_info=True)
+            logger.error(
+                "DeerFlow request failed: %s", safe_error("", e), exc_info=True
+            )
             yield await self._finish_with_error(err_msg)
 
     def _extract_new_messages_from_values(

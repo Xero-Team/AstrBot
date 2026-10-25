@@ -94,8 +94,6 @@ def _internal_plugin_context(tts_provider=None) -> SimpleNamespace:
 def _pipeline_context(execution_context: SimpleNamespace) -> SimpleNamespace:
     if not hasattr(execution_context, "background_tasks"):
         execution_context.background_tasks = set()
-    if not hasattr(execution_context, "metrics"):
-        execution_context.metrics = SimpleNamespace(upload=AsyncMock())
     return SimpleNamespace(
         execution_context=execution_context,
         handlers=SimpleNamespace(
@@ -103,11 +101,6 @@ def _pipeline_context(execution_context: SimpleNamespace) -> SimpleNamespace:
         ),
         plugins=SimpleNamespace(),
     )
-
-
-def _set_metrics_upload(stage, upload) -> None:
-    """Replace only the telemetry port bound to this test runtime."""
-    stage.ctx.execution_context.metrics.upload = upload
 
 
 class FakeThirdPartyRunner:

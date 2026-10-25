@@ -77,6 +77,18 @@ async def asgi_client(app: FastAPI):
 
 
 @pytest.mark.asyncio
+async def test_retrieve_rejects_body_kb_names(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/knowledge-bases/test_kb_id/retrieve",
+        json={"query": "astrbot", "kb_names": ["other-kb"]},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_import_documents(
     asgi_client: httpx.AsyncClient,
     kb_helper: AsyncMock,
@@ -609,6 +621,9 @@ async def test_retrieve_reports_visualization_error_without_dropping_results(
     monkeypatch,
 ):
     kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(
+        return_value=SimpleNamespace(kb=SimpleNamespace(kb_name="kb-1"))
+    )
     kb_manager.retrieve = AsyncMock(
         return_value={"results": [{"doc_id": "doc-1", "score": 0.9}]}
     )
@@ -628,7 +643,7 @@ async def test_retrieve_reports_visualization_error_without_dropping_results(
     )
 
     result = await service.retrieve(
-        {"query": "astrbot", "kb_names": ["kb-1"], "debug": True, "top_k": 2}
+        {"query": "astrbot", "kb_id": "kb-1", "debug": True, "top_k": 2}
     )
 
     assert result == {

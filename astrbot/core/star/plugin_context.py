@@ -1008,6 +1008,10 @@ class RenderingCapability:
         """Render text using the configured text-to-image template."""
         return await self._renderer.render_t2i(text, template_name=template_name)
 
+    async def render_help(self, text: str) -> str:
+        """Render the internal help template for the help command."""
+        return await self._renderer.render_help(text)
+
     async def html(
         self,
         template: str,

@@ -6,16 +6,8 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.auth.models import Role
-from astrbot.core.tools.computer_tools.python import LocalPythonTool, PythonTool
+from astrbot.core.tools.computer_tools.python import LocalPythonTool
 from tests.fixtures.auth import attach_authorized_tool_context
-
-
-def test_python_tool_description_contains_os():
-    """测试 PythonTool 的描述中是否包含当前操作系统信息"""
-    tool = PythonTool()
-    current_os = platform.system()
-    assert current_os in tool.description
-    assert "IPython" in tool.description
 
 
 def test_local_python_tool_description_contains_os():

@@ -13,6 +13,7 @@ import MarkdownIt from 'markdown-it';
 import defaultPluginIcon from '/favicon.svg';
 import { pluginApi } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
+import { safeHttpUrl } from '@/utils/safeUrl';
 import { usePluginI18n } from '@/utils/pluginI18n';
 import PluginPlatformChip from '@/components/shared/PluginPlatformChip.vue';
 
@@ -618,8 +619,9 @@ const buildCommandComponentRows = (
 };
 
 const openExternal = (url?: string) => {
-  if (!url) return;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const safe = safeHttpUrl(url);
+  if (!safe) return;
+  window.open(safe, '_blank', 'noopener,noreferrer');
 };
 
 const goBack = () => {

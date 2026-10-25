@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import AbstractAsyncContextManager, nullcontext
 from copy import deepcopy
 from dataclasses import replace
+from urllib.parse import urlsplit
 
 from astrbot import logger
 from astrbot.core.agent.follow_up import FollowUpCapture
@@ -20,7 +21,6 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.request_preparation import (
-    cua_pixel_mode_from_settings,
     image_compress_args_from_settings,
     prepare_provider_request,
 )
@@ -168,7 +168,6 @@ class InternalAgentSubStage:
         self.llm_safety_mode = self.main_agent_cfg.llm_safety_mode
         self.safety_mode_strategy = self.main_agent_cfg.safety_mode_strategy
         self.computer_use_runtime = self.main_agent_cfg.computer_use_runtime
-        self.sandbox_cfg = self.main_agent_cfg.sandbox_cfg
         self.add_cron_tools = self.main_agent_cfg.add_cron_tools
 
     def _prepare_group_sender_concurrency(
@@ -272,9 +271,6 @@ class InternalAgentSubStage:
             image_compress_enabled=enabled,
             image_max_size=max_size,
             image_quality=quality,
-            warn_unresized_images=cua_pixel_mode_from_settings(
-                settings if isinstance(settings, dict) else None
-            ),
         )
         req.image_urls = prepared.image_urls
         req.audio_urls = prepared.audio_urls
@@ -315,15 +311,6 @@ class InternalAgentSubStage:
         ):
             pending = await self._capture_pending_history(event, req, agent_runner)
             await self._finalize_pending_history(event, req, pending)
-        create_tracked_task(
-            self.ctx.execution_context.background_tasks,
-            self.ctx.execution_context.metrics.upload(
-                llm_tick=1,
-                model_name=agent_runner.provider.get_model(),
-                provider_type=agent_runner.provider.meta().type,
-            ),
-            name="upload_agent_metric",
-        )
 
     async def _build_checked_agent_runner(
         self,
@@ -359,15 +346,14 @@ class InternalAgentSubStage:
             return None
 
         api_base = build_result.provider.provider_config.get("api_base", "")
-        for host in BLOCKED_PROVIDER_HOSTS:
-            if host in api_base:
-                _set_llm_error_message(event, "blockedProvider", api_base=api_base)
-                logger.error(
-                    "Provider API base %s was blocked for security reasons",
-                    safe_error("", api_base),
-                )
-                await self._send_llm_error_message(event)
-                return None
+        if _is_blocked_provider_api_base(api_base):
+            _set_llm_error_message(event, "blockedProvider", api_base=api_base)
+            logger.error(
+                "Provider API base %s was blocked for security reasons",
+                safe_error("", api_base),
+            )
+            await self._send_llm_error_message(event)
+            return None
         return build_result
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
@@ -932,6 +918,27 @@ BLOCKED_PROVIDER_HOSTS = frozenset(
         "kourichat",
     }
 )
+
+
+def _is_blocked_provider_api_base(api_base: object) -> bool:
+    """Return whether an API base host matches a known blocked provider."""
+    if not isinstance(api_base, str) or not api_base.strip():
+        return False
+    candidate = api_base.strip()
+    if "://" not in candidate and not candidate.startswith("//"):
+        # Provider base URLs are sometimes stored without a scheme; parse them
+        # as network-path references so the guard still sees the host.
+        candidate = f"//{candidate}"
+    try:
+        hostname = (urlsplit(candidate).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    if not hostname:
+        return False
+    return any(
+        hostname == blocked or hostname.endswith(f".{blocked}")
+        for blocked in BLOCKED_PROVIDER_HOSTS
+    )
 
 
 async def _record_internal_agent_stats(

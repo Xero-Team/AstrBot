@@ -1,6 +1,5 @@
-import re
-
 import pytest
+import regex
 
 from astrbot.core.auth.models import Role
 from astrbot.core.platform.message_protocol import (
@@ -128,7 +127,7 @@ def test_portable_text_concatenates_string_parts_only():
     )
 
 
-def test_compile_text_pattern_uses_stdlib_re():
+def test_compile_text_pattern_bounds_matching():
     assert compile_text_pattern("hello").search("say hello")
     assert compile_text_pattern("(?i)hello").search("HELLO")
     assert compile_text_pattern("hello").search("HELLO") is None
@@ -136,7 +135,28 @@ def test_compile_text_pattern_uses_stdlib_re():
         compile_text_pattern("(")
     with pytest.raises(ValueError, match="Invalid filter pattern"):
         compile_text_pattern("x" * 257)
-    assert isinstance(compile_text_pattern("a"), re.Pattern)
+    assert isinstance(compile_text_pattern("a"), regex.Pattern)
+
+
+def test_filter_timeout_drops_before_match_and_except():
+    text = "a" * 50_000 + "b"
+
+    assert not evaluate_filter(
+        {"text": [r"(a+)+$"]},
+        {},
+        subject_id=None,
+        has_sender=False,
+        role=Role.GUEST.value,
+        text=text,
+    )
+    assert not evaluate_filter(
+        {},
+        {"text": [r"(a+)+$"]},
+        subject_id=None,
+        has_sender=False,
+        role=Role.GUEST.value,
+        text=text,
+    )
 
 
 def test_validate_and_append_limits():

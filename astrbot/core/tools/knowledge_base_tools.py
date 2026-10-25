@@ -104,7 +104,10 @@ async def retrieve_knowledge_base(
     return None
 
 
-@builtin_tool(config=_KNOWLEDGE_BASE_TOOL_CONFIG)
+@builtin_tool(
+    config=_KNOWLEDGE_BASE_TOOL_CONFIG,
+    required_actions=("tool.kb_read",),
+)
 @dataclass
 class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
     name: str = "astr_kb_search"

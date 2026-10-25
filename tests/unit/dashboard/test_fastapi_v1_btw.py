@@ -95,3 +95,26 @@ async def test_a_chat_scope_api_key_cannot_read_internal_work_sessions(
 
     assert response.status_code == 403
     assert "SECRET USER TASK" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_the_route_filters_sessions_by_requested_config(
+    asgi_client, isolated_registry
+):
+    manager_a = WorkSessionManager()
+    session_a = await manager_a.create("webchat:FriendMessage:a", "task-a")
+    manager_b = WorkSessionManager()
+    session_b = await manager_b.create("webchat:FriendMessage:b", "task-b")
+    isolated_registry.register("profile-a", manager_a)
+    isolated_registry.register("profile-b", manager_b)
+
+    response = await asgi_client.get(
+        "/api/v1/btw/work-sessions",
+        params={"config_id": "profile-a"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["sessions"]
+    assert [item["id"] for item in payload] == [session_a.id]
+    assert session_b.id not in response.text

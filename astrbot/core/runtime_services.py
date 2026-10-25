@@ -78,7 +78,7 @@ async def create_runtime_services() -> RuntimeServices:
         webchat_run_coordinator = WebChatRunCoordinator(webchat_queue_manager)
         follow_up_coordinator = FollowUpCoordinator()
         llm_metadata_catalog = LLMMetadataCatalog()
-        metrics = MetricsRuntime(config, db)
+        metrics = MetricsRuntime(db)
         totp_runtime_state = TotpRuntimeState()
 
         # SharedPreferences starts a scheduler in its constructor.  Construct it

@@ -32,9 +32,9 @@ This repository is a modernized fork of AstrBot. The code, commands, deployment 
 3. 🤖 Supports integration with Dify, Alibaba Cloud Bailian, Coze, and other agent platforms.
 4. 🌐 Multi-Platform: QQ, WeChat Work, Feishu, DingTalk, WeChat Official Accounts, Telegram, Slack, and [more](#supported-messaging-platforms).
 5. 📦 Plugin extensions with a community marketplace and a sandboxed Dashboard Extension Protocol.
-6. 🛡️ [Agent Sandbox](docs/en/use/astrbot-agent-sandbox.md) for isolated, safe execution of code, shell calls, and session-level resource reuse.
+6. 🛡️ Restricted local code and shell execution with bubblewrap or Seatbelt isolation.
 7. 💻 WebUI Support.
-8. 🌈 Web ChatUI Support with built-in agent sandbox and web search.
+8. 🌈 Web ChatUI Support with built-in web search.
 9. 🌐 Bilingual WebUI: Simplified Chinese and English.
 
 <br>

@@ -75,11 +75,13 @@ class ToolsService:
                     "active": server_config.get("active", True),
                 }
                 for key, value in server_config.items():
-                    if key not in {"active", "headers"}:
+                    if key not in {"active", "headers", "env"}:
                         server_info[key] = value
-                # Headers are write-only. A Dashboard list response must never
-                # disclose an Authorization value or another deployment secret.
+                # Headers and stdio env are write-only. A Dashboard list
+                # response must never disclose an Authorization value or
+                # another deployment secret.
                 server_info["headers_configured"] = bool(server_config.get("headers"))
+                server_info["env_configured"] = bool(server_config.get("env"))
 
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
@@ -610,15 +612,13 @@ class ToolsService:
             server_config[key] = value
             only_update_active = False
 
-        # Header values are deliberately absent from the Dashboard GET result.
-        # Omission preserves the existing secret; an explicit empty object is
-        # the user's intentional request to remove headers.
-        if (
-            isinstance(old_config, dict)
-            and "headers" in old_config
-            and "headers" not in server_config
-        ):
-            server_config["headers"] = copy.deepcopy(old_config["headers"])
+        # Header and env values are deliberately absent from the Dashboard GET
+        # result. Omission preserves the existing secret; an explicit empty
+        # object is the user's intentional request to remove it.
+        if isinstance(old_config, dict):
+            for secret_key in ("headers", "env"):
+                if secret_key in old_config and secret_key not in server_config:
+                    server_config[secret_key] = copy.deepcopy(old_config[secret_key])
 
         if only_update_active and isinstance(old_config, dict):
             for key, value in old_config.items():

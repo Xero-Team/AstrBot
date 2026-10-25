@@ -455,8 +455,8 @@ async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
     assert delete_response.status_code == 200
     assert download_response.json()["status"] == "error"
     assert delete_response.json()["status"] == "error"
-    assert "非法路径" in download_response.json()["message"]
-    assert "非法路径" in delete_response.json()["message"]
+    assert "无效的文件名" in download_response.json()["message"]
+    assert "无效的文件名" in delete_response.json()["message"]
 
 
 @pytest.mark.asyncio

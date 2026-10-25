@@ -106,3 +106,27 @@ def test_storage_cleaner_protects_custom_database_under_symlinked_logs_root(tmp_
     assert all(path.name != "custom-trace-store" for path in collected)
     cleaner.cleanup("logs")
     assert custom_db.read_bytes().startswith(b"SQLite format 3\x00")
+
+
+def test_storage_cleaner_does_not_truncate_symlinked_active_log(tmp_path):
+    data_dir = tmp_path / "data"
+    logs_dir = data_dir / "logs"
+    logs_dir.mkdir(parents=True)
+    database = data_dir / "astrbot.db"
+    database.write_bytes(b"SQLite format 3\x00database")
+    active_log = logs_dir / "astrbot.log"
+    try:
+        active_log.symlink_to(database)
+    except OSError:
+        pytest.skip("symbolic links are unavailable")
+
+    cleaner = StorageCleaner(
+        {"log": {"file_enable": True, "file_path": "logs/astrbot.log"}},
+        data_dir=data_dir,
+        temp_dir=data_dir / "temp",
+    )
+
+    cleaner.cleanup("logs")
+
+    assert not active_log.exists()
+    assert database.read_bytes().startswith(b"SQLite format 3\x00")

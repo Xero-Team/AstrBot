@@ -63,7 +63,6 @@ from astrbot.core.tools.function_tool_manager import FunctionToolManager
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
-from astrbot.core.utils.metrics import MetricsSink
 from astrbot.core.utils.session_lock import SessionLockManager
 from astrbot.core.utils.session_waiter import SessionWaiterRegistry
 
@@ -216,7 +215,6 @@ class CoreExecutionContext:
         subagent_orchestrator: SubAgentOrchestrator | None = None,
         demo_mode: bool = False,
         *,
-        metrics: MetricsSink,
         active_event_registry: ActiveEventRegistry | None = None,
         session_lock_manager: SessionLockManager | None = None,
         session_waiter_registry: SessionWaiterRegistry | None = None,
@@ -276,8 +274,6 @@ class CoreExecutionContext:
         """Runtime-owned action/resource authorization service."""
         self.llm_metadata_catalog = llm_metadata_catalog or LLMMetadataCatalog()
         """Runtime-owned model metadata used by Agent and Dashboard paths."""
-        self.metrics = metrics
-        """Runtime-owned telemetry capability used by Agent execution."""
         self.follow_up_coordinator = follow_up_coordinator or FollowUpCoordinator()
         """Runtime-owned active Agent follow-up coordination state."""
         self.background_tasks: set[asyncio.Task] = set()
@@ -346,7 +342,6 @@ class CoreExecutionContext:
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
         from astrbot.core.agent.request_preparation import (
-            cua_pixel_mode_from_settings,
             image_compress_args_from_settings,
             prepare_provider_request,
         )
@@ -371,7 +366,6 @@ class CoreExecutionContext:
             image_compress_enabled=compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
-            warn_unresized_images=cua_pixel_mode_from_settings(provider_settings),
         )
         llm_resp = await prov.text_chat(
             prompt=request.prompt,
@@ -432,7 +426,6 @@ class CoreExecutionContext:
         """
         # Import here to avoid circular imports
         from astrbot.core.agent.request_preparation import (
-            cua_pixel_mode_from_settings,
             image_compress_args_from_settings,
             prepare_provider_request,
         )
@@ -495,7 +488,6 @@ class CoreExecutionContext:
             image_compress_enabled=compress_enabled,
             image_max_size=image_max_size,
             image_quality=image_quality,
-            warn_unresized_images=cua_pixel_mode_from_settings(provider_settings),
         )
         if agent_context is None:
             agent_context = AstrAgentContext(

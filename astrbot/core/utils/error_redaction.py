@@ -1,27 +1,57 @@
 import re
 
-_SECRET_KEYS = (
-    r"(?:api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password)"  # noqa: S105  # constant/name, not a credential
+_SECRET_KEY_BASE = r"(?:api[-_]?key|access[-_]?token|auth[-_]?token|refresh[-_]?token|session[-_]?id|secret|password|token|key)"  # noqa: S105
+_SECRET_KEY_NAME = rf"(?:[A-Za-z0-9]+[_-])*{_SECRET_KEY_BASE}(?:[_-][A-Za-z0-9]+)*"
+# A bare ``key`` is also an ordinary English word ("Missing key: username").
+# Keep it for assignments, JSON fields, and query parameters, but require a
+# qualified name before a colon so field-name prose is not over-redacted.
+_COLON_SECRET_KEY_BASE = r"(?:api[-_]?key|access[-_]?token|auth[-_]?token|refresh[-_]?token|session[-_]?id|secret|password|token)"  # noqa: S105
+_COLON_SECRET_KEY_NAME = (
+    rf"(?:[A-Za-z0-9]+[_-])*{_COLON_SECRET_KEY_BASE}(?:[_-][A-Za-z0-9]+)*"
 )
 
 _JSON_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>(?P<kq>['\"]){_SECRET_KEYS}(?P=kq)\s*:\s*)(?P<vq>['\"])(?P<value>[^'\"]+)(?P=vq)"
+    rf"(?i)(?P<prefix>(?P<kq>['\"]){_SECRET_KEY_NAME}(?P=kq)\s*:\s*)"
+    r"(?P<vq>['\"])(?P<value>(?:\\.|(?!(?P=vq)).)*)(?P=vq)"
 )
 _AUTH_JSON_FIELD_PATTERN = re.compile(
-    r"(?i)(?P<prefix>(?P<kq>['\"])authorization(?P=kq)\s*:\s*)(?P<vq>['\"])bearer\s+[^'\"]+(?P=vq)"
+    r"(?i)(?P<prefix>(?P<kq>['\"])[A-Za-z0-9_-]*authorization(?P=kq)\s*:\s*)"
+    r"(?P<vq>['\"])(?P<scheme>[A-Za-z][A-Za-z0-9_-]*)\s+"
+    r"(?P<value>(?:\\.|(?!(?P=vq)).)*)(?P=vq)"
+)
+_QUOTED_FIELD_PATTERN = re.compile(
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9])(?<![A-Za-z0-9][_-]){_SECRET_KEY_NAME}\s*[:=]\s*)"
+    r"(?P<vq>['\"])(?P<value>(?:\\.|(?!(?P=vq)).)*)(?P=vq)"
+)
+_COLON_FIELD_PATTERN = re.compile(
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9])(?<![A-Za-z0-9][_-]){_COLON_SECRET_KEY_NAME}\s*:\s*)"
+    r"(?P<value>(?!['\"])[^\s&]+)"
 )
 _QUERY_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>{_SECRET_KEYS}\s*[:=]\s*)(?P<value>[^&'\" ]+)"
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9])(?<![A-Za-z0-9][_-]){_SECRET_KEY_NAME}\s*=\s*)"
+    r"(?P<value>(?!['\"])[^\s&]+)"
 )
 _QUERY_PARAM_PATTERN = re.compile(
-    r"(?i)(?P<prefix>[?&](?:api_?key|key|access_?token|auth_?token)=)(?P<value>[^&'\" ]+)"
+    rf"(?i)(?P<prefix>[?&]{_SECRET_KEY_NAME}=)(?P<value>[^&\s]+)"
 )
 _AUTH_HEADER_PATTERN = re.compile(
-    r"(?i)(?P<prefix>\bauthorization\s*:\s*bearer\s+)(?P<token>[A-Za-z0-9._\-]+)"
+    r"(?i)(?P<prefix>\bauthorization\s*:\s*)"
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9_-]*)\s+"
+    r"(?P<token>[A-Za-z0-9._~+/=-]+)"
 )
-_BEARER_PATTERN = re.compile(r"(?i)(?P<prefix>\bbearer\s+)(?P<token>[A-Za-z0-9._\-]+)")
-_SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")
-_URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+")
+_AUTH_SCHEME_PATTERN = re.compile(
+    r"(?i)(?P<prefix>\b(?:bearer|basic|digest)\s+)"
+    r"(?P<token>[A-Za-z0-9._~+/=-]+)"
+)
+# A bare ``token`` is also an ordinary English word ("token refresh failed"),
+# so only redact a long, credential-shaped value outside an Authorization
+# header. ``_AUTH_HEADER_PATTERN`` still covers every scheme in a header.
+_TOKEN_SCHEME_PATTERN = re.compile(
+    r"(?i)(?P<prefix>\btoken\s+)"
+    r"(?P<token>[A-Za-z0-9._~+/=-]{16,})"
+)
+_SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
+_URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]{0,63}://[^\s'\"<>]+")
 _DATA_URI_PATTERN = re.compile(r"(?i)\bdata:[a-z0-9.+-]+/[a-z0-9.+-]+[^\s'\"<>]*")
 _WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])(?:[A-Za-z]:[\\/]|\\\\)[^\s'\"<>]+"
@@ -41,14 +71,23 @@ def _redact_json_field(match: re.Match[str]) -> str:
 
 def _redact_auth_json_field(match: re.Match[str]) -> str:
     quote = match.group("vq")
-    return f"{match.group('prefix')}{quote}Bearer [REDACTED]{quote}"
+    return f"{match.group('prefix')}{quote}{match.group('scheme')} [REDACTED]{quote}"
+
+
+def _redact_quoted_field(match: re.Match[str]) -> str:
+    quote = match.group("vq")
+    return f"{match.group('prefix')}{quote}[REDACTED]{quote}"
 
 
 def _redact_prefixed_value(match: re.Match[str]) -> str:
     return f"{match.group('prefix')}[REDACTED]"
 
 
-def _redact_bearer_token(match: re.Match[str]) -> str:
+def _redact_auth_value(match: re.Match[str]) -> str:
+    return f"{match.group('prefix')}{match.group('scheme')} [REDACTED]"
+
+
+def _redact_auth_scheme_value(match: re.Match[str]) -> str:
     return f"{match.group('prefix')}[REDACTED]"
 
 
@@ -58,13 +97,16 @@ def _redact_json_like(text: str) -> str:
 
 
 def _redact_query_like(text: str) -> str:
+    text = _QUOTED_FIELD_PATTERN.sub(_redact_quoted_field, text)
+    text = _COLON_FIELD_PATTERN.sub(_redact_prefixed_value, text)
     text = _QUERY_FIELD_PATTERN.sub(_redact_prefixed_value, text)
     return _QUERY_PARAM_PATTERN.sub(_redact_prefixed_value, text)
 
 
 def _redact_tokens(text: str) -> str:
-    text = _AUTH_HEADER_PATTERN.sub(_redact_bearer_token, text)
-    text = _BEARER_PATTERN.sub(_redact_bearer_token, text)
+    text = _AUTH_HEADER_PATTERN.sub(_redact_auth_value, text)
+    text = _AUTH_SCHEME_PATTERN.sub(_redact_auth_scheme_value, text)
+    text = _TOKEN_SCHEME_PATTERN.sub(_redact_auth_scheme_value, text)
     return _SK_PATTERN.sub("[REDACTED]", text)
 
 

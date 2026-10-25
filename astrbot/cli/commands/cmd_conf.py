@@ -1,4 +1,5 @@
 import json
+import sys
 import zoneinfo
 from collections.abc import Callable
 from typing import Any
@@ -171,19 +172,40 @@ def conf() -> None:
     """
 
 
+def _resolve_config_value(key: str, value: str | None) -> str:
+    if key != "dashboard.password":
+        if value is None:
+            raise click.UsageError(f"Missing value for config key: {key}")
+        return value
+
+    if value == "-":
+        return sys.stdin.read().rstrip("\r\n")
+    if value is not None:
+        raise click.UsageError(
+            "Refusing a plaintext password argument; omit it for a hidden prompt "
+            "or pass '-' to read from stdin."
+        )
+    return click.prompt(
+        "New dashboard password",
+        hide_input=True,
+        confirmation_prompt=True,
+    )
+
+
 @conf.command(name="set")
 @click.argument("key")
-@click.argument("value")
-def set_config(key: str, value: str) -> None:
+@click.argument("value", required=False)
+def set_config(key: str, value: str | None = None) -> None:
     """Set the value of a config item"""
     if key not in CONFIG_VALIDATORS:
         raise click.ClickException(f"Unsupported config key: {key}")
 
+    raw_value = _resolve_config_value(key, value)
     config = _load_config()
 
     try:
         old_value = _get_nested_item(config, key)
-        validated_value = CONFIG_VALIDATORS[key](value)
+        validated_value = CONFIG_VALIDATORS[key](raw_value)
         if key == "dashboard.password":
             _set_dashboard_password(config, validated_value)
         else:

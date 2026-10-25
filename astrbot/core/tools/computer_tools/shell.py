@@ -1,17 +1,13 @@
 import asyncio
 import json
-import os
 import shlex
-import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.booters.local import LocalShellComponent
-from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
@@ -22,44 +18,12 @@ from .util import (
     workspace_root,
 )
 
-_COMPUTER_RUNTIME_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": ("local", "sandbox"),
-}
 _LOCAL_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "local",
 }
 
 
-def _quote_redirect_path(path: str, *, local_runtime: bool) -> str:
-    if local_runtime and os.name == "nt":
-        escaped_path = path.replace('"', '""')
-    else:
-        escaped_path = path.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped_path}"'
-
-
-def _build_background_output_path(*, local_runtime: bool) -> str:
-    file_name = f"astrbot_shell_stdout_{uuid.uuid4().hex[:8]}.log"
-    if local_runtime:
-        output_dir = Path(get_astrbot_system_tmp_path()) / "shell"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        return str((output_dir / file_name).resolve(strict=False))
-    # The sandbox owns this randomly named POSIX temporary output file.
-    return f"/tmp/{file_name}"  # noqa: S108  # nosec B108
-
-
-def _redirect_background_stdout_command(
-    command: str,
-    *,
-    output_path: str,
-    local_runtime: bool,
-) -> str:
-    return f"({command}) > {_quote_redirect_path(output_path, local_runtime=local_runtime)} 2>&1"
-
-
-@builtin_tool(
-    config=_COMPUTER_RUNTIME_TOOL_CONFIG, required_actions=("tool.local_exec",)
-)
+@builtin_tool(config=_LOCAL_RUNTIME_TOOL_CONFIG, required_actions=("tool.local_exec",))
 @dataclass
 class ExecuteShellTool(FunctionTool):
     name: str = "astrbot_execute_shell"
@@ -116,98 +80,60 @@ class ExecuteShellTool(FunctionTool):
         )
         if permission_error:
             return permission_error
+        if not is_local_runtime(context):
+            return "Error executing command: only local runtime is supported."
         sandboxed = bool(local_policy and local_policy.requires_sandbox)
-
-        sb = await context.context.context.computer_runtime.get_booter(
-            context.context.context,
-            context.context.event.unified_msg_origin,
-        )
+        sb = context.context.context.computer_runtime.get_local_booter()
         try:
-            cwd: str | None = None
-            local_runtime = is_local_runtime(context)
-            if local_runtime:
-                current_workspace_root = workspace_root(
-                    context.context.event.unified_msg_origin
-                )
-                current_workspace_root.mkdir(parents=True, exist_ok=True)
-                cwd = str(current_workspace_root)
-
-                shell_component = sb.shell
-                if not isinstance(shell_component, LocalShellComponent):
-                    return (
-                        "Error executing command: local shell component is unavailable."
-                    )
-                creator_id = str(context.context.event.get_sender_id())
-                creator_is_admin = (
-                    get_local_permission_policy(context).filesystem_scope == "host"
-                    or local_policy is not None
-                    and local_policy.allow_network
-                    and not local_policy.requires_sandbox
-                )
-                umo = context.context.event.unified_msg_origin
-                workspace_scope = (
-                    local_policy is not None
-                    and local_policy.filesystem_scope == "workspace"
-                )
-                requested_timeout = timeout_seconds
-                result = await shell_component.exec_managed(
-                    command,
-                    owner_id=context.context.event.unified_msg_origin,
-                    runtime_id="local",
-                    sender_id=creator_id,
-                    creator_is_admin=creator_is_admin,
-                    sandboxed=sandboxed,
-                    permission_check=lambda: (
-                        is_local_runtime(context)
-                        and get_local_permission_policy(context) == local_policy
-                    ),
-                    allow_network=(
-                        local_policy.allow_network if local_policy else True
-                    ),
-                    filesystem_scope=(
-                        local_policy.filesystem_scope if local_policy else "host"
-                    ),
-                    cwd=cwd,
-                    env=dict(env or {}),
-                    timeout=(
-                        min(requested_timeout or 300, 300)
-                        if sandboxed
-                        else requested_timeout
-                    ),
-                    yield_time_ms=0 if background else yield_time_ms,
-                    allowed_root=str(current_workspace_root),
-                    readable_roots=_read_allowed_roots(umo) if workspace_scope else (),
-                    writable_roots=_write_allowed_roots(umo) if workspace_scope else (),
-                )
-                return json.dumps(result, ensure_ascii=False)
-
-            env = dict(env or {})
-            effective_background = background and not _is_self_detached_command(command)
-
-            stdout_file: str | None = None
-            if effective_background:
-                local_runtime = is_local_runtime(context)
-                stdout_file = _build_background_output_path(
-                    local_runtime=local_runtime,
-                )
-                command = _redirect_background_stdout_command(
-                    command,
-                    output_path=stdout_file,
-                    local_runtime=local_runtime,
-                )
-
-            result = await sb.shell.exec(
-                command,
-                cwd=cwd,
-                background=effective_background,
-                env=env,
-                timeout_seconds=timeout_seconds or 300,
+            current_workspace_root = workspace_root(
+                context.context.event.unified_msg_origin
             )
-            if stdout_file:
-                result["stdout"] = (
-                    f"Command is running in the background. stdout/stderr is being "
-                    f"written to `{stdout_file}`. Use astrbot_file_read_tool to read it."
-                )
+            current_workspace_root.mkdir(parents=True, exist_ok=True)
+            cwd = str(current_workspace_root)
+
+            shell_component = sb.shell
+            if not isinstance(shell_component, LocalShellComponent):
+                return "Error executing command: local shell component is unavailable."
+            creator_id = str(context.context.event.get_sender_id())
+            creator_is_admin = (
+                get_local_permission_policy(context).filesystem_scope == "host"
+                or local_policy is not None
+                and local_policy.allow_network
+                and not local_policy.requires_sandbox
+            )
+            umo = context.context.event.unified_msg_origin
+            workspace_scope = (
+                local_policy is not None
+                and local_policy.filesystem_scope == "workspace"
+            )
+            requested_timeout = timeout_seconds
+            result = await shell_component.exec_managed(
+                command,
+                owner_id=context.context.event.unified_msg_origin,
+                runtime_id="local",
+                sender_id=creator_id,
+                creator_is_admin=creator_is_admin,
+                sandboxed=sandboxed,
+                permission_check=lambda: (
+                    is_local_runtime(context)
+                    and get_local_permission_policy(context) == local_policy
+                ),
+                allow_network=(local_policy.allow_network if local_policy else True),
+                filesystem_scope=(
+                    local_policy.filesystem_scope if local_policy else "host"
+                ),
+                cwd=cwd,
+                env=dict(env or {}),
+                timeout=(
+                    min(requested_timeout or 300, 300)
+                    if sandboxed
+                    else requested_timeout
+                ),
+                yield_time_ms=0 if background else yield_time_ms,
+                allowed_root=str(current_workspace_root),
+                readable_roots=_read_allowed_roots(umo) if workspace_scope else (),
+                writable_roots=_write_allowed_roots(umo) if workspace_scope else (),
+            )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             detail = str(e) or type(e).__name__
@@ -282,9 +208,7 @@ class ShellSessionTool(FunctionTool):
         owner_id = context.context.event.unified_msg_origin
         sender_id = str(context.context.event.get_sender_id())
         try:
-            booter = await context.context.context.computer_runtime.get_booter(
-                context.context.context, owner_id
-            )
+            booter = context.context.context.computer_runtime.get_local_booter()
             if not isinstance(booter.shell, LocalShellComponent):
                 return "Error managing shell session: local shell component is unavailable."
             shell = booter.shell

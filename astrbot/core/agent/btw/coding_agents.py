@@ -272,7 +272,7 @@ def active_provider(agent: Mapping) -> dict | None:
 def settings_home(agent: Mapping) -> Path:
     """Return the AstrBot-owned directory holding one agent's generated config."""
     root = Path(get_astrbot_data_path()) / "btw" / "coding-agents"
-    return root / str(agent.get("id", "agent"))
+    return root / agent_id_slug(agent.get("id"))
 
 
 def _profile_home() -> Path:

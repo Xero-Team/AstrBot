@@ -12,6 +12,7 @@ from tenacity import (
 
 from astrbot import logger
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.network_utils import is_connection_error
 
 T = TypeVar("T")
@@ -75,9 +76,11 @@ def _log_retry(
 ) -> None:
     error = retry_state.outcome.exception() if retry_state.outcome else None
     logger.warning(
-        f"[{provider_label}] Request failed with retryable error; "
-        f"retrying ({retry_state.attempt_number + 1}/{max_attempts}): "
-        f"{error}"
+        "[%s] Request failed with retryable error; retrying (%s/%s): %s",
+        provider_label,
+        retry_state.attempt_number + 1,
+        max_attempts,
+        safe_error("", error) if error is not None else "unknown error",
     )
 
 

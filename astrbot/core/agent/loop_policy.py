@@ -45,6 +45,21 @@ def is_work_loop_enabled(config: object) -> bool:
     return isinstance(work, Mapping) and bool(work.get("enabled", False))
 
 
+COMPUTER_USE_RUNTIMES = frozenset({"none", "local"})
+
+
+def normalize_computer_use_runtime(value: object) -> str:
+    """Normalize an untrusted runtime value to the supported set.
+
+    Per-profile configuration files do not pass through the main config
+    migration, so a legacy ``sandbox`` value or an unknown string must fail
+    closed to ``none`` rather than reaching a host-level runtime.
+    """
+    return (
+        value if isinstance(value, str) and value in COMPUTER_USE_RUNTIMES else "none"
+    )
+
+
 def resolve_computer_runtime(
     profile: Mapping,
     loop: object,
@@ -61,6 +76,7 @@ def resolve_computer_runtime(
         The inherited runtime when BTW is disabled, otherwise the permitted
         runtime for this loop.
     """
+    inherited = normalize_computer_use_runtime(inherited)
     btw = profile.get("btw", {})
     if not isinstance(btw, Mapping) or not btw.get("enabled", False):
         return inherited
@@ -72,9 +88,9 @@ def resolve_computer_runtime(
         if isinstance(work, Mapping)
         else "inherit"
     )
-    if runtime not in ("none", "local", "sandbox"):
-        runtime = inherited
-    return runtime if runtime in ("none", "local", "sandbox") else "none"
+    if runtime == "inherit":
+        return inherited
+    return normalize_computer_use_runtime(runtime)
 
 
 def work_loop_is_read_only(profile: Mapping, loop: object) -> bool:

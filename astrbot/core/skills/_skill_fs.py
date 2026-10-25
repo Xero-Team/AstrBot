@@ -121,7 +121,13 @@ def _open_nofollow_dirfd(root: Path, parts: tuple[str, ...]) -> int:
         raise NotImplementedError("O_DIRECTORY unavailable")
     root_flags = os.O_RDONLY | cloexec | directory
     dir_flags = os.O_RDONLY | cloexec | directory | nofollow
-    file_flags = os.O_RDONLY | cloexec | nofollow
+    file_flags = (
+        os.O_RDONLY
+        | cloexec
+        | nofollow
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
     dirfd = os.open(root, root_flags)
     try:
         for index, part in enumerate(parts):

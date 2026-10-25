@@ -4,7 +4,6 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from astrbot.core.skills._skill_inventory import (
-    _SKILL_NAME_RE,
     _get_archive_names,
     _get_archive_top_dirs,
     _is_ignored_zip_entry,
@@ -12,7 +11,9 @@ from astrbot.core.skills._skill_inventory import (
     _normalize_archive_skill_name,
     _normalize_skill_markdown_path,
     _normalize_skill_name,
+    _resolve_skill_dir,
     _validate_archive_paths,
+    _validate_skill_dir_name,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -20,37 +21,32 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 class SkillManagerArchiveMixin:
     skills_root: str
 
-    def is_sandbox_only_skill(self, name: str) -> bool: ...
     def is_plugin_skill(self, name: str) -> bool: ...
     def is_builtin_skill(self, name: str) -> bool: ...
     def set_skill_active(self, name: str, active: bool) -> None: ...
-    def _remove_skill_from_sandbox_cache(self, name: str) -> None: ...
     def _load_config(self) -> dict: ...
     def _save_config(self, config: dict) -> None: ...
 
     def delete_skill(self, name: str) -> None:
-        if self.is_sandbox_only_skill(name):
-            raise PermissionError(
-                "Sandbox preset skill cannot be deleted from local skill management."
-            )
-        if self.is_plugin_skill(name):
+        skill_name = _validate_skill_dir_name(name)
+        if self.is_plugin_skill(skill_name):
             raise PermissionError(
                 "Plugin-provided skill cannot be deleted from local skill management."
             )
-        if self.is_builtin_skill(name):
+        if self.is_builtin_skill(skill_name):
             raise PermissionError(
                 "Builtin preset skill cannot be deleted from local skill management."
             )
 
-        skill_dir = Path(self.skills_root) / name
-        if skill_dir.exists():
+        skill_dir = _resolve_skill_dir(self.skills_root, skill_name)
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+        elif skill_dir.exists():
             shutil.rmtree(skill_dir)
 
-        self._remove_skill_from_sandbox_cache(name)
-
         config = self._load_config()
-        if name in config.get("skills", {}):
-            config["skills"].pop(name, None)
+        if skill_name in config.get("skills", {}):
+            config["skills"].pop(skill_name, None)
             self._save_config(config)
 
     def _validate_skill_archive_conflicts(
@@ -91,7 +87,10 @@ class SkillManagerArchiveMixin:
             )
             if target_name is None:
                 continue
-            dest_dir = Path(self.skills_root) / target_name
+            try:
+                dest_dir = _resolve_skill_dir(self.skills_root, target_name)
+            except ValueError:
+                continue
             if dest_dir.exists():
                 conflict_dirs.append(str(dest_dir))
         return conflict_dirs
@@ -134,11 +133,15 @@ class SkillManagerArchiveMixin:
         skill_name: str,
         overwrite: bool,
     ) -> str:
-        dest_dir = Path(self.skills_root) / skill_name
-        if dest_dir.exists():
+        skill_name = _validate_skill_dir_name(skill_name)
+        dest_dir = _resolve_skill_dir(self.skills_root, skill_name)
+        if dest_dir.is_symlink() or dest_dir.exists():
             if not overwrite:
                 raise FileExistsError(f"Skill {skill_name} already exists.")
-            shutil.rmtree(dest_dir)
+            if dest_dir.is_symlink():
+                dest_dir.unlink()
+            else:
+                shutil.rmtree(dest_dir)
 
         shutil.move(str(src_dir), str(dest_dir))
         self.set_skill_active(skill_name, True)
@@ -152,9 +155,9 @@ class SkillManagerArchiveMixin:
         zip_stem: str,
         overwrite: bool,
     ) -> str:
-        skill_name = _normalize_skill_name(archive_skill_name or zip_stem)
-        if not skill_name or not _SKILL_NAME_RE.fullmatch(skill_name):
-            raise ValueError("Invalid skill name.")
+        skill_name = _validate_skill_dir_name(
+            _normalize_skill_name(archive_skill_name or zip_stem)
+        )
 
         src_dir = Path(tmp_dir)
         if _normalize_skill_markdown_path(src_dir) is None:

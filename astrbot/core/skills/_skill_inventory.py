@@ -1,40 +1,45 @@
+import os
 import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-SANDBOX_SKILLS_ROOT = "skills"
-SANDBOX_WORKSPACE_ROOT = "/workspace"
 WORKSPACE_SKILLS_ROOT = "skills"
 WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS = 64 * 1024
 
-_SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
+_SKILL_NAME_RE = re.compile(r"^(?!\.{1,2}$)[\w.-]+$")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F-\x9F]")
+
+
+def _validate_skill_dir_name(name: str | None) -> str:
+    """Return a safe single-component skill directory name."""
+    skill_name = str(name or "").strip()
+    if not skill_name or not _SKILL_NAME_RE.fullmatch(skill_name):
+        raise ValueError("Invalid skill name.")
+    return skill_name
+
+
+def _resolve_skill_dir(root: str | Path, name: str | None) -> Path:
+    """Resolve one skill directory and prove it stays under ``root``.
+
+    Both the joined path and its real path are normalized and prefix-checked, so
+    a symlinked skill cannot escape the skills root.
+    """
+    skill_name = _validate_skill_dir_name(name)
+    root_path = Path(root).resolve(strict=True)
+    root_prefix = os.path.join(str(root_path), "")
+    candidate = os.path.normpath(os.path.join(str(root_path), skill_name))
+    if not candidate.startswith(root_prefix):
+        raise ValueError("Invalid skill path.")
+    resolved = os.path.realpath(candidate)
+    if resolved == str(root_path) or not resolved.startswith(root_prefix):
+        raise ValueError("Invalid skill path.")
+    return Path(candidate)
 
 
 def _normalize_skill_name(name: str | None) -> str:
     raw = str(name or "")
     return re.sub(r"\s+", "_", raw.strip())
-
-
-def _default_sandbox_skill_path(name: str) -> str:
-    return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
-
-
-def _normalize_cached_sandbox_skill_path(name: str, path: str) -> str:
-    normalized = str(path or "").strip().replace("\\", "/")
-    if not normalized:
-        return _default_sandbox_skill_path(name)
-
-    pure_path = PurePosixPath(normalized)
-    if _is_invalid_cached_sandbox_skill_path(name, pure_path):
-        return _default_sandbox_skill_path(name)
-
-    return str(pure_path)
-
-
-def _is_invalid_cached_sandbox_skill_path(name: str, path: PurePosixPath) -> bool:
-    return ".." in path.parts or path.name != "SKILL.md" or path.parent.name != name
 
 
 def _is_ignored_zip_entry(name: str) -> bool:
@@ -113,7 +118,6 @@ class SkillInfo:
     source_type: str = "local_only"
     source_label: str = "local"
     local_exists: bool = True
-    sandbox_exists: bool = False
     plugin_name: str = ""
     readonly: bool = False
     declared_tools: tuple[str, ...] = ()
@@ -201,7 +205,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
 def _render_skill_prompt_description(skill: SkillInfo) -> str:
     description = skill.description or "No description"
-    if skill.source_type not in {"sandbox_only", "workspace"}:
+    if skill.source_type != "workspace":
         return description
     sanitized = _sanitize_prompt_description(description)
     return sanitized or "Read SKILL.md for details."

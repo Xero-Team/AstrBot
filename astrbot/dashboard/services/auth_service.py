@@ -725,23 +725,8 @@ class AuthService:
 
             code = post_data.get("code")
             if isinstance(code, str) and code.strip():
-                if await self.totp_runtime_state.consume_totp_code(
-                    account.totp_secret, code
-                ):
-                    async with self.totp_runtime_state._rotation_lock:
-                        self.totp_runtime_state._rotation_verified_subjects.add(
-                            self.totp_runtime_state._subject_key(subject)
-                        )
-                    return AuthServiceResult(data={"secret": pyotp.random_base32()})
                 if await self.totp_runtime_state.verify_rotation_secret(
                     subject, account.totp_secret, code
-                ):
-                    return AuthServiceResult(data={"secret": pyotp.random_base32()})
-                # Direct setup callers may supply the current factor in the
-                # same request; accept it as the session-scoped verification
-                # instead of requiring a separate browser round trip.
-                if await self.totp_runtime_state.consume_totp_code(
-                    account.totp_secret, code
                 ):
                     return AuthServiceResult(data={"secret": pyotp.random_base32()})
                 return self.error("当前 TOTP 验证码无效")
@@ -788,6 +773,14 @@ class AuthService:
             return self.error("Setup without password is not enabled")
         if not await self.is_setup_required():
             return self.error("Setup is not required")
+        if authenticated_username is None and isinstance(post_data, dict):
+            requested_username = post_data.get("username")
+            if (
+                isinstance(requested_username, str)
+                and await self._find_account_by_username(requested_username.strip())
+                is not None
+            ):
+                return self.error("Dashboard username already exists")
 
         return await self.complete_setup(
             post_data,

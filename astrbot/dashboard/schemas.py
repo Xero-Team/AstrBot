@@ -611,11 +611,12 @@ class KnowledgeBaseUrlImportRequest(OpenModel):
         return self
 
 
-class KnowledgeBaseRetrieveRequest(OpenModel):
-    query: str | None = None
-    top_k: int | None = None
-    threshold: float | None = None
-    rerank: bool | None = None
+class KnowledgeBaseRetrieveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=50)
+    debug: bool = False
 
 
 class MemoryFactCreateRequest(OpenModel):
@@ -763,28 +764,22 @@ class SkillUpdateRequest(BaseModel):
     active: bool
 
 
-class SkillNeoRequest(OpenModel):
-    skill_name: str | None = None
-    skill_key: str | None = None
-    name: str | None = None
-    candidate_id: str | None = None
-    release_id: str | None = None
-    profile_id: str | None = None
-    payload: dict[str, Any] | None = None
-
-
 class ConversationRef(BaseModel):
     user_id: str
     cid: str
 
 
-class ConversationPatchRequest(OpenModel):
+class ConversationPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     user_id: str | None = None
     title: str | None = None
     prompt_id: str | None = None
 
 
-class ConversationMessagesReplaceRequest(OpenModel):
+class ConversationMessagesReplaceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     user_id: str | None = None
     history: list[Any] | str | None = None
     messages: list[Any] | str | None = None

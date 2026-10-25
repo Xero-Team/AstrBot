@@ -828,7 +828,7 @@ class FunctionToolManager:
     async def test_mcp_server_connection(config: dict) -> list[str]:
         mcp_client = MCPClient()
         try:
-            logger.debug(f"testing MCP server connection with config: {config}")
+            FunctionToolManager._log_safe_mcp_debug_config(config)
             # A test connection is short-lived.  The initial catalog is already
             # fetched by connect_to_server(); opening a subscription here can
             # race the cleanup and some servers only allow one subscription.

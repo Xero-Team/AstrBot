@@ -11,6 +11,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.send_result import PlatformSendResult
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 
@@ -101,11 +102,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     try:
                         response = self._client.media.upload("image", f)
                     except Exception as e:
-                        logger.error(f"微信公众平台上传图片失败: {e}")
-                        await self.send(
-                            MessageChain().message(f"微信公众平台上传图片失败: {e}"),
-                        )
-                        return
+                        return await self._send_upload_failure("图片", e)
                     logger.debug(f"微信公众平台上传图片返回: {response}")
 
                     if active_send_mode:
@@ -132,13 +129,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         try:
                             response = self._client.media.upload("voice", f)
                         except Exception as e:
-                            logger.error(f"微信公众平台上传语音失败: {e}")
-                            await self.send(
-                                MessageChain().message(
-                                    f"微信公众平台上传语音失败: {e}"
-                                ),
-                            )
-                            return
+                            return await self._send_upload_failure("语音", e)
                         logger.info(f"微信公众平台上传语音返回: {response}")
 
                         if active_send_mode:
@@ -170,6 +161,22 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
 
         return await super().send(message)
+
+    async def _send_upload_failure(
+        self,
+        kind: str,
+        error: Exception,
+    ) -> PlatformSendResult | None:
+        logger.error(
+            "微信公众平台上传%s失败: %s",
+            kind,
+            safe_error("", error),
+        )
+        return await super().send(
+            MessageChain().message(
+                f"微信公众平台上传{kind}失败，请稍后重试",
+            )
+        )
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         return await self._send_buffered_streaming_response(generator, use_fallback)

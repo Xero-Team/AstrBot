@@ -79,7 +79,8 @@ def test_conf_set_dashboard_password_updates_password_state(monkeypatch, tmp_pat
     runner = CliRunner()
     result = runner.invoke(
         conf,
-        ["set", "dashboard.password", "AstrbotChanged123"],
+        ["set", "dashboard.password", "-"],
+        input="AstrbotChanged123\n",
     )
 
     assert result.exit_code == 0

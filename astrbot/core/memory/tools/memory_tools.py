@@ -15,7 +15,7 @@ def _format_fact(fact: MemoryFact) -> str:
     )
 
 
-@builtin_tool
+@builtin_tool(required_actions=("tool.memory_read",))
 @dataclass
 class SearchMemoryTool(FunctionTool[AstrAgentContext]):
     name: str = "search_memory"
@@ -93,7 +93,7 @@ class GetPersonProfileTool(FunctionTool[AstrAgentContext]):
         return profile.profile_text
 
 
-@builtin_tool
+@builtin_tool(required_actions=("tool.memory_read",))
 @dataclass
 class QueryEpisodeTool(FunctionTool[AstrAgentContext]):
     name: str = "query_episode"

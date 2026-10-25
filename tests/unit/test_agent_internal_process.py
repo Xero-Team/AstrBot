@@ -137,7 +137,6 @@ async def test_internal_process_accepts_non_text_messages_with_reply_or_media(
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
@@ -754,7 +753,6 @@ async def test_internal_process_streaming_sets_finish_result_from_final_response
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event)]
@@ -822,7 +820,6 @@ async def test_internal_process_turns_streaming_into_general_when_platform_lacks
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
 
     yielded = [item async for item in stage.process(event)]
     await asyncio.sleep(0)
@@ -884,7 +881,6 @@ async def test_internal_process_awaits_reset_before_running_agent(monkeypatch):
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fake_create_task)
 
     yielded = [item async for item in stage.process(event)]
@@ -945,7 +941,6 @@ async def test_internal_process_skips_history_save_when_event_stopped_without_ab
     stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = (
         unregister_runner
     )
-    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
     yielded = [item async for item in stage.process(event)]
@@ -1000,7 +995,6 @@ async def test_internal_process_saves_history_when_event_stopped_but_runner_abor
     )
     monkeypatch.setattr(internal, "run_agent", fake_run_agent)
     monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
 
     yielded = [item async for item in stage.process(event)]
@@ -1065,7 +1059,6 @@ async def test_internal_process_unregisters_runner_and_sends_error_when_history_
         unregister_runner
     )
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(
         internal,
         "get_agent_error_message",
@@ -1143,7 +1136,6 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
         unregister_runner
     )
     monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
     monkeypatch.setattr(task_utils.asyncio, "create_task", fail_create_task)
     monkeypatch.setattr(
         internal,
@@ -1155,93 +1147,6 @@ async def test_internal_process_sends_error_when_stats_task_creation_fails_befor
 
     assert yielded == [None]
     save_to_history.assert_not_awaited()
-    register_runner.assert_called_once_with(event.unified_msg_origin, runner)
-    unregister_runner.assert_called_once_with(event.unified_msg_origin, runner)
-    event.send.assert_awaited_once()
-    assert (
-        event.send.await_args.args[0].get_plain_text()
-        == "Error occurred during AI execution."
-    )
-    event.stop_typing.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_internal_process_sends_error_when_metric_task_creation_fails_after_history_save(
-    monkeypatch,
-):
-    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
-    stage.streaming_response = False
-    stage.show_tool_use = True
-    stage.show_tool_call_result = False
-    stage.show_reasoning = False
-    stage.buffer_intermediate_messages = False
-    stage.max_step = 5
-    stage.unsupported_streaming_strategy = "turn_off"
-    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
-    stage.main_agent_cfg = object()
-    stage.ctx = _pipeline_context(_internal_plugin_context())
-    event = FakeInternalProcessEvent(message_str="hello")
-    runner = FakeInternalRunner()
-    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-metric-task-fail"))
-    build_result = SimpleNamespace(
-        agent_runner=runner,
-        provider_request=req,
-        provider=runner.provider,
-        reset_coro=None,
-    )
-    save_to_history = AsyncMock()
-    register_runner = MagicMock()
-    unregister_runner = MagicMock()
-    created_coroutines: list = []
-    scheduled_tasks: list[asyncio.Task] = []
-
-    async def fake_run_agent(*args, **kwargs):
-        yield
-
-    def fail_on_second_create_task(coro, *, name=None):
-        created_coroutines.append(coro)
-        if len(created_coroutines) == 1:
-            coro.close()
-            task = asyncio.get_running_loop().create_task(asyncio.sleep(0), name=name)
-            scheduled_tasks.append(task)
-            return task
-        coro.close()
-        raise RuntimeError("schedule metric failed")
-
-    monkeypatch.setattr(
-        stage.ctx.execution_context.session_lock_manager,
-        "acquire_lock",
-        lambda _umo: _AsyncLockContext(),
-    )
-    monkeypatch.setattr(
-        internal, "replace", lambda _cfg, **kwargs: _fake_build_cfg(**kwargs)
-    )
-    monkeypatch.setattr(internal, "call_event_hook", AsyncMock(return_value=False))
-    monkeypatch.setattr(
-        internal, "build_main_agent", AsyncMock(return_value=build_result)
-    )
-    monkeypatch.setattr(internal, "run_agent", fake_run_agent)
-    monkeypatch.setattr(stage, "_save_to_history", save_to_history)
-    stage.ctx.execution_context.follow_up_coordinator.register_active_runner = (
-        register_runner
-    )
-    stage.ctx.execution_context.follow_up_coordinator.unregister_active_runner = (
-        unregister_runner
-    )
-    monkeypatch.setattr(internal, "_record_internal_agent_stats", AsyncMock())
-    _set_metrics_upload(stage, AsyncMock())
-    monkeypatch.setattr(task_utils.asyncio, "create_task", fail_on_second_create_task)
-    monkeypatch.setattr(
-        internal,
-        "get_agent_error_message",
-        lambda _event: "Error occurred during AI execution.",
-    )
-
-    yielded = [item async for item in stage.process(event)]
-    await asyncio.gather(*scheduled_tasks)
-
-    assert yielded == [None]
-    save_to_history.assert_awaited_once()
     register_runner.assert_called_once_with(event.unified_msg_origin, runner)
     unregister_runner.assert_called_once_with(event.unified_msg_origin, runner)
     event.send.assert_awaited_once()

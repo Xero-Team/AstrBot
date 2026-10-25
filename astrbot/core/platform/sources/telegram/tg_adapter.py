@@ -714,7 +714,7 @@ class TelegramPlatformAdapter(Platform):
         data = getattr(query, "data", None)
         token = str(data) if isinstance(data, str) else ""
         self._prune_callback_bindings()
-        binding = self._callback_bindings.pop(token, None)
+        binding = self._callback_bindings.get(token)
         if binding is None or not token.startswith(TELEGRAM_CALLBACK_PREFIX):
             await self._ack_callback(query, text="This action is no longer available.")
             return
@@ -780,6 +780,12 @@ class TelegramPlatformAdapter(Platform):
                     return
             if role not in binding.allowed_roles:
                 return
+
+        if self._callback_bindings.pop(token, None) is not binding:
+            # Another update for the same token was handled while this one was
+            # awaiting role lookup. Keep the binding single-use.
+            await self._ack_callback(query, text="This action is no longer available.")
+            return
 
         abm = AstrBotMessage()
         is_private = getattr(chat, "type", None) == ChatType.PRIVATE

@@ -271,11 +271,8 @@ def test_build_handoff_toolset_keeps_declared_tools(runtime):
     assert (toolset.get_tool("astrbot_execute_python") is not None) == (
         runtime == "local"
     )
-    assert (toolset.get_tool("astrbot_execute_ipython") is not None) == (
-        runtime == "sandbox"
-    )
     assert (toolset.get_tool("astrbot_execute_shell") is not None) == (
-        runtime in {"local", "sandbox"}
+        runtime == "local"
     )
 
 
@@ -286,7 +283,7 @@ def test_build_handoff_toolset_keeps_declared_tools(runtime):
         (True, None, "inherit", "none"),
         (True, "conversation", "sandbox", "none"),
         (True, "work", "inherit", "local"),
-        (True, "work", "sandbox", "sandbox"),
+        (True, "work", "sandbox", "none"),
         (True, "work", "none", "none"),
         (False, "conversation", "sandbox", "local"),
     ],
@@ -302,7 +299,6 @@ def test_handoff_respects_btw_runtime_for_all_tool_declarations(
         for name in (
             "weather",
             "astrbot_file_read_tool",
-            "astrbot_create_skill_payload",
         )
     ]
     manager.func_list = declared
@@ -337,12 +333,8 @@ def test_handoff_respects_btw_runtime_for_all_tool_declarations(
         assert not COMPUTER_TOOL_NAMES.intersection(names)
     else:
         assert "astrbot_file_read_tool" in names
-        assert "astrbot_create_skill_payload" in names
         if tool_selection == "all":
-            assert ("astrbot_execute_python" in names) is (expected_runtime == "local")
-            assert ("astrbot_execute_ipython" in names) is (
-                expected_runtime == "sandbox"
-            )
+            assert "astrbot_execute_python" in names
     assert profile["provider_settings"]["computer_use_runtime"] == "local"
 
 
@@ -360,9 +352,6 @@ def test_handoff_keeps_a_read_only_work_loop_inside_its_boundary():
         FunctionTool(name="mystery", description="mystery", parameters={}),
         FunctionTool(name="astrbot_execute_shell", description="shell", parameters={}),
         FunctionTool(name="astrbot_file_read_tool", description="read", parameters={}),
-        FunctionTool(
-            name="astrbot_create_skill_payload", description="neo", parameters={}
-        ),
         FunctionTool(
             name="delegate_coding_task", description="delegate", parameters={}
         ),
@@ -394,7 +383,6 @@ def test_handoff_keeps_a_read_only_work_loop_inside_its_boundary():
     assert "delegate_coding_task" in work_names
     assert "mystery" not in work_names
     assert "astrbot_execute_shell" not in work_names
-    assert "astrbot_create_skill_payload" not in work_names
 
     assert "delegate_coding_task" not in names_for("conversation")
 

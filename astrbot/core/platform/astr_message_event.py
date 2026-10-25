@@ -1,9 +1,7 @@
 import abc
 import asyncio
-import hashlib
 import os
 import re
-import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -223,7 +221,7 @@ class AstrMessageEvent(abc.ABC):
         self._background_tasks: set[asyncio.Task] = set()
         """Tasks retained by this event until its owning platform binds them."""
         self._metrics: MetricsSink | None = None
-        """Telemetry capability injected by the originating platform."""
+        """Local statistics capability injected by the originating platform."""
 
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
@@ -242,19 +240,19 @@ class AstrMessageEvent(abc.ABC):
         self._background_tasks = task_set
 
     def bind_metrics(self, metrics: MetricsSink) -> None:
-        """Bind telemetry from the platform that owns this event."""
+        """Bind local statistics from the platform that owns this event."""
 
         self._metrics = metrics
 
-    def _schedule_metric(self, *, name: str, **kwargs: Any) -> None:
-        """Schedule a metric under this event's bound task owner."""
+    def _schedule_metric(self, *, name: str) -> None:
+        """Record a local platform event under this event's bound task owner."""
 
         metrics = getattr(self, "_metrics", None)
         if metrics is None:
             return
         create_tracked_task(
             self._background_tasks,
-            metrics.upload(**kwargs),
+            metrics.record_platform_event(platform_id=self.platform_meta.name),
             name=name,
         )
 
@@ -761,8 +759,6 @@ class AstrMessageEvent(abc.ABC):
         """Record exactly one successful logical streaming response."""
         self._schedule_metric(
             name=f"metric:stream:{self.platform_meta.name}",
-            msg_event_tick=1,
-            adapter_name=self.platform_meta.name,
         )
         self._has_send_oper = True
         return self._success_send_result()
@@ -989,14 +985,8 @@ class AstrMessageEvent(abc.ABC):
             await turn.gate.hold_turn(turn.umo, turn.event)
         elif gate is not None and umo:
             await gate.hold_turn(umo, self)
-        # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
-        hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
-        sid = str(uuid.UUID(bytes=hash_obj.digest()))
         self._schedule_metric(
             name=f"metric:send:{self.platform_meta.name}",
-            msg_event_tick=1,
-            adapter_name=self.platform_meta.name,
-            sid=sid,
         )
         self._has_send_oper = True
         return self._success_send_result(message_count=len(message.chain))

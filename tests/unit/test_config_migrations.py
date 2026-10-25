@@ -160,6 +160,36 @@ def test_local_permission_migration_preserves_other_policies():
     )
 
 
+def test_retired_sandbox_runtime_fails_closed_to_none():
+    conf = {
+        "schema_revision": 4,
+        "provider_settings": {
+            "computer_use_runtime": "sandbox",
+            "sandbox": {"booter": "shipyard_neo"},
+            "computer_use_local_permissions": {},
+        },
+        "btw": {"work_loop": {"computer_use_runtime": "sandbox"}},
+    }
+
+    assert migrate_config_dict(conf) is True
+    assert conf["schema_revision"] == CONFIG_SCHEMA_REVISION
+    assert conf["provider_settings"]["computer_use_runtime"] == "none"
+    assert "sandbox" not in conf["provider_settings"]
+    assert conf["btw"]["work_loop"]["computer_use_runtime"] == "none"
+
+
+def test_retired_sandbox_runtime_preserves_local_and_none():
+    conf = {
+        "schema_revision": 4,
+        "provider_settings": {"computer_use_runtime": "local"},
+        "btw": {"work_loop": {"computer_use_runtime": "inherit"}},
+    }
+
+    assert migrate_config_dict(conf) is True
+    assert conf["provider_settings"]["computer_use_runtime"] == "local"
+    assert conf["btw"]["work_loop"]["computer_use_runtime"] == "inherit"
+
+
 def test_config_load_migrates_and_persists_flat_file(tmp_path):
     config_path = tmp_path / "cmd_config.json"
     config_path.write_text(

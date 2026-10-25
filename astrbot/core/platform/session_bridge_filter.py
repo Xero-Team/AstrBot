@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from typing import Any
 
+import regex
+
+from astrbot import logger
 from astrbot.core.auth.models import Role
 
 from .message_protocol import NativeContent, PortablePart
@@ -14,6 +17,7 @@ FILTER_DIMENSIONS = ("subjects", "roles", "text")
 FILTER_SIDES = ("match", "except")
 MAX_FILTER_ITEMS = 16
 MAX_PATTERN_LENGTH = 256
+MATCH_TIMEOUT_SECONDS = 0.01
 FILTER_ROLES = frozenset(role.value for role in Role)
 COMMAND_DIMENSIONS = {
     "subject": "subjects",
@@ -22,6 +26,10 @@ COMMAND_DIMENSIONS = {
 }
 
 _RULE_ID_CHARS = frozenset("0123456789abcdef")
+
+
+class FilterEvaluationTimeout(Exception):
+    """Raised when a text pattern exceeds its bounded match time."""
 
 
 def coerce_filter_side(payload: object) -> dict[str, list[str]]:
@@ -67,8 +75,13 @@ def portable_text(content: Sequence[object]) -> str:
     return "".join(parts)
 
 
-def compile_text_pattern(pattern: str) -> re.Pattern[str]:
-    """Compile one stdlib ``re`` pattern at save time.
+@lru_cache(maxsize=256)
+def _compile_filter_pattern(pattern: str) -> regex.Pattern[str]:
+    return regex.compile(pattern)
+
+
+def compile_text_pattern(pattern: str) -> regex.Pattern[str]:
+    """Compile one bounded search pattern at save time.
 
     Args:
         pattern: Caller-supplied search pattern.
@@ -83,8 +96,8 @@ def compile_text_pattern(pattern: str) -> re.Pattern[str]:
     if not pattern or len(pattern) > MAX_PATTERN_LENGTH:
         raise ValueError("Invalid filter pattern")
     try:
-        return re.compile(pattern)
-    except re.error as exc:
+        return _compile_filter_pattern(pattern)
+    except regex.error as exc:
         raise ValueError("Invalid filter pattern") from exc
 
 
@@ -155,11 +168,14 @@ def parse_rule_id(token: str) -> str:
 def _patterns_match(patterns: Sequence[str], text: str) -> bool:
     for pattern in patterns:
         try:
-            compiled = re.compile(pattern)
-        except re.error:
+            compiled = _compile_filter_pattern(pattern)
+        except regex.error:
             continue
-        if compiled.search(text) is not None:
-            return True
+        try:
+            if compiled.search(text, timeout=MATCH_TIMEOUT_SECONDS) is not None:
+                return True
+        except TimeoutError as exc:
+            raise FilterEvaluationTimeout("Filter pattern timed out") from exc
     return False
 
 
@@ -235,8 +251,12 @@ def evaluate_filter(
         "role": role,
         "text": text,
     }
-    if not side_matches(match_doc, **kwargs):
+    try:
+        if not side_matches(match_doc, **kwargs):
+            return False
+        if not has_filter_constraints(except_doc):
+            return True
+        return not side_matches(except_doc, **kwargs)
+    except FilterEvaluationTimeout:
+        logger.warning("Session bridge filter pattern timed out; dropping message")
         return False
-    if not has_filter_constraints(except_doc):
-        return True
-    return not side_matches(except_doc, **kwargs)

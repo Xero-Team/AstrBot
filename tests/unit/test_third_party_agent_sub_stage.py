@@ -91,7 +91,6 @@ async def test_third_party_runner_receives_inline_profile_config(
                 conversation_manager=MagicMock(),
                 prompt_manager=MagicMock(),
                 background_tasks=set(),
-                metrics=SimpleNamespace(upload=AsyncMock()),
             ),
             handlers=MagicMock(),
             plugins=MagicMock(),

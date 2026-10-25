@@ -11,6 +11,7 @@ import type {
   HistoryRecord,
   MessagePart,
 } from '@/domain/chat';
+import { webchatProtocols } from '@/utils/webchatProtocol';
 import { buildChatRequestFlags } from './chatRequestFlags';
 import { createStreamPayloadHandlers } from './chatStreamPayload';
 import { readSseStream } from './chatStreamReader';
@@ -520,6 +521,9 @@ export function useMessages(options: UseMessagesOptions) {
 
   function takeWebChatStepUpTokens(): Record<string, string> | undefined {
     const tokens = options.webchatStepUpTokens?.value || undefined;
+    if (tokens && options.webchatStepUpTokens) {
+      options.webchatStepUpTokens.value = null;
+    }
     return tokens;
   }
 
@@ -989,7 +993,10 @@ export function useMessages(options: UseMessagesOptions) {
     }
 
     const token = localStorage.getItem('token') || '';
-    const ws = new WebSocket(chatApi.unifiedWebSocketUrl(token));
+    const ws = new WebSocket(
+      chatApi.unifiedWebSocketUrl(),
+      webchatProtocols(token),
+    );
     chatWebSockets.set(sessionId, ws);
 
     ws.onmessage = (event) => {

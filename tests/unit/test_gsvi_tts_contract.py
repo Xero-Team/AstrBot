@@ -78,6 +78,7 @@ class _Session:
     ) -> None:
         self.post_response = post_response
         self.get_response = get_response
+        self.get_kwargs: dict[str, object] = {}
 
     async def __aenter__(self) -> _Session:
         return self
@@ -88,7 +89,8 @@ class _Session:
     def post(self, *_args: object, **_kwargs: object) -> _Request:
         return _Request(self.post_response)
 
-    def get(self, *_args: object, **_kwargs: object) -> _Request:
+    def get(self, *_args: object, **kwargs: object) -> _Request:
+        self.get_kwargs = kwargs
         return _Request(self.get_response)
 
 
@@ -180,7 +182,13 @@ async def test_gsvi_tts_cancellation_cleans_partial_audio(
 ) -> None:
     _patch_session(
         monkeypatch,
-        _Response(200, json_data={"msg": "合成成功", "audio_url": "ignored"}),
+        _Response(
+            200,
+            json_data={
+                "msg": "合成成功",
+                "audio_url": "https://gsvi.example.test/audio.wav",
+            },
+        ),
         _Response(200, body=b"audio"),
         tmp_path,
     )
@@ -209,3 +217,113 @@ async def test_gsvi_tts_cancellation_cleans_partial_audio(
         await _provider().get_audio("text")
 
     assert list(tmp_path.glob("*.wav")) == []
+
+
+@pytest.mark.asyncio
+async def test_gsvi_tts_remote_audio_uses_private_network_denying_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_download(url: str, path: Path, policy) -> None:
+        captured["url"] = url
+        captured["policy"] = policy
+        path.write_bytes(b"audio")
+
+    monkeypatch.setattr(gsvi_tts_source, "download_to_path", fake_download)
+    _patch_session(
+        monkeypatch,
+        _Response(
+            200,
+            json_data={
+                "msg": "合成成功",
+                "audio_url": "https://cdn.example/audio.wav",
+            },
+        ),
+        _Response(200),
+        tmp_path,
+    )
+
+    assert await _provider().get_audio("text")
+
+    policy = captured["policy"]
+    assert policy.allowed_schemes == frozenset({"http", "https"})
+    assert policy.allow_private_network is False
+    assert policy.max_redirects == 0
+
+
+@pytest.mark.asyncio
+async def test_gsvi_tts_same_origin_audio_keeps_provider_headers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    session_headers: list[dict[str, str]] = []
+    sessions: list[_Session] = []
+
+    def _session_factory(**kwargs: object) -> _Session:
+        headers = kwargs.get("headers")
+        session_headers.append(dict(headers) if isinstance(headers, dict) else {})
+        session = _Session(
+            _Response(
+                200,
+                json_data={
+                    "msg": "合成成功",
+                    "audio_url": "https://gsvi.example.test/audio.wav",
+                },
+            ),
+            _Response(200, body=b"audio"),
+        )
+        sessions.append(session)
+        return session
+
+    monkeypatch.setattr(
+        gsvi_tts_source.aiohttp,
+        "ClientSession",
+        _session_factory,
+    )
+    monkeypatch.setattr(gsvi_tts_source, "get_astrbot_temp_path", lambda: str(tmp_path))
+    provider = _provider()
+    provider.request_headers = {"X-Provider-Token": "secret"}
+
+    assert await provider.get_audio("text")
+
+    assert any(
+        headers.get("X-Provider-Token") == "secret" for headers in session_headers
+    )
+    download_session = next(session for session in sessions if session.get_kwargs)
+    assert download_session.get_kwargs["allow_redirects"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "audio_url",
+    [
+        "https://gsvi.example.test:8443/audio.wav",
+        "http://gsvi.example.test/audio.wav",
+    ],
+)
+async def test_gsvi_tts_other_origin_never_receives_provider_headers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    audio_url: str,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_download(url: str, path: Path, policy) -> None:
+        captured["url"] = url
+        path.write_bytes(b"audio")
+
+    monkeypatch.setattr(gsvi_tts_source, "download_to_path", fake_download)
+    _patch_session(
+        monkeypatch,
+        _Response(200, json_data={"msg": "合成成功", "audio_url": audio_url}),
+        _Response(200),
+        tmp_path,
+    )
+    provider = _provider()
+    provider.request_headers = {"X-Provider-Token": "secret"}
+
+    assert await provider.get_audio("text")
+
+    assert captured["url"] == audio_url

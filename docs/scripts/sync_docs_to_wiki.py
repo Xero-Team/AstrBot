@@ -544,6 +544,25 @@ def build_page_info(
     )
 
 
+def _safe_manifest_path(wiki_root: Path, file_name: str) -> Path | None:
+    name = str(file_name or "").strip()
+    if (
+        not name
+        or name in {".", ".."}
+        or ".." in name
+        or "/" in name
+        or "\\" in name
+        or Path(name).is_absolute()
+        or (len(name) >= 2 and name[1] == ":")
+    ):
+        return None
+    root = wiki_root.resolve(strict=False)
+    path = (root / name).resolve(strict=False)
+    if path.parent != root or path.is_dir():
+        return None
+    return path
+
+
 def read_manifest(wiki_root: Path) -> set[str]:
     manifest_path = wiki_root / MANIFEST_NAME
     if not manifest_path.exists():
@@ -593,8 +612,8 @@ def sync_docs_to_wiki(source_root: Path, wiki_root: Path) -> None:
 
     previously_managed = read_manifest(wiki_root)
     for existing_name in previously_managed - set(desired_files):
-        existing_path = wiki_root / existing_name
-        if existing_path.exists():
+        existing_path = _safe_manifest_path(wiki_root, existing_name)
+        if existing_path is not None and existing_path.exists():
             existing_path.unlink()
 
     for file_name, content in desired_files.items():

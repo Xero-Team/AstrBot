@@ -754,7 +754,7 @@ async def test_v1_config_route_mutations_require_collection_capability(
     fake_db.add_api_key(raw_key, ["config"])
     headers = {"X-API-Key": raw_key}
 
-    routing = {"webchat-main:private:*": "group-conf"}
+    routing = {"webchat-main:private:*": "default"}
     allowed = await asgi_client.put(
         "/api/v1/config-routes",
         headers=headers,
@@ -781,6 +781,84 @@ async def test_v1_config_route_mutations_require_collection_capability(
     )
     assert denied_clear.status_code == 403
     assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
+
+
+@pytest.mark.asyncio
+async def test_v1_config_route_mutations_require_target_config_capability(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+):
+    from astrbot.core.auth.models import Resource
+
+    raw_key = "config-route-target-key"
+    fake_db.add_api_key(raw_key, ["config"])
+    subject_id = f"api-key:key-{raw_key}"
+    headers = {"X-API-Key": raw_key}
+    routing = {"webchat-main:private:*": "group-conf"}
+
+    denied = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": routing},
+    )
+    assert denied.status_code == 403
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == {}
+
+    target = Resource.instance("group-conf")
+    fake_db.capabilities.add((subject_id, "platform.manage", target.type, target.id))
+
+    allowed = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": routing},
+    )
+    assert allowed.status_code == 200
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
+
+
+@pytest.mark.asyncio
+async def test_v1_config_route_removal_requires_current_target_capability(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+):
+    from astrbot.core.auth.models import Resource
+
+    raw_key = "config-route-removal-key"
+    fake_db.add_api_key(raw_key, ["config"])
+    subject_id = f"api-key:key-{raw_key}"
+    headers = {"X-API-Key": raw_key}
+    umo = "webchat-main:private:*"
+    routing = {umo: "group-conf"}
+    fake_core_lifecycle.umop_config_router.umop_to_conf_id = dict(routing)
+
+    denied_clear = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": {}},
+    )
+    assert denied_clear.status_code == 403
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
+
+    denied_rebind = await asgi_client.put(
+        f"/api/v1/config-routes/{umo}",
+        headers=headers,
+        json={"config_id": "default"},
+    )
+    assert denied_rebind.status_code == 403
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
+
+    target = Resource.instance("group-conf")
+    fake_db.capabilities.add((subject_id, "platform.manage", target.type, target.id))
+
+    allowed_clear = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": {}},
+    )
+    assert allowed_clear.status_code == 200
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == {}
 
 
 @pytest.mark.asyncio
@@ -845,3 +923,155 @@ async def test_v1_config_route_list_ignores_malformed_persisted_ids(
 
     assert response.status_code == 200
     assert response.json()["data"]["routing"] == {"webchat-main:group:demo": "default"}
+
+
+@pytest.mark.asyncio
+async def test_v1_config_route_delete_tolerates_malformed_persisted_target(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_core_lifecycle.umop_config_router.umop_to_conf_id = {
+        "webchat-main:private:*": "bad id",
+        "webchat-main:group:demo": "default",
+    }
+
+    response = await asgi_client.delete(
+        "/api/v1/config-routes/webchat-main:private:*",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == {
+        "webchat-main:group:demo": "default",
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_provider_embedding_dimension_requires_write_capability(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.dashboard.api.auth import object_resource
+
+    calls: list[dict] = []
+
+    async def fake_get_embedding_dimension(config):
+        calls.append(config)
+        return {"embedding_dimensions": 3}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.providers,
+        "get_embedding_dimension",
+        fake_get_embedding_dimension,
+    )
+
+    provider_id = "demo-embed"
+    fake_core_lifecycle.astrbot_config["provider"].append(
+        {
+            "id": provider_id,
+            "type": "openai_embedding",
+            "enable": True,
+        }
+    )
+    raw_key = "provider-embedding-read-key"
+    fake_db.add_api_key(raw_key, ["provider"])
+    subject_id = f"api-key:key-{raw_key}"
+    resource = object_resource("provider", provider_id, config_id="default")
+    fake_db.capabilities.add((subject_id, "provider.read", resource.type, resource.id))
+
+    response = await asgi_client.post(
+        f"/api/v1/providers/{provider_id}/embedding-dimension",
+        json={"config": {"model": "example"}},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 403
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_v1_provider_embedding_dimension_allows_manage_without_credentials_write(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.dashboard.api.auth import object_resource
+
+    calls: list[dict] = []
+
+    async def fake_get_embedding_dimension(config):
+        calls.append(config)
+        return {"embedding_dimensions": 3}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.providers,
+        "get_embedding_dimension",
+        fake_get_embedding_dimension,
+    )
+
+    provider_id = "demo-embed-managed"
+    fake_core_lifecycle.astrbot_config["provider"].append(
+        {
+            "id": provider_id,
+            "type": "openai_embedding",
+            "enable": True,
+            "api_key": "secret-api-key",
+            "model": "text-embedding-3-small",
+        }
+    )
+    raw_key = "provider-embedding-manage-key"
+    fake_db.add_api_key(raw_key, ["provider"])
+    subject_id = f"api-key:key-{raw_key}"
+    resource = object_resource("provider", provider_id, config_id="default")
+    fake_db.capabilities.add(
+        (subject_id, "provider.manage", resource.type, resource.id)
+    )
+
+    response = await asgi_client.post(
+        f"/api/v1/providers/{provider_id}/embedding-dimension",
+        json={"config": {"model": "text-embedding-3-large"}},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["model"] == "text-embedding-3-large"
+    assert calls[0]["api_key"] == "secret-api-key"
+
+
+@pytest.mark.asyncio
+async def test_provider_routes_ignore_caller_config_scope(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.dashboard.api import providers as providers_api
+
+    captured: list[str | None] = []
+
+    async def fake_authorize(_request, _auth, *, action, resource):
+        _ = action
+        captured.append(resource.config_id)
+
+    async def fake_test_provider(_provider_id):
+        return {"ok": True}
+
+    monkeypatch.setattr(providers_api, "require_resource_action", fake_authorize)
+    monkeypatch.setattr(
+        asgi_app.state.services.providers,
+        "test_provider",
+        fake_test_provider,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/providers/gpt-mini/test",
+        params={"config_id": "group-conf"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert captured == ["default"]

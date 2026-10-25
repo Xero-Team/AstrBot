@@ -997,3 +997,37 @@ async def test_v1_provider_embedding_dimension_allows_manage_without_credentials
     assert response.status_code == 200
     assert calls[0]["model"] == "text-embedding-3-large"
     assert calls[0]["api_key"] == "secret-api-key"
+
+
+@pytest.mark.asyncio
+async def test_provider_routes_ignore_caller_config_scope(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.dashboard.api import providers as providers_api
+
+    captured: list[str | None] = []
+
+    async def fake_authorize(_request, _auth, *, action, resource):
+        _ = action
+        captured.append(resource.config_id)
+
+    async def fake_test_provider(_provider_id):
+        return {"ok": True}
+
+    monkeypatch.setattr(providers_api, "require_resource_action", fake_authorize)
+    monkeypatch.setattr(
+        asgi_app.state.services.providers,
+        "test_provider",
+        fake_test_provider,
+    )
+
+    response = await asgi_client.post(
+        "/api/v1/providers/gpt-mini/test",
+        params={"config_id": "group-conf"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert captured == ["default"]

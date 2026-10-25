@@ -11,10 +11,12 @@ import pytest
 
 from astrbot.core.message.components import (
     BaseMessageComponent,
+    File,
     Mention,
     MentionAll,
     Plain,
     Record,
+    Video,
 )
 from astrbot.core.platform.sources.kook.kook_client import KookClient
 from astrbot.core.platform.sources.kook.kook_config import KookConfig
@@ -347,3 +349,32 @@ async def test_kook_client_group_lookup_apis_pass_expected_params():
             {"guild_id": "guild-1", "page": 3, "page_size": 50},
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_kook_card_file_modules_reject_local_paths(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookClient",
+        mock_kook_client,
+    )
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    adapter = KookPlatformAdapter({}, {}, asyncio.Queue())
+    content = json.dumps(
+        [
+            {
+                "type": "card",
+                "modules": [
+                    {"type": "file", "title": "f", "src": "/etc/passwd"},
+                    {"type": "video", "title": "v", "src": "file:///etc/passwd"},
+                    {"type": "audio", "title": "a", "src": "../../secret.wav"},
+                ],
+            }
+        ]
+    )
+
+    components, _text = await adapter._parse_card_message(
+        SimpleNamespace(content=content, extra=SimpleNamespace(guild_id="guild"))
+    )
+
+    assert not any(isinstance(item, (File, Video, Record)) for item in components)

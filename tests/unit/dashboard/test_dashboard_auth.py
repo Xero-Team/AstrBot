@@ -1730,3 +1730,55 @@ async def test_step_up_paths_share_the_auth_rate_limiter(
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
+
+
+@pytest.mark.asyncio
+async def test_local_setup_cannot_reset_existing_account(
+    app: FastAPI,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = DashboardTestClient(app)
+    existing_username = f"existing-{uuid.uuid4().hex[:8]}"
+    existing_password = "ExistingPassword123"
+    attacker_password = "AttackerPassword123"
+
+    try:
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH", "true")
+        core_lifecycle_td.astrbot_config["dashboard"]["host"] = "127.0.0.1"
+        await app.state.services.auth.create_dashboard_account(
+            username=existing_username,
+            password=existing_password,
+            created_by="test",
+        )
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+        response = await test_client.post(
+            "/api/v1/auth/setup",
+            json={
+                "username": existing_username,
+                "password": attacker_password,
+                "confirm_password": attacker_password,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "error"
+
+        async with core_lifecycle_td.db.get_db() as session:
+            account = (
+                await session.execute(
+                    select(DashboardAccount).where(
+                        col(DashboardAccount.username) == existing_username
+                    )
+                )
+            ).scalar_one()
+        assert verify_dashboard_password(account.password_hash, existing_password)
+        assert not verify_dashboard_password(account.password_hash, attacker_password)
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )

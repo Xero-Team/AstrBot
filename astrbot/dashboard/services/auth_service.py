@@ -788,6 +788,14 @@ class AuthService:
             return self.error("Setup without password is not enabled")
         if not await self.is_setup_required():
             return self.error("Setup is not required")
+        if authenticated_username is None and isinstance(post_data, dict):
+            requested_username = post_data.get("username")
+            if (
+                isinstance(requested_username, str)
+                and await self._find_account_by_username(requested_username.strip())
+                is not None
+            ):
+                return self.error("Dashboard username already exists")
 
         return await self.complete_setup(
             post_data,

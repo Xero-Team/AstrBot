@@ -249,3 +249,40 @@ async def test_gsvi_tts_remote_audio_uses_private_network_denying_policy(
     assert policy.allowed_schemes == frozenset({"http", "https"})
     assert policy.allow_private_network is False
     assert policy.max_redirects == 0
+
+
+@pytest.mark.asyncio
+async def test_gsvi_tts_same_origin_audio_keeps_provider_headers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    session_headers: list[dict[str, str]] = []
+
+    def _session_factory(**kwargs: object) -> _Session:
+        headers = kwargs.get("headers")
+        session_headers.append(dict(headers) if isinstance(headers, dict) else {})
+        return _Session(
+            _Response(
+                200,
+                json_data={
+                    "msg": "合成成功",
+                    "audio_url": "https://gsvi.example.test/audio.wav",
+                },
+            ),
+            _Response(200, body=b"audio"),
+        )
+
+    monkeypatch.setattr(
+        gsvi_tts_source.aiohttp,
+        "ClientSession",
+        _session_factory,
+    )
+    monkeypatch.setattr(gsvi_tts_source, "get_astrbot_temp_path", lambda: str(tmp_path))
+    provider = _provider()
+    provider.request_headers = {"X-Provider-Token": "secret"}
+
+    assert await provider.get_audio("text")
+
+    assert any(
+        headers.get("X-Provider-Token") == "secret" for headers in session_headers
+    )

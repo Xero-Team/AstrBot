@@ -50,8 +50,11 @@ class ProviderGSVITTS(TTSProvider):
             raise ValueError("GSVI TTS returned an invalid audio URL")
 
         if audio_host == api_host:
+            # The audio URL is on the configured provider origin, so provider
+            # headers (including custom authorization) stay scoped to it. Third-
+            # party audio hosts below never receive them.
             async with aiohttp.ClientSession(
-                headers={"User-Agent": "AstrBot"},
+                headers={"User-Agent": "AstrBot", **self.request_headers},
             ) as download_session:
                 async with download_session.get(audio_url, ssl=True) as response:
                     if response.status != 200:

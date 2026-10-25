@@ -1988,3 +1988,21 @@ async def test_bot_enable_clears_blocked_state_after_authorization():
 
     assert settings["session_enabled"] is True
     assert settings["session_blocked"] is False
+
+
+def test_sender_key_from_token_normalizes_platform_components():
+    from astrbot.api import Subject
+
+    event = DummyEvent(
+        message_str="user block",
+        platform_id="my platform",
+        platform_name="custom",
+    )
+    minted = Subject.im(
+        platform_instance="my platform",
+        bot_account_id="bot",
+        sender_id="99",
+    ).id
+    assert sender_key_from_token(event, minted) == minted
+    assert sender_key_from_token(event, "im:my platform:bot:99") == minted
+    assert sender_key_from_token(event, "im:other:bot:99") is None

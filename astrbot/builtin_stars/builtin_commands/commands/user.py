@@ -37,11 +37,24 @@ def sender_key_from_token(event: AstrMessageEvent, token: str) -> str | None:
     platform_id, bot_id = _event_sender_scope(event)
     if sender_id.lower().startswith("im:"):
         parts = sender_id.split(":", 3)
-        if (
-            len(parts) != 4
-            or parts[1].strip() != platform_id
-            or parts[2].strip() != bot_id
-        ):
+        if len(parts) != 4:
+            return None
+        try:
+            # Compare canonical subject components: platform and bot ids that
+            # are not plain identifiers are base64-encoded by ``Subject.im``.
+            token_subject = Subject.im(
+                platform_instance=parts[1].strip(),
+                bot_account_id=parts[2].strip(),
+                sender_id=parts[3].strip(),
+            )
+            event_subject = Subject.im(
+                platform_instance=platform_id,
+                bot_account_id=bot_id,
+                sender_id=parts[3].strip(),
+            )
+        except ValueError:
+            return None
+        if token_subject.id != event_subject.id:
             return None
         return sender_admission_key_from_id(sender_id)
     try:

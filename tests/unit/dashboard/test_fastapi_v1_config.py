@@ -818,6 +818,50 @@ async def test_v1_config_route_mutations_require_target_config_capability(
 
 
 @pytest.mark.asyncio
+async def test_v1_config_route_removal_requires_current_target_capability(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+):
+    from astrbot.core.auth.models import Resource
+
+    raw_key = "config-route-removal-key"
+    fake_db.add_api_key(raw_key, ["config"])
+    subject_id = f"api-key:key-{raw_key}"
+    headers = {"X-API-Key": raw_key}
+    umo = "webchat-main:private:*"
+    routing = {umo: "group-conf"}
+    fake_core_lifecycle.umop_config_router.umop_to_conf_id = dict(routing)
+
+    denied_clear = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": {}},
+    )
+    assert denied_clear.status_code == 403
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
+
+    denied_rebind = await asgi_client.put(
+        f"/api/v1/config-routes/{umo}",
+        headers=headers,
+        json={"config_id": "default"},
+    )
+    assert denied_rebind.status_code == 403
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
+
+    target = Resource.instance("group-conf")
+    fake_db.capabilities.add((subject_id, "platform.manage", target.type, target.id))
+
+    allowed_clear = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": {}},
+    )
+    assert allowed_clear.status_code == 200
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == {}
+
+
+@pytest.mark.asyncio
 async def test_v1_default_operator_can_replace_and_clear_config_routes(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,

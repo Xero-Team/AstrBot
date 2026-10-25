@@ -16,6 +16,7 @@ from astrbot.dashboard.schemas import (
 from astrbot.dashboard.services.backup_service import (
     BackupService,
     BackupServiceError,
+    validate_backup_filename,
 )
 from astrbot.dashboard.upload_utils import UploadFileAdapter
 
@@ -49,11 +50,7 @@ def _ok_result(result):
 
 
 def _safe_backup_filename(filename: str | None) -> str:
-    if not filename:
-        raise BackupServiceError("缺少参数 filename")
-    if ".." in filename or "/" in filename or "\\" in filename:
-        raise BackupServiceError("文件名包含非法路径字符")
-    return filename
+    return validate_backup_filename(filename, missing="缺少参数 filename")
 
 
 async def _run(operation, *, prefix: str):

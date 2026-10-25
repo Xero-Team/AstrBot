@@ -1,12 +1,17 @@
 import asyncio
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import aiohttp
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.utils.outbound_http import (
+    OutboundRequestPolicy,
+    download_to_path,
+)
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -36,6 +41,44 @@ class ProviderGSVITTS(TTSProvider):
         self.emotion = provider_config.get("emotion", "默认")
         self.text_lang = provider_config.get("text_lang", "中文")
 
+    async def _download_audio(self, audio_url: str, path: Path) -> None:
+        parsed = urlsplit(audio_url)
+        scheme = parsed.scheme.lower()
+        audio_host = (parsed.hostname or "").lower()
+        api_host = (urlsplit(self.api_base).hostname or "").lower()
+        if scheme not in {"http", "https"} or not audio_host:
+            raise ValueError("GSVI TTS returned an invalid audio URL")
+
+        if audio_host == api_host:
+            async with aiohttp.ClientSession(
+                headers={"User-Agent": "AstrBot"},
+            ) as download_session:
+                async with download_session.get(audio_url, ssl=True) as response:
+                    if response.status != 200:
+                        logger.error(
+                            "[GSVI TTS] Audio download failed with status %s",
+                            response.status,
+                        )
+                        raise RuntimeError(_REQUEST_ERROR)
+                    audio = await response.read()
+                    if not isinstance(audio, bytes) or not audio:
+                        raise ValueError("GSVI TTS returned empty audio")
+                    with open(path, "wb") as output:
+                        output.write(audio)
+            return
+
+        policy = OutboundRequestPolicy(
+            allowed_schemes=frozenset({"http", "https"}),
+            allowed_hosts=None,
+            allowed_ports=None,
+            allow_private_network=False,
+            max_redirects=0,
+            max_url_length=2048,
+            max_response_bytes=64 * 1024 * 1024,
+            timeout_seconds=60.0,
+        )
+        await download_to_path(audio_url, path, policy)
+
     async def get_audio(self, text: str) -> str:
         path = Path(get_astrbot_temp_path()) / f"gsvi_tts_{uuid.uuid4()}.wav"
         url = f"{self.api_base}/infer_single"
@@ -57,8 +100,11 @@ class ProviderGSVITTS(TTSProvider):
         completed = False
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            async with aiohttp.ClientSession(headers=self.request_headers) as session:
-                async with session.post(url, json=data, headers=headers) as response:
+            post_headers = {**self.request_headers, **headers}
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, json=data, headers=post_headers
+                ) as response:
                     if response.status != 200:
                         logger.error(
                             "[GSVI TTS] Synthesis request failed with status %s",
@@ -74,18 +120,7 @@ class ProviderGSVITTS(TTSProvider):
                     if not isinstance(audio_url, str) or not audio_url:
                         raise ValueError("GSVI TTS returned no audio URL")
 
-                    async with session.get(audio_url) as audio_response:
-                        if audio_response.status != 200:
-                            logger.error(
-                                "[GSVI TTS] Audio download failed with status %s",
-                                audio_response.status,
-                            )
-                            raise RuntimeError(_REQUEST_ERROR)
-                        audio = await audio_response.read()
-                        if not isinstance(audio, bytes) or not audio:
-                            raise ValueError("GSVI TTS returned empty audio")
-                        with open(path, "wb") as output:
-                            output.write(audio)
+                    await self._download_audio(audio_url, path)
             completed = True
             return str(path)
         except asyncio.CancelledError:

@@ -142,7 +142,7 @@ class WeixinOfficialAccountServer:
             msg = parse_message(xml)
             if not msg:
                 logger.error("解析失败。msg为None。")
-                raise
+                raise ValueError("Failed to parse WeChat message")
             logger.info(f"解析成功: {msg}")
 
             if not self.callback:

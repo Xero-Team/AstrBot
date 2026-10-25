@@ -2374,11 +2374,13 @@ export const openChatWebSocket = <ThrowOnError extends boolean = false>(
 
 /**
  * Open the unified chat WebSocket
+ *
+ * Authenticate with Sec-WebSocket-Protocol: astrbot, <dashboard JWT>. The server accepts the astrbot subprotocol and never reads a token from the query string.
  */
 export const openUnifiedChatWebSocket = <ThrowOnError extends boolean = false>(
-  options: Options<OpenUnifiedChatWebSocketData, ThrowOnError>,
+  options?: Options<OpenUnifiedChatWebSocketData, ThrowOnError>,
 ): RequestResult<unknown, unknown, ThrowOnError> =>
-  (options.client ?? client).get<unknown, unknown, ThrowOnError>({
+  (options?.client ?? client).get<unknown, unknown, ThrowOnError>({
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/unified-chat/ws',
     ...options,

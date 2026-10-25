@@ -1292,12 +1292,10 @@ paths:
       operationId: openUnifiedChatWebSocket
       x-websocket: true
       x-astrbot-scope: chat
-      parameters:
-        - name: token
-          in: query
-          required: true
-          schema:
-            type: string
+      description: >-
+        Authenticate with Sec-WebSocket-Protocol: astrbot, <dashboard JWT>.
+        The server accepts the astrbot subprotocol and never reads a token from
+        the query string.
       responses:
         '101':
           description: WebSocket upgrade accepted

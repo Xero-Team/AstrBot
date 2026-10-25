@@ -37,9 +37,9 @@ export const chatApi = {
   resumeRunStreamUrl(runId: string) {
     return `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`;
   },
-  unifiedWebSocketUrl(token: string, host = window.location.host) {
+  unifiedWebSocketUrl(host = window.location.host) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${host}/api/v1/unified-chat/ws?token=${encodeURIComponent(token)}`;
+    return `${protocol}//${host}/api/v1/unified-chat/ws`;
   },
   getFeatures() {
     return typed<ChatFeaturesData>(openApiV1.getChatFeatures());

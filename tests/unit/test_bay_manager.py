@@ -32,10 +32,6 @@ def _inspect(host_bindings, network_bindings=None):
             [{"HostIp": "127.0.0.1", "HostPort": "8114"}],
             [{"HostIp": "127.0.0.1", "HostPort": "8114"}],
         ),
-        (
-            [{"HostIp": "::1", "HostPort": "8114"}],
-            [{"HostIp": "::1", "HostPort": "8114"}],
-        ),
     ],
 )
 def test_loopback_bound_reuses_container(host_bindings, network_bindings):
@@ -49,6 +45,7 @@ def test_loopback_bound_reuses_container(host_bindings, network_bindings):
     [
         [{"HostPort": "8114"}],
         [{"HostIp": "0.0.0.0", "HostPort": "8114"}],
+        [{"HostIp": "::1", "HostPort": "8114"}],
         [{"HostIp": "", "HostPort": "8114"}],
         [{"HostIp": "::", "HostPort": "8114"}],
         ("unexpected",),

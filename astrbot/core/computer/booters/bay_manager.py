@@ -25,7 +25,9 @@ BAY_LABEL = "astrbot.bay.managed"
 BAY_PORT = 8114
 HEALTH_TIMEOUT_S = 60
 HEALTH_POLL_INTERVAL_S = 2
-_LOOPBACK_HOST_IPS = frozenset({"127.0.0.1", "::1"})
+# The endpoint is always http://127.0.0.1, so an IPv6-only binding is not
+# reachable through it and must be recreated like any other non-loopback one.
+_LOOPBACK_HOST_IPS = frozenset({"127.0.0.1"})
 
 
 class BayContainerManager:

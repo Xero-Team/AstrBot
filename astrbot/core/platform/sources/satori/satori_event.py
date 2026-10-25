@@ -1,3 +1,4 @@
+from html import escape as escape_html
 from typing import TYPE_CHECKING
 
 from astrbot import logger
@@ -24,6 +25,10 @@ from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
+
+
+def _satori_attr(value: object) -> str:
+    return escape_html(str(value), quote=True)
 
 
 class SatoriPlatformEvent(AstrMessageEvent):
@@ -408,9 +413,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 if component.is_everyone_sentinel():
                     return "@all"
                 if component.target:
-                    return f'<at id="{component.target}"/>'
+                    return f'<at id="{_satori_attr(component.target)}"/>'
                 if component.name:
-                    return f'<at name="{component.name}"/>'
+                    return f'<at name="{_satori_attr(component.name)}"/>'
 
             elif isinstance(component, Image):
                 try:
@@ -422,7 +427,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, File):
                 return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
+                    f'<file src="{_satori_attr(component.file)}" '
+                    f'name="{_satori_attr(component.name or "文件")}"/>'
                 )
 
             elif isinstance(component, Record):
@@ -434,18 +440,18 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"语音转换为base64失败: {e}")
 
             elif isinstance(component, Reply):
-                return f'<reply id="{component.id}"/>'
+                return f'<reply id="{_satori_attr(component.id)}"/>'
 
             elif isinstance(component, Video):
                 try:
                     video_path_url = await component.convert_to_file_path()
                     if video_path_url:
-                        return f'<video src="{video_path_url}"/>'
+                        return f'<video src="{_satori_attr(video_path_url)}"/>'
                 except Exception as e:
                     logger.error(f"视频文件转换失败: {e}")
 
             elif isinstance(component, Forward):
-                return f'<message id="{component.id}" forward/>'
+                return f'<message id="{_satori_attr(component.id)}" forward/>'
 
             # 对于其他未处理的组件类型，返回空字符串
             return ""
@@ -475,9 +481,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
             # 构建 Satori 格式的转发节点
             author_attrs = []
             if node.uin:
-                author_attrs.append(f'id="{node.uin}"')
+                author_attrs.append(f'id="{_satori_attr(node.uin)}"')
             if node.name:
-                author_attrs.append(f'name="{node.name}"')
+                author_attrs.append(f'name="{_satori_attr(node.name)}"')
 
             author_attr_str = " ".join(author_attrs)
 
@@ -505,9 +511,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 if component.is_everyone_sentinel():
                     return "@all"
                 if component.target:
-                    return f'<at id="{component.target}"/>'
+                    return f'<at id="{_satori_attr(component.target)}"/>'
                 if component.name:
-                    return f'<at name="{component.name}"/>'
+                    return f'<at name="{_satori_attr(component.name)}"/>'
 
             elif isinstance(component, Image):
                 try:
@@ -519,7 +525,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, File):
                 return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
+                    f'<file src="{_satori_attr(component.file)}" '
+                    f'name="{_satori_attr(component.name or "文件")}"/>'
                 )
 
             elif isinstance(component, Record):
@@ -531,18 +538,18 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"语音转换为base64失败: {e}")
 
             elif isinstance(component, Reply):
-                return f'<reply id="{component.id}"/>'
+                return f'<reply id="{_satori_attr(component.id)}"/>'
 
             elif isinstance(component, Video):
                 try:
                     video_path_url = await component.convert_to_file_path()
                     if video_path_url:
-                        return f'<video src="{video_path_url}"/>'
+                        return f'<video src="{_satori_attr(video_path_url)}"/>'
                 except Exception as e:
                     logger.error(f"视频文件转换失败: {e}")
 
             elif isinstance(component, Forward):
-                return f'<message id="{component.id}" forward/>'
+                return f'<message id="{_satori_attr(component.id)}" forward/>'
 
             # 对于其他未处理的组件类型，返回空字符串
             return ""
@@ -572,9 +579,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             author_attrs = []
             if node.uin:
-                author_attrs.append(f'id="{node.uin}"')
+                author_attrs.append(f'id="{_satori_attr(node.uin)}"')
             if node.name:
-                author_attrs.append(f'name="{node.name}"')
+                author_attrs.append(f'name="{_satori_attr(node.name)}"')
 
             author_attr_str = " ".join(author_attrs)
 

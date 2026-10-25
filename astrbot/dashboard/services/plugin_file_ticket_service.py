@@ -225,7 +225,7 @@ class PluginFileTicketService:
                 "filename": filename,
                 "content_type": content_type,
                 "size": size,
-                "disposition": action.disposition,
+                "disposition": disposition,
                 "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
             },
             cookie_secret=secret,

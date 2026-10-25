@@ -252,3 +252,30 @@ def test_content_disposition_sanitizes_header_injection():
     header = content_disposition_header("attachment", '../bad\r\n".txt')
     assert "\r" not in header and "\n" not in header
     assert "filename*=UTF-8''" in header
+
+
+@pytest.mark.asyncio
+async def test_inline_document_is_forced_to_attachment(tmp_path: Path):
+    registry, _metadata, snapshot = await _snapshot(tmp_path)
+    (tmp_path / "page.html").write_text("<h1>preview</h1>", encoding="utf-8")
+    service = PluginFileTicketService(registry, "file-ticket-test-secret")
+    action = DashboardFileAction(
+        name="file.preview",
+        input_model=EmptyRequest,
+        disposition="inline",
+        allowed_content_types=frozenset({"text/html"}),
+    )
+    created = await service.create_ticket(
+        snapshot,
+        action.name,
+        action,
+        DashboardFile(Path("page.html")),
+        _principal(),
+    )
+
+    assert created.data["disposition"] == "attachment"
+    handle = str(created.data["ticket_url"]).rsplit("/", 1)[1]
+    redeemed = await service.redeem(handle, created.cookie_secret)
+    assert redeemed.disposition == "attachment"
+    redeemed.file_handle.close()
+    await service.shutdown()

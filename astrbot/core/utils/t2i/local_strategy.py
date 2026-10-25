@@ -13,7 +13,7 @@ from astrbot.core.config import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .runtime_stats import RenderResult, T2iRuntimeStats
-from .template_manager import TemplateManager
+from .template_manager import TemplateManager, public_template_name
 from .template_runtime import (
     SHIKI_RUNTIME_TEMPLATE_PATTERN,
     get_shiki_runtime,
@@ -337,12 +337,19 @@ class HtmlRenderer:
             },
         )
 
+    async def render_help(self, text: str) -> str:
+        """Render the internal help template for an explicit help command."""
+        return await self.render(text, template_name="astrbot_help")
+
     async def render_t2i(
         self,
         text: str,
         template_name: str | None = None,
     ) -> str:
-        return await self.render(text, template_name=template_name)
+        return await self.render(
+            text,
+            template_name=public_template_name(template_name),
+        )
 
     def get_runtime_stats(self) -> dict[str, int | float | bool]:
         """Return a non-sensitive snapshot of the local renderer state."""

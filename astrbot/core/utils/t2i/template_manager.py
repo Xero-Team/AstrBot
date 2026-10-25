@@ -96,6 +96,15 @@ class TemplateManager:
         """读取文件内容。"""
         return path.read_text(encoding="utf-8")
 
+    def get_builtin_template(self, name: str) -> str:
+        """读取仅由内置命令使用的模板，忽略用户目录中的同名覆盖。"""
+        if not is_internal_template_name(name):
+            raise ValueError("只有内置模板可以按内置路径读取。")
+        path = self.builtin_template_dir / f"{name.strip().casefold()}.html"
+        if not path.is_file():
+            raise FileNotFoundError("模板不存在。")
+        return self._read_file(path)
+
     def list_templates(self) -> list[dict]:
         """列出所有可用模板。
         该列表是内置模板和用户模板的合并视图，用户模板将覆盖同名的内置模板。

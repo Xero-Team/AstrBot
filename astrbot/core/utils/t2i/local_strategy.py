@@ -339,7 +339,14 @@ class HtmlRenderer:
 
     async def render_help(self, text: str) -> str:
         """Render the internal help template for an explicit help command."""
-        return await self.render(text, template_name="astrbot_help")
+        tmpl_str = self.template_manager.get_builtin_template("astrbot_help")
+        return await self.render_custom_template(
+            tmpl_str,
+            {
+                "text": text,
+                "version": f"v{VERSION}",
+            },
+        )
 
     async def render_t2i(
         self,

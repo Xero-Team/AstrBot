@@ -120,6 +120,12 @@ def main() -> int:
         root = locate_astrbot_root(args.astrbot_root)
         python_floor, python_pin = read_python_floor(root)
         output = args.output.expanduser().resolve()
+        if output == output.parent:
+            raise ValueError("refusing to use a filesystem root as the output")
+        if output == root or output in root.parents:
+            raise ValueError(
+                "refusing to scaffold into the AstrBot checkout or one of its ancestors"
+            )
         if output.exists():
             if not args.force:
                 raise ValueError(f"output directory already exists: {output}")
@@ -127,8 +133,6 @@ def main() -> int:
                 raise ValueError(f"output path is not a directory: {output}")
         else:
             output.mkdir(parents=True)
-        if output == root:
-            raise ValueError("refusing to scaffold directly into the AstrBot checkout")
     except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
         print(f"scaffold_plugin: error: {exc}", file=sys.stderr)
         return 2

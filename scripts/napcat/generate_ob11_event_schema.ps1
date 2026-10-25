@@ -94,6 +94,22 @@ function Ensure-NapCatRepo {
     )
 
     if ($ResetClone -and (Test-Path -LiteralPath $Path)) {
+        $fullPath = [System.IO.Path]::GetFullPath($Path)
+        $pathRoot = [System.IO.Path]::GetPathRoot($fullPath)
+        $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
+        $ancestorPrefix = [System.IO.Path]::TrimEndingDirectorySeparator(
+            $fullPath
+        ) + [System.IO.Path]::DirectorySeparatorChar
+        if (
+            $fullPath -eq $pathRoot -or
+            $fullPath -eq $repoRoot -or
+            $repoRoot.StartsWith(
+                $ancestorPrefix,
+                [System.StringComparison]::OrdinalIgnoreCase
+            )
+        ) {
+            throw "Refusing to recursively delete a filesystem root or the repository/ancestor: $fullPath"
+        }
         Remove-Item -LiteralPath $Path -Recurse -Force
     }
 

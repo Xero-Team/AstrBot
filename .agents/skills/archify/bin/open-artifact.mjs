@@ -15,14 +15,14 @@ const OPENERS = {
   win32: {
     command: 'powershell.exe',
     method: 'powershell',
-    // Keep the command constant and pass the target through PowerShell's
-    // argument array. Paths are never interpolated into executable source.
-    args: (target) => [
+    // Keep the command constant and pass the target through the environment.
+    // PowerShell parses everything after -Command as source text and does not
+    // populate $args, so appending the path would be command injection.
+    args: () => [
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      'Start-Process -FilePath $args[0]',
-      target,
+      'Start-Process -FilePath $env:ASTRBOT_OPEN_TARGET',
     ],
   },
 };
@@ -44,6 +44,7 @@ function launchTarget(target, options = {}) {
   try {
     result = spawn(opener.command, opener.args(target), {
       encoding: 'utf8',
+      env: { ...process.env, ASTRBOT_OPEN_TARGET: target },
       shell: false,
       stdio: 'ignore',
       timeout: options.timeoutMs || 5000,

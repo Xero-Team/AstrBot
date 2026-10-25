@@ -4,6 +4,7 @@ from collections.abc import Iterator
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response, StreamingResponse
+from starlette.background import BackgroundTask
 
 from astrbot.dashboard.services.plugin_file_ticket_service import (
     FILE_TICKET_COOKIE_NAME,
@@ -61,6 +62,7 @@ async def get_plugin_file(ticket_handle: str, request: Request):
     response = StreamingResponse(
         _file_chunks(redeemed.file_handle),
         media_type=redeemed.content_type,
+        background=BackgroundTask(redeemed.file_handle.close),
         headers={
             "Content-Length": str(redeemed.size),
             "Content-Disposition": content_disposition_header(

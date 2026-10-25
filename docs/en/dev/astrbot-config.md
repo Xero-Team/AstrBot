@@ -387,6 +387,8 @@ Important `dashboard` defaults:
 | `totp.*`                 | Managed by WebUI | Dashboard TOTP snapshot retained for configuration export; it is not the authority for account authentication.                   |
 | `ssl.enable`             | `false`          | Terminate TLS in AstrBot using the certificate, key, and optional CA path fields.                                                |
 
+When `ssl.enable` is set, startup fails if the certificate, key, or configured CA file is missing. The Dashboard never falls back to cleartext HTTP; fix the paths or disable TLS explicitly.
+
 Passwords are stored as PBKDF2 hashes in `pbkdf2_password`. New writes clear the legacy `password` field. MD5 values written by older releases are no longer accepted for login: startup rotates them to a newly generated random password stored in `pbkdf2_password` and requires a change after login. Never write plaintext into either field or manually exchange hashes. To recover access, run:
 
 ```bash

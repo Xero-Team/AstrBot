@@ -3,6 +3,21 @@ from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 from ..register import register_provider_adapter
 
+
+def _normalized_provider_config(provider_config: dict) -> dict:
+    config = dict(provider_config)
+    config["api_base"] = "https://token-plan-cn.xiaomimimo.com/anthropic"
+
+    keys = config.get("key", [])
+    actual_key = keys[0] if isinstance(keys, list) and keys else keys
+    existing_headers = config.get("custom_headers")
+    headers = dict(existing_headers) if isinstance(existing_headers, dict) else {}
+    if actual_key:
+        headers["Authorization"] = f"Bearer {actual_key}"
+    config["custom_headers"] = headers
+    return config
+
+
 XIAOMI_TOKEN_PLAN_MODELS = [
     "mimo-v2.5-pro",
     "mimo-v2.5",
@@ -25,16 +40,7 @@ class ProviderXiaomiTokenPlan(ProviderAnthropic):
         provider_config,
         provider_settings,
     ) -> None:
-        # Keep api_base fixed; Token Plan users do not need to configure it.
-        provider_config["api_base"] = "https://token-plan-cn.xiaomimimo.com/anthropic"
-
-        # Xiaomi Token Plan requires the Authorization: Bearer <token> header.
-        keys = provider_config.get("key", [])
-        actual_key = keys[0] if isinstance(keys, list) and keys else keys
-        if actual_key:
-            provider_config.setdefault("custom_headers", {})["Authorization"] = (
-                f"Bearer {actual_key}"
-            )
+        provider_config = _normalized_provider_config(provider_config)
 
         super().__init__(
             provider_config,

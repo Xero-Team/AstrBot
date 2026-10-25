@@ -10,6 +10,7 @@ def test_blocked_provider_hosts_are_parsed_case_insensitively():
     assert _is_blocked_provider_api_base("https://api.kourichat/v1")
     assert _is_blocked_provider_api_base("tfbwhvwr.cloud.sealos.io/v1")
     assert _is_blocked_provider_api_base("api.kourichat:443/v1")
+    assert _is_blocked_provider_api_base("//tfbwhvwr.cloud.sealos.io/v1")
 
 
 def test_blocked_provider_hosts_do_not_use_short_substrings():

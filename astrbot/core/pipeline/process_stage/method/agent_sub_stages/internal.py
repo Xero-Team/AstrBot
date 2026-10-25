@@ -939,7 +939,7 @@ def _is_blocked_provider_api_base(api_base: object) -> bool:
     if not isinstance(api_base, str) or not api_base.strip():
         return False
     candidate = api_base.strip()
-    if "://" not in candidate:
+    if "://" not in candidate and not candidate.startswith("//"):
         # Provider base URLs are sometimes stored without a scheme; parse them
         # as network-path references so the guard still sees the host.
         candidate = f"//{candidate}"

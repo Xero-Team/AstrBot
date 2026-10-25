@@ -111,11 +111,23 @@ class BackupService:
         return validate_backup_filename(filename, missing=missing)
 
     def _resolve_backup_path(self, filename: str) -> Path:
+        name = validate_backup_filename(filename, missing="缺少参数 filename")
         root = Path(self.backup_dir).resolve(strict=False)
-        path = (root / filename).resolve(strict=False)
-        if not path.is_relative_to(root) or not path.is_file():
-            raise BackupServiceError(f"备份文件不存在: {filename}")
-        return path
+        try:
+            entries = list(root.iterdir())
+        except OSError:
+            entries = []
+        for entry in entries:
+            if os.path.normcase(entry.name) != os.path.normcase(name):
+                continue
+            try:
+                resolved = entry.resolve(strict=True)
+            except OSError:
+                break
+            if resolved.is_relative_to(root) and resolved.is_file():
+                return resolved
+            break
+        raise BackupServiceError(f"备份文件不存在: {name}")
 
     def _init_task(self, task_id: str, task_type: str, status: str = "pending") -> None:
         self.backup_tasks[task_id] = {

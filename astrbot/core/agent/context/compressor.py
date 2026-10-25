@@ -18,6 +18,8 @@ else:
 
         logger = logging.getLogger("astrbot")
 
+from astrbot.core.utils.error_redaction import safe_error
+
 from ..context.truncator import ContextTruncator
 
 
@@ -244,7 +246,7 @@ class LLMSummaryCompressor:
             )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
-            logger.error(f"Failed to generate summary: {e}")
+            logger.error("Failed to generate summary: %s", safe_error("", e))
             return messages
 
         if not summary_content:

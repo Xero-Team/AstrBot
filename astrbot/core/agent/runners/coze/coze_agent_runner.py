@@ -6,6 +6,7 @@ from typing import override
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -95,16 +96,14 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            logger.error(f"Coze 请求失败：{str(e)}")
+            logger.error("Coze 请求失败：%s", safe_error("", e))
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"Coze 请求失败：{str(e)}"
+                role="err", completion_text="Coze 请求失败"
             )
             yield AgentResponse(
                 type="err",
-                data=AgentResponseData(
-                    chain=MessageChain().message(f"Coze 请求失败：{str(e)}")
-                ),
+                data=AgentResponseData(chain=MessageChain().message("Coze 请求失败")),
             )
         finally:
             await self.api_client.close()

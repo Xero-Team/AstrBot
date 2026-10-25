@@ -144,7 +144,7 @@ class WecomServer:
             raise
         else:
             msg = cast(BaseMessage, parse_message(xml))
-            logger.info(f"解析成功: {msg}")
+            logger.debug("解析成功: type=%s", msg.type)
 
             if self.callback:
                 self._start_callback_task(self.callback(msg))
@@ -513,7 +513,7 @@ class WecomPlatformAdapter(Platform):
             return
 
         self.agent_id = abm.self_id
-        logger.info(f"abm: {abm}")
+        logger.debug("Converted WeCom message type=%s", abm.type)
         await self.handle_msg(abm)
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:

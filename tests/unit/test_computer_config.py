@@ -1,7 +1,6 @@
 """Tests for local Computer Use configuration change logging."""
 
 import sys
-from pathlib import Path
 from unittest.mock import patch
 
 from astrbot.dashboard.services.config_service import (
@@ -143,7 +142,9 @@ class TestLogComputerConfigChanges:
         assert policy["network"]["allowed_domains"] == []
         assert policy["network"]["denied_domains"] == ["blocked.example"]
 
-    def test_validation_rejects_unknown_keys_and_linux_socket_paths(self) -> None:
+    def test_validation_rejects_unknown_keys_and_linux_socket_paths(
+        self, tmp_path
+    ) -> None:
         data = {
             "provider_settings": {
                 "computer_use_local_permissions": {
@@ -154,7 +155,7 @@ class TestLogComputerConfigChanges:
                         "filesystem": {"deny_read": []},
                         "unix_sockets": {
                             "mode": "deny",
-                            "allowed_paths": [str(Path("/tmp/api.sock"))],
+                            "allowed_paths": [str(tmp_path / "api.sock")],
                         },
                         "allow_network": True,
                     }

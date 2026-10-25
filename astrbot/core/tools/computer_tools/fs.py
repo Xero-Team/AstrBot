@@ -48,7 +48,6 @@ from .util import (
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "local",
 }
-_IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _remote_basename(path: str) -> str:

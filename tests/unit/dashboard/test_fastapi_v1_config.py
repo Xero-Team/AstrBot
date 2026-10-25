@@ -845,3 +845,49 @@ async def test_v1_config_route_list_ignores_malformed_persisted_ids(
 
     assert response.status_code == 200
     assert response.json()["data"]["routing"] == {"webchat-main:group:demo": "default"}
+
+
+@pytest.mark.asyncio
+async def test_v1_provider_embedding_dimension_requires_write_capability(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.dashboard.api.auth import object_resource
+
+    calls: list[dict] = []
+
+    async def fake_get_embedding_dimension(config):
+        calls.append(config)
+        return {"embedding_dimensions": 3}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.providers,
+        "get_embedding_dimension",
+        fake_get_embedding_dimension,
+    )
+
+    provider_id = "demo-embed"
+    fake_core_lifecycle.astrbot_config["provider"].append(
+        {
+            "id": provider_id,
+            "type": "openai_embedding",
+            "enable": True,
+        }
+    )
+    raw_key = "provider-embedding-read-key"
+    fake_db.add_api_key(raw_key, ["provider"])
+    subject_id = f"api-key:key-{raw_key}"
+    resource = object_resource("provider", provider_id, config_id="default")
+    fake_db.capabilities.add((subject_id, "provider.read", resource.type, resource.id))
+
+    response = await asgi_client.post(
+        f"/api/v1/providers/{provider_id}/embedding-dimension",
+        json={"config": {"model": "example"}},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 403
+    assert calls == []

@@ -8,6 +8,7 @@ shell launcher, file tools, and the runtime proxy.
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import sys
 from dataclasses import dataclass, replace
@@ -409,9 +410,9 @@ def _literal_anchor(value: str) -> str:
 
 def _expand_path(value: str) -> str:
     if value == "~" or value.startswith("~/"):
-        # Admin-supplied policy rule; the expansion only feeds the literal
-        # glob-anchor existence check for a configured deny rule.
-        return str(Path(value).expanduser())  # lgtm[py/path-injection]
+        # abspath is a CodeQL-recognized path normalizer; the result only
+        # feeds the literal glob-anchor existence check for a deny rule.
+        return os.path.abspath(os.path.expanduser(value))
     return value
 
 

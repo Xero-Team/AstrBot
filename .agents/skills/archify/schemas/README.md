@@ -159,9 +159,11 @@ is committed and shipped with the skill, so runtime validation has no npm or
 network dependency. `renderers/shared/validator.mjs` applies the matching
 standalone validator before the renderer's own layout checks.
 The shared loader then checks cross-collection facts that JSON Schema cannot
-express cleanly here: duplicate view IDs, duplicate focus IDs, focus IDs that do
-not exist in the diagram's semantic collection, and duplicate authored
-relationship IDs within the mode's relationship collection.
+express cleanly here: duplicate semantic node IDs, architecture
+`boundaries[].wraps` and `connections[].from` / `connections[].to` references
+that do not exist in `components`, duplicate view IDs, duplicate focus IDs,
+focus IDs that do not exist in the diagram's semantic collection, and duplicate
+authored relationship IDs within the mode's relationship collection.
 
 Architecture additionally supports opt-in, revision-pinned repository evidence.
 `meta.repository` names a public GitHub URL and full commit SHA; a component may

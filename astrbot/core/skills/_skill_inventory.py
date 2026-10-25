@@ -8,8 +8,32 @@ SANDBOX_WORKSPACE_ROOT = "/workspace"
 WORKSPACE_SKILLS_ROOT = "skills"
 WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS = 64 * 1024
 
-_SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
+_SKILL_NAME_RE = re.compile(r"^(?!\.{1,2}$)[\w.-]+$")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F-\x9F]")
+
+
+def _validate_skill_dir_name(name: str | None) -> str:
+    """Return a safe single-component skill directory name."""
+    skill_name = str(name or "").strip()
+    if not skill_name or not _SKILL_NAME_RE.fullmatch(skill_name):
+        raise ValueError("Invalid skill name.")
+    return skill_name
+
+
+def _resolve_skill_dir(
+    root: str | Path,
+    name: str | None,
+    *,
+    strict: bool = False,
+) -> Path:
+    """Resolve one skill directory and prove it stays under ``root``."""
+    skill_name = _validate_skill_dir_name(name)
+    root_path = Path(root).resolve(strict=True)
+    skill_dir = root_path / skill_name
+    resolved = skill_dir.resolve(strict=strict)
+    if resolved == root_path or not resolved.is_relative_to(root_path):
+        raise ValueError("Invalid skill path.")
+    return skill_dir
 
 
 def _normalize_skill_name(name: str | None) -> str:

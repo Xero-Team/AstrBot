@@ -102,7 +102,7 @@ class SkillManagerDiscoveryMixin:
     ) -> tuple[str, str, Path] | None:
         if _normalize_skill_markdown_path(skills_dir) is None:
             return None
-        if not _SKILL_NAME_RE.match(plugin_name):
+        if not _SKILL_NAME_RE.fullmatch(plugin_name):
             return None
         return plugin_name, plugin_name, skills_dir
 
@@ -141,7 +141,7 @@ class SkillManagerDiscoveryMixin:
         if not skill_dir.is_dir():
             return None
         skill_name = skill_dir.name
-        if not _SKILL_NAME_RE.match(skill_name):
+        if not _SKILL_NAME_RE.fullmatch(skill_name):
             return None
         if _normalize_skill_markdown_path(skill_dir) is None:
             return None
@@ -283,7 +283,7 @@ class SkillManagerDiscoveryMixin:
         if not skill_dir.is_dir():
             return None
         skill_name = skill_dir.name
-        if not _SKILL_NAME_RE.match(skill_name):
+        if not _SKILL_NAME_RE.fullmatch(skill_name):
             return None
         return skill_name
 

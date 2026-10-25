@@ -109,6 +109,47 @@ async def test_dashboard_ssl_missing_cert_and_key_fails_startup(
 
 
 @pytest.mark.asyncio
+async def test_disabled_dashboard_does_not_require_ssl_files(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = await AstrBotDashboard.create(
+        core_lifecycle_td.runtime,
+        core_lifecycle_td,
+        core_lifecycle_td.db,
+        shutdown_event,
+    )
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("dashboard", {}),
+    )
+    info_messages = []
+
+    def capture(messages):
+        def append(message, *args):
+            messages.append(message % args if args else message)
+
+        return append
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["enable"] = False
+        core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
+            "enable": True,
+            "cert_file": "",
+            "key_file": "",
+        }
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.info",
+            capture(info_messages),
+        )
+
+        assert server.run() is None
+        assert any("WebUI disabled." in message for message in info_messages)
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
 async def test_generated_dashboard_password_is_written_only_to_operator_terminal(
     monkeypatch,
     capsys,

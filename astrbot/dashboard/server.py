@@ -609,6 +609,9 @@ class AstrBotDashboard:
             or dashboard_config.get("host", "127.0.0.1")
         )
         enable = dashboard_config.get("enable", True)
+        if not enable:
+            logger.info("WebUI disabled.")
+            return None
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
             ssl_config = {}
@@ -623,10 +626,6 @@ class AstrBotDashboard:
                 ssl_config,
             )
         scheme = "https" if ssl_enable else "http"
-
-        if not enable:
-            logger.info("WebUI disabled.")
-            return None
 
         logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == str(ipaddress.IPv4Address(0)):

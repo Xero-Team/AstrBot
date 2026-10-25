@@ -1,7 +1,5 @@
 from types import SimpleNamespace
 
-import pytest
-
 from astrbot.core.provider.sources import request_retry
 from astrbot.core.utils import network_utils
 

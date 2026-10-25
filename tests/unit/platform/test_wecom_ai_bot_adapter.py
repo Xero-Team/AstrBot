@@ -423,6 +423,8 @@ async def test_wecom_ai_bot_stream_keeps_images_across_polls():
 
     await queue.put({"type": "plain", "data": "lo", "streaming": False})
     await queue.put({"type": "image", "image_data": "dHdv"})
+    await adapter._process_message(stream_message, callback_params)
+
     await queue.put({"type": "complete"})
     await adapter._process_message(stream_message, callback_params)
 

@@ -436,6 +436,32 @@ async def test_wecom_ai_bot_stream_keeps_images_across_polls():
 
 
 @pytest.mark.asyncio
+async def test_wecom_ai_bot_stream_cache_trim_keeps_active_stream_images():
+    adapter = _adapter()
+    adapter.api_client = SimpleNamespace(
+        encrypt_message=AsyncMock(return_value="encrypted-active")
+    )
+    queue = asyncio.Queue()
+    adapter.queue_mgr = SimpleNamespace(
+        has_back_queue=MagicMock(return_value=True),
+        get_or_create_back_queue=MagicMock(return_value=queue),
+        remove_queues=MagicMock(),
+    )
+    adapter._stream_image_cache = {
+        "stream-4": ["b25l"],
+        **{f"other-{index}": ["eA=="] for index in range(1024)},
+    }
+    callback_params = {"nonce": "n1", "timestamp": "t1"}
+    stream_message = {"msgtype": "stream", "stream": {"id": "stream-4"}}
+
+    await queue.put({"type": "plain", "data": "Hello", "streaming": False})
+    await adapter._process_message(stream_message, callback_params)
+
+    assert adapter._stream_image_cache["stream-4"] == ["b25l"]
+    assert len(adapter._stream_image_cache) == 1024
+
+
+@pytest.mark.asyncio
 async def test_wecom_ai_bot_process_event_enter_chat_returns_welcome_message():
     adapter = _adapter()
     adapter.friend_message_welcome_text = "welcome"

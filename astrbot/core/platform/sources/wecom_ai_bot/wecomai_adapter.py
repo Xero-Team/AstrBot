@@ -316,12 +316,14 @@ class WecomAIBotAdapter(Platform):
             if not finish:
                 self._stream_plain_cache.pop(stream_id, None)
                 self._stream_plain_cache[stream_id] = cached_plain_content
+                cached_images = self._stream_image_cache.pop(stream_id, None)
                 if image_base64:
-                    cached_images = self._stream_image_cache.pop(stream_id, [])
                     self._stream_image_cache[stream_id] = [
-                        *cached_images,
+                        *(cached_images or []),
                         *image_base64,
                     ]
+                elif cached_images is not None:
+                    self._stream_image_cache[stream_id] = cached_images
                 self._trim_stream_caches()
             else:
                 image_base64 = [

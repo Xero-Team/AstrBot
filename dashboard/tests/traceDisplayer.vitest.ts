@@ -91,33 +91,36 @@ describe('TraceDisplayer', () => {
   });
 
   it('renders a legacy persona_id trace field as a Prompt chip', async () => {
-    state.history.mockResolvedValue({
+    mockAgentPrepareTrace('persona_id', 'legacy-persona');
+
+    const wrapper = await mountTraceDetail();
+
+    expect(wrapper.text()).toContain('legacy-persona');
+    expect(promptChipTitles(wrapper)).toContain('Prompt: legacy-persona');
+  });
+
+  it('renders a prompt_id trace field recorded by new traces', async () => {
+    mockAgentPrepareTrace('prompt_id', 'new-prompt');
+
+    const wrapper = await mountTraceDetail();
+
+    expect(wrapper.text()).toContain('new-prompt');
+    expect(wrapper.text()).not.toContain('persona');
+    expect(promptChipTitles(wrapper)).toContain('Prompt: new-prompt');
+  });
+});
+
+function mockAgentPrepareTrace(
+  field: 'persona_id' | 'prompt_id',
+  value: string,
+) {
+  state.history.mockResolvedValue({
+    data: {
+      status: 'ok',
       data: {
-        status: 'ok',
-        data: {
-          traces: [
-            {
-              trace_id: 'trace-legacy',
-              name: 'AstrMessageEvent',
-              attributes: {},
-              state: 'ended',
-              start_time_unix_nano: '1000000000',
-              end_time_unix_nano: '2000000000',
-              span_count: 2,
-            },
-          ],
-          total: 1,
-          page: 1,
-          storage: {},
-        },
-      },
-    });
-    state.detail.mockResolvedValue({
-      data: {
-        status: 'ok',
-        data: {
-          trace: {
-            trace_id: 'trace-legacy',
+        traces: [
+          {
+            trace_id: 'trace-detail',
             name: 'AstrMessageEvent',
             attributes: {},
             state: 'ended',
@@ -125,44 +128,71 @@ describe('TraceDisplayer', () => {
             end_time_unix_nano: '2000000000',
             span_count: 2,
           },
-          spans: [
-            {
-              span_id: 'root-span',
-              parent_span_id: '',
-              name: 'AstrMessageEvent',
-              attributes: {},
-              start_time_unix_nano: '1000000000',
-              end_time_unix_nano: '2000000000',
-              events: [],
-            },
-            {
-              span_id: 'agent-span',
-              parent_span_id: 'root-span',
-              name: 'Agent',
-              attributes: { 'astrbot.kind': 'agent' },
-              start_time_unix_nano: '1100000000',
-              end_time_unix_nano: '1900000000',
-              events: [
-                {
-                  event_id: 'prepare-event',
-                  span_id: 'agent-span',
-                  name: 'astr_agent_prepare',
-                  time_unix_nano: '1200000000',
-                  attributes: { 'astrbot.persona_id': 'legacy-persona' },
-                },
-              ],
-            },
-          ],
-        },
+        ],
+        total: 1,
+        page: 1,
+        storage: {},
       },
-    });
-
-    const wrapper = mountWithVuetify(TraceDisplayer);
-    await flushPromises();
-
-    await wrapper.find('.trace-list-row').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('legacy-persona');
+    },
   });
-});
+  state.detail.mockResolvedValue({
+    data: {
+      status: 'ok',
+      data: {
+        trace: {
+          trace_id: 'trace-detail',
+          name: 'AstrMessageEvent',
+          attributes: {},
+          state: 'ended',
+          start_time_unix_nano: '1000000000',
+          end_time_unix_nano: '2000000000',
+          span_count: 2,
+        },
+        spans: [
+          {
+            span_id: 'root-span',
+            parent_span_id: '',
+            name: 'AstrMessageEvent',
+            attributes: {},
+            start_time_unix_nano: '1000000000',
+            end_time_unix_nano: '2000000000',
+            events: [],
+          },
+          {
+            span_id: 'agent-span',
+            parent_span_id: 'root-span',
+            name: 'Agent',
+            attributes: { 'astrbot.kind': 'agent' },
+            start_time_unix_nano: '1100000000',
+            end_time_unix_nano: '1900000000',
+            events: [
+              {
+                event_id: 'prepare-event',
+                span_id: 'agent-span',
+                name: 'astr_agent_prepare',
+                time_unix_nano: '1200000000',
+                attributes: { [`astrbot.${field}`]: value },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+}
+
+async function mountTraceDetail() {
+  const wrapper = mountWithVuetify(TraceDisplayer);
+  await flushPromises();
+
+  await wrapper.find('.trace-list-row').trigger('click');
+  await flushPromises();
+  return wrapper;
+}
+
+function promptChipTitles(wrapper: ReturnType<typeof mountWithVuetify>) {
+  return wrapper
+    .findAll('.timeline-metadata-chip')
+    .map((chip) => chip.attributes('title'))
+    .filter((title): title is string => Boolean(title));
+}

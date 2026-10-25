@@ -219,6 +219,7 @@ async def replace_conversation_messages(
     service: ConversationService = Depends(get_service),
 ):
     body = model_dict(payload)
+    body.pop("cid", None)
     body_user_id = body.pop("user_id", None) or user_id
     if body_user_id != user_id:
         raise ApiError("user_id does not match query parameter", status_code=400)
@@ -254,6 +255,7 @@ async def update_conversation(
     service: ConversationService = Depends(get_service),
 ):
     body = model_dict(payload)
+    body.pop("cid", None)
     body_user_id = body.pop("user_id", None) or user_id
     if body_user_id != user_id:
         raise ApiError("user_id does not match query parameter", status_code=400)

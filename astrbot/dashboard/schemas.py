@@ -778,13 +778,17 @@ class ConversationRef(BaseModel):
     cid: str
 
 
-class ConversationPatchRequest(OpenModel):
+class ConversationPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     user_id: str | None = None
     title: str | None = None
     prompt_id: str | None = None
 
 
-class ConversationMessagesReplaceRequest(OpenModel):
+class ConversationMessagesReplaceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     user_id: str | None = None
     history: list[Any] | str | None = None
     messages: list[Any] | str | None = None

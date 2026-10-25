@@ -7,6 +7,7 @@
     :style="chipStyle"
     :href="url"
     target="_blank"
+    rel="noopener noreferrer"
     clickable
   >
     <v-icon start size="x-small" color="">mdi-link-variant</v-icon>

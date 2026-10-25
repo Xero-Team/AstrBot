@@ -5,7 +5,7 @@ import os
 import traceback
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot import logger
@@ -49,11 +49,16 @@ from astrbot.core.utils.totp import (
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, DashboardValidationError
+from astrbot.dashboard.schemas import BotCleanupTarget
+from astrbot.dashboard.services.bot_cleanup_service import delete_bot_data
 from astrbot.dashboard.upload_utils import (
     UploadLimitError,
     UploadPathError,
     save_upload_to_path,
 )
+
+if TYPE_CHECKING:
+    from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -1566,10 +1571,13 @@ class BotConfigService:
         config: AstrBotConfig,
         platform_catalog: PlatformCatalog,
         platform_manager: PlatformManager,
+        *,
+        core_lifecycle: AstrBotCoreLifecycle | None = None,
     ) -> None:
         self.config = config
         self.platform_catalog = platform_catalog
         self.platform_manager = platform_manager
+        self.core_lifecycle = core_lifecycle
 
     def list_bot_types(self) -> dict:
         _ensure_dashboard_platform_metadata_loaded(self.platform_catalog)
@@ -1628,6 +1636,10 @@ class BotConfigService:
         next_config.setdefault("platform", []).append(copy.deepcopy(config))
         committed = await save_config_async(next_config, self.config, is_core=True)
         _require_config_save_commit(committed)
+        if self.core_lifecycle and (
+            event_bus := getattr(self.core_lifecycle, "event_bus", None)
+        ):
+            event_bus.stopped_platforms.discard(bot_id)
         await self.platform_manager.load_platform(config)
 
     async def update_bot(self, bot_id: str, config: dict) -> None:
@@ -1663,20 +1675,56 @@ class BotConfigService:
         new_config["enable"] = enabled
         await self.update_bot(bot_id, new_config)
 
-    async def delete_bot(self, bot_id: str) -> None:
-        next_config = copy.deepcopy(dict(self.config))
-        for idx, bot in enumerate(next_config.get("platform", [])):
-            if bot.get("id") == bot_id:
-                del next_config["platform"][idx]
-                committed = await save_config_async(
-                    next_config,
-                    self.config,
-                    is_core=True,
-                )
-                _require_config_save_commit(committed)
-                await self.platform_manager.terminate_platform(bot_id)
-                return
-        raise DashboardValidationError(f"Bot {bot_id} not found")
+    async def delete_bot(
+        self, bot_id: str, *, cleanup: list[BotCleanupTarget] | None = None
+    ) -> None:
+        """Stop an adapter and delete only explicitly selected associated data.
+
+        Args:
+            bot_id: Exact platform instance ID.
+            cleanup: Data categories to remove; omitted categories are retained.
+
+        Raises:
+            ValueError: The bot or a cleanup category is invalid.
+            Exception: Cleanup or configuration persistence fails.
+        """
+        bot = self._find_bot(bot_id)
+        if bot is None:
+            raise ValueError(f"Bot {bot_id} not found")
+        targets = set(cleanup or [])
+        if targets - set(get_args(BotCleanupTarget)):
+            raise ValueError("Invalid bot cleanup category")
+        core = self.core_lifecycle
+        event_bus = getattr(core, "event_bus", None) if core else None
+        await self.platform_manager.terminate_platform(bot_id)
+        try:
+            if event_bus:
+                await event_bus.stop_platform(bot_id)
+            if targets:
+                if core is None:
+                    raise ValueError("Bot cleanup requires the runtime")
+                await delete_bot_data(core, bot_id, targets)
+            next_config = copy.deepcopy(dict(self.config))
+            next_config["platform"] = [
+                item
+                for item in next_config.get("platform", [])
+                if item.get("id") != bot_id
+            ]
+            committed = await save_config_async(
+                next_config,
+                self.config,
+                is_core=True,
+            )
+            _require_config_save_commit(committed)
+            if event_bus:
+                event_bus.stopped_platforms.discard(bot_id)
+        except Exception:
+            # Keep the adapter available for inspection or retry after a failure.
+            if event_bus:
+                event_bus.stopped_platforms.discard(bot_id)
+            if bot.get("enable"):
+                await self.platform_manager.load_platform(bot)
+            raise
 
     def _find_bot(self, bot_id: str) -> dict | None:
         for bot in self.config.get("platform", []):

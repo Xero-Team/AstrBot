@@ -9,6 +9,7 @@ import pytest
 
 from astrbot.core.event_bus import EventBus, build_unique_session_id
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 
 
 @pytest.fixture
@@ -60,6 +61,106 @@ class TestEventBusInit:
         assert bus.event_queue == event_queue
         assert bus.pipeline_scheduler_mapping == {"test": mock_pipeline_scheduler}
         assert bus.astrbot_config_mgr == mock_config_manager
+
+
+@pytest.mark.asyncio
+async def test_stop_platform_drains_only_owned_messages(event_bus, monkeypatch):
+    """Drop queued messages and finish cancellation before database cleanup."""
+    registry = ActiveEventRegistry()
+    scheduler = event_bus.pipeline_scheduler_mapping["test-conf-id"]
+    scheduler.ctx.execution_context.active_event_registry = registry
+    owned, other = MagicMock(), MagicMock()
+    owned.get_platform_id.return_value = "bot"
+    owned.unified_msg_origin = "bot:GroupMessage:1"
+    owned.get_extra.return_value = None
+    other.get_platform_id.return_value = "bot-other"
+    cleaned = asyncio.Event()
+    started = asyncio.Event()
+
+    async def run():
+        try:
+            started.set()
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            cleaned.set()
+
+    foreground = asyncio.create_task(run())
+    background = asyncio.create_task(asyncio.Event().wait())
+    unrelated = asyncio.create_task(asyncio.Event().wait())
+    registry.register_background_task(owned, background)
+    event_bus._pending_tasks = {foreground: owned, unrelated: other}
+    event_bus.event_queue.put_nowait(owned)
+    event_bus.event_queue.put_nowait(other)
+    await asyncio.wait_for(started.wait(), 1)
+    try:
+        await asyncio.wait_for(event_bus.stop_platform("bot"), 1)
+        assert foreground.cancelled() and background.cancelled()
+        assert cleaned.is_set()
+        assert not unrelated.done()
+        assert event_bus.event_queue.get_nowait() is other
+        assert event_bus.event_queue.empty()
+        owned.trace.record.assert_called_once_with("pipeline_end", status="cancelled")
+        assert event_bus.stopped_platforms == {"bot"}
+    finally:
+        for task in (foreground, background, unrelated):
+            task.cancel()
+        await asyncio.gather(foreground, background, unrelated, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_stop_platform_blocks_event_waiting_for_concurrency(
+    event_bus, event_queue, mock_pipeline_scheduler
+):
+    """An event queued behind the semaphore must not run after deletion."""
+    mock_pipeline_scheduler.ctx.execution_context.active_event_registry = (
+        ActiveEventRegistry()
+    )
+    event_bus._semaphore = asyncio.Semaphore(1)
+    await event_bus._semaphore.acquire()
+    event = MagicMock()
+    event.get_platform_id.return_value = "bot"
+    event.get_platform_name.return_value = "webchat"
+    event.unified_msg_origin = "bot:FriendMessage:1"
+    event.get_extra.return_value = None
+    event.get_sender_id.return_value = "sender"
+    event.get_sender_name.return_value = "Sender"
+    event.get_message_outline.return_value = "hello"
+
+    dispatch = asyncio.create_task(event_bus.dispatch())
+    event_queue.put_nowait(event)
+    await asyncio.sleep(0)
+    await event_bus.stop_platform("bot")
+    event_bus._semaphore.release()
+    await asyncio.sleep(0.05)
+    dispatch.cancel()
+    await asyncio.gather(dispatch, return_exceptions=True)
+
+    mock_pipeline_scheduler.execute.assert_not_awaited()
+    event.trace.record.assert_any_call("pipeline_end", status="cancelled")
+
+
+@pytest.mark.asyncio
+async def test_cancelled_before_start_releases_concurrency(
+    event_bus, mock_pipeline_scheduler
+):
+    """A task cancelled before its first step must return its semaphore permit."""
+    event_bus._semaphore = asyncio.Semaphore(1)
+    await event_bus._semaphore.acquire()
+    event = MagicMock()
+    event.get_platform_id.return_value = "bot"
+
+    async def never_runs() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(never_runs())
+    event_bus._pending_tasks[task] = event
+    task.add_done_callback(event_bus._on_task_done)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert not event_bus._semaphore.locked()
+    assert not event_bus._pending_tasks
 
 
 class TestEventBusDispatch:

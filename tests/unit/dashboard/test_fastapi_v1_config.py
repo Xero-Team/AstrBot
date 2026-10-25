@@ -1075,3 +1075,46 @@ async def test_provider_routes_ignore_caller_config_scope(
 
     assert response.status_code == 200
     assert captured == ["default"]
+
+
+@pytest.mark.asyncio
+async def test_v1_bot_delete_forwards_cleanup_categories(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fake_save_config_async(post_config, config, **_kwargs) -> bool:
+        return await config.save_config_async(post_config)
+
+    cleanup = AsyncMock()
+    monkeypatch.setattr(config_service, "save_config_async", fake_save_config_async)
+    monkeypatch.setattr(config_service, "delete_bot_data", cleanup)
+    fake_core_lifecycle.astrbot_config["platform"].append(
+        {"id": "bot-cleanup", "type": "webchat", "enable": True}
+    )
+
+    response = await asgi_client.delete(
+        "/api/v1/bots/bot-cleanup",
+        params=[("cleanup", "custom_rules"), ("cleanup", "traces")],
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    cleanup.assert_awaited_once()
+    assert cleanup.await_args.args[1] == "bot-cleanup"
+    assert cleanup.await_args.args[2] == {"custom_rules", "traces"}
+
+
+@pytest.mark.asyncio
+async def test_v1_bot_delete_rejects_unknown_cleanup_and_requires_auth(
+    asgi_client: httpx.AsyncClient,
+):
+    unauthorized = await asgi_client.delete("/api/v1/bots/bot-cleanup")
+    invalid = await asgi_client.delete(
+        "/api/v1/bots/bot-cleanup",
+        params={"cleanup": "unknown"},
+        headers=_jwt_headers(),
+    )
+
+    assert unauthorized.status_code == 401
+    assert invalid.status_code == 422

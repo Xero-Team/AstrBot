@@ -53,6 +53,17 @@ def reject_forbidden_keys(
     if present:
         raise error(f"{label}: {', '.join(sorted(present))}")
 
+BotCleanupTarget = Literal[
+    "custom_rules",
+    "preferences",
+    "routing",
+    "cron_jobs",
+    "conversations",
+    "message_history",
+    "traces",
+    "stats",
+]
+
 
 class OpenModel(BaseModel):
     model_config = ConfigDict(extra="allow")

@@ -798,9 +798,10 @@ async def test_bot_config_does_not_change_runtime_when_save_is_superseded(
     assert update_exc.value.status_code == 409
     assert delete_exc.value.status_code == 409
     assert save.await_count == 3
-    platform_manager.load_platform.assert_not_awaited()
+    # A superseded delete still terminates and restores the adapter.
+    platform_manager.load_platform.assert_awaited_once()
     platform_manager.reload.assert_not_awaited()
-    platform_manager.terminate_platform.assert_not_awaited()
+    platform_manager.terminate_platform.assert_awaited_once_with("existing")
 
 
 @pytest.mark.asyncio

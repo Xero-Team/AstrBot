@@ -372,6 +372,8 @@ export type {
   BindPluginSourceResponse,
   BindPluginSourceResponses,
   BotActionRequest,
+  BotCleanup,
+  BotCleanupTarget,
   BotConfigRequest,
   BotId,
   BotRegistrationRequest,

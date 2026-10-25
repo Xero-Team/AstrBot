@@ -56,6 +56,10 @@ describe('Vuetify 4 API usage', () => {
     expect(t2iEditor).toContain('referrerpolicy="no-referrer"');
     // A sandboxed opaque origin cannot be reloaded through contentWindow.
     expect(t2iEditor).not.toContain('contentWindow.location');
+    // Remount through a changing key: reassigning an unchanged srcdoc does not
+    // trigger a navigation.
+    expect(t2iEditor).toContain(':key="previewKey"');
+    expect(t2iEditor).not.toContain('frame.srcdoc =');
   });
 
   it('does not pass props removed in Vuetify 4', () => {

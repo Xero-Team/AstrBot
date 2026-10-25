@@ -1,8 +1,10 @@
 import asyncio
 import json
 import random
+import tempfile
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, NoReturn
 from urllib.parse import urlsplit
 
@@ -15,6 +17,11 @@ except ImportError as e:
     ) from e
 
 from astrbot import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.outbound_http import (
+    OutboundRequestPolicy,
+    download_to_path,
+)
 
 from .misskey_utils import FileIDExtractor
 
@@ -705,31 +712,28 @@ class MisskeyAPI:
                 return bytes(chunks)
         return None
 
-    async def _download_with_temp_session(
-        self,
-        url: str,
-        ssl_verify: bool = True,
-    ) -> bytes | None:
-        """使用临时会话下载文件"""
-        connector = aiohttp.TCPConnector(ssl=ssl_verify)
-        async with aiohttp.ClientSession(connector=connector) as temp_session:
-            async with temp_session.get(
-                url,
-                timeout=aiohttp.ClientTimeout(total=self.download_timeout),
-            ) as response:
-                if response.status == 200:
-                    chunks = bytearray()
-                    async for chunk in response.content.iter_chunked(self.chunk_size):
-                        chunks.extend(chunk)
-                        if (
-                            self.max_download_bytes is not None
-                            and len(chunks) > self.max_download_bytes
-                        ):
-                            raise APIError(
-                                "Downloaded file exceeds configured size limit"
-                            )
-                    return bytes(chunks)
-        return None
+    async def _download_with_temp_session(self, url: str) -> bytes | None:
+        """Download a third-party media URL through the outbound policy."""
+        policy = OutboundRequestPolicy(
+            allowed_schemes=frozenset({"http", "https"}),
+            allowed_hosts=None,
+            allowed_ports=None,
+            allow_private_network=False,
+            max_redirects=0,
+            max_url_length=2048,
+            max_response_bytes=self.max_download_bytes,
+            timeout_seconds=float(self.download_timeout),
+        )
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=temp_dir, delete=False) as temp_file:
+            temp_path = Path(temp_file.name)
+        try:
+            await download_to_path(url, temp_path, policy)
+            # Media files can be large; keep the blocking read off the loop.
+            return await asyncio.to_thread(temp_path.read_bytes)
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     def _is_instance_origin(self, url: str) -> bool:
         """Return whether ``url`` belongs to the configured Misskey instance."""
@@ -762,7 +766,7 @@ class MisskeyAPI:
                 raise
             except Exception:
                 logger.debug("Misskey authenticated download failed; retrying")
-        return await self._download_with_temp_session(url, ssl_verify=True)
+        return await self._download_with_temp_session(url)
 
     async def upload_and_find_file(
         self,

@@ -86,3 +86,19 @@ def test_verify_recovery_code_rejects_malformed_or_wrong_length():
     config = {"dashboard": {"totp": {"recovery_code_hash": recovery_code_hash}}}
     assert verify_recovery_code(config, "abc") is False
     assert verify_recovery_code(config, recovery_code[:-1]) is False
+
+
+@pytest.mark.asyncio
+async def test_rotation_verification_obeys_ttl(monkeypatch):
+    from astrbot.core.utils import totp as totp_module
+
+    monkeypatch.setattr(totp_module, "_ROTATION_STATE_TTL_SECONDS", 0)
+    state = TotpRuntimeState()
+    secret = pyotp.random_base32()
+
+    assert await state.verify_rotation_secret(
+        "dashboard-session:ttl",
+        secret,
+        pyotp.TOTP(secret).now(),
+    )
+    assert not await state.has_rotation_verification("dashboard-session:ttl")

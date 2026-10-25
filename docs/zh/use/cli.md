@@ -76,7 +76,7 @@ uv run astrbot conf get dashboard.port
 uv run astrbot conf set dashboard.port 6185
 ```
 
-CLI 支持的常用键包括 `timezone`、`log.level`、`dashboard.port`、`dashboard.username`、`dashboard.password` 和 `callback_api_base`。修改密码时会把 PBKDF2 哈希写入 `pbkdf2_password`，并清空遗留的 `password` 字段。不要手工生成哈希值。
+CLI 支持的常用键包括 `timezone`、`log.level`、`dashboard.port`、`dashboard.username`、`dashboard.password` 和 `callback_api_base`。修改密码时会把 PBKDF2 哈希写入 `pbkdf2_password`，并清空遗留的 `password` 字段。不要手工生成哈希值。`conf set dashboard.password` 不接受明文密码参数：省略值会进入隐藏输入提示，传入 `-` 则从标准输入读取。
 
 也可以使用专门的交互式命令：
 

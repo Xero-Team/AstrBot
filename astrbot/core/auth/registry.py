@@ -118,6 +118,7 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.mcp_write": _INSTANCE_AND_ABOVE,
     "tool.computer_use": _INSTANCE_AND_ABOVE,
     "tool.web_search": _SESSION_AND_ABOVE,
+    "tool.kb_read": _SESSION_AND_ABOVE,
     "tool.session_history": _SESSION_AND_ABOVE,
     "tool.memory_read": _SESSION_AND_ABOVE,
     "tool.memory_write": _SESSION_OWNER_AND_ABOVE,

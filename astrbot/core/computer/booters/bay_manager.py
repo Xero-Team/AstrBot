@@ -25,6 +25,7 @@ BAY_LABEL = "astrbot.bay.managed"
 BAY_PORT = 8114
 HEALTH_TIMEOUT_S = 60
 HEALTH_POLL_INTERVAL_S = 2
+_LOOPBACK_HOST_IPS = frozenset({"127.0.0.1", "::1"})
 
 
 class BayContainerManager:
@@ -39,6 +40,33 @@ class BayContainerManager:
         self._host_port = host_port
         self._docker: aiodocker.Docker | None = None
         self._container: Any = None
+
+    @staticmethod
+    def _is_loopback_bound(existing: dict[str, Any]) -> bool:
+        """Return whether a managed container publishes only on loopback.
+
+        Inspect both the requested host binding and the effective network
+        mapping so a container created before the loopback fix is recreated
+        instead of being reused with its port still exposed.
+        """
+        key = f"{BAY_PORT}/tcp"
+        host_config = existing.get("HostConfig") or {}
+        bindings = (host_config.get("PortBindings") or {}).get(key)
+        if not bindings:
+            return False
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                return False
+            if binding.get("HostIp") not in _LOOPBACK_HOST_IPS:
+                return False
+
+        network_ports = (existing.get("NetworkSettings") or {}).get("Ports") or {}
+        for binding in network_ports.get(key) or []:
+            if not isinstance(binding, dict):
+                return False
+            if binding.get("HostIp") not in _LOOPBACK_HOST_IPS:
+                return False
+        return True
 
     def _build_container_config(self) -> dict[str, Any]:
         return {
@@ -88,6 +116,14 @@ class BayContainerManager:
 
         # 1. Look for an existing managed container
         existing = await self._find_managed_container()
+        if existing is not None and not self._is_loopback_bound(existing):
+            logger.warning(
+                "[BayManager] Managed Bay container is not loopback-bound; "
+                "recreating it"
+            )
+            container = await self._docker.containers.get(existing["Id"])
+            await container.delete(force=True)
+            existing = None
         if existing is not None:
             state = existing["State"]
             if state.get("Running"):

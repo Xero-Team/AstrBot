@@ -1,6 +1,7 @@
 import asyncio
 import copy
 from typing import Any
+from weakref import WeakValueDictionary
 
 from mcp.types import PromptReference, ResourceTemplateReference
 
@@ -40,7 +41,9 @@ class ToolsService:
         self.plugin_catalog = plugin_catalog
         self._oauth_probe_tasks: dict[str, asyncio.Task[None]] = {}
         self._background_tasks: set[asyncio.Task[Any]] = set()
-        self._oauth_start_locks: dict[str, asyncio.Lock] = {}
+        self._oauth_start_locks: WeakValueDictionary[str, asyncio.Lock] = (
+            WeakValueDictionary()
+        )
 
     def _oauth_start_lock(self, identity: str) -> asyncio.Lock:
         lock = self._oauth_start_locks.get(identity)
@@ -258,6 +261,10 @@ class ToolsService:
                 ),
                 label=f"MCP OAuth catalog refresh for {name}",
             )
+            # The server is already authorized: there is no redirect URL to
+            # wait for, so report pending immediately instead of blocking on
+            # the OAuth URL timeout.
+            return {"status": "pending"}
         else:
             # A protected endpoint may fail its first catalog request with 401,
             # so it has no runtime entry yet. Keep an owner task alive while the

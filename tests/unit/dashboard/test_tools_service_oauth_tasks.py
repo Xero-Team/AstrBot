@@ -44,6 +44,8 @@ async def test_oauth_catalog_refresh_is_tracked_until_completion() -> None:
     result = await service.start_mcp_authorization("server")
 
     assert result == {"status": "pending"}
+    service.tool_mgr.mcp_authorization_coordinator.wait_for_url.assert_not_awaited()
+    assert service._oauth_start_locks == {}
     await asyncio.wait_for(started.wait(), timeout=1)
     assert len(service._background_tasks) == 1
 

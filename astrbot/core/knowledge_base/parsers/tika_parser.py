@@ -47,18 +47,33 @@ class TikaParser(BaseParser):
                 timeout=self.timeout_seconds,
                 follow_redirects=False,
             ) as client:
-                response = await client.put(url, content=file_content, headers=headers)
+                async with client.stream(
+                    "PUT",
+                    url,
+                    content=file_content,
+                    headers=headers,
+                ) as response:
+                    if response.status_code >= 400:
+                        raise RuntimeError(
+                            f"Tika extraction failed with status {response.status_code}"
+                        )
+                    content = await _read_bounded(response)
         except httpx.HTTPError as exc:
             raise RuntimeError("Tika extraction service is unreachable") from exc
 
-        if response.status_code >= 400:
-            raise RuntimeError(
-                f"Tika extraction failed with status {response.status_code}"
-            )
-        content = response.content
-        if len(content) > _MAX_TIKA_RESPONSE_BYTES:
-            content = content[:_MAX_TIKA_RESPONSE_BYTES]
         return ParseResult(text=content.decode("utf-8", errors="replace"), media=[])
+
+
+async def _read_bounded(response: httpx.Response) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in response.aiter_bytes():
+        if not chunk or total >= _MAX_TIKA_RESPONSE_BYTES:
+            break
+        remaining = _MAX_TIKA_RESPONSE_BYTES - total
+        chunks.append(chunk[:remaining])
+        total += min(len(chunk), remaining)
+    return b"".join(chunks)
 
 
 def _safe_name(file_name: str) -> str:

@@ -50,8 +50,24 @@ async def test_select_parser_rejects_unknown_extension() -> None:
 
 
 class _FakeResponse:
-    status_code = 200
-    content = b"extracted text"
+    def __init__(self, *, status_code: int = 200, content: bytes = b"extracted text"):
+        self.status_code = status_code
+        self.content = content
+
+    async def aiter_bytes(self):
+        if self.content:
+            yield self.content
+
+
+class _FakeStream:
+    def __init__(self, response: _FakeResponse) -> None:
+        self.response = response
+
+    async def __aenter__(self) -> _FakeResponse:
+        return self.response
+
+    async def __aexit__(self, *_args) -> None:
+        return None
 
 
 class _FakeAsyncClient:
@@ -64,9 +80,16 @@ class _FakeAsyncClient:
     async def __aexit__(self, *_args) -> None:
         return None
 
-    async def put(self, url, *, content, headers):
-        self.calls.append({"url": url, "content": content, "headers": headers})
-        return _FakeResponse()
+    def stream(self, method, url, *, content, headers):
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "content": content,
+                "headers": headers,
+            }
+        )
+        return _FakeStream(_FakeResponse())
 
 
 @pytest.mark.asyncio
@@ -79,6 +102,7 @@ async def test_tika_parser_posts_file(monkeypatch) -> None:
 
     assert result.text == "extracted text"
     assert result.media == []
+    assert client.calls[0]["method"] == "PUT"
     assert client.calls[0]["url"] == "http://tika.local:9998/tika"
     assert client.calls[0]["content"] == b"raw-bytes"
 
@@ -117,3 +141,35 @@ def test_pdf_filter_arrays_resolve_to_the_real_image_encoding():
     ) == ("jpg", "image/jpeg")
     assert PDFParser._resolve_image_format("/JPXDecode") == ("jp2", "image/jp2")
     assert PDFParser._resolve_image_format("/FlateDecode") is None
+
+
+@pytest.mark.asyncio
+async def test_tika_parser_caps_streaming_response(monkeypatch) -> None:
+    response = _FakeResponse(content=b"x" * 64)
+
+    class CappedClient(_FakeAsyncClient):
+        def stream(self, method, url, *, content, headers):
+            return _FakeStream(response)
+
+    monkeypatch.setattr(
+        tika_parser.httpx, "AsyncClient", lambda **kwargs: CappedClient()
+    )
+    monkeypatch.setattr(tika_parser, "_MAX_TIKA_RESPONSE_BYTES", 16)
+
+    result = await TikaParser("http://tika.local:9998").parse(b"raw", "doc.pdf")
+
+    assert result.text == "x" * 16
+
+
+@pytest.mark.asyncio
+async def test_tika_parser_rejects_error_status(monkeypatch) -> None:
+    class ErrorClient(_FakeAsyncClient):
+        def stream(self, method, url, *, content, headers):
+            return _FakeStream(_FakeResponse(status_code=500))
+
+    monkeypatch.setattr(
+        tika_parser.httpx, "AsyncClient", lambda **kwargs: ErrorClient()
+    )
+
+    with pytest.raises(RuntimeError, match="status 500"):
+        await TikaParser("http://tika.local:9998").parse(b"raw", "doc.pdf")

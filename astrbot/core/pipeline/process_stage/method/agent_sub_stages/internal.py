@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import AbstractAsyncContextManager, nullcontext
 from copy import deepcopy
 from dataclasses import replace
+from urllib.parse import urlsplit
 
 from astrbot import logger
 from astrbot.core.agent.follow_up import FollowUpCapture
@@ -359,15 +360,14 @@ class InternalAgentSubStage:
             return None
 
         api_base = build_result.provider.provider_config.get("api_base", "")
-        for host in BLOCKED_PROVIDER_HOSTS:
-            if host in api_base:
-                _set_llm_error_message(event, "blockedProvider", api_base=api_base)
-                logger.error(
-                    "Provider API base %s was blocked for security reasons",
-                    safe_error("", api_base),
-                )
-                await self._send_llm_error_message(event)
-                return None
+        if _is_blocked_provider_api_base(api_base):
+            _set_llm_error_message(event, "blockedProvider", api_base=api_base)
+            logger.error(
+                "Provider API base %s was blocked for security reasons",
+                safe_error("", api_base),
+            )
+            await self._send_llm_error_message(event)
+            return None
         return build_result
 
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None]:
@@ -932,6 +932,22 @@ BLOCKED_PROVIDER_HOSTS = frozenset(
         "kourichat",
     }
 )
+
+
+def _is_blocked_provider_api_base(api_base: object) -> bool:
+    """Return whether an API base host matches a known blocked provider."""
+    if not isinstance(api_base, str) or not api_base.strip():
+        return False
+    try:
+        hostname = (urlsplit(api_base).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    if not hostname:
+        return False
+    return any(
+        hostname == blocked or hostname.endswith(f".{blocked}")
+        for blocked in BLOCKED_PROVIDER_HOSTS
+    )
 
 
 async def _record_internal_agent_stats(

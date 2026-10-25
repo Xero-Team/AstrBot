@@ -14,6 +14,19 @@ from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .dify_api_client import DifyAPIClient
 
 
+def _workflow_inputs(
+    query_key: str,
+    prompt: str,
+    session_id: str,
+    payload_vars: dict,
+) -> dict:
+    return {
+        **payload_vars,
+        query_key: prompt,
+        "astrbot_session_id": session_id,
+    }
+
+
 class DifyAgentRunner(BaseAgentRunner[TContext]):
     """Dify Agent Runner"""
 
@@ -215,11 +228,12 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
             case "workflow":
                 async for chunk in self.api_client.workflow_run(
-                    inputs={
-                        self.dify_query_input_key: prompt,
-                        "astrbot_session_id": session_id,
-                        **payload_vars,
-                    },
+                    inputs=_workflow_inputs(
+                        self.dify_query_input_key,
+                        prompt,
+                        session_id,
+                        payload_vars,
+                    ),
                     user=session_id,
                     files=files_payload,
                     timeout_seconds=self.timeout,

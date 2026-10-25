@@ -72,8 +72,6 @@ class T2iService:
             raise T2iServiceError("Name and content are required.", 400)
 
         name = name.strip()
-        if is_internal_template_name(name):
-            raise T2iServiceError("该模板仅供内置命令使用。", 400)
         try:
             self.manager.create_template(name, content)
         except FileExistsError as exc:
@@ -92,8 +90,6 @@ class T2iService:
         name = name.strip()
         if content is None:
             raise T2iServiceError("Content is required.", 400)
-        if is_internal_template_name(name):
-            raise T2iServiceError("该模板仅供内置命令使用。", 400)
 
         try:
             self.manager.update_template(name, content)

@@ -28,23 +28,19 @@ AstrBot can discover Skills from several places:
 
 - **Local Skills**: uploaded from the WebUI or placed under `data/skills/<skill_name>/SKILL.md`. These appear in the WebUI Skills management page.
 - **Plugin-provided Skills**: plugins can bundle Skills in their own `skills/` directory. They appear in the WebUI, but are managed by the plugin, so they cannot be deleted or edited from the Local Skills page.
-- **Sandbox preset Skills**: when the sandbox runtime is used, AstrBot reads Skills discovered inside the sandbox and provides them to the Agent.
 - **Workspace Skills**: Skills under the current session workspace, at `skills/<skill_name>/SKILL.md`. They are currently injected only in local runtime, where the path is usually `data/workspaces/{normalized_umo}/skills/<skill_name>/SKILL.md`.
 
 Workspace Skills are **request-scoped**. In local runtime, when AstrBot builds a request, it checks the current session workspace for a `skills/` directory and appends valid Skills to that request's Skill inventory. They are not shown in the WebUI Skills management page yet, and they are not written to the global Skills configuration.
 
-If a prompt is configured to select specific Skills, that list filters only local, plugin-provided, and sandbox Skills. Workspace Skills are still discovered and injected as part of the current request. Workspace Skills are disabled only when the prompt is explicitly configured to use no Skills.
+If a prompt is configured to select specific Skills, that list filters only local and plugin-provided Skills. Workspace Skills are still discovered and injected as part of the current request. Workspace Skills are disabled only when the prompt is explicitly configured to use no Skills.
 
 When multiple sources contain a Skill with the same name, request-time priority is:
 
 1. If the current prompt is explicitly configured to use no Skills, no Skills are injected, including Workspace Skills.
 2. If the current prompt selects a specific Skill list, that list does not filter Workspace Skills.
-3. The current session's Workspace Skill has the highest priority. If it has the same name as a local, plugin, or sandbox Skill, it overrides that Skill for the current request only.
-4. Local Skills take priority over plugin-provided Skills and sandbox-only Skills.
-5. Plugin-provided Skills take priority over sandbox-only Skills.
-6. Sandbox-only Skills are injected only when there is no local, plugin, or workspace Skill with the same name.
-
-If a local Skill has been synced into the sandbox, AstrBot treats it as the same Skill. In sandbox runtime, the request will prefer the path that is readable inside the sandbox. Workspace Skills are not automatically synced into the sandbox yet.
+3. The current session's Workspace Skill has the highest priority. If it has the same name as a local or plugin Skill, it overrides that Skill for the current request only.
+4. Local Skills take priority over plugin-provided Skills.
+5. Plugin-provided Skills are injected only when there is no local or workspace Skill with the same name.
 
 ## Load steps
 
@@ -56,10 +52,9 @@ Only frontmatter `tools:` is recognized. Values are registered tool names, for e
 
 Skills are on-demand task manuals. Scripts inside a manual still need an execution environment, but reading the manual no longer depends on a shell.
 
-Currently, AstrBot provides two execution environments:
+AstrBot currently provides one execution environment:
 
 - Local — The Agent runs in your AstrBot runtime environment. **Use with caution: this allows the Agent to execute arbitrary code in your environment, which may pose security risks.**
-- Sandbox — The Agent runs inside an isolated sandbox environment. **You must enable AstrBot sandbox mode first.** See [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox).
 
 You can select the default execution environment under **Config → select a profile → AI → Capabilities → Agent Computer Use**. Memory and retrieval Skills can still load their manuals through `read_skill` when Computer Use is off.
 

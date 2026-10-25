@@ -87,7 +87,6 @@ make check
 如果希望执行一套更接近 CI 的验证：
 
 ```bash
-make pr-test-neo
 make pr-test-full
 make pr-test-full-fast
 ```
@@ -194,7 +193,6 @@ make check
 For a CI-like local pass:
 
 ```bash
-make pr-test-neo
 make pr-test-full
 make pr-test-full-fast
 ```

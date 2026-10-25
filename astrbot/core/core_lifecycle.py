@@ -531,10 +531,6 @@ class AstrBotCoreLifecycle:
             builtin_skill_catalog=self.services.catalogs.builtin_skills,
         )
         execution_context.skill_manager = skill_manager
-        self.services.computer_runtime.bind_skill_manager(
-            skill_manager,
-            self.services.catalogs.plugins,
-        )
         # 根据配置实例化各个 Provider
         self._default_chat_provider_warning_emitted = False
         self._register_cleanup("provider manager", self.provider_manager.terminate)

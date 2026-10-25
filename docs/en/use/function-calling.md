@@ -4,7 +4,7 @@ outline: deep
 
 # Function calling
 
-Function calling lets the model invoke external tools in the same turn: web search, reminders, knowledge-base retrieval, sandbox tools, or plugin tools.
+Function calling lets the model invoke external tools in the same turn: web search, reminders, knowledge-base retrieval, local execution tools, or plugin tools.
 
 Open **Extensions → Manage Handlers → Function Tools**. MCP and Skills are adjacent tabs. See [MCP](./mcp) and [Skills](./skills).
 

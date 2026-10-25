@@ -399,7 +399,6 @@ async def test_update_plugin_passes_default_market_repo_to_lifecycle(
     update_calls: list[dict[str, str]] = []
     reload_calls: list[str] = []
     refresh_calls: list[tuple[str, dict[str, object]]] = []
-    sync_calls: list[bool] = []
     update_info = _repo_only_update_info()
 
     async def fake_update_plugin(
@@ -423,9 +422,6 @@ async def test_update_plugin_passes_default_market_repo_to_lifecycle(
     async def fake_refresh(plugin_name: str, info: dict[str, object]) -> None:
         refresh_calls.append((plugin_name, info))
 
-    async def fake_sync() -> None:
-        sync_calls.append(True)
-
     async def fake_resolve(_plugin_name: str):
         return update_info
 
@@ -440,7 +436,6 @@ async def test_update_plugin_passes_default_market_repo_to_lifecycle(
         "refresh_plugin_install_source_after_update",
         fake_refresh,
     )
-    monkeypatch.setattr(service, "sync_skills_after_plugin_change", fake_sync)
 
     await service.update_plugin({"name": plugin.name})
 
@@ -454,7 +449,6 @@ async def test_update_plugin_passes_default_market_repo_to_lifecycle(
     ]
     assert reload_calls == [plugin.name]
     assert refresh_calls == [(plugin.name, update_info)]
-    assert sync_calls == [True]
 
 
 @pytest.mark.asyncio
@@ -486,9 +480,6 @@ async def test_update_all_plugins_passes_default_market_repo_to_lifecycle(
     async def fake_refresh(_plugin_name: str, _info: dict[str, object]) -> None:
         return None
 
-    async def fake_sync() -> None:
-        return None
-
     async def fake_resolve(_plugin_name: str):
         return _repo_only_update_info()
 
@@ -503,7 +494,6 @@ async def test_update_all_plugins_passes_default_market_repo_to_lifecycle(
         "refresh_plugin_install_source_after_update",
         fake_refresh,
     )
-    monkeypatch.setattr(service, "sync_skills_after_plugin_change", fake_sync)
 
     payload, message = await service.update_all_plugins({"names": [plugin.name]})
 

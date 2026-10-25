@@ -20,19 +20,13 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 class SkillManagerArchiveMixin:
     skills_root: str
 
-    def is_sandbox_only_skill(self, name: str) -> bool: ...
     def is_plugin_skill(self, name: str) -> bool: ...
     def is_builtin_skill(self, name: str) -> bool: ...
     def set_skill_active(self, name: str, active: bool) -> None: ...
-    def _remove_skill_from_sandbox_cache(self, name: str) -> None: ...
     def _load_config(self) -> dict: ...
     def _save_config(self, config: dict) -> None: ...
 
     def delete_skill(self, name: str) -> None:
-        if self.is_sandbox_only_skill(name):
-            raise PermissionError(
-                "Sandbox preset skill cannot be deleted from local skill management."
-            )
         if self.is_plugin_skill(name):
             raise PermissionError(
                 "Plugin-provided skill cannot be deleted from local skill management."
@@ -45,8 +39,6 @@ class SkillManagerArchiveMixin:
         skill_dir = Path(self.skills_root) / name
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
-
-        self._remove_skill_from_sandbox_cache(name)
 
         config = self._load_config()
         if name in config.get("skills", {}):

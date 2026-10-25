@@ -405,62 +405,15 @@
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks.",
+      "hint": "Allows AstrBot to access and use the local machine to perform more complex tasks.",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
           "hint": "Environment the Agent is allowed to access.",
-          "labels": ["No environment", "Local machine", "Third-party sandbox"]
+          "labels": ["No environment", "Local machine"]
         },
         "computer_use_local_permissions": {
           "description": "Local Permission Policies"
-        },
-        "sandbox": {
-          "booter": {
-            "description": "Sandbox Environment Driver",
-            "labels": ["Shipyard Neo", "CUA"]
-          },
-          "shipyard_neo_endpoint": {
-            "description": "Shipyard Neo API Endpoint",
-            "hint": "Bay API address, default http://127.0.0.1:8114. Only http/https is supported and cloud metadata addresses are rejected."
-          },
-          "shipyard_neo_access_token": {
-            "description": "Shipyard Neo Access Token",
-            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
-          },
-          "shipyard_neo_profile": {
-            "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
-          },
-          "shipyard_neo_ttl": {
-            "description": "Shipyard Neo Sandbox TTL",
-            "hint": "Sandbox time-to-live in seconds."
-          },
-          "cua_image": {
-            "description": "CUA Image",
-            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK."
-          },
-          "cua_os_type": {
-            "description": "CUA OS Type",
-            "hint": "CUA sandbox operating system type. Defaults to linux.",
-            "labels": ["Linux", "macOS", "Windows", "Android"]
-          },
-          "cua_idle_timeout": {
-            "description": "CUA Idle Timeout",
-            "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it."
-          },
-          "cua_telemetry_enabled": {
-            "description": "CUA Telemetry",
-            "hint": "Allow the CUA SDK to send telemetry data. Disabled by default."
-          },
-          "cua_local": {
-            "description": "CUA Local Sandbox",
-            "hint": "Prefer a local CUA sandbox. Enabled by default to avoid requiring CUA_API_KEY for cloud sandboxes. Disable this to use CUA cloud sandboxes."
-          },
-          "cua_api_key": {
-            "description": "CUA API Key",
-            "hint": "CUA cloud sandbox API key. Required only when local sandbox is disabled. You can also provide it via the CUA_API_KEY environment variable."
-          }
         }
       },
       "local_permissions": {
@@ -565,8 +518,8 @@
           },
           "computer_use_runtime": {
             "description": "Work loop Computer Use runtime",
-            "hint": "inherit uses the existing Computer Use setting. The conversation loop has no computer or file tools. Work still follows existing role, path, and sandbox authorization rules.",
-            "labels": ["Inherit", "None", "Local", "Sandbox"]
+            "hint": "inherit uses the existing Computer Use setting. The conversation loop has no computer or file tools. Work still follows existing role, path, and local-isolation authorization rules.",
+            "labels": ["Inherit", "None", "Local"]
           },
           "max_concurrent": {
             "description": "Concurrent work execution",
@@ -586,7 +539,7 @@
           },
           "coding_agents": {
             "description": "Third-party coding agents",
-            "hint": "Local CLI agents that can be handed write tasks (for example Claude Code or Codex). Each entry carries an id, type, command, model, output cap, permission mode, and the extra directory it may write to. A delegation starts a local process and writes files, so the work loop's Computer Use runtime must also be local (delegating under sandbox would be the way out of it), and `tool.local_exec` and `tool.file_write` must both be authorized. Claude Code runs non-interactively under `-p`, so there is no terminal to answer a permission prompt: `acceptEdits` approves edits alone, and a task that runs shell commands waits until it times out unless `bypassPermissions` is chosen deliberately. The provider an agent runs against is managed on the Third-party Agent Config page, which switches that CLI's own global configuration."
+            "hint": "Local CLI agents that can be handed write tasks (for example Claude Code or Codex). Each entry carries an id, type, command, model, output cap, permission mode, and the extra directory it may write to. A delegation starts a local process and writes files, so the work loop's Computer Use runtime must also be local, and `tool.local_exec` and `tool.file_write` must both be authorized. Claude Code runs non-interactively under `-p`, so there is no terminal to answer a permission prompt: `acceptEdits` approves edits alone, and a task that runs shell commands waits until it times out unless `bypassPermissions` is chosen deliberately. The provider an agent runs against is managed on the Third-party Agent Config page, which switches that CLI's own global configuration."
           }
         },
         "work_session": {

@@ -267,7 +267,7 @@ Dashboard 账户在所选配置文件上拥有 `instance_operator` 或更高角�
 启用。再次执行高风险运行前，也需要重新启用。
 
 此功能不会授予修改账户、提供商、插件、系统设置、导出或重启等全局 Dashboard
-操作权限。账户现有的 Prompt、工具、沙箱和路径限制仍然生效。匿名 WebChat、API Key、
+操作权限。账户现有的 Prompt、工具、本地隔离和路径限制仍然生效。匿名 WebChat、API Key、
 IM 消息、插件和后台续跑不能复用该授权。IM 发送者要使用同一组实例工具，需把
 `/session info` 里的授权主体绑成该配置的 `instance_operator`，见 [授权管理](./authorization)。
 

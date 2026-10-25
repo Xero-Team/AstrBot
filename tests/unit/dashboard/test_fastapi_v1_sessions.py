@@ -475,27 +475,6 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
 
 
 @pytest.mark.asyncio
-async def test_v1_neo_skill_sync_accepts_skill_key_target(
-    asgi_app: FastAPI,
-    asgi_client: httpx.AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    async def fake_sync(data):
-        return {"synced": data["skill_key"]}
-
-    monkeypatch.setattr(asgi_app.state.services.skills, "sync_neo_release", fake_sync)
-
-    response = await asgi_client.post(
-        "/api/v1/skills/neo/sync",
-        json={"skill_key": "neo.demo"},
-        headers=_jwt_headers(),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["data"] == {"synced": "neo.demo"}
-
-
-@pytest.mark.asyncio
 async def test_v1_safe_skill_routes_accept_slash_names(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,

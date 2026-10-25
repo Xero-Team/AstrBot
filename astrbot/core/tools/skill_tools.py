@@ -13,7 +13,6 @@ from astrbot.core.skills._skill_read import (
     format_skill_read_result,
     lookup_frozen_skill,
     read_host_skill_file,
-    resolve_sandbox_skill_file,
     resolve_skill_relative_path,
     split_truncated_text,
 )
@@ -94,36 +93,8 @@ async def _read_skill_content(
     skill: FrozenSkill,
     relative_path: str,
 ) -> str:
-    if skill.host_readable:
-        return read_host_skill_file(skill, relative_path)
-    return await _read_sandbox_skill_file(context, snapshot, skill, relative_path)
-
-
-async def _read_sandbox_skill_file(
-    context: ContextWrapper[AstrAgentContext],
-    snapshot: SkillSnapshot,
-    skill: FrozenSkill,
-    relative_path: str,
-) -> str:
-    remote = resolve_sandbox_skill_file(
-        skill,
-        relative_path,
-        snapshot.sandbox_root,
-    )
-    runtime = getattr(context.context.context, "computer_runtime", None)
-    if runtime is None:
-        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    booter = await runtime.get_booter(
-        context.context.context,
-        context.context.event.unified_msg_origin,
-    )
-    result = await booter.fs.read_file(remote)
-    if not isinstance(result, dict) or not result.get("success"):
-        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    content = result.get("content")
-    if not isinstance(content, str):
-        raise SkillReadError(GENERIC_SKILL_READ_ERROR)
-    return content
+    del context, snapshot
+    return read_host_skill_file(skill, relative_path)
 
 
 def _snapshot_from_context(

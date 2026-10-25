@@ -30,9 +30,9 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 3. 🤖 支持接入 Dify、阿里云百炼、Coze 等智能体平台。
 4. 🌐 多平台，支持 QQ、企业微信、飞书、钉钉、微信公众号、Telegram、Slack 以及[更多](#支持的消息平台)。
 5. 📦 插件扩展，提供社区插件市场和沙箱化的 Dashboard Extension Protocol。
-6. 🛡️ [Agent Sandbox](docs/zh/use/astrbot-agent-sandbox.md) 隔离化环境，安全地执行代码、调用 Shell、复用会话级资源。
+6. 🛡️ 受限的本地代码与 Shell 执行，使用 bubblewrap 或 Seatbelt 进行隔离。
 7. 💻 WebUI 支持。
-8. 🌈 Web ChatUI 支持，ChatUI 内置代理沙盒、网页搜索等。
+8. 🌈 Web ChatUI 支持，内置网页搜索等能力。
 9. 🌐 WebUI 双语：简体中文和英文。
 
 <br>

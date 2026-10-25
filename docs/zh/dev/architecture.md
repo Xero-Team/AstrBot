@@ -198,9 +198,9 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 
 工具来源包括内置工具、插件工具和 MCP 工具。MCP 仅支持 stdio 与 Streamable HTTP；远程 HTTP 默认拒绝 localhost、私网、链路本地和保留地址，只有在可信配置中显式设置 `allow_private_network` 才会放开。
 
-Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`），路径锁在请求级 Skill 快照内。用户说明见 [技能 Skills](/use/skills)。
+Skills 可来自 `data/skills`、插件 `skills/` 和当前会话 workspace。工作区 Skill 是请求级资源，默认路径为 `data/workspaces/{normalized_umo}/skills/`。系统提示只列名称和短描述；读手册走 `read_skill`（动作 `skill.read`），路径锁在请求级 Skill 快照内。用户说明见 [技能 Skills](/use/skills)。
 
-工具目录由 `astrbot/core/tool_catalog.py` 的 `assemble_tool_catalog()` 一次计算。输入是冻结的 Skill 快照、提示词三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再物化 `ToolSet`。请求上已有的工具回灌时仍走同一套表面硬裁。`_apply_local_env_tools()` / `_apply_sandbox_tools()` 只写运行时提示词。`tool_schema_mode=skills_like` 只做两阶段轻 schema，不收目录。
+工具目录由 `astrbot/core/tool_catalog.py` 的 `assemble_tool_catalog()` 一次计算。输入是冻结的 Skill 快照、提示词三态、入口表面、`computer_use_runtime`、会话插件过滤和已注册工具表；输出是工具名集合，再物化 `ToolSet`。请求上已有的工具回灌时仍走同一套表面硬裁。`_apply_local_env_tools()` 只写本地运行时提示词。`tool_schema_mode=skills_like` 只做两阶段轻 schema，不收目录。
 
 内置工具 = 平台基线 $\cup$ 按需电脑工具
 
@@ -208,14 +208,14 @@ Skills 可来自 `data/skills`、插件 `skills/`、沙盒和当前会话 worksp
 
 目录 = 表面硬裁(可见性过滤(内置工具 $\cup$ (提示词白名单 $\cap$ 扩展工具)))
 
-| 层             | 何时进入候选                                                       | 是否靠 Skill `tools:`                         |
-| -------------- | ------------------------------------------------------------------ | --------------------------------------------- |
-| 平台基线       | 对应能力已开                                                       | 否                                            |
-| 会话插件 / MCP | 插件已激活且通过会话过滤；MCP 无插件归属则保留                     | 否。Skill 不能安装或放开私网 MCP              |
-| Skill 声明     | 已启用 Skill 前言 `tools:`                                         | 是。只过滤已有工具名                          |
-| 按需电脑工具   | `computer_use_runtime` 为 `local` 或 `sandbox`，且通过提示词与硬裁 | 可声明，但不能扩权。`runtime=none` 时本层为空 |
+| 层             | 何时进入候选                                          | 是否靠 Skill `tools:`                         |
+| -------------- | ----------------------------------------------------- | --------------------------------------------- |
+| 平台基线       | 对应能力已开                                          | 否                                            |
+| 会话插件 / MCP | 插件已激活且通过会话过滤；MCP 无插件归属则保留        | 否。Skill 不能安装或放开私网 MCP              |
+| Skill 声明     | 已启用 Skill 前言 `tools:`                            | 是。只过滤已有工具名                          |
+| 按需电脑工具   | `computer_use_runtime` 为 `local`，且通过提示词与硬裁 | 可声明，但不能扩权。`runtime=none` 时本层为空 |
 
-提示词 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表只移除插件、MCP 和会话工具，内置工具仍由平台基线、配置、授权与场景决定；非空列表只对这些扩展工具求交，内置工具始终保留。`read_skill` 属于内置工具，因此同样保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。Neo 生命周期工具属于 sandbox + `shipyard_neo` 的按需电脑层，不是平台基线。
+提示词 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表只移除插件、MCP 和会话工具，内置工具仍由平台基线、配置、授权与场景决定；非空列表只对这些扩展工具求交，内置工具始终保留。`read_skill` 属于内置工具，因此同样保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。远程沙箱与生命周期工具不属于平台基线。
 
 社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。匿名 WebChat、插件、Agent、API Key 一律裁掉。已认证 WebChat 只放行已 step-up 的动作交集。IM 在该配置上绑了 `instance_operator` 及以上时，挂出整组动作且不走 Dashboard step-up；新动作加入该集合后自动进入这条路径。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。全局 `root`/`operator` 绑定不会继承到 IM 主体。
 

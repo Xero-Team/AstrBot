@@ -160,9 +160,6 @@ async def test_plugin_service_market_install_uses_registry_entry(
         captured["persist_repo_url"] = repo_url
         captured["persist_download_url"] = download_url
 
-    async def fake_sync_skills_after_plugin_change():
-        captured["synced"] = True
-
     monkeypatch.setattr(
         "astrbot.dashboard.services.plugin_service.reject_unsafe_plugin_fetch",
         lambda **kwargs: None,
@@ -177,11 +174,6 @@ async def test_plugin_service_market_install_uses_registry_entry(
         plugin_service,
         "persist_plugin_install_source",
         fake_persist_plugin_install_source,
-    )
-    monkeypatch.setattr(
-        plugin_service,
-        "sync_skills_after_plugin_change",
-        fake_sync_skills_after_plugin_change,
     )
 
     result, message = await plugin_service.install_plugin(
@@ -218,7 +210,6 @@ async def test_plugin_service_market_install_uses_registry_entry(
         captured["persist_payload"]["market_plugin_id"]
         == "AstrBotDevs/astrbot-plugin-demo"
     )
-    assert captured["synced"] is True
 
 
 @pytest.mark.asyncio

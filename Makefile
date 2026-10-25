@@ -1,4 +1,4 @@
-.PHONY: worktree worktree-add worktree-rm bootstrap doctor pr-test-neo pr-test-full pr-test-full-fast \
+.PHONY: worktree worktree-add worktree-rm bootstrap doctor pr-test-full pr-test-full-fast \
 	build build-all build-backend build-dashboard build-docs sync-webui-dist dev run run-backend run-dashboard \
 	stop stop-backend stop-dashboard stop-perf clean status perf docs napcat-schema-ob11-event napcat-schema-ob11-event-normalized napcat-models-ob11-event napcat-models-ob11-event-src napcat-codegen napcat-test napcat-check quality quality-report \
 	quality-all quality-sync quality-pyright quality-bandit quality-audit quality-web-audit quality-complexity quality-radon-cc quality-radon-mi \
@@ -50,16 +50,14 @@ ifeq ($(OS),Windows_NT)
 CHECK_TARGETS := check-py check-web check-data check-md check-toml check-yaml check-ps
 FORMAT_TARGETS := format-py format-web format-data format-md format-toml format-yaml format-ps
 DEV_RUNNER := $(PS) scripts/make_dev.ps1
-PR_TEST_NEO := $(PS) scripts/pr_test_env.ps1 -TestProfile neo
-PR_TEST_FULL := $(PS) scripts/pr_test_env.ps1 -TestProfile full
-PR_TEST_FULL_FAST := $(PS) scripts/pr_test_env.ps1 -TestProfile full -SkipSync -NoDashboard
+PR_TEST_FULL := $(PS) scripts/pr_test_env.ps1
+PR_TEST_FULL_FAST := $(PS) scripts/pr_test_env.ps1 -SkipSync -NoDashboard
 else
 CHECK_TARGETS := check-py check-web check-data check-md check-toml check-yaml check-shell check-docker
 FORMAT_TARGETS := format-py format-web format-data format-md format-toml format-yaml format-shell
 DEV_RUNNER := bash scripts/make_dev.sh
-PR_TEST_NEO := bash scripts/pr_test_env.sh --profile neo
-PR_TEST_FULL := bash scripts/pr_test_env.sh --profile full
-PR_TEST_FULL_FAST := bash scripts/pr_test_env.sh --profile full --skip-sync --no-dashboard
+PR_TEST_FULL := bash scripts/pr_test_env.sh
+PR_TEST_FULL_FAST := bash scripts/pr_test_env.sh --skip-sync --no-dashboard
 endif
 
 worktree:
@@ -83,9 +81,6 @@ endif
 	else \
 		echo "Worktree $(WORKTREE_DIR)/$(BRANCH) not found."; \
 	fi
-
-pr-test-neo:
-	@$(PR_TEST_NEO)
 
 pr-test-full:
 	@$(PR_TEST_FULL)

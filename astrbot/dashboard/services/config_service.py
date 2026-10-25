@@ -706,27 +706,6 @@ def _log_computer_config_changes(
                     new_value,
                 )
 
-    old_sandbox = old_ps.get("sandbox", {})
-    new_sandbox = new_ps.get("sandbox", {})
-    all_keys = set(old_sandbox.keys()) | set(new_sandbox.keys())
-    for key in sorted(all_keys):
-        old_val = old_sandbox.get(key)
-        new_val = new_sandbox.get(key)
-        if old_val == new_val:
-            continue
-        if "token" in key or "secret" in key:
-            old_display = "***" if old_val else "(empty)"
-            new_display = "***" if new_val else "(empty)"
-        else:
-            old_display = old_val
-            new_display = new_val
-        log_info(
-            "[Computer] Config changed: sandbox.%s %s -> %s",
-            key,
-            old_display,
-            new_display,
-        )
-
 
 def _get_nested_value(data: dict, path: tuple[str, ...]) -> Any:
     current = data
@@ -756,48 +735,6 @@ def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
         if posted != _get_nested_value(old_config, path):
             return True
     return False
-
-
-async def _validate_neo_connectivity(post_config: dict) -> str | None:
-    ps = post_config.get("provider_settings", {})
-    runtime = ps.get("computer_use_runtime", "none")
-    sandbox = ps.get("sandbox", {})
-    booter = sandbox.get("booter", "")
-
-    if runtime != "sandbox" or booter != "shipyard_neo":
-        return None
-
-    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
-    if not endpoint:
-        return "⚠️ Shipyard Neo endpoint 未设置"
-
-    access_token = sandbox.get("shipyard_neo_access_token", "")
-    if not access_token:
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
-
-        access_token = _discover_bay_credentials(endpoint)
-
-    if not access_token:
-        return (
-            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
-            "或确保 Bay 的 credentials.json 可被自动发现。"
-        )
-
-    from astrbot.core.utils.outbound_http import (
-        SHIPYARD_NEO_HEALTH,
-        fetch_text,
-    )
-
-    health_url = f"{endpoint}/health"
-    try:
-        status, _body, _headers = await fetch_text(health_url, SHIPYARD_NEO_HEALTH)
-    except Exception:
-        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
-
-    if status != 200:
-        return f"⚠️ Bay 健康检查失败 (HTTP {status})，请确认 Bay 正在运行: {endpoint}"
-
-    return None
 
 
 async def save_config_async(
@@ -1053,9 +990,6 @@ class ConfigProfileService:
             if booter is not None and isinstance(booter.shell, LocalShellComponent):
                 await booter.shell.shutdown_sessions(invalid_only=True)
         await self.core_control.reload_pipeline_scheduler(config_id)
-        warning = await _validate_neo_connectivity(config)
-        if warning:
-            return f"保存成功。{warning}"
         return "保存成功~"
 
     async def _verify_config_2fa(

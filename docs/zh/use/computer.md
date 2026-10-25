@@ -12,7 +12,8 @@
 
 - `none`：不启用电脑能力，不给 Agent 挂载 Shell、Python、文件系统等工具。读 Skill 手册仍走 `read_skill`，不需要电脑能力。
 - `local`：在 AstrBot 所在机器上执行，适合需要访问本机文件、命令行工具或本地依赖的场景。
-- `sandbox`：在隔离沙盒中执行，适合希望降低本机风险、或让多用户使用自动化能力的场景。
+
+仅在确实需要直接访问本机时使用 `local`。旧配置中已移除的运行环境值会按 `none` 处理。
 
 ## Local 模式
 
@@ -58,7 +59,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 - `文件编辑`：按精确字符串替换文件内容。
 - `Grep 搜索`：使用 ripgrep 能力搜索文件内容。
 
-`local` 模式不会挂载沙盒上传/下载工具，也不会提供浏览器自动化工具。浏览器能力属于沙盒运行时，需要使用支持 `browser` capability 的沙盒 profile。
+`local` 模式不会挂载远程上传/下载或浏览器自动化工具。
 
 本地 Shell 内置了基础危险命令拦截，例如 `rm -rf`、`sudo`、`shutdown`、`reboot`、`kill -9` 等。但这不是完整安全沙箱，不能把它当作安全边界。
 
@@ -66,11 +67,11 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 在本地权限表中，展开“文件访问范围”下拉菜单即可查看各选项的说明。“工作区”允许受限访问会话工作区、临时目录和技能文件；“整个环境”（原“主机文件”）允许访问 AstrBot 运行账户有权限访问的文件。Docker 部署时，“整个环境”指容器内及挂载的文件，并非宿主机全部文件。“关闭”不允许通过本地电脑能力工具访问任何文件。范围说明已从表格下方移到下拉菜单的对应选项中；将鼠标悬停在“AstrBot 所在运行环境的所有文件。”后的问号上，或点按问号，可查看账户权限和 Docker 访问范围的详细说明。
 
-新安装的 Windows、Linux 和 macOS 使用相同的默认权限：普通成员可访问工作区文件但不能执行代码；管理员可在整个环境执行代码并联网。已有配置中保存的权限保持不变，包括用户明确关闭的普通成员文件访问。旧版 Windows 普通成员的默认值与手动关闭后的保存值完全相同，因此本 fork 不会在升级时自动改写；如需允许成员访问工作区文件，请在权限表中改为“工作区”。该管理员默认值会直接以 AstrBot 运行账户执行本地代码，拥有整个环境的文件访问和联网能力；在 Linux 和 macOS 上不会使用进程隔离。若该访问范围不适合当前部署，请改用工作区范围或沙盒运行时。
+新安装的 Windows、Linux 和 macOS 使用相同的默认权限：普通成员可访问工作区文件但不能执行代码；管理员可在整个环境执行代码并联网。已有配置中保存的权限保持不变，包括用户明确关闭的普通成员文件访问。旧版 Windows 普通成员的默认值与手动关闭后的保存值完全相同，因此本 fork 不会在升级时自动改写；如需允许成员访问工作区文件，请在权限表中改为“工作区”。该管理员默认值会直接以 AstrBot 运行账户执行本地代码，拥有整个环境的文件访问和联网能力；在 Linux 和 macOS 上不会使用进程隔离。若该访问范围不适合当前部署，请改用工作区范围。
 
 若已保存的策略需要本地进程隔离，但当前隔离不可用，代码执行和执行环境联网会被禁用，同时不会扩大文件访问范围，也不会改写已保存的策略。工作区文件访问（不执行代码）和整个环境执行（允许联网）仍然可用。权限矩阵保留已勾选的执行项，并将暂不可用的执行标记为“未生效”；悬浮或点按旁边的问号可查看原因。恢复隔离并重启 AstrBot 后，已保存的策略会重新生效。
 
-Windows 通过原生文件句柄支持工作区范围内的文件读取、写入和编辑，并拒绝符号链接、目录联接和多重硬链接文件。Windows 原生环境仍不支持本地进程隔离；管理员可在整个环境执行代码并联网，需要隔离执行时请使用沙盒运行时。
+Windows 通过原生文件句柄支持工作区范围内的文件读取、写入和编辑，并拒绝符号链接、目录联接和多重硬链接文件。Windows 原生环境仍不支持本地进程隔离；管理员可在整个环境执行代码并联网。
 
 电脑能力走统一授权服务，不再使用“需要 AstrBot 管理员权限”开关。常见动作包括：
 
@@ -79,9 +80,8 @@ Windows 通过原生文件句柄支持工作区范围内的文件读取、写入
 - `tool.python_exec`
 - `tool.file_read`
 - `tool.file_write`
-- `tool.browser_control`
 
-`tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write` 和 `tool.computer_use` 是实例级高风险动作：已认证 Dashboard 驱动的 WebChat 仅可在当前 session/config 内，经 WebChat 一次性 step-up 后使用。IM 发送者若在该配置上绑了 `instance_operator`，可免 step-up 使用同一组动作。全局控制面仍 Dashboard-only；匿名 WebChat、插件、Agent、API Key 以及未绑定的 IM member 不会继承 Dashboard 角色。沙箱、路径和 Prompt/工具声明限制仍然有效。
+`tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.mcp_write` 和 `tool.computer_use` 是实例级高风险动作：已认证 Dashboard 驱动的 WebChat 仅可在当前 session/config 内，经 WebChat 一次性 step-up 后使用。IM 发送者若在该配置上绑了 `instance_operator`，可免 step-up 使用同一组动作。全局控制面仍 Dashboard-only；匿名 WebChat、插件、Agent、API Key 以及未绑定的 IM member 不会继承 Dashboard 角色。路径和 Prompt/工具声明限制仍然有效。
 
 `local` 模式下，普通会话成员可以读取：
 
@@ -92,42 +92,6 @@ Windows 通过原生文件句柄支持工作区范围内的文件读取、写入
 - 系统临时目录中的 `.astrbot`
 
 写入和编辑仍限制在当前会话 workspace 和临时目录。请通过 Dashboard [权限页面](/use/authorization)把 IM 发送者绑成该配置的 `instance_operator`；`/admin grant` 只授予当前会话 `session_admin`，不能把 IM 用户变成全局 operator。开发模型见[项目架构](/dev/architecture#统一授权系统)。
-
-## Sandbox 模式
-
-`sandbox` 模式会把执行动作放到隔离环境中，而不是直接在 AstrBot 主机上运行。
-
-在沙盒中，Agent 仍然可以使用 Shell、Python、文件系统工具；如果所选沙盒 profile 支持 `browser` capability，还会挂载浏览器自动化工具。
-
-沙盒环境驱动器可在 `配置文件 -> 选择配置文件 -> AI 配置 -> 能力 -> 使用电脑能力` 的沙箱配置中选择。当前常用选项包括：
-
-- `Shipyard Neo`：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
-- `CUA`：基于 [CUA](https://github.com/trycua/cua) 的本地或云端电脑使用沙盒，可提供桌面截图、鼠标、键盘、Shell、Python 和文件系统能力。
-
-使用 `Shipyard Neo` 时，沙盒 workspace 根目录通常是：
-
-```text
-/workspace
-```
-
-文件工具一般应传入相对路径，例如：
-
-```text
-result.txt
-```
-
-而不是：
-
-```text
-/workspace/result.txt
-```
-
-使用 `CUA` 时，工作目录和可用命令取决于所选 CUA image 与运行方式。Linux CUA 容器通常提供类 Unix Shell；Windows、Android 等非 POSIX 镜像不保证支持 `sh`、`ls`、`rm`、`base64` 等命令，AstrBot 会对部分 shell fallback 操作返回明确错误。
-
-沙盒部署、驱动器选择、CUA 配置、profile、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
-
-> [!NOTE]
-> 即使在 `sandbox` 模式下，Shell、Python、浏览器和上传下载仍按 `tool.local_exec`、`tool.python_exec`、`tool.browser_control` 和 `tool.file_write` 等动作授权。沙箱只隔离执行，不改变授权。
 
 ## Skills
 
@@ -141,6 +105,5 @@ Skills 是给 Agent 使用的“任务说明书”，通常存放在 `data/skill
 例如，一个 Skill 可能要求 Agent 读取文件、运行脚本、生成报告。如果 `Computer Use Runtime` 是 `none`，Agent 可以看到 Skill 的说明，但无法真正调用 Shell 或 Python 完成执行。
 
 在 `local` 模式下，Agent 会读取本地 Skills。
-在 `sandbox` 模式下，AstrBot 会尝试把本地 Skills 同步到沙盒中，让 Agent 在沙盒内按 Skill 指令执行。
 
 更多内容请参考：[技能 Skills](/use/skills)。

@@ -83,9 +83,6 @@ export type SkillInventoryItem = {
 export type SkillInventoryData = {
   skills: Array<SkillInventoryItem>;
   runtime: string;
-  sandbox_cache: {
-    [key: string]: unknown;
-  };
 };
 
 export type SkillInventoryResponse = {
@@ -864,22 +861,6 @@ export type SkillUploadRequest = {
 
 export type SkillPatchRequest = {
   active: boolean;
-};
-
-export type NeoCandidateActionRequest = {
-  candidate_id: string;
-  [key: string]: unknown;
-};
-
-export type NeoReleaseActionRequest = {
-  release_id: string;
-  [key: string]: unknown;
-};
-
-export type NeoSyncRequest = unknown & {
-  release_id?: string;
-  skill_key?: string;
-  [key: string]: unknown;
 };
 
 export type KnowledgeBaseRequest = {
@@ -5495,167 +5476,6 @@ export type UpdateSkillFileResponses = {
 
 export type UpdateSkillFileResponse =
   UpdateSkillFileResponses[keyof UpdateSkillFileResponses];
-
-export type ListNeoSkillCandidatesData = {
-  body?: never;
-  path?: never;
-  query?: {
-    skill_key?: string;
-    status?: string;
-  };
-  url: '/api/v1/skills/neo/candidates';
-};
-
-export type ListNeoSkillCandidatesResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type ListNeoSkillCandidatesResponse =
-  ListNeoSkillCandidatesResponses[keyof ListNeoSkillCandidatesResponses];
-
-export type ListNeoSkillReleasesData = {
-  body?: never;
-  path?: never;
-  query?: {
-    skill_key?: string;
-    stage?: string;
-  };
-  url: '/api/v1/skills/neo/releases';
-};
-
-export type ListNeoSkillReleasesResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type ListNeoSkillReleasesResponse =
-  ListNeoSkillReleasesResponses[keyof ListNeoSkillReleasesResponses];
-
-export type GetNeoSkillPayloadData = {
-  body?: never;
-  path?: never;
-  query: {
-    payload_ref: string;
-  };
-  url: '/api/v1/skills/neo/payload';
-};
-
-export type GetNeoSkillPayloadResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type GetNeoSkillPayloadResponse =
-  GetNeoSkillPayloadResponses[keyof GetNeoSkillPayloadResponses];
-
-export type EvaluateNeoSkillCandidateData = {
-  body: NeoCandidateActionRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/skills/neo/evaluate';
-};
-
-export type EvaluateNeoSkillCandidateResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type EvaluateNeoSkillCandidateResponse =
-  EvaluateNeoSkillCandidateResponses[keyof EvaluateNeoSkillCandidateResponses];
-
-export type PromoteNeoSkillCandidateData = {
-  body: NeoCandidateActionRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/skills/neo/promote';
-};
-
-export type PromoteNeoSkillCandidateResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type PromoteNeoSkillCandidateResponse =
-  PromoteNeoSkillCandidateResponses[keyof PromoteNeoSkillCandidateResponses];
-
-export type RollbackNeoSkillReleaseData = {
-  body: NeoReleaseActionRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/skills/neo/rollback';
-};
-
-export type RollbackNeoSkillReleaseResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type RollbackNeoSkillReleaseResponse =
-  RollbackNeoSkillReleaseResponses[keyof RollbackNeoSkillReleaseResponses];
-
-export type SyncNeoSkillReleaseData = {
-  body: NeoSyncRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/skills/neo/sync';
-};
-
-export type SyncNeoSkillReleaseResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type SyncNeoSkillReleaseResponse =
-  SyncNeoSkillReleaseResponses[keyof SyncNeoSkillReleaseResponses];
-
-export type DeleteNeoSkillCandidateData = {
-  body: NeoCandidateActionRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/skills/neo/candidates/delete';
-};
-
-export type DeleteNeoSkillCandidateResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type DeleteNeoSkillCandidateResponse =
-  DeleteNeoSkillCandidateResponses[keyof DeleteNeoSkillCandidateResponses];
-
-export type DeleteNeoSkillReleaseData = {
-  body: NeoReleaseActionRequest;
-  path?: never;
-  query?: never;
-  url: '/api/v1/skills/neo/releases/delete';
-};
-
-export type DeleteNeoSkillReleaseResponses = {
-  /**
-   * Standard AstrBot success response
-   */
-  200: SuccessEnvelope;
-};
-
-export type DeleteNeoSkillReleaseResponse =
-  DeleteNeoSkillReleaseResponses[keyof DeleteNeoSkillReleaseResponses];
 
 export type ListKnowledgeBasesData = {
   body?: never;

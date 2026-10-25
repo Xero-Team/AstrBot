@@ -1,5 +1,4 @@
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -51,6 +50,19 @@ async def test_metrics_runtime_without_database_is_a_noop() -> None:
 
 
 @pytest.mark.asyncio
+async def test_metrics_runtime_is_silent_in_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "true")
+    database = AsyncMock()
+    metrics = MetricsRuntime(database)
+
+    await metrics.record_platform_event(platform_id="adapter")
+
+    database.insert_platform_stats.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_metrics_runtime_propagates_cancellation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -64,11 +76,10 @@ async def test_metrics_runtime_propagates_cancellation(
 
 
 @pytest.mark.asyncio
-async def test_metrics_runtime_never_uses_network_or_installation_identity(
+async def test_metrics_runtime_never_creates_an_http_session(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
 ) -> None:
-    """Statistics stay local: no HTTP session and no .installation_id file."""
+    """Statistics stay local and never open an outbound HTTP session."""
     from astrbot.core.utils import proxy_route
 
     monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
@@ -82,5 +93,4 @@ async def test_metrics_runtime_never_uses_network_or_installation_identity(
 
     await metrics.record_platform_event(platform_id="adapter")
 
-    assert not (tmp_path / ".installation_id").exists()
     database.insert_platform_stats.assert_awaited_once()

@@ -4,6 +4,18 @@ When the local Agent Runner approaches a model's context-window limit, AstrBot a
 
 ![Context compression settings](https://files.astrbot.app/docs/source/images/context-compress/image.png)
 
+## Configure compression
+
+1. Open **Config** in the WebUI sidebar and select the profile your bot uses.
+2. Go to **AI → Advanced → Context Management Strategy**. If this section is missing, confirm that you are using AstrBot Built-in AI and that **Enable AI** is on. See [Agent Execution Mode](./agent-runner.md) for switching modes.
+3. Choose a **Compression Strategy**. New profiles default to **Compress by LLM**.
+4. Leave **Compression Model** empty to use the current chat model. To adjust parameters, expand **More Settings**. To get started, keep the recent context ratio at `0.15` and **Max Turns Before Compression** at `-1` to avoid an additional turn-based history limit.
+5. Click **Save Configuration** at the bottom right.
+
+Label changes: **Handling for History Limits or Context Window Pressure** → **Compression Strategy**; **Model Provider ID for Context Compression** → **Compression Model**.
+
+**Max Turns Before Compression**, **Turns to Discard When Limit Exceeded**, **Context Compression Instruction**, **Recent Context Token Ratio to Keep**, and **Fallback context window size** are now under **More Settings**, collapsed by default. The instruction and recent-context ratio appear only when LLM compression is selected. Configuration keys, default values and runtime behavior are unchanged; no data migration is required.
+
 ## When compression runs
 
 AstrBot checks the context before every Agent step. This includes the next model call after a tool finishes. Compression is triggered when the estimated context usage exceeds **82%** of the model's context window.

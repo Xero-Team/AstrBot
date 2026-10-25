@@ -40,8 +40,15 @@ _AUTH_HEADER_PATTERN = re.compile(
     r"(?P<token>[A-Za-z0-9._~+/=-]+)"
 )
 _AUTH_SCHEME_PATTERN = re.compile(
-    r"(?i)(?P<prefix>\b(?:bearer|basic|digest|token)\s+)"
+    r"(?i)(?P<prefix>\b(?:bearer|basic|digest)\s+)"
     r"(?P<token>[A-Za-z0-9._~+/=-]+)"
+)
+# A bare ``token`` is also an ordinary English word ("token refresh failed"),
+# so only redact a long, credential-shaped value outside an Authorization
+# header. ``_AUTH_HEADER_PATTERN`` still covers every scheme in a header.
+_TOKEN_SCHEME_PATTERN = re.compile(
+    r"(?i)(?P<prefix>\btoken\s+)"
+    r"(?P<token>[A-Za-z0-9._~+/=-]{16,})"
 )
 _SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
 _URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]{0,63}://[^\s'\"<>]+")
@@ -99,6 +106,7 @@ def _redact_query_like(text: str) -> str:
 def _redact_tokens(text: str) -> str:
     text = _AUTH_HEADER_PATTERN.sub(_redact_auth_value, text)
     text = _AUTH_SCHEME_PATTERN.sub(_redact_auth_scheme_value, text)
+    text = _TOKEN_SCHEME_PATTERN.sub(_redact_auth_scheme_value, text)
     return _SK_PATTERN.sub("[REDACTED]", text)
 
 

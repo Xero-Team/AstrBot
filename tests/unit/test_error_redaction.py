@@ -89,6 +89,21 @@ def test_sanitize_error_text_keeps_business_text():
     assert sanitize_error_text("分组 'abc' 不存在") == "分组 'abc' 不存在"
 
 
+def test_redact_sensitive_text_keeps_token_prose():
+    assert redact_sensitive_text("token refresh failed") == "token refresh failed"
+    assert redact_sensitive_text("session token expired") == "session token expired"
+    assert "credential-shaped-token-value" not in redact_sensitive_text(
+        "token credential-shaped-token-value"
+    )
+
+
+def test_redact_sensitive_text_redacts_any_authorization_scheme():
+    redacted = redact_sensitive_text("Authorization: token ghp_secretvalue123456")
+
+    assert "ghp_secretvalue123456" not in redacted
+    assert "Authorization: token [REDACTED]" == redacted
+
+
 def test_redact_sensitive_text_redacts_colon_separated_secrets():
     redacted = redact_sensitive_text("password: hunter2 secret: s3cr3t")
 

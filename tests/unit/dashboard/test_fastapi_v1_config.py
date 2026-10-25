@@ -754,7 +754,7 @@ async def test_v1_config_route_mutations_require_collection_capability(
     fake_db.add_api_key(raw_key, ["config"])
     headers = {"X-API-Key": raw_key}
 
-    routing = {"webchat-main:private:*": "group-conf"}
+    routing = {"webchat-main:private:*": "default"}
     allowed = await asgi_client.put(
         "/api/v1/config-routes",
         headers=headers,
@@ -780,6 +780,40 @@ async def test_v1_config_route_mutations_require_collection_capability(
         json={"routing": {}},
     )
     assert denied_clear.status_code == 403
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
+
+
+@pytest.mark.asyncio
+async def test_v1_config_route_mutations_require_target_config_capability(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+):
+    from astrbot.core.auth.models import Resource
+
+    raw_key = "config-route-target-key"
+    fake_db.add_api_key(raw_key, ["config"])
+    subject_id = f"api-key:key-{raw_key}"
+    headers = {"X-API-Key": raw_key}
+    routing = {"webchat-main:private:*": "group-conf"}
+
+    denied = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": routing},
+    )
+    assert denied.status_code == 403
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == {}
+
+    target = Resource.instance("group-conf")
+    fake_db.capabilities.add((subject_id, "platform.manage", target.type, target.id))
+
+    allowed = await asgi_client.put(
+        "/api/v1/config-routes",
+        headers=headers,
+        json={"routing": routing},
+    )
+    assert allowed.status_code == 200
     assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == routing
 
 

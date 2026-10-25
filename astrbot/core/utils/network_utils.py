@@ -74,6 +74,9 @@ def log_connection_failure(
     """
     import os
 
+    from astrbot.core.utils.error_redaction import safe_error
+    from astrbot.core.utils.proxy_route import redact_proxy_url
+
     error_type = type(error).__name__
 
     # Fallback to environment proxy if not configured
@@ -85,11 +88,19 @@ def log_connection_failure(
 
     if effective_proxy:
         logger.error(
-            f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {effective_proxy}，错误: {error}"
+            "[%s] 网络/代理连接失败 (%s)。代理地址: %s，错误: %s",
+            provider_label,
+            error_type,
+            redact_proxy_url(effective_proxy),
+            safe_error("", error),
         )
     else:
-        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
+        logger.error(
+            "[%s] 网络连接失败 (%s)。错误: %s",
+            provider_label,
+            error_type,
+            safe_error("", error),
+        )
 
 
 def create_proxy_client(

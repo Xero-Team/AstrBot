@@ -1527,14 +1527,14 @@ class BotConfigService:
                 continue
             if type_ and bot.get("type") != type_:
                 continue
-            bots.append(copy.deepcopy(bot))
+            bots.append(_redact_sensitive_config(bot))
         return {"bots": bots}
 
     def get_bot(self, bot_id: str) -> dict:
         bot = self._find_bot(bot_id)
         if bot is None:
             raise DashboardValidationError(f"Bot {bot_id} not found")
-        return {"bot": copy.deepcopy(bot)}
+        return {"bot": _redact_sensitive_config(bot)}
 
     def get_bot_stats(self) -> dict:
         return self.platform_manager.get_all_stats()
@@ -1555,18 +1555,25 @@ class BotConfigService:
     async def update_bot(self, bot_id: str, config: dict) -> None:
         if config.get("id") != bot_id:
             raise DashboardValidationError("Bot id cannot be changed")
-        ensure_platform_webhook_config(config)
+        current_bot = self._find_bot(bot_id)
+        if current_bot is None:
+            raise DashboardValidationError(f"Bot {bot_id} not found")
+
+        restored = copy.deepcopy(config)
+        _restore_redacted_sensitive_config(restored, current_bot)
+        ensure_platform_webhook_config(restored)
+
         next_config = copy.deepcopy(dict(self.config))
         for idx, bot in enumerate(next_config.get("platform", [])):
             if bot.get("id") == bot_id:
-                next_config["platform"][idx] = copy.deepcopy(config)
+                next_config["platform"][idx] = copy.deepcopy(restored)
                 committed = await save_config_async(
                     next_config,
                     self.config,
                     is_core=True,
                 )
                 _require_config_save_commit(committed)
-                await self.platform_manager.reload(config)
+                await self.platform_manager.reload(restored)
                 return
         raise DashboardValidationError(f"Bot {bot_id} not found")
 

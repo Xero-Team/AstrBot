@@ -31,14 +31,6 @@ from astrbot.dashboard.services.config_service import MAX_FILE_BYTES
 
 from .api.app import create_dashboard_asgi_app
 
-try:
-    from python_multipart.multipart import parse_options_header
-except ImportError:  # pragma: no cover
-    try:
-        from multipart.multipart import parse_options_header
-    except ImportError:
-        parse_options_header = None
-
 _MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 _BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
     ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),

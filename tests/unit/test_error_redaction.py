@@ -179,3 +179,15 @@ def test_redact_sensitive_text_does_not_match_unrelated_key_names():
 def test_redact_sensitive_text_keeps_field_name_prose_readable():
     assert redact_sensitive_text("Missing key: username") == "Missing key: username"
     assert redact_sensitive_text("Missing key: message") == "Missing key: message"
+
+
+def test_redact_sensitive_text_matches_hyphenated_credential_keys():
+    for text, secret in (
+        ("x-api-key: abc123", "abc123"),
+        ("api-key: abc123", "abc123"),
+        ("session-id: abc123", "abc123"),
+        ('{"session-id": "abc123"}', "abc123"),
+    ):
+        redacted = redact_sensitive_text(text)
+        assert secret not in redacted
+        assert "[REDACTED]" in redacted

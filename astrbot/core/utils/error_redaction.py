@@ -1,11 +1,11 @@
 import re
 
-_SECRET_KEY_BASE = r"(?:api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password|token|key)"  # noqa: S105
+_SECRET_KEY_BASE = r"(?:api[-_]?key|access[-_]?token|auth[-_]?token|refresh[-_]?token|session[-_]?id|secret|password|token|key)"  # noqa: S105
 _SECRET_KEY_NAME = rf"(?:[A-Za-z0-9]+[_-])*{_SECRET_KEY_BASE}(?:[_-][A-Za-z0-9]+)*"
 # A bare ``key`` is also an ordinary English word ("Missing key: username").
 # Keep it for assignments, JSON fields, and query parameters, but require a
 # qualified name before a colon so field-name prose is not over-redacted.
-_COLON_SECRET_KEY_BASE = r"(?:api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password|token)"  # noqa: S105
+_COLON_SECRET_KEY_BASE = r"(?:api[-_]?key|access[-_]?token|auth[-_]?token|refresh[-_]?token|session[-_]?id|secret|password|token)"  # noqa: S105
 _COLON_SECRET_KEY_NAME = (
     rf"(?:[A-Za-z0-9]+[_-])*{_COLON_SECRET_KEY_BASE}(?:[_-][A-Za-z0-9]+)*"
 )

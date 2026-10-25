@@ -221,7 +221,7 @@ class AstrMessageEvent(abc.ABC):
         self._background_tasks: set[asyncio.Task] = set()
         """Tasks retained by this event until its owning platform binds them."""
         self._metrics: MetricsSink | None = None
-        """Telemetry capability injected by the originating platform."""
+        """Local statistics capability injected by the originating platform."""
 
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
@@ -240,7 +240,7 @@ class AstrMessageEvent(abc.ABC):
         self._background_tasks = task_set
 
     def bind_metrics(self, metrics: MetricsSink) -> None:
-        """Bind telemetry from the platform that owns this event."""
+        """Bind local statistics from the platform that owns this event."""
 
         self._metrics = metrics
 

@@ -44,7 +44,6 @@ def mock_db():
     llm_metadata_catalog = MagicMock()
     llm_metadata_catalog.refresh = AsyncMock()
     metrics = MagicMock()
-    metrics.shutdown = AsyncMock()
     webchat_queue_manager = WebChatQueueManager()
     follow_up_coordinator = FollowUpCoordinator()
     return SimpleNamespace(

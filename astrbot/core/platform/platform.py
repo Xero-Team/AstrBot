@@ -229,7 +229,7 @@ class Platform(abc.ABC):
         self._plugin_registry = plugin_registry
 
     def bind_metrics(self, metrics: MetricsSink) -> None:
-        """Bind the telemetry capability owned by this platform runtime."""
+        """Bind the local statistics capability owned by this platform runtime."""
 
         self._metrics = metrics
 

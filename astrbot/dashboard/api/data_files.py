@@ -7,6 +7,7 @@ from typing import Any, NoReturn
 
 from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 
 from astrbot.core.auth.models import AuthContext, Resource, Role, Subject
 from astrbot.dashboard.responses import ApiError, ok
@@ -444,11 +445,6 @@ async def download(
     except DataFileServiceError as exc:
         _raise(exc)
 
-    def iterator():
-        with os.fdopen(opened.fd, "rb", closefd=True) as handle:
-            while chunk := handle.read(1024 * 1024):
-                yield chunk
-
     headers = {
         "Content-Disposition": content_disposition_header(
             "attachment", opened.entry["name"]
@@ -456,6 +452,24 @@ async def download(
         "Content-Length": str(opened.entry["size"]),
         "Cache-Control": "no-store",
     }
-    return StreamingResponse(
-        iterator(), media_type=opened.content_type, headers=headers
-    )
+    return _opened_file_response(opened, headers)
+
+
+def _opened_file_response(opened, headers: dict[str, str]) -> StreamingResponse:
+    handle = os.fdopen(opened.fd, "rb", closefd=True)
+
+    def iterator():
+        with handle:
+            while chunk := handle.read(1024 * 1024):
+                yield chunk
+
+    try:
+        return StreamingResponse(
+            iterator(),
+            media_type=opened.content_type,
+            headers=headers,
+            background=BackgroundTask(handle.close),
+        )
+    except Exception:
+        handle.close()
+        raise

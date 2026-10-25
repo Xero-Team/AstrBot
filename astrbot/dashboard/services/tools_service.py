@@ -40,6 +40,14 @@ class ToolsService:
         self.plugin_catalog = plugin_catalog
         self._oauth_probe_tasks: dict[str, asyncio.Task[None]] = {}
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._oauth_start_locks: dict[str, asyncio.Lock] = {}
+
+    def _oauth_start_lock(self, identity: str) -> asyncio.Lock:
+        lock = self._oauth_start_locks.get(identity)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._oauth_start_locks[identity] = lock
+        return lock
 
     def _track_background_task(self, task: asyncio.Task[Any], *, label: str) -> None:
         self._background_tasks.add(task)
@@ -227,6 +235,14 @@ class ToolsService:
         return {"configured": True, **status}
 
     async def start_mcp_authorization(self, name: str) -> dict[str, Any]:
+        config = self.get_mcp_server_config(name)
+        if config is None or not config.get("auth_ref"):
+            raise ToolsServiceError("This MCP server has no OAuth configuration.")
+        identity = f"{name}:{config['auth_ref']}"
+        async with self._oauth_start_lock(identity):
+            return await self._start_mcp_authorization_locked(name)
+
+    async def _start_mcp_authorization_locked(self, name: str) -> dict[str, Any]:
         config = self.get_mcp_server_config(name)
         if config is None or not config.get("auth_ref"):
             raise ToolsServiceError("This MCP server has no OAuth configuration.")

@@ -1,3 +1,5 @@
+import copy
+
 from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.core.auth.models import Resource
@@ -13,6 +15,7 @@ from astrbot.dashboard.schemas import (
 from astrbot.dashboard.services.config_service import (
     REDACTED_SECRET_PLACEHOLDER,
     ProviderConfigService,
+    _restore_redacted_sensitive_config,
     sensitive_config_changed,
 )
 
@@ -52,7 +55,9 @@ def _provider_config_for_dimension(
         base_config = {}
     provider_config = body.get("config")
     if isinstance(provider_config, dict):
-        return {**base_config, **provider_config}
+        overrides = copy.deepcopy(provider_config)
+        _restore_redacted_sensitive_config(overrides, base_config)
+        return {**base_config, **overrides}
     return base_config
 
 
@@ -105,6 +110,7 @@ async def _authorize_provider_resource(
     resource_id: str,
     config: dict | None = None,
     write: bool = False,
+    missing_is_change: bool = True,
 ) -> None:
     service = request.app.state.services.providers
     config_id = (
@@ -127,7 +133,11 @@ async def _authorize_provider_resource(
         except Exception:
             current = None
         if isinstance(current, dict):
-            credentials_changed = sensitive_config_changed(current, config)
+            credentials_changed = sensitive_config_changed(
+                current,
+                config,
+                missing_is_change=missing_is_change,
+            )
     action = (
         "provider.credentials.write"
         if credentials_changed
@@ -395,7 +405,15 @@ async def get_embedding_dimension(
 ):
     body = model_dict(payload)
     await _authorize_provider_resource(
-        request, auth, resource_type="provider", resource_id=provider_id
+        request,
+        auth,
+        resource_type="provider",
+        resource_id=provider_id,
+        config=body.get("config") if isinstance(body.get("config"), dict) else None,
+        write=True,
+        # Overrides are merged onto the stored provider, so omitting a
+        # credential does not delete it and must not require credential write.
+        missing_is_change=False,
     )
     return ok(
         await service.get_embedding_dimension(

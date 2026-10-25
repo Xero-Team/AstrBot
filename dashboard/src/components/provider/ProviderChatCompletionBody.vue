@@ -24,7 +24,7 @@
     <v-divider></v-divider>
 
     <div class="provider-config-body">
-      <section class="provider-section">
+      <section class="provider-section config-form">
         <div class="provider-section-head">
           <div class="provider-section-title">
             {{ tm('providers.settings') }}
@@ -42,7 +42,7 @@
 
       <v-divider v-if="advancedSourceConfig"></v-divider>
 
-      <section v-if="advancedSourceConfig" class="provider-section">
+      <section v-if="advancedSourceConfig" class="provider-section config-form">
         <div class="provider-section-head">
           <div class="provider-section-title">
             {{ tm('providerSources.advancedConfig') }}
@@ -366,3 +366,5 @@ const modelSearchProxy = computed({
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

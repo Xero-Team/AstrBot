@@ -250,7 +250,7 @@ class HelpCommand:
         try:
             render_help = getattr(self.context.rendering, "render_help", None)
             if callable(render_help):
-                rendered_image = await render_help(image_markup)
+                rendered_image = await cast(Any, render_help)(image_markup)
             else:
                 rendered_image = await self.context.rendering.text_to_image(
                     image_markup,

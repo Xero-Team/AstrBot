@@ -268,6 +268,10 @@ async def test_lark_webhook_accepts_matching_verification_token():
         event_queue=SimpleNamespace(),
     )
 
+    headers = {
+        "X-Lark-Request-Timestamp": str(int(time.time())),
+        "X-Lark-Request-Nonce": "token-nonce",
+    }
     accepted = await server.handle_callback(
         _FakeRequest(
             body=b"{}",
@@ -275,6 +279,7 @@ async def test_lark_webhook_accepts_matching_verification_token():
                 "type": "event_callback",
                 "header": {"token": "verification-token"},
             },
+            headers=headers,
         )
     )
     assert accepted == {}
@@ -286,6 +291,7 @@ async def test_lark_webhook_accepts_matching_verification_token():
                 "type": "event_callback",
                 "header": {"token": "wrong-token"},
             },
+            headers=headers,
         )
     )
     assert rejected == ({"error": "Invalid verification token"}, 401)
@@ -329,6 +335,10 @@ async def test_lark_webhook_treats_non_ascii_credentials_as_mismatch():
             event_data={
                 "type": "event_callback",
                 "header": {"token": "令牌"},
+            },
+            headers={
+                "X-Lark-Request-Timestamp": str(int(time.time())),
+                "X-Lark-Request-Nonce": "non-ascii-token-nonce",
             },
         )
     )

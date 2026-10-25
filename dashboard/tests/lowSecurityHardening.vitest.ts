@@ -26,14 +26,11 @@ describe('low-severity Dashboard hardening', () => {
     );
   });
 
-  it('keeps a configured sandbox runtime distinct during onboarding', () => {
+  it('does not offer the removed sandbox runtime during onboarding', () => {
     const welcome = readSource('src/views/WelcomePage.vue');
-    expect(welcome).toContain(
-      "type ComputerAccessRuntime = 'local' | 'sandbox' | 'none'",
-    );
-    expect(welcome).toContain("runtime === 'sandbox'");
-    expect(welcome).toContain("currentRuntime === 'sandbox'");
-    expect(welcome).toContain("value: 'sandbox'");
+    expect(welcome).toContain("type ComputerAccessRuntime = 'local' | 'none'");
+    expect(welcome).not.toContain("value: 'sandbox'");
+    expect(welcome).not.toContain('step3Sandbox');
   });
 
   it('consumes WebChat step-up tokens on take', () => {

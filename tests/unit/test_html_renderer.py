@@ -19,7 +19,7 @@ async def test_render_t2i_uses_local_renderer():
 
     renderer.render.assert_awaited_once_with(
         "hello",
-        template_name="astrbot_help",
+        template_name="base",
     )
     assert result == "D:/temp/local.png"
     assert not hasattr(renderer, "network_strategy")

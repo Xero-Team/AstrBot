@@ -30,13 +30,13 @@ def _resolve_skill_dir(root: str | Path, name: str | None) -> Path:
     skill_name = _validate_skill_dir_name(name)
     root_path = Path(root).resolve(strict=True)
     root_prefix = os.path.join(str(root_path), "")
-    skill_dir = Path(os.path.normpath(root_path / skill_name))
-    if not str(skill_dir).startswith(root_prefix):
+    candidate = os.path.normpath(os.path.join(str(root_path), skill_name))
+    if not candidate.startswith(root_prefix):
         raise ValueError("Invalid skill path.")
-    resolved = os.path.realpath(skill_dir)
+    resolved = os.path.realpath(candidate)
     if resolved == str(root_path) or not resolved.startswith(root_prefix):
         raise ValueError("Invalid skill path.")
-    return skill_dir
+    return Path(candidate)
 
 
 def _normalize_skill_name(name: str | None) -> str:

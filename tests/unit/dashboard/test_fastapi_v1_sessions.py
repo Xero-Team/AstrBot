@@ -1072,3 +1072,96 @@ async def test_v1_session_authorization_covers_every_declared_target(
         headers=headers,
     )
     assert scope_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_messages_reject_body_cid(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[dict] = []
+
+    async def fake_update_history(data):
+        calls.append(data)
+        return {"message": "ok"}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.conversations,
+        "update_history",
+        fake_update_history,
+    )
+
+    response = await asgi_client.put(
+        "/api/v1/conversations/path-conversation/messages",
+        params={"user_id": "webchat:user"},
+        json={"history": [], "cid": "victim-conversation"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_messages_use_path_cid(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[dict] = []
+
+    async def fake_update_history(data):
+        calls.append(data)
+        return {"message": "ok"}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.conversations,
+        "update_history",
+        fake_update_history,
+    )
+
+    response = await asgi_client.put(
+        "/api/v1/conversations/path-conversation/messages",
+        params={"user_id": "webchat:user"},
+        json={"history": []},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "user_id": "webchat:user",
+            "cid": "path-conversation",
+            "history": [],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_patch_rejects_body_cid(
+    asgi_client: httpx.AsyncClient,
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[dict] = []
+
+    async def fake_update_conversation(data):
+        calls.append(data)
+        return {"message": "ok"}
+
+    monkeypatch.setattr(
+        asgi_app.state.services.conversations,
+        "update_conversation",
+        fake_update_conversation,
+    )
+
+    response = await asgi_client.patch(
+        "/api/v1/conversations/path-conversation",
+        params={"user_id": "webchat:user"},
+        json={"title": "Renamed", "cid": "victim-conversation"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 422
+    assert calls == []

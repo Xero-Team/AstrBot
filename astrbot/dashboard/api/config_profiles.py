@@ -80,6 +80,22 @@ def _validate_config_route_ids(config_ids: set[str]) -> None:
             raise ApiError("Invalid config id", status_code=400) from exc
 
 
+async def _authorize_config_route_targets(
+    request: Request,
+    auth: AuthContext,
+    config_ids: set[str],
+) -> None:
+    for config_id in config_ids:
+        if config_id == "default":
+            continue
+        await _authorize_config_resource(
+            request,
+            auth,
+            config_id=config_id,
+            write=True,
+        )
+
+
 async def _can_read_config(
     request: Request,
     auth: AuthContext,
@@ -329,6 +345,11 @@ async def replace_config_routes(
 ):
     await _authorize_config_route_collection(request, auth, write=True)
     _validate_config_route_ids(set(payload.routing.values()))
+    await _authorize_config_route_targets(
+        request,
+        auth,
+        set(payload.routing.values()),
+    )
     await service.replace_route_mapping(payload.routing)
     return ok(message="更新成功")
 
@@ -343,6 +364,7 @@ async def upsert_config_route(
 ):
     await _authorize_config_route_collection(request, auth, write=True)
     _validate_config_route_ids({payload.config_id})
+    await _authorize_config_route_targets(request, auth, {payload.config_id})
     await service.set_route(umo, payload.config_id)
     return ok(message="更新成功")
 
@@ -355,5 +377,17 @@ async def delete_config_route(
     service: ConfigRoutingService = Depends(get_routing_service),
 ):
     await _authorize_config_route_collection(request, auth, write=True)
+    current_config_id = service.list_routes().get("routing", {}).get(umo)
+    if current_config_id:
+        try:
+            await _authorize_config_route_targets(
+                request,
+                auth,
+                {current_config_id},
+            )
+        except AuthorizationValueError:
+            # Persisted routing data may predate route-id validation. Deleting a
+            # mapping whose target id is malformed cannot affect any profile.
+            pass
     await service.delete_route_by_umo(umo)
     return ok(message="删除成功")

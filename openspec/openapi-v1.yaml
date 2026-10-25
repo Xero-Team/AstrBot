@@ -767,6 +767,13 @@ paths:
       description: Requires an authenticated Dashboard session; developer API keys are not accepted for instance-wide run data.
       operationId: listBtwWorkSessions
       x-astrbot-scope: chat
+      parameters:
+        - name: config_id
+          in: query
+          required: false
+          description: Return sessions only for this configuration profile id.
+          schema:
+            type: string
       responses:
         '200':
           description: Retained BTW work sessions, newest first

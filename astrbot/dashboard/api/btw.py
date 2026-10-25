@@ -30,8 +30,18 @@ def get_service(request: Request) -> BtwService:
 
 @router.get("/btw/work-sessions")
 async def list_work_sessions(
+    request: Request,
     _auth: AuthContext = Depends(require_btw_scope),
     service: BtwService = Depends(get_service),
 ):
     """List active and retained BTW work sessions with delegation progress."""
-    return ok({"sessions": await service.list_work_sessions()})
+    config_id = request.query_params.get("config_id") or request.headers.get(
+        "X-AstrBot-Config-Id"
+    )
+    return ok(
+        {
+            "sessions": await service.list_work_sessions(
+                config_id=config_id.strip() if config_id else None
+            )
+        }
+    )

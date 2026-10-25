@@ -48,9 +48,9 @@ def test_commit_event_returns_false_when_queue_is_full():
 
 
 def test_commit_event_binds_runtime_metrics_to_event():
-    """An adapter passes its instance-owned telemetry capability to each event."""
+    """An adapter passes its instance-owned statistics capability to each event."""
     platform = _DummyPlatform({}, Queue())
-    metrics = SimpleNamespace(upload=AsyncMock())
+    metrics = SimpleNamespace(record_platform_event=AsyncMock())
     platform.bind_metrics(metrics)
     event = _make_event("runtime-owned")
 
@@ -68,7 +68,7 @@ async def test_platform_termination_cancels_send_metric_task():
         await asyncio.Event().wait()
 
     platform = _DummyPlatform({}, Queue())
-    platform.bind_metrics(SimpleNamespace(upload=blocked_metric_upload))
+    platform.bind_metrics(SimpleNamespace(record_platform_event=blocked_metric_upload))
     session = MessageSession("dummy", MessageType.FRIEND_MESSAGE, "session")
 
     await platform.send_by_session(session, MessageChain())

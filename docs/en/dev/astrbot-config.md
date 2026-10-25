@@ -412,7 +412,6 @@ Dashboard accounts have stable `account_id` values. Their TOTP secret, recovery-
 - `timezone` is an IANA timezone and defaults to `Asia/Shanghai`.
 - `callback_api_base` is the externally reachable base used to build callback and file URLs. It does not change the listening address.
 - `plugin_set` limits plugins for the profile; `["*"]` means all and an empty list means none.
-- `disable_metrics` disables metric collection. Enable or disable built-in commands individually from Dashboard command management.
 
 ## Process-level environment overrides
 

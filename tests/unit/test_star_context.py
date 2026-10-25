@@ -48,7 +48,6 @@ def make_initialized_context() -> CoreExecutionContext:
         catalogs=RuntimeCatalogs(),
         computer_runtime=ComputerRuntime(),
         tool_image_cache=MagicMock(spec=ToolImageCache),
-        metrics=SimpleNamespace(upload=AsyncMock()),
     )
 
 

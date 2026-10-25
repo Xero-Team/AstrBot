@@ -72,7 +72,6 @@ class PluginManager:
             plugin_store_path=plugin_store_path,
             plugin_config_path=plugin_config_path,
             background_tasks=background_tasks,
-            metrics=execution_context.metrics,
         )
         self.loader = PluginRuntimeLoader(
             execution_context=execution_context,

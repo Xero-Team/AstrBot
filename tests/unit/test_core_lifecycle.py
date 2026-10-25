@@ -44,7 +44,6 @@ def mock_db():
     llm_metadata_catalog = MagicMock()
     llm_metadata_catalog.refresh = AsyncMock()
     metrics = MagicMock()
-    metrics.shutdown = AsyncMock()
     webchat_queue_manager = WebChatQueueManager()
     follow_up_coordinator = FollowUpCoordinator()
     return SimpleNamespace(
@@ -562,22 +561,18 @@ class TestAstrBotCoreLifecycleInitialize:
         async def cleanup_preferences() -> None:
             await record_cleanup("preferences")
 
-        async def cleanup_metrics() -> None:
-            await record_cleanup("metrics")
-
         async def cleanup_database() -> None:
             await record_cleanup("database")
 
         mock_db.db.initialize = AsyncMock(side_effect=fail_database_initialize)
         mock_db.preferences.terminate = AsyncMock(side_effect=cleanup_preferences)
-        mock_db.metrics.shutdown = AsyncMock(side_effect=cleanup_metrics)
         mock_db.db.close = AsyncMock(side_effect=cleanup_database)
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
         with pytest.raises(RuntimeError, match="database failed"):
             await lifecycle.initialize()
 
-        assert cleanup_order == ["preferences", "metrics", "database"]
+        assert cleanup_order == ["preferences", "database"]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

@@ -1071,15 +1071,14 @@ class TestSendStreaming:
         async def generator():
             yield MessageEventResult().message("Test")
 
-        metrics = SimpleNamespace(upload=AsyncMock())
+        metrics = SimpleNamespace(record_platform_event=AsyncMock())
         astr_message_event.bind_metrics(metrics)
         await astr_message_event.send_streaming(generator())
         await asyncio.sleep(0)
 
         assert astr_message_event._has_send_oper is True
-        metrics.upload.assert_awaited_once_with(
-            msg_event_tick=1,
-            adapter_name="test_platform",
+        metrics.record_platform_event.assert_awaited_once_with(
+            platform_id="test_platform",
         )
 
     @pytest.mark.asyncio

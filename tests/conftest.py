@@ -31,7 +31,6 @@ pytest_plugins = [
 # 设置测试环境变量
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
-os.environ.setdefault("ASTRBOT_DISABLE_METRICS", "1")
 os.environ.setdefault("PTB_TIMEDELTA", "1")
 
 
@@ -497,7 +496,6 @@ async def mock_context(
         computer_runtime=ComputerRuntime(),
         tool_image_cache=ToolImageCache(tmp_path / "tool_images"),
         subagent_orchestrator=subagent_orchestrator,
-        metrics=MagicMock(upload=AsyncMock()),
     )
 
     return context

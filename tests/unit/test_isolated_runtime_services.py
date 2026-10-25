@@ -20,7 +20,6 @@ async def test_isolated_runtime_services_do_not_use_repository_data(tmp_path: Pa
         assert Path(services.preferences.path).is_relative_to(tmp_path)
         assert services.config["platform"] == []
     finally:
-        await services.metrics.shutdown()
         await services.preferences.terminate()
 
 
@@ -69,8 +68,6 @@ async def test_isolated_runtime_services_do_not_share_computer_or_tool_images(
             second.tool_image_cache.get_image_base64_by_path(cached.file_path) is None
         )
     finally:
-        await first.metrics.shutdown()
-        await second.metrics.shutdown()
         await first.computer_runtime.terminate()
         await second.computer_runtime.terminate()
         await first.preferences.terminate()

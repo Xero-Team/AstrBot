@@ -121,3 +121,73 @@ def test_sanitize_error_text_handles_unprintable_message():
             return "Reprable()"
 
     assert sanitize_error_text(Reprable()) == "Reprable()"
+
+
+def test_redact_sensitive_text_matches_prefixed_and_escaped_json_keys():
+    for text, secret in (
+        ('{"client_secret": "abc123"}', "abc123"),
+        ('{"db_password": "abc123"}', "abc123"),
+        ('{"password": "it\'s secret"}', "it's secret"),
+        ('{"password": "ab\\"cd"}', "ab"),
+        ('{"openai_api_key": "plainvalue"}', "plainvalue"),
+    ):
+        redacted = redact_sensitive_text(text)
+        assert secret not in redacted
+        assert "[REDACTED]" in redacted
+
+
+def test_redact_sensitive_text_matches_quoted_and_dotenv_values():
+    for text, secret in (
+        ('password: "hunter2"', "hunter2"),
+        ("API_KEY='abc'", "abc"),
+        ('db_password = "x"', "x"),
+    ):
+        redacted = redact_sensitive_text(text)
+        assert secret not in redacted
+        assert "[REDACTED]" in redacted
+
+
+def test_redact_sensitive_text_matches_modern_sk_keys():
+    for key in (
+        "sk-proj-abcdefghijklmnopqrstuvwxyz",
+        "sk-ant-api03-abcdefghijklmnop",
+    ):
+        assert key not in redact_sensitive_text(f"provider failed for {key}")
+
+
+def test_redact_sensitive_text_preserves_authorization_scheme():
+    text = (
+        "Authorization: Basic dXNlcjpwYXNz "
+        "Bearer ab+/cd== "
+        '{"authorization": "Digest opaque-value"}'
+    )
+
+    redacted = redact_sensitive_text(text)
+
+    for secret in ("dXNlcjpwYXNz", "ab+/cd==", "opaque-value"):
+        assert secret not in redacted
+    assert "Basic [REDACTED]" in redacted
+    assert "Bearer [REDACTED]" in redacted
+    assert "Digest [REDACTED]" in redacted
+
+
+def test_redact_sensitive_text_does_not_match_unrelated_key_names():
+    assert redact_sensitive_text("monkey: banana") == "monkey: banana"
+    assert "value" not in redact_sensitive_text("key=value")
+
+
+def test_redact_sensitive_text_keeps_field_name_prose_readable():
+    assert redact_sensitive_text("Missing key: username") == "Missing key: username"
+    assert redact_sensitive_text("Missing key: message") == "Missing key: message"
+
+
+def test_redact_sensitive_text_matches_hyphenated_credential_keys():
+    for text, secret in (
+        ("x-api-key: abc123", "abc123"),
+        ("api-key: abc123", "abc123"),
+        ("session-id: abc123", "abc123"),
+        ('{"session-id": "abc123"}', "abc123"),
+    ):
+        redacted = redact_sensitive_text(text)
+        assert secret not in redacted
+        assert "[REDACTED]" in redacted

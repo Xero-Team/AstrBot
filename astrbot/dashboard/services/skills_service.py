@@ -150,12 +150,24 @@ class SkillsService:
 
         try:
             skills_root = Path(skill_mgr.skills_root).resolve(strict=True)
-            skill_dir = (skills_root / skill_name).resolve(strict=True)
         except FileNotFoundError as exc:
             raise SkillsServiceError("Local skill not found", status_code=404) from exc
-        if not skill_dir.is_relative_to(skills_root):
-            raise SkillsServiceError("Invalid skill path")
-        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+
+        skill_dir: Path | None = None
+        try:
+            for entry in skills_root.iterdir():
+                if os.path.normcase(entry.name) != os.path.normcase(skill_name):
+                    continue
+                resolved_entry = entry.resolve(strict=True)
+                if not resolved_entry.is_relative_to(skills_root):
+                    raise SkillsServiceError("Invalid skill path")
+                skill_dir = resolved_entry
+                break
+        except FileNotFoundError as exc:
+            raise SkillsServiceError("Local skill not found", status_code=404) from exc
+        if skill_dir is None or not skill_dir.is_dir():
+            raise SkillsServiceError("Local skill not found", status_code=404)
+        if not (skill_dir / "SKILL.md").is_file():
             raise SkillsServiceError("Local skill not found", status_code=404)
         return skill_dir
 
@@ -410,10 +422,10 @@ class SkillsService:
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
-        zip_base = export_dir / skill_name
+        # ``skill_dir.name`` comes from the validated skills-root listing, not
+        # from the request path, so the export path cannot be user-controlled.
+        zip_base = export_dir / skill_dir.name
         zip_path = zip_base.with_name(f"{zip_base.name}.zip")
-        if zip_path.exists():
-            zip_path.unlink()
 
         shutil.make_archive(
             str(zip_base),

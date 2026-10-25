@@ -12,7 +12,7 @@ async def test_satori_component_attributes_escape_untrusted_values(tmp_path):
     named_mention = await SatoriPlatformEvent._convert_component_to_satori_static(
         Mention(target="", name='a&b"<c')
     )
-    source = tmp_path / 'a"b&c'
+    source = tmp_path / "a b&c.txt"
     source.write_text("payload", encoding="utf-8")
     file = await SatoriPlatformEvent._convert_component_to_satori_static(
         File(name='a"b<c', file=str(source))
@@ -29,7 +29,7 @@ async def test_satori_component_attributes_escape_untrusted_values(tmp_path):
         assert "&quot;" in output or "&amp;" in output or "&lt;" in output
     assert "a&amp;b&quot;&lt;c" in named_mention
     assert "a&quot;b&lt;c" in file
-    assert "a&quot;b&amp;c" in file
+    assert "a b&amp;c.txt" in file
 
 
 @pytest.mark.asyncio

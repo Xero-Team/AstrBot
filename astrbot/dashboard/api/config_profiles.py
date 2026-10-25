@@ -379,10 +379,15 @@ async def delete_config_route(
     await _authorize_config_route_collection(request, auth, write=True)
     current_config_id = service.list_routes().get("routing", {}).get(umo)
     if current_config_id:
-        await _authorize_config_route_targets(
-            request,
-            auth,
-            {current_config_id},
-        )
+        try:
+            await _authorize_config_route_targets(
+                request,
+                auth,
+                {current_config_id},
+            )
+        except AuthorizationValueError:
+            # Persisted routing data may predate route-id validation. Deleting a
+            # mapping whose target id is malformed cannot affect any profile.
+            pass
     await service.delete_route_by_umo(umo)
     return ok(message="删除成功")

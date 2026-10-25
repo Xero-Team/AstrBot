@@ -879,3 +879,24 @@ async def test_v1_config_route_list_ignores_malformed_persisted_ids(
 
     assert response.status_code == 200
     assert response.json()["data"]["routing"] == {"webchat-main:group:demo": "default"}
+
+
+@pytest.mark.asyncio
+async def test_v1_config_route_delete_tolerates_malformed_persisted_target(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_core_lifecycle.umop_config_router.umop_to_conf_id = {
+        "webchat-main:private:*": "bad id",
+        "webchat-main:group:demo": "default",
+    }
+
+    response = await asgi_client.delete(
+        "/api/v1/config-routes/webchat-main:private:*",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert fake_core_lifecycle.umop_config_router.umop_to_conf_id == {
+        "webchat-main:group:demo": "default",
+    }

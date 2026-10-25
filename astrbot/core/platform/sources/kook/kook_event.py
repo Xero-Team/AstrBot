@@ -174,12 +174,12 @@ class KookEvent(AstrMessageEvent):
 
         for index, result in enumerate(tasks_result):
             if isinstance(result, BaseException):
-                logger.error(f"[Kook] {result}")
-                # 构造一个虚假的 OrderMessage，让用户知道这里本来有张图但坏了
+                logger.error("[Kook] component send failed: %s", safe_error("", result))
+                # 构造一个虚假的 OrderMessage，让用户知道这里本来有内容但发送失败
                 # 这样后面的 for 循环就能把它当成普通文本发出去
                 err_node = OrderMessage(
                     index=index,
-                    text=str(result),
+                    text="[Kook] 消息组件发送失败",
                     type=KookMessageType.TEXT,
                 )
                 order_messages.append(err_node)
@@ -205,9 +205,10 @@ class KookEvent(AstrMessageEvent):
                     reply_id,
                 )
             except RuntimeError as exp:
+                logger.error("[Kook] message send failed: %s", safe_error("", exp))
                 await self._client.send_text(
                     self.channel_id,
-                    str(exp),
+                    "[Kook] 消息发送失败，请稍后重试",
                     self.astrbot_message_type,
                     KookMessageType.TEXT,
                     reply_id,

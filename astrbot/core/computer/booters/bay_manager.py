@@ -40,6 +40,32 @@ class BayContainerManager:
         self._docker: aiodocker.Docker | None = None
         self._container: Any = None
 
+    def _build_container_config(self) -> dict[str, Any]:
+        return {
+            "Image": self._image,
+            "Labels": {BAY_LABEL: "true"},
+            "Env": [
+                "BAY_SERVER__HOST=0.0.0.0",
+                f"BAY_SERVER__PORT={BAY_PORT}",
+                "BAY_DATA_DIR=/app/data",
+                "BAY_SECURITY__ALLOW_ANONYMOUS=false",
+            ],
+            "HostConfig": {
+                "PortBindings": {
+                    f"{BAY_PORT}/tcp": [
+                        {
+                            "HostIp": "127.0.0.1",
+                            "HostPort": str(self._host_port),
+                        }
+                    ],
+                },
+                "Binds": [
+                    "/var/run/docker.sock:/var/run/docker.sock",
+                ],
+                "RestartPolicy": {"Name": "unless-stopped"},
+            },
+        }
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -86,29 +112,8 @@ class BayContainerManager:
             self._image,
             self._host_port,
         )
-        config = {
-            "Image": self._image,
-            "Labels": {BAY_LABEL: "true"},
-            "Env": [
-                "BAY_SERVER__HOST=0.0.0.0",
-                f"BAY_SERVER__PORT={BAY_PORT}",
-                "BAY_DATA_DIR=/app/data",
-                # allow_anonymous=false → auto-provisions API key
-                "BAY_SECURITY__ALLOW_ANONYMOUS=false",
-            ],
-            "HostConfig": {
-                "PortBindings": {
-                    f"{BAY_PORT}/tcp": [{"HostPort": str(self._host_port)}],
-                },
-                "Binds": [
-                    # Bay needs Docker socket to create sandbox containers
-                    "/var/run/docker.sock:/var/run/docker.sock",
-                ],
-                "RestartPolicy": {"Name": "unless-stopped"},
-            },
-        }
         self._container = await self._docker.containers.create_or_replace(
-            BAY_CONTAINER_NAME, config
+            BAY_CONTAINER_NAME, self._build_container_config()
         )
         await self._container.start()
         logger.info("[BayManager] Bay container started: %s", BAY_CONTAINER_NAME)

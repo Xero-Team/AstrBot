@@ -10,6 +10,7 @@
 import asyncio
 import json
 import os
+import re
 import shutil
 import zipfile
 from dataclasses import dataclass, field
@@ -34,6 +35,7 @@ from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 
 from ._importer_datetime import convert_datetime_fields
 from ._importer_files import (
+    MAX_ARCHIVE_MEMBER_BYTES,
     backup_existing_directory,
     extract_directory_files,
     import_attachments,
@@ -73,6 +75,22 @@ def _get_major_version(version_str: str) -> str:
 
 def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
     return validate_path_within(target_path, base_dir)
+
+
+_KB_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def _validate_kb_id(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    kb_id = value.strip()
+    if not kb_id or kb_id in {".", ".."} or not _KB_ID_RE.fullmatch(kb_id):
+        return None
+    return kb_id
+
+
+def _archive_member_size_allowed(zf: zipfile.ZipFile, name: str) -> bool:
+    return zf.getinfo(name).file_size <= MAX_ARCHIVE_MEMBER_BYTES
 
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
@@ -725,20 +743,34 @@ class AstrBotImporter:
             self._convert_datetime_fields,
         )
 
+    def _resolve_kb_dir(self, kb_id: str) -> Path:
+        kb_root = Path(self.kb_root_dir).resolve(strict=False)
+        kb_dir = (kb_root / kb_id).resolve(strict=False)
+        if kb_dir == kb_root or not kb_dir.is_relative_to(kb_root):
+            raise ValueError("Knowledge base id escapes the knowledge base root.")
+        return kb_dir
+
     async def _import_single_knowledge_base(
         self,
         zf: zipfile.ZipFile,
         kb_data: dict[str, Any],
         result: ImportResult,
     ) -> None:
-        kb_id = kb_data.get("kb_id")
-        if not kb_id:
+        kb_id = _validate_kb_id(kb_data.get("kb_id"))
+        if kb_id is None:
+            result.add_internal_warning(
+                "备份中的知识库 ID 无效",
+                ValueError("Invalid knowledge base id."),
+            )
             return
-
-        kb_dir = Path(self.kb_root_dir) / kb_id
+        try:
+            kb_dir = self._resolve_kb_dir(kb_id)
+        except ValueError as exc:
+            result.add_internal_warning("备份中的知识库 ID 越界", exc)
+            return
         kb_dir.mkdir(parents=True, exist_ok=True)
 
-        await self._import_single_kb_documents(zf, kb_id, result)
+        await self._import_single_kb_documents(zf, kb_id, kb_dir, result)
         await self._import_single_kb_vector_index(zf, kb_id, kb_dir, result)
         await self._import_single_kb_media_files(zf, kb_id, kb_dir, result)
         await self._import_single_kb_source_files(zf, kb_id, kb_dir, result)
@@ -747,6 +779,7 @@ class AstrBotImporter:
         self,
         zf: zipfile.ZipFile,
         kb_id: str,
+        kb_dir: Path,
         result: ImportResult,
     ) -> None:
         doc_path = f"databases/kb_{kb_id}/documents.json"
@@ -754,7 +787,11 @@ class AstrBotImporter:
             return
 
         try:
-            await self._import_kb_documents(kb_id, json.loads(zf.read(doc_path)))
+            if not _archive_member_size_allowed(zf, doc_path):
+                raise ValueError("Knowledge base documents exceed the size limit.")
+            with zf.open(doc_path) as source:
+                doc_data = json.load(source)
+            await self._import_kb_documents(kb_id, kb_dir, doc_data)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -773,11 +810,15 @@ class AstrBotImporter:
             if archive_path not in archive_names:
                 continue
             try:
+                if not _archive_member_size_allowed(zf, archive_path):
+                    raise ValueError(
+                        "Knowledge base vector index exceeds the size limit."
+                    )
                 with (
                     zf.open(archive_path) as src,
                     open(kb_dir / filename, "wb") as dst,
                 ):
-                    dst.write(src.read())
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -800,9 +841,11 @@ class AstrBotImporter:
                 if not _validate_path_within(target_path, kb_dir):
                     logger.warning("媒体文件路径越界，已跳过")
                     continue
+                if not _archive_member_size_allowed(zf, name):
+                    raise ValueError("Knowledge base media exceeds the size limit.")
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(name) as src, open(target_path, "wb") as dst:
-                    dst.write(src.read())
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -828,19 +871,27 @@ class AstrBotImporter:
                 ) or not _validate_path_within(target_path, kb_dir):
                     logger.warning("知识库源文件路径越界，已跳过")
                     continue
+                if not _archive_member_size_allowed(zf, name):
+                    raise ValueError(
+                        "Knowledge base source file exceeds the size limit."
+                    )
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(name) as src, open(target_path, "wb") as dst:
-                    dst.write(src.read())
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 result.add_internal_warning("导入知识库源文件失败", exc)
 
-    async def _import_kb_documents(self, kb_id: str, doc_data: dict) -> None:
+    async def _import_kb_documents(
+        self,
+        kb_id: str,
+        kb_dir: Path,
+        doc_data: dict,
+    ) -> None:
         """导入知识库文档到向量数据库"""
         from astrbot.core.db.vec_db.document_storage import DocumentStorage
 
-        kb_dir = Path(self.kb_root_dir) / kb_id
         doc_db_path = kb_dir / "doc.db"
 
         # 初始化文档存储

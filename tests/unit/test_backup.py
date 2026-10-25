@@ -1782,3 +1782,51 @@ async def test_export_kb_metadata_fails_the_backup_on_table_error():
 
     with pytest.raises(RuntimeError, match="导出知识库表"):
         await exporter._export_kb_metadata()
+
+
+@pytest.mark.asyncio
+async def test_kb_import_rejects_unsafe_kb_id(tmp_path):
+    importer = AstrBotImporter.__new__(AstrBotImporter)
+    importer.kb_root_dir = str(tmp_path / "restored")
+    zip_path = tmp_path / "unsafe-kb.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("databases/kb_1/documents.json", "{}")
+
+    unsafe_ids = [
+        "../outside",
+        str(tmp_path / "absolute"),
+        ".",
+        "..",
+        "a/b",
+        "",
+    ]
+    for kb_id in unsafe_ids:
+        result = ImportResult()
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            await importer._import_single_knowledge_base(zf, {"kb_id": kb_id}, result)
+
+    assert not (tmp_path / "outside").exists()
+    assert not (tmp_path / "absolute").exists()
+    assert not (tmp_path / "restored" / "a").exists()
+
+
+@pytest.mark.asyncio
+async def test_kb_vector_index_skips_oversized_member(tmp_path, monkeypatch):
+    from astrbot.core.backup import importer as importer_module
+
+    monkeypatch.setattr(importer_module, "MAX_ARCHIVE_MEMBER_BYTES", 4)
+    zip_path = tmp_path / "oversized-vector.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("databases/kb_1/index.faiss", b"0123456789")
+
+    importer = AstrBotImporter.__new__(AstrBotImporter)
+    importer.kb_root_dir = str(tmp_path / "restored")
+    kb_dir = tmp_path / "restored" / "1"
+    kb_dir.mkdir(parents=True)
+    result = ImportResult()
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        await importer._import_single_kb_vector_index(zf, "1", kb_dir, result)
+
+    assert not (kb_dir / "index.faiss").exists()
+    assert any("向量索引" in warning for warning in result.warnings)

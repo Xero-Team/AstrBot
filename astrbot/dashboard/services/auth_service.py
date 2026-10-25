@@ -854,6 +854,12 @@ class AuthService:
             if duplicate is not None and duplicate.account_id != account.account_id:
                 return self.error("Dashboard username already exists")
 
+        if (
+            authenticated_username is None
+            and await self._find_account_by_username(username) is not None
+        ):
+            return self.error("Dashboard username already exists")
+
         next_config = copy.deepcopy(dict(self.config))
         next_dashboard_config = next_config["dashboard"]
         next_dashboard_config["username"] = username

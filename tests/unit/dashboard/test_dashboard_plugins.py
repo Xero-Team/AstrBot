@@ -55,7 +55,7 @@ async def test_get_t2i_runtime_stats_requires_system_scope(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
+async def test_dashboard_ssl_missing_cert_and_key_fails_startup(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
@@ -98,15 +98,12 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
             capture(info_messages),
         )
 
-        config = await server.run()
+        with pytest.raises(RuntimeError, match="cert_file or key_file is missing"):
+            await server.run()
 
-        assert getattr(config, "certfile", None) is None
-        assert getattr(config, "keyfile", None) is None
-        assert any(
-            "cert_file or key_file is missing" in message
-            for message in warning_messages
+        assert not any(
+            "Starting WebUI at http://" in message for message in info_messages
         )
-        assert any("Starting WebUI at http://" in message for message in info_messages)
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 

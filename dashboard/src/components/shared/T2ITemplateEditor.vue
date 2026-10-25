@@ -180,6 +180,8 @@
               <iframe
                 ref="previewFrame"
                 :srcdoc="previewContent"
+                sandbox="allow-scripts"
+                referrerpolicy="no-referrer"
                 class="t2i-template-editor__preview-frame"
               />
             </div>

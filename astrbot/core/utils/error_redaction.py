@@ -20,15 +20,15 @@ _AUTH_JSON_FIELD_PATTERN = re.compile(
     r"(?P<value>(?:\\.|(?!(?P=vq)).)*)(?P=vq)"
 )
 _QUOTED_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>(?<![A-Za-z0-9]){_SECRET_KEY_NAME}\s*[:=]\s*)"
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9])(?<![A-Za-z0-9][_-]){_SECRET_KEY_NAME}\s*[:=]\s*)"
     r"(?P<vq>['\"])(?P<value>(?:\\.|(?!(?P=vq)).)*)(?P=vq)"
 )
 _COLON_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>(?<![A-Za-z0-9]){_COLON_SECRET_KEY_NAME}\s*:\s*)"
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9])(?<![A-Za-z0-9][_-]){_COLON_SECRET_KEY_NAME}\s*:\s*)"
     r"(?P<value>(?!['\"])[^\s&]+)"
 )
 _QUERY_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>(?<![A-Za-z0-9]){_SECRET_KEY_NAME}\s*=\s*)"
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9])(?<![A-Za-z0-9][_-]){_SECRET_KEY_NAME}\s*=\s*)"
     r"(?P<value>(?!['\"])[^\s&]+)"
 )
 _QUERY_PARAM_PATTERN = re.compile(
@@ -44,7 +44,7 @@ _AUTH_SCHEME_PATTERN = re.compile(
     r"(?P<token>[A-Za-z0-9._~+/=-]+)"
 )
 _SK_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
-_URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+")
+_URL_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]{0,63}://[^\s'\"<>]+")
 _DATA_URI_PATTERN = re.compile(r"(?i)\bdata:[a-z0-9.+-]+/[a-z0-9.+-]+[^\s'\"<>]*")
 _WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])(?:[A-Za-z]:[\\/]|\\\\)[^\s'\"<>]+"

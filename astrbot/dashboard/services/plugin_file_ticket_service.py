@@ -33,6 +33,33 @@ FILE_TICKET_COOKIE_NAME = "astrbot_plugin_file"
 FILE_TICKET_TTL = timedelta(seconds=60)
 FILE_TICKET_SECRET_PURPOSE = b"dashboard-plugin-file-ticket-secret-v1"
 _UNSAFE_FILENAME = re.compile(r"[\x00-\x1f\x7f/\\]+")
+_CONTENT_TYPE_RE = re.compile(r"^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$")
+_UNSAFE_INLINE_CONTENT_TYPES = frozenset(
+    {
+        "application/xhtml+xml",
+        "application/xml",
+        "image/svg+xml",
+        "text/html",
+        "text/xml",
+    }
+)
+
+
+def normalize_content_type(content_type: str) -> str:
+    """Validate an already-lowercased ``type/subtype`` media type."""
+    if not _CONTENT_TYPE_RE.fullmatch(content_type):
+        raise ValueError("Invalid media type")
+    return content_type
+
+
+def resolve_disposition(
+    content_type: str,
+    disposition: str,
+) -> str:
+    """Force document-like media to download instead of inline rendering."""
+    if content_type in _UNSAFE_INLINE_CONTENT_TYPES:
+        return "attachment"
+    return disposition
 
 
 class RawFileError(Exception):
@@ -158,11 +185,16 @@ class PluginFileTicketService:
             or mimetypes.guess_type(resolved.name)[0]
             or "application/octet-stream"
         ).lower()
+        try:
+            content_type = normalize_content_type(content_type)
+        except ValueError as exc:
+            raise ApiError("File media type is not allowed", status_code=415) from exc
         if (
             action.allowed_content_types
             and content_type not in action.allowed_content_types
         ):
             raise ApiError("File media type is not allowed", status_code=415)
+        disposition = resolve_disposition(content_type, action.disposition)
         filename = sanitize_download_filename(file.filename or resolved.name)
         handle = secrets.token_urlsafe(48)
         secret = secrets.token_urlsafe(48)
@@ -179,8 +211,8 @@ class PluginFileTicketService:
             filename=filename,
             content_type=content_type,
             size=size,
-            disposition=action.disposition,
-            remaining_uses=3 if action.disposition == "inline" else 1,
+            disposition=disposition,
+            remaining_uses=3 if disposition == "inline" else 1,
             expires_at=expires_at,
         )
         async with self._lock:
@@ -193,7 +225,7 @@ class PluginFileTicketService:
                 "filename": filename,
                 "content_type": content_type,
                 "size": size,
-                "disposition": action.disposition,
+                "disposition": disposition,
                 "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
             },
             cookie_secret=secret,

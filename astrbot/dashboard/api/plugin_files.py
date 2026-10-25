@@ -68,6 +68,7 @@ async def get_plugin_file(ticket_handle: str, request: Request):
                 redeemed.filename,
             ),
             "Cache-Control": "no-store",
+            "Content-Security-Policy": "sandbox",
             "X-Content-Type-Options": "nosniff",
             "Accept-Ranges": "none",
         },

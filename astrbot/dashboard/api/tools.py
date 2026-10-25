@@ -243,7 +243,7 @@ async def set_mcp_server_enabled(
 async def test_mcp_server(
     server_name: str,
     payload: McpServerRequest | None = None,
-    _auth: AuthContext = Depends(require_mcp_scope),
+    _auth: AuthContext = Depends(require_mcp_write_scope),
     service: ToolsService = Depends(get_service),
 ):
     body = model_dict(payload) if payload is not None else {}

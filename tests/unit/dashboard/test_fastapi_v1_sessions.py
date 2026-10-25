@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot.core.auth.models import Resource
 from tests.unit.dashboard.fastapi_v1_support import *  # noqa: F403
 
 
@@ -106,6 +107,36 @@ async def test_v1_mcp_scope_accepts_api_key(
     data = response.json()
     assert data["status"] == "ok"
     assert any(server["name"] == "demo-server" for server in data["data"])
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_test_rejects_inline_config_for_read_only_principal(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+):
+    raw_key = "abk_fastapi_v1_mcp_read_only"
+    fake_db.add_api_key(raw_key, scopes=["mcp"])
+    subject_id = f"api-key:key-{raw_key}"
+    fake_db.capabilities = {
+        capability
+        for capability in fake_db.capabilities
+        if not (capability[0] == subject_id and capability[1] == "tool.mcp_write")
+    }
+    read_resource = Resource.named("dashboard-api", "post-mcp")
+    fake_db.capabilities.add(
+        (subject_id, "tool.mcp_read", read_resource.type, read_resource.id)
+    )
+    fake_tools = fake_core_lifecycle.provider_manager.tool_manager
+
+    response = await asgi_client.post(
+        "/api/v1/mcp/servers/demo-server/test",
+        json={"url": "https://example.com/demo", "transport": "streamable_http"},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 403
+    assert fake_tools.tested_configs == []
 
 
 @pytest.mark.asyncio

@@ -116,6 +116,7 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.browser_control": _INSTANCE_AND_ABOVE,
     "tool.mcp_read": _SESSION_AND_ABOVE,
     "tool.mcp_write": _INSTANCE_AND_ABOVE,
+    # Reserved for third-party computer-use tools; no built-in tool declares it.
     "tool.computer_use": _INSTANCE_AND_ABOVE,
     "tool.web_search": _SESSION_AND_ABOVE,
     "tool.kb_read": _SESSION_AND_ABOVE,

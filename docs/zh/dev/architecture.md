@@ -215,9 +215,9 @@ Skills 可来自 `data/skills`、插件 `skills/` 和当前会话 workspace。�
 | Skill 声明     | 已启用 Skill 前言 `tools:`                            | 是。只过滤已有工具名                          |
 | 按需电脑工具   | `computer_use_runtime` 为 `local`，且通过提示词与硬裁 | 可声明，但不能扩权。`runtime=none` 时本层为空 |
 
-提示词 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表只移除插件、MCP 和会话工具，内置工具仍由平台基线、配置、授权与场景决定；非空列表只对这些扩展工具求交，内置工具始终保留。`read_skill` 属于内置工具，因此同样保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。远程沙箱与生命周期工具不属于平台基线。
+提示词 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表只移除插件、MCP 和会话工具，内置工具仍由平台基线、配置、授权与场景决定；非空列表只对这些扩展工具求交，内置工具始终保留。`read_skill` 属于内置工具，因此同样保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。按需电脑工具不属于平台基线。
 
-社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。匿名 WebChat、插件、Agent、API Key 一律裁掉。已认证 WebChat 只放行已 step-up 的动作交集。IM 在该配置上绑了 `instance_operator` 及以上时，挂出整组动作且不走 Dashboard step-up；新动作加入该集合后自动进入这条路径。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。全局 `root`/`operator` 绑定不会继承到 IM 主体。
+社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。`tool.computer_use` 保留给第三方 computer-use 工具，当前无内置生产者，但仍须留在此集合中。匿名 WebChat、插件、Agent、API Key 一律裁掉。已认证 WebChat 只放行已 step-up 的动作交集。IM 在该配置上绑了 `instance_operator` 及以上时，挂出整组动作且不走 Dashboard step-up；新动作加入该集合后自动进入这条路径。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。全局 `root`/`operator` 绑定不会继承到 IM 主体。
 
 `read_skill` 使用请求创建时冻结的快照，不按名称重扫全局目录。宿主冻结单文件 64 KiB、目录合计 256 KiB / 32 个文件。路径相对 Skill 目录；拒绝 `..`、绝对路径、符号链接逃逸。Unix 使用 `O_NOFOLLOW`。前言只认 `tools:`，忽略 `allowed-tools`；声明是过滤不是授权。不要照搬 Claude Code 预批准、Codex `$mention` / `skill://`、或 OpenCode 全工具池目录。
 

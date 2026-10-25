@@ -331,7 +331,6 @@
   "skills": {
     "searchPlaceholder": "搜索技能...",
     "noSearchResult": "未找到匹配的技能",
-    "modeLocal": "本地 Skills",
     "actions": "操作",
     "upload": "上传 Skills",
     "refresh": "刷新",
@@ -400,7 +399,6 @@
     "batchDeleteConfirm": "删除 {count} 个技能",
     "batchDeleteSuccess": "已删除 {count} 个技能",
     "batchDeletePartial": "已删除 {succeeded} 个，{failed} 个删除失败",
-    "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
     "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 才能让 AstrBot 正常使用你提供的 Skills。工作区的 Skills 暂不在此页面显示。",
     "sourceLocalOnly": "本地 Skill",
     "sourcePlugin": "插件：{plugin}",

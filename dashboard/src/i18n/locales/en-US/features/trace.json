@@ -88,7 +88,7 @@
   },
   "chips": {
     "provider": "Provider: {id}",
-    "persona": "Persona: {id}",
+    "prompt": "Prompt: {id}",
     "toolCalls": "{count} tool calls"
   },
   "groups": {
@@ -129,7 +129,6 @@
     "llm_tool": "LLM tool"
   },
   "actions": {
-    "selectPersona": "Select persona",
     "eventReceived": "Message received",
     "pipelineStart": "Pipeline started",
     "pipelineEnd": "Processing complete",

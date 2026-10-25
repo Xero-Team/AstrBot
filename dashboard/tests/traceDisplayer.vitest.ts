@@ -5,6 +5,7 @@ import { mountWithVuetify } from './utils/mountWithVuetify';
 
 const state = vi.hoisted(() => ({
   history: vi.fn(),
+  detail: vi.fn(),
   plugins: vi.fn(),
   sessions: vi.fn(),
   sources: [] as Array<{
@@ -19,7 +20,7 @@ vi.mock('@/api/v1', () => ({
   },
   traceApi: {
     history: state.history,
-    detail: vi.fn(),
+    detail: state.detail,
   },
   pluginApi: {
     getAll: state.plugins,
@@ -87,5 +88,81 @@ describe('TraceDisplayer', () => {
     expect(wrapper.text()).toContain('Sender');
     expect(wrapper.text()).toContain('Spans');
     expect(wrapper.text()).toContain('No trace data yet');
+  });
+
+  it('renders a legacy persona_id trace field as a Prompt chip', async () => {
+    state.history.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          traces: [
+            {
+              trace_id: 'trace-legacy',
+              name: 'AstrMessageEvent',
+              attributes: {},
+              state: 'ended',
+              start_time_unix_nano: '1000000000',
+              end_time_unix_nano: '2000000000',
+              span_count: 2,
+            },
+          ],
+          total: 1,
+          page: 1,
+          storage: {},
+        },
+      },
+    });
+    state.detail.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          trace: {
+            trace_id: 'trace-legacy',
+            name: 'AstrMessageEvent',
+            attributes: {},
+            state: 'ended',
+            start_time_unix_nano: '1000000000',
+            end_time_unix_nano: '2000000000',
+            span_count: 2,
+          },
+          spans: [
+            {
+              span_id: 'root-span',
+              parent_span_id: '',
+              name: 'AstrMessageEvent',
+              attributes: {},
+              start_time_unix_nano: '1000000000',
+              end_time_unix_nano: '2000000000',
+              events: [],
+            },
+            {
+              span_id: 'agent-span',
+              parent_span_id: 'root-span',
+              name: 'Agent',
+              attributes: { 'astrbot.kind': 'agent' },
+              start_time_unix_nano: '1100000000',
+              end_time_unix_nano: '1900000000',
+              events: [
+                {
+                  event_id: 'prepare-event',
+                  span_id: 'agent-span',
+                  name: 'astr_agent_prepare',
+                  time_unix_nano: '1200000000',
+                  attributes: { 'astrbot.persona_id': 'legacy-persona' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const wrapper = mountWithVuetify(TraceDisplayer);
+    await flushPromises();
+
+    await wrapper.find('.trace-list-row').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('legacy-persona');
   });
 });

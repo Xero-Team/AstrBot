@@ -568,7 +568,7 @@ class InternalAgentSubStage:
                         runner_registered = True
                     event.trace.record(
                         "astr_agent_prepare",
-                        persona_id=event.get_extra("_trace_persona_id"),
+                        prompt_id=event.get_extra("_trace_prompt_id"),
                         system_prompt=req.system_prompt,
                         tools=req.func_tool.names() if req.func_tool else [],
                         stream=streaming_response,

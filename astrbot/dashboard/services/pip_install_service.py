@@ -17,37 +17,32 @@ async def call_pip_install(pip_installer: PipInstaller, *args, **kwargs):
 
 
 @dataclass
-class UpdateServiceResult:
+class PipInstallResult:
     data: Any = None
     message: str | None = None
     status: str = "ok"
     headers: dict | None = None
 
 
-class UpdateServiceError(Exception):
+class PipInstallServiceError(Exception):
     def __init__(self, message: str, *, code: str | None = None) -> None:
         super().__init__(message)
         self.code = code
 
 
-class UpdateService:
+class PipInstallService:
     def __init__(
         self,
         *,
         pip_install_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
-        clear_site_data_headers: dict,
     ) -> None:
         self.pip_install = pip_install_func
         self.demo_mode = demo_mode
-        self.clear_site_data_headers = clear_site_data_headers
 
-    async def shutdown(self) -> None:
-        return None
-
-    async def install_pip_package(self, data: object) -> UpdateServiceResult:
+    async def install_pip_package(self, data: object) -> PipInstallResult:
         if self.demo_mode:
-            raise UpdateServiceError(
+            raise PipInstallServiceError(
                 "You are not permitted to do this operation in demo mode"
             )
 
@@ -55,13 +50,13 @@ class UpdateService:
         package = payload.get("package", "")
         mirror = payload.get("mirror", None)
         if not package:
-            raise UpdateServiceError("缺少参数 package 或不合法。")
+            raise PipInstallServiceError("缺少参数 package 或不合法。")
         try:
             await self.pip_install(package, mirror=mirror)
-            return UpdateServiceResult(message="安装成功。")
+            return PipInstallResult(message="安装成功。")
         except Exception as exc:
             logger.error(
-                "/api/update_pip: %s",
+                "/api/v1/pip/install: %s",
                 redact_sensitive_text(traceback.format_exc()),
             )
-            raise UpdateServiceError("安装依赖失败。") from exc
+            raise PipInstallServiceError("安装依赖失败。") from exc

@@ -50,6 +50,7 @@ COMPUTER_TOOL_ACTIONS: frozenset[str] = frozenset(
         "tool.file_read",
         "tool.file_write",
         "tool.browser_control",
+        # Reserved for third-party computer-use tools; no built-in tool declares it.
         "tool.computer_use",
     }
 )
@@ -71,6 +72,7 @@ WRITE_CAPABILITY_ACTIONS: frozenset[str] = frozenset(
         "tool.local_exec",
         "tool.python_exec",
         "tool.browser_control",
+        # Reserved for third-party computer-use tools; no built-in tool declares it.
         "tool.computer_use",
         "tool.mcp_write",
         "tool.memory_write",
@@ -597,6 +599,8 @@ def _apply_surface_strip(names: set[str], *, inputs: ToolCatalogInputs) -> set[s
 
 
 def _is_computer_capability_action(actions: Iterable[str]) -> bool:
+    # tool.computer_use is reserved for third-party computer-use tools; no
+    # built-in tool currently declares it.
     return bool(
         set(actions)
         & {

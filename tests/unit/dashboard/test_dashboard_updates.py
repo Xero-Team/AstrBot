@@ -55,7 +55,7 @@ async def test_install_pip_package_returns_generic_error_message(
         del args, kwargs
         raise PipInstallError("install failed", code=2)
 
-    app.state.services.updates.pip_install = mock_pip_install
+    app.state.services.pip_install.pip_install = mock_pip_install
 
     response = await test_client.post(
         "/api/v1/pip/install",

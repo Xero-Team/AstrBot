@@ -903,7 +903,7 @@ async def _ensure_prompt_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure prompt and skills are applied to the request's system prompt or user prompt."""
-    event.set_extra("_trace_persona_id", None)
+    event.set_extra("_trace_prompt_id", None)
     if not req.conversation:
         return
 
@@ -921,7 +921,7 @@ async def _ensure_prompt_and_skills(
     set_prompt_custom_error_message_on_event(
         event, extract_prompt_custom_error_message_from_prompt(prompt_spec)
     )
-    event.set_extra("_trace_persona_id", prompt_id)
+    event.set_extra("_trace_prompt_id", prompt_id)
 
     if req.system_prompt is None:
         req.system_prompt = ""

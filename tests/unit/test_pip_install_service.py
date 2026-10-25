@@ -50,4 +50,3 @@ async def test_install_pip_package_wraps_install_failure() -> None:
     service = _make_service(fail=True)
     with pytest.raises(PipInstallServiceError, match="安装依赖失败"):
         await service.install_pip_package({"package": "demo"})
-

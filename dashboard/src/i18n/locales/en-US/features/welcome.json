@@ -23,7 +23,6 @@
     "step3HelpItem2": "For AstrBot administrators, the Agent is additionally allowed to execute shell commands, run Python code, and access all local directories on this machine.",
     "step3HelpClose": "Close",
     "step3SelectLabel": "Computer Access",
-    "step3Sandbox": "Sandbox only",
     "step3Allow": "Allow",
     "step3Deny": "Disallow",
     "configure": "Configure",

@@ -23,7 +23,6 @@
     "step3HelpItem2": "对于 AstrBot 管理员，会额外允许 Agent 执行 Shell 命令、Python 代码，以及访问本机的所有目录。",
     "step3HelpClose": "关闭",
     "step3SelectLabel": "电脑访问权限",
-    "step3Sandbox": "仅沙箱",
     "step3Allow": "允许",
     "step3Deny": "不允许",
     "configure": "去配置",

@@ -14,20 +14,22 @@ describe('low-severity Dashboard hardening', () => {
 
   it('defaults unknown routes to authentication and keeps public routes explicit', () => {
     const router = readSource('src/router/index.ts');
-    expect(router).toContain("record.meta.requiresAuth === false");
+    expect(router).toContain('record.meta.requiresAuth === false');
     expect(router).toContain('explicitlyPublic');
   });
 
   it('does not log provider config or embedding responses', () => {
     const config = readSource('src/components/shared/AstrBotConfig.vue');
     expect(config).not.toContain('console.log(response.data.data.embedding');
-    expect(config).not.toContain('console.error(\'Error getting embedding dimensions:\', error)');
+    expect(config).not.toContain(
+      "console.error('Error getting embedding dimensions:', error)",
+    );
   });
 
-  it('preserves sandbox runtime instead of normalizing it to local', () => {
+  it('does not offer the removed sandbox runtime during onboarding', () => {
     const welcome = readSource('src/views/WelcomePage.vue');
-    expect(welcome).toContain("type ComputerAccessRuntime = 'local' | 'sandbox' | 'none'");
-    expect(welcome).toContain("value: 'sandbox'");
+    expect(welcome).toContain("type ComputerAccessRuntime = 'local' | 'none'");
+    expect(welcome).not.toContain("value: 'sandbox'");
   });
 
   it('consumes WebChat step-up tokens on take', () => {

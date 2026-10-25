@@ -248,7 +248,7 @@ import { runConfigMutationWithStepUp, stepUpHeaders } from '@/utils/stepUp';
 import { useToast } from '@/utils/toast';
 
 type StepState = 'pending' | 'completed' | 'skipped';
-type ComputerAccessRuntime = 'local' | 'sandbox' | 'none';
+type ComputerAccessRuntime = 'local' | 'none';
 
 interface ProviderSettings {
   computer_use_runtime?: unknown;
@@ -502,10 +502,7 @@ async function syncDefaultConfigProviderIfNeeded() {
 function normalizeComputerAccessRuntime(
   runtime: unknown,
 ): ComputerAccessRuntime {
-  if (runtime === 'local' || runtime === 'sandbox') {
-    return runtime;
-  }
-  return 'none';
+  return runtime === 'local' ? 'local' : 'none';
 }
 
 function syncComputerAccessRuntime(configData: DefaultConfigPayload) {
@@ -516,16 +513,13 @@ function syncComputerAccessRuntime(configData: DefaultConfigPayload) {
   computerAccessRuntime.value = normalizedRuntime;
   savedComputerAccessRuntime.value = normalizedRuntime;
   computerAccessStepState.value =
-    currentRuntime === 'local' ||
-    currentRuntime === 'none' ||
-    currentRuntime === 'sandbox'
+    currentRuntime === 'local' || currentRuntime === 'none'
       ? 'completed'
       : 'pending';
 }
 
 const computerAccessOptions = computed(() => [
   { title: tm('onboard.step3Allow'), value: 'local' },
-  { title: tm('onboard.step3Sandbox'), value: 'sandbox' },
   { title: tm('onboard.step3Deny'), value: 'none' },
 ]);
 

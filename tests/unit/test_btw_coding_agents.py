@@ -639,3 +639,13 @@ def test_the_opencode_result_line_is_read_from_the_stream():
         ]
     )
     assert ca.agent_result_text({"type": "opencode"}, stdout) == "final answer"
+
+
+def test_settings_home_sanitizes_profile_ids(isolated_paths):
+    root = Path(isolated_paths) / "root" / "data" / "btw" / "coding-agents"
+
+    for agent_id in ("../../outside", "/absolute/path", "..", "."):
+        home = ca.settings_home({"id": agent_id})
+        assert home.parent == root
+        assert home.name not in {"", ".", ".."}
+        assert home.resolve().is_relative_to(root.resolve())

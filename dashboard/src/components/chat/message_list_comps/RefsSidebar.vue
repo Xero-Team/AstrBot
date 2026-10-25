@@ -51,6 +51,7 @@
 <script setup lang="ts">
 import { useModuleI18n } from '@/i18n/composables';
 import { computed } from 'vue';
+import { safeHttpUrl } from '@/utils/safeUrl';
 
 interface RefItem {
   index?: unknown;
@@ -102,7 +103,7 @@ const normalizedRefs = computed(() => {
     .map((ref) => ({
       index: ref?.index,
       title: String(ref?.title || ref?.url || 'Reference'),
-      url: typeof ref?.url === 'string' ? ref.url : undefined,
+      url: safeHttpUrl(ref?.url) ?? undefined,
       snippet: typeof ref?.snippet === 'string' ? ref.snippet : undefined,
       favicon: typeof ref?.favicon === 'string' ? ref.favicon : undefined,
     }))
@@ -124,16 +125,21 @@ function formatUrl(url?: string): string {
   if (!url) {
     return '';
   }
+  const safe = safeHttpUrl(url);
+  if (!safe) {
+    return '';
+  }
   try {
-    return new URL(url).hostname;
+    return new URL(safe).hostname;
   } catch {
-    return url;
+    return '';
   }
 }
 
 function openLink(url?: string): void {
-  if (url) {
-    window.open(url, '_blank');
+  const safe = safeHttpUrl(url);
+  if (safe) {
+    window.open(safe, '_blank', 'noopener,noreferrer');
   }
 }
 

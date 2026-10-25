@@ -40,6 +40,7 @@
       "untrusted": "MCP 内容不可信。请显式选择项目；它不会自动加入模型上下文。"
     },
     "auth": {
+      "invalidUrl": "授权地址不是有效的 http(s) 链接。",
       "pending": "OAuth 授权正在等待浏览器完成流程。"
     }
   },

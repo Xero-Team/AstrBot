@@ -1136,7 +1136,9 @@ class ConfigDisplayService:
                 continue
             if not plugin_md.config:
                 break
-            result["config"] = plugin_md.config
+            result["config"] = _redact_sensitive_config(
+                copy.deepcopy(dict(plugin_md.config))
+            )
             result["metadata"] = {
                 plugin_name: {
                     "description": f"{plugin_name} 配置",
@@ -1305,6 +1307,8 @@ class ConfigFileService:
             previous = copy.deepcopy(dict(metadata.config))
         except TypeError, ValueError:
             previous = None
+        if previous is not None:
+            _restore_redacted_sensitive_config(post_configs, previous)
         committed = await metadata.config.save_config_async(post_configs)
         _require_config_save_commit(committed)
         try:

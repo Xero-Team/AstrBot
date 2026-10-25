@@ -11,6 +11,9 @@ async def test_v1_mcp_enabled_patch_updates_stored_active_flag(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
+    fake_core_lifecycle.provider_manager.tool_manager.config["mcpServers"][
+        "demo-server"
+    ]["env"] = {"GITHUB_TOKEN": "stored-token"}
     response = await asgi_client.patch(
         "/api/v1/mcp/servers/demo-server/enabled",
         json={"enabled": False},
@@ -23,6 +26,7 @@ async def test_v1_mcp_enabled_patch_updates_stored_active_flag(
     assert data["message"] == "Successfully updated MCP server demo-server"
     mcp_servers = fake_core_lifecycle.provider_manager.tool_manager.config["mcpServers"]
     assert mcp_servers["demo-server"]["active"] is False
+    assert mcp_servers["demo-server"]["env"] == {"GITHUB_TOKEN": "stored-token"}
 
 
 @pytest.mark.asyncio
@@ -34,6 +38,9 @@ async def test_v1_mcp_list_never_returns_configured_header_secrets(
     fake_tools.config["mcpServers"]["demo-server"]["headers"] = {
         "Authorization": "Bearer dashboard-must-not-see-this"
     }
+    fake_tools.config["mcpServers"]["demo-server"]["env"] = {
+        "GITHUB_TOKEN": "dashboard-must-not-see-this-either"
+    }
 
     response = await asgi_client.get("/api/v1/mcp/servers", headers=_jwt_headers())
 
@@ -42,7 +49,10 @@ async def test_v1_mcp_list_never_returns_configured_header_secrets(
         item for item in response.json()["data"] if item["name"] == "demo-server"
     )
     assert "headers" not in server
+    assert "env" not in server
     assert server["headers_configured"] is True
+    assert server["env_configured"] is True
+    assert "dashboard-must-not-see-this" not in response.text
 
 
 @pytest.mark.asyncio

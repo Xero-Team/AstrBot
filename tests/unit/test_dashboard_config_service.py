@@ -1143,3 +1143,78 @@ async def test_bot_update_restores_redacted_placeholders(
     reloaded = platform_manager.reload.await_args.args[0]
     assert reloaded["token"] == "secret-token"
     assert reloaded["bot_token"] == "secret-bot-token"
+
+
+def test_get_plugin_config_redacts_and_copies() -> None:
+    class PluginConfig(dict):
+        schema = {}
+
+    plugin_config = PluginConfig(
+        {
+            "api_key": "stored-secret",
+            "nested": {"token": "nested-secret"},
+            "plain": "visible",
+        }
+    )
+    metadata = SimpleNamespace(
+        name="example-plugin",
+        config=plugin_config,
+        schema={},
+        i18n={},
+    )
+    service = config_service.ConfigDisplayService.__new__(
+        config_service.ConfigDisplayService
+    )
+    service.plugin_catalog = SimpleNamespace(all=lambda: [metadata])
+
+    result = service.get_plugin_config("example-plugin")
+
+    assert result["config"]["api_key"] == config_service.REDACTED_SECRET_PLACEHOLDER
+    assert (
+        result["config"]["nested"]["token"]
+        == config_service.REDACTED_SECRET_PLACEHOLDER
+    )
+    assert result["config"]["plain"] == "visible"
+    assert plugin_config["api_key"] == "stored-secret"
+    assert plugin_config["nested"]["token"] == "nested-secret"
+
+
+@pytest.mark.asyncio
+async def test_save_plugin_configs_restores_redacted_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class PluginConfig(dict):
+        schema = {}
+
+        def __init__(self, values):
+            super().__init__(values)
+            self.saved = None
+
+        async def save_config_async(self, posted):
+            self.saved = copy.deepcopy(posted)
+            return True
+
+    plugin_config = PluginConfig({"api_key": "stored-secret", "plain": "old"})
+    metadata = SimpleNamespace(config=plugin_config, schema={})
+    plugin_lifecycle = SimpleNamespace(reload=AsyncMock())
+    service = config_service.ConfigFileService(
+        SimpleNamespace(get_by_name=lambda _name: metadata),
+        plugin_lifecycle,
+    )
+    monkeypatch.setattr(
+        config_service,
+        "validate_config",
+        lambda posted, _schema, **_kwargs: ([], posted),
+    )
+
+    await service.save_plugin_configs(
+        {
+            "api_key": config_service.REDACTED_SECRET_PLACEHOLDER,
+            "plain": "new",
+        },
+        "example-plugin",
+    )
+
+    assert plugin_config.saved["api_key"] == "stored-secret"
+    assert plugin_config.saved["plain"] == "new"
+    plugin_lifecycle.reload.assert_awaited_once_with("example-plugin")

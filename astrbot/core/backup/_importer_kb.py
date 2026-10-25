@@ -1,4 +1,5 @@
 import asyncio
+import re
 import shutil
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,18 @@ from .constants import KB_METADATA_MODELS
 
 if TYPE_CHECKING:
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+
+_KB_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def _validate_kb_id(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    kb_id = value.strip()
+    if not kb_id or kb_id in {".", ".."} or not _KB_ID_RE.fullmatch(kb_id):
+        return None
+    return kb_id
 
 
 async def clear_kb_data(kb_manager: KnowledgeBaseManager | None) -> None:
@@ -92,6 +105,15 @@ async def import_kb_metadata_tables(
                             for key, value in normalized_row.items()
                             if key in allowed
                         }
+                        if "kb_id" in normalized_row:
+                            kb_id = _validate_kb_id(normalized_row["kb_id"])
+                            if kb_id is None:
+                                logger.warning(
+                                    "跳过包含无效知识库 ID 的备份记录: %s",
+                                    table_name,
+                                )
+                                continue
+                            normalized_row["kb_id"] = kb_id
                         async with session.begin_nested():
                             session.add(model_class(**normalized_row))
                             await session.flush()

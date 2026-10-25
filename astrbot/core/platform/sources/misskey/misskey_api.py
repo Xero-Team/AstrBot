@@ -730,7 +730,8 @@ class MisskeyAPI:
             temp_path = Path(temp_file.name)
         try:
             await download_to_path(url, temp_path, policy)
-            return temp_path.read_bytes()
+            # Media files can be large; keep the blocking read off the loop.
+            return await asyncio.to_thread(temp_path.read_bytes)
         finally:
             temp_path.unlink(missing_ok=True)
 

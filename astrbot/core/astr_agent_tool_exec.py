@@ -702,6 +702,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         summary_name: str,
         extra_result_fields: dict[str, T.Any] | None = None,
     ) -> None:
+        # Lazy import: astr_main_agent imports this executor at module scope.
         from astrbot.core.astr_main_agent import (
             _get_session_conv,
             build_main_agent,

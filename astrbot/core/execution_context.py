@@ -424,7 +424,9 @@ class CoreExecutionContext:
             ChatProviderNotFoundError: If the specified chat provider ID is not found
             Exception: For other errors during LLM generation
         """
-        # Import here to avoid circular imports
+        # Lazy runtime imports keep this module import-inert. The agent
+        # modules import CoreExecutionContext at module scope, so loading
+        # them here is safe only after the runtime has been constructed.
         from astrbot.core.agent.request_preparation import (
             image_compress_args_from_settings,
             prepare_provider_request,

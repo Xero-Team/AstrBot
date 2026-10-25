@@ -207,6 +207,7 @@ def materialize_handler_declarations(
         for declaration in copied_declarations
     ]
 
+    # Lazy import: filter.command imports star_handler at module scope.
     from .filter.command import CommandFilter
 
     command_handlers: dict[int, StarHandlerMetadata] = {}

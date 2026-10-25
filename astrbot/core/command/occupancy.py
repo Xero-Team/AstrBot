@@ -56,6 +56,8 @@ def llm_prefix_conflict(
     Returns:
         Dashboard ``data`` payload, or None when the prefixes are free.
     """
+    # Lazy import: turn_router imports the command package, which reaches
+    # this module through the catalog.
     from astrbot.core.pipeline.turn_router import public_root_token
 
     for prefix in prefixes:

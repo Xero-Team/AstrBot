@@ -1,6 +1,6 @@
 import copy
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from astrbot.core.command.diagnostics import CommandError
 from astrbot.core.command.schema import (
@@ -14,9 +14,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from ..star_handler import HandlerDeclaration, StarHandlerMetadata
 from . import HandlerFilter
 from .custom_filter import CustomFilter
-
-if TYPE_CHECKING:
-    from .command_group import CommandGroupFilter
 
 
 class CommandFilter(HandlerFilter):
@@ -33,7 +30,8 @@ class CommandFilter(HandlerFilter):
         self.alias = alias if alias else set()
         self._original_command_name = command_name
         self.parent_command_names = parent_command_names or [""]
-        self.parent_group: CommandGroupFilter | None = None
+        # Typed loosely to keep command -> command_group a one-way runtime import.
+        self.parent_group: Any = None
         self.custom_filter_list: list[CustomFilter] = []
         self.schema = CommandSchema((), {})
         self.handler_params: tuple[CommandParamSpec, ...] = ()

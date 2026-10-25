@@ -849,8 +849,8 @@ def get_capability_descriptor(name: str) -> PlatformCapabilityDescriptor | None:
     descriptor = next((item for item in ONEBOT_CAPABILITIES if item.name == name), None)
     if descriptor is not None:
         return descriptor
-    # Telegram contracts live in their own module to keep this historical
-    # OneBot module dependency-free; import lazily to avoid a cycle.
+    # Lazy import: the Telegram contract module imports this historical
+    # OneBot module at module scope, so import only when dispatch needs it.
     from .telegram import TELEGRAM_CAPABILITIES
 
     return next((item for item in TELEGRAM_CAPABILITIES if item.name == name), None)

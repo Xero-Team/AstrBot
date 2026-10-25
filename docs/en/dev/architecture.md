@@ -241,6 +241,22 @@ Use the Star KV API for small persistent values. From a `Star` instance, store f
 
 Plugin Dashboard pages use Extension Protocol v1. Metadata declares both `requires.dashboard_extension: 1` and `dashboard`, `assets.v1.json` fully lists content-addressed static assets, and Python Actions can be registered only during `initialize()` through `astrbot.api.dashboard`. Pages run in a sandboxed iframe with only `allow-scripts`; privileged work must cross host-managed structured Actions. Legacy Page metadata, arbitrary HTTP proxies, and direct access to Dashboard authentication state are not supported. See the [Plugin Dashboard Extension Development Guide](/dev/star/plugin-dashboard-extension) for the complete contract.
 
+### Accepted import cycles
+
+The static import graph, including `TYPE_CHECKING` edges, must stay acyclic. A few runtime cycles remain intentional: each is closed by a function-local import, so it cannot run during module initialization. Keep the comment at the import site when touching one of these paths.
+
+| Modules                                                                                            | Lazy import site                                     | Why it is safe                                                                                                   |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `astrbot.core.execution_context` ↔ `astr_agent_context`, `astr_agent_tool_exec`, `astr_main_agent` | `AgentRequestRunner` setup in `execution_context.py` | The agent modules import `CoreExecutionContext` at module scope; the runtime loads them only after construction. |
+| `astrbot.core.astr_agent_tool_exec` ↔ `astr_main_agent`                                            | `FunctionToolExecutor` handoff path                  | `astr_main_agent` imports the executor at module scope.                                                          |
+| `astrbot.core.execution_context` ↔ `tools.computer_tools` (with `fs`, `util`, `message_tools`)     | Local runtime setup in `execution_context.py`        | Computer tools import `astr_agent_context`, which imports the execution context.                                 |
+| `astrbot.core.command.catalog` ↔ `astrbot.core.command.occupancy`                                  | `build_catalog`                                      | Occupancy imports the catalog module at module scope.                                                            |
+| `astrbot.core.command.occupancy` ↔ `astrbot.core.pipeline.turn_router`                             | Prefix validation                                    | The router imports the command package, which reaches occupancy through the catalog.                             |
+| `astrbot.core.star.star_handler` ↔ `astrbot.core.star.filter.command`                              | Handler materialization                              | The command filter imports handler metadata at module scope.                                                     |
+| `astrbot.core.subagent_orchestrator` ↔ `astrbot.core.astr_agent_context`                           | `reload_from_config`                                 | Agent context imports the execution context, whose module scope reaches the orchestrator.                        |
+| `astrbot.core.platform.contracts.onebot` ↔ `astrbot.core.platform.contracts.telegram`              | `get_capability_descriptor`                          | Telegram adapts the historical OneBot contract module.                                                           |
+| `astrbot.core.db.migrations.doc` ↔ `astrbot.core.db.vec_db.document_storage`                       | `_initial_schema`                                    | Document storage imports the migration sequence module.                                                          |
+
 ## Unified Authorization
 
 Commands, Dashboard, WebChat, API keys, tools, and plugins all enter one runtime gate:

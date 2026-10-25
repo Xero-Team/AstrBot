@@ -25,6 +25,8 @@ class SubAgentOrchestrator:
         self.handoffs: list[HandoffTool] = []
 
     async def reload_from_config(self, cfg: dict[str, Any]) -> None:
+        # Lazy import: astr_agent_context imports execution_context, whose
+        # module scope reaches this orchestrator.
         from astrbot.core.astr_agent_context import AstrAgentContext
 
         agents = cfg.get("agents", [])

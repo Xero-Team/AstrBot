@@ -290,6 +290,7 @@ def build_command_catalog(
                         handler,
                     )
                 )
+    # Lazy import: occupancy imports this catalog module at module scope.
     from .occupancy import apply_exclusive_occupancy
 
     registrations, groups, _conflicts = apply_exclusive_occupancy(

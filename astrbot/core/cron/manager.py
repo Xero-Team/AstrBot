@@ -3,7 +3,7 @@ import json
 import re
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -27,10 +27,6 @@ from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.string_utils import interpolate_placeholders
 from astrbot.core.utils.task_utils import cancel_tracked_tasks, create_tracked_task
 from astrbot.core.utils.trace import trace_execution
-
-if TYPE_CHECKING:
-    from astrbot.core.execution_context import CoreExecutionContext
-
 
 _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
@@ -112,8 +108,10 @@ class CronJobManager:
         self._started = False
         self._db_synced = False
 
-    async def start(self, ctx: CoreExecutionContext) -> None:
-        self.ctx: CoreExecutionContext = ctx
+    async def start(self, ctx: Any) -> None:
+        # Deliberately untyped: importing CoreExecutionContext here would
+        # create a static cron.manager <-> execution_context cycle.
+        self.ctx: Any = ctx
         async with self._lock:
             if self._db_synced:
                 return

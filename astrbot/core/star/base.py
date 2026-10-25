@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import Any
 
 from astrbot.core.log import LogManager
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
-from .star import StarDeclaration
-
-if TYPE_CHECKING:
-    from .plugin_context import PluginContext
-
 logger = logging.getLogger("astrbot")
+
+
+@dataclass(frozen=True, slots=True)
+class StarDeclaration:
+    """Static plugin declaration attached to a :class:`Star` subclass.
+
+    Importing a plugin may create declarations, but it must not publish mutable
+    state into a process-wide registry.  A runtime catalog materializes this
+    declaration only after the plugin module has been validated.
+    """
+
+    star_cls_type: type[Star]
+    module_path: str
 
 
 class Star(PluginKVStoreMixin):
@@ -21,8 +30,10 @@ class Star(PluginKVStoreMixin):
     name: str
     logger: logging.Logger
 
-    def __init__(self, context: PluginContext, config: dict | None = None) -> None:
-        self.context: PluginContext = context
+    def __init__(self, context: Any, config: dict | None = None) -> None:
+        # Keep the plugin context opaque: importing its concrete type for
+        # annotations would create a star.base <-> star.plugin_context cycle.
+        self.context: Any = context
         plugin_name = getattr(self.__class__, "__astrbot_plugin_logger_name__", None)
         self.logger = (
             LogManager.get_plugin_logger(plugin_name)

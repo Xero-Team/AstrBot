@@ -1,6 +1,5 @@
 from astrbot.api import logger, safe_error, star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 from .reply import reply_i18n
 
@@ -88,7 +87,7 @@ class PluginCommands:
             return
         logger.info(
             "Preparing to install plugin from %s",
-            redact_sensitive_text(plugin_repo),
+            safe_error("", plugin_repo),
         )
         try:
             await self.context.runtime_info.install_plugin(plugin_repo)

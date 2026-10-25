@@ -106,7 +106,7 @@ class DifyAPIClient:
         payload = locals()
         payload.pop("self")
         payload.pop("timeout_seconds")
-        logger.info(f"workflow_run payload: {payload}")
+        logger.debug("Dify workflow request started")
         async with self.session.post(
             url,
             json=payload,

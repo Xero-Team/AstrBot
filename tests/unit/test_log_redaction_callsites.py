@@ -31,7 +31,7 @@ def test_high_volume_logs_do_not_embed_raw_payloads():
     )
     dify = _source("astrbot/core/agent/runners/dify/dify_api_client.py")
     assert 'logger.info(f"chat_messages payload: {payload}")' not in dify
-    assert 'logger.info(f"workflow payload: {payload}")' not in dify
+    assert 'logger.info(f"workflow_run payload: {payload}")' not in dify
 
 
 def test_agent_errors_are_redacted_or_generic():

@@ -1782,3 +1782,54 @@ async def test_local_setup_cannot_reset_existing_account(
             core_lifecycle_td,
             original_dashboard_config,
         )
+
+
+@pytest.mark.asyncio
+async def test_totp_rotation_verification_expires_before_staging(
+    app: FastAPI,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.utils import totp as totp_module
+
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    current_secret = pyotp.random_base32()
+    replacement_secret = pyotp.random_base32()
+    test_client = DashboardTestClient(app)
+
+    try:
+        monkeypatch.setattr(totp_module, "_ROTATION_STATE_TTL_SECONDS", 0)
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": current_secret,
+            "recovery_code_hash": "recovery-hash",
+        }
+        await _set_dashboard_account_totp(
+            core_lifecycle_td, current_secret, "recovery-hash"
+        )
+
+        verified = await test_client.post(
+            "/api/v1/auth/totp/setup",
+            headers=authenticated_header,
+            json={"code": pyotp.TOTP(current_secret).now()},
+        )
+        assert (await verified.get_json())["status"] == "ok"
+
+        staged = await test_client.post(
+            "/api/v1/auth/totp/setup",
+            headers=authenticated_header,
+            json={
+                "secret": replacement_secret,
+                "code": pyotp.TOTP(replacement_secret).now(),
+            },
+        )
+        assert (await staged.get_json())["status"] == "error"
+    finally:
+        await app.state.services.auth.totp_runtime_state.clear_all()
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )

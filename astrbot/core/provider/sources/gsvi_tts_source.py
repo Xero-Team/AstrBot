@@ -18,6 +18,7 @@ from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
 _REQUEST_ERROR = "GSVI TTS audio generation failed"
+_DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
 @register_provider_adapter(
@@ -45,18 +46,34 @@ class ProviderGSVITTS(TTSProvider):
         parsed = urlsplit(audio_url)
         scheme = parsed.scheme.lower()
         audio_host = (parsed.hostname or "").lower()
-        api_host = (urlsplit(self.api_base).hostname or "").lower()
+        api = urlsplit(self.api_base)
+        api_scheme = api.scheme.lower()
+        api_host = (api.hostname or "").lower()
         if scheme not in {"http", "https"} or not audio_host:
             raise ValueError("GSVI TTS returned an invalid audio URL")
+        try:
+            audio_port = parsed.port or _DEFAULT_PORTS[scheme]
+            api_port = api.port or _DEFAULT_PORTS.get(api_scheme)
+        except ValueError as exc:
+            raise ValueError("GSVI TTS returned an invalid audio URL") from exc
 
-        if audio_host == api_host:
-            # The audio URL is on the configured provider origin, so provider
-            # headers (including custom authorization) stay scoped to it. Third-
-            # party audio hosts below never receive them.
+        if (
+            api_host
+            and scheme == api_scheme
+            and audio_host == api_host
+            and audio_port == api_port
+        ):
+            # Only the configured provider origin receives provider headers
+            # (including custom authorization). A redirect could leave that
+            # origin, so it must not be followed.
             async with aiohttp.ClientSession(
                 headers={"User-Agent": "AstrBot", **self.request_headers},
             ) as download_session:
-                async with download_session.get(audio_url, ssl=True) as response:
+                async with download_session.get(
+                    audio_url,
+                    ssl=True,
+                    allow_redirects=False,
+                ) as response:
                     if response.status != 200:
                         logger.error(
                             "[GSVI TTS] Audio download failed with status %s",

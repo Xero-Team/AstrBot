@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from binascii import Error as BinasciiError
 from typing import cast
@@ -20,8 +21,24 @@ for handler in logging.root.handlers[:]:
 
 _SIGNATURE_HEADER = "X-Signature-Ed25519"
 _SIGNATURE_TIMESTAMP_HEADER = "X-Signature-Timestamp"
+_BOT_APPID_HEADER = "X-Bot-Appid"
 _ED25519_SEED_SIZE = 32
 _ED25519_SIGNATURE_SIZE = 64
+_SIGNATURE_MAX_SKEW_SECONDS = 300
+_EVENT_DEDUP_TTL_SECONDS = 600
+_VALIDATION_EVENT_TS_RE = re.compile(r"^\d{10,16}$")
+_VALIDATION_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+_VALIDATION_RATE_LIMIT = 10
+_VALIDATION_RATE_WINDOW_SECONDS = 60
+
+
+def _is_fresh_timestamp(value: object) -> bool:
+    if not isinstance(value, str) or not value.isdigit():
+        return False
+    timestamp = int(value)
+    if len(value) >= 13:
+        timestamp //= 1000
+    return abs(time.time() - timestamp) <= _SIGNATURE_MAX_SKEW_SECONDS
 
 
 def _build_ed25519_seed(secret: str) -> bytes:
@@ -108,7 +125,7 @@ class QQOfficialWebhook:
 
         # Deduplication cache for webhook retry callbacks.
         self._seen_event_ids: dict[str, float] = {}
-        self._dedup_ttl: int = 60  # seconds
+        self._dedup_ttl: int = _EVENT_DEDUP_TTL_SECONDS
 
     async def initialize(self) -> None:
         logger.info("正在登录到 QQ 官方机器人...")
@@ -137,26 +154,42 @@ class QQOfficialWebhook:
             api=self.api,
         )
 
-    async def repeat_seed(self, bot_secret: str, target_size: int = 32) -> bytes:
-        seed = bot_secret
-        while len(seed) < target_size:
-            seed *= 2
-        return seed[:target_size].encode("utf-8")
+    async def webhook_validation(self, validation_payload: dict) -> dict:
+        event_ts = validation_payload.get("event_ts")
+        plain_token = validation_payload.get("plain_token")
+        if not isinstance(event_ts, str) or not _VALIDATION_EVENT_TS_RE.fullmatch(
+            event_ts
+        ):
+            raise ValueError("Invalid validation payload.")
+        if not isinstance(plain_token, str) or not _VALIDATION_TOKEN_RE.fullmatch(
+            plain_token
+        ):
+            raise ValueError("Invalid validation payload.")
+        if not _is_fresh_timestamp(event_ts):
+            raise ValueError("Stale validation payload.")
 
-    async def webhook_validation(self, validation_payload: dict):
-        seed = await self.repeat_seed(self.secret)
-        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
-        msg = validation_payload.get("event_ts", "") + validation_payload.get(
-            "plain_token",
-            "",
-        )
-        # sign
-        signature = private_key.sign(msg.encode()).hex()
-        response = {
-            "plain_token": validation_payload.get("plain_token"),
-            "signature": signature,
+        return {
+            "plain_token": plain_token,
+            "signature": _sign_qq_webhook_payload(
+                self.secret,
+                event_ts,
+                plain_token.encode("utf-8"),
+            ),
         }
-        return response
+
+    def _allow_validation_attempt(self) -> bool:
+        now = time.monotonic()
+        attempts = getattr(self, "_validation_attempts", None)
+        if attempts is None:
+            attempts = []
+            self._validation_attempts = attempts
+        cutoff = now - _VALIDATION_RATE_WINDOW_SECONDS
+        while attempts and attempts[0] < cutoff:
+            attempts.pop(0)
+        if len(attempts) >= _VALIDATION_RATE_LIMIT:
+            return False
+        attempts.append(now)
+        return True
 
     def pop_extra_data(self, message_id: str) -> dict:
         """Pop and return extra fields cached from the raw webhook payload for a given message ID."""
@@ -191,14 +224,29 @@ class QQOfficialWebhook:
         data = msg.get("d")
 
         if opcode == 13:
-            # validation
-            signed = await self.webhook_validation(cast(dict, data))
+            if not isinstance(data, dict):
+                return {"error": "Invalid validation payload"}, 400
+            appid = request.headers.get(_BOT_APPID_HEADER)
+            configured_appid = getattr(self, "appid", None)
+            if appid and configured_appid and appid != configured_appid:
+                return {"error": "Invalid validation payload"}, 403
+            if not self._allow_validation_attempt():
+                return {"error": "Too many validation attempts"}, 429
+            try:
+                signed = await self.webhook_validation(data)
+            except TypeError, ValueError:
+                logger.warning("qq_official_webhook validation payload is invalid.")
+                return {"error": "Invalid validation payload"}, 400
             logger.debug(f"webhook validation response: {signed}")
             return signed
 
+        signature_timestamp = request.headers.get(_SIGNATURE_TIMESTAMP_HEADER) or ""
+        if not _is_fresh_timestamp(signature_timestamp):
+            logger.warning("qq_official_webhook timestamp is missing or stale.")
+            return {"error": "Invalid signature"}, 401
         if not _verify_qq_webhook_signature(
             self.secret,
-            request.headers.get(_SIGNATURE_TIMESTAMP_HEADER),
+            signature_timestamp,
             request.headers.get(_SIGNATURE_HEADER),
             body,
         ):

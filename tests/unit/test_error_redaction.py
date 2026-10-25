@@ -174,3 +174,8 @@ def test_redact_sensitive_text_preserves_authorization_scheme():
 def test_redact_sensitive_text_does_not_match_unrelated_key_names():
     assert redact_sensitive_text("monkey: banana") == "monkey: banana"
     assert "value" not in redact_sensitive_text("key=value")
+
+
+def test_redact_sensitive_text_keeps_field_name_prose_readable():
+    assert redact_sensitive_text("Missing key: username") == "Missing key: username"
+    assert redact_sensitive_text("Missing key: message") == "Missing key: message"

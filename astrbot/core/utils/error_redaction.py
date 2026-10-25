@@ -2,6 +2,13 @@ import re
 
 _SECRET_KEY_BASE = r"(?:api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password|token|key)"  # noqa: S105
 _SECRET_KEY_NAME = rf"(?:[A-Za-z0-9]+[_-])*{_SECRET_KEY_BASE}(?:[_-][A-Za-z0-9]+)*"
+# A bare ``key`` is also an ordinary English word ("Missing key: username").
+# Keep it for assignments, JSON fields, and query parameters, but require a
+# qualified name before a colon so field-name prose is not over-redacted.
+_COLON_SECRET_KEY_BASE = r"(?:api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password|token)"  # noqa: S105
+_COLON_SECRET_KEY_NAME = (
+    rf"(?:[A-Za-z0-9]+[_-])*{_COLON_SECRET_KEY_BASE}(?:[_-][A-Za-z0-9]+)*"
+)
 
 _JSON_FIELD_PATTERN = re.compile(
     rf"(?i)(?P<prefix>(?P<kq>['\"]){_SECRET_KEY_NAME}(?P=kq)\s*:\s*)"
@@ -16,8 +23,12 @@ _QUOTED_FIELD_PATTERN = re.compile(
     rf"(?i)(?P<prefix>(?<![A-Za-z0-9]){_SECRET_KEY_NAME}\s*[:=]\s*)"
     r"(?P<vq>['\"])(?P<value>(?:\\.|(?!(?P=vq)).)*)(?P=vq)"
 )
+_COLON_FIELD_PATTERN = re.compile(
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9]){_COLON_SECRET_KEY_NAME}\s*:\s*)"
+    r"(?P<value>(?!['\"])[^\s&]+)"
+)
 _QUERY_FIELD_PATTERN = re.compile(
-    rf"(?i)(?P<prefix>(?<![A-Za-z0-9]){_SECRET_KEY_NAME}\s*[:=]\s*)"
+    rf"(?i)(?P<prefix>(?<![A-Za-z0-9]){_SECRET_KEY_NAME}\s*=\s*)"
     r"(?P<value>(?!['\"])[^\s&]+)"
 )
 _QUERY_PARAM_PATTERN = re.compile(
@@ -80,6 +91,7 @@ def _redact_json_like(text: str) -> str:
 
 def _redact_query_like(text: str) -> str:
     text = _QUOTED_FIELD_PATTERN.sub(_redact_quoted_field, text)
+    text = _COLON_FIELD_PATTERN.sub(_redact_prefixed_value, text)
     text = _QUERY_FIELD_PATTERN.sub(_redact_prefixed_value, text)
     return _QUERY_PARAM_PATTERN.sub(_redact_prefixed_value, text)
 

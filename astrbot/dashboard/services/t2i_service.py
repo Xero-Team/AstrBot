@@ -2,7 +2,10 @@ from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_runtime import CoreControl
-from astrbot.core.utils.t2i.template_manager import TemplateManager
+from astrbot.core.utils.t2i.template_manager import (
+    INTERNAL_TEMPLATE_NAMES,
+    TemplateManager,
+)
 
 
 class T2iServiceError(Exception):
@@ -119,6 +122,8 @@ class T2iService:
     async def set_active_template(self, name: str | None) -> str:
         if not name:
             raise T2iServiceError("模板名称(name)不能为空。", 400)
+        if name in INTERNAL_TEMPLATE_NAMES:
+            raise T2iServiceError("该模板仅供内置命令使用。", 400)
 
         try:
             self.manager.get_template(name)

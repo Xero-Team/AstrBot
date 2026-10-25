@@ -78,3 +78,21 @@ def test_builtin_base_template_stays_offline():
     assert "{{ rendered_html | safe }}" in content
     assert "markdown-source" not in content
     assert "marked.min.js" not in content
+
+
+def test_internal_help_template_is_not_selectable_for_generic_rendering():
+    from astrbot.core.utils.t2i.template_manager import public_template_name
+
+    assert public_template_name("astrbot_help") == "base"
+    assert public_template_name("custom") == "custom"
+    assert public_template_name(None) == "base"
+
+
+@pytest.mark.asyncio
+async def test_t2i_service_rejects_internal_template_as_active():
+    from astrbot.dashboard.services.t2i_service import T2iService, T2iServiceError
+
+    service = T2iService.__new__(T2iService)
+
+    with pytest.raises(T2iServiceError):
+        await service.set_active_template("astrbot_help")

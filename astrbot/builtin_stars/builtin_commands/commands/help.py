@@ -248,10 +248,14 @@ class HelpCommand:
             notice=notice,
         )
         try:
-            rendered_image = await self.context.rendering.text_to_image(
-                image_markup,
-                template_name="astrbot_help",
-            )
+            render_help = getattr(self.context.rendering, "render_help", None)
+            if callable(render_help):
+                rendered_image = await render_help(image_markup)
+            else:
+                rendered_image = await self.context.rendering.text_to_image(
+                    image_markup,
+                    template_name="astrbot_help",
+                )
         except Exception as exc:
             logger.warning("Failed to render help image: %s", exc)
             reply_text(event, plain_text)

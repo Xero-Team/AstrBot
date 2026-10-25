@@ -9,6 +9,14 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_p
 logger = logging.getLogger("astrbot")
 
 _ALLOWED_VARS = frozenset({"rendered_html", "shiki_runtime", "text", "version"})
+INTERNAL_TEMPLATE_NAMES = frozenset({"astrbot_help"})
+
+
+def public_template_name(name: str | None) -> str:
+    """Return a template name that may be used for generic text rendering."""
+    candidate = name or "base"
+    return "base" if candidate in INTERNAL_TEMPLATE_NAMES else candidate
+
 
 _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
     (

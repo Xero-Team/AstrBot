@@ -159,6 +159,7 @@ class StorageCleaner:
                         os.O_WRONLY
                         | os.O_TRUNC
                         | getattr(os, "O_NOFOLLOW", 0)
+                        | getattr(os, "O_NONBLOCK", 0)
                         | getattr(os, "O_BINARY", 0)
                     )
                     fd = os.open(file_path, flags)

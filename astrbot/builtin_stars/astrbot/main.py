@@ -20,7 +20,7 @@ def _iter_message_components(event: AstrMessageEvent):
 
 class Main(star.Star):
     def __init__(self, context: star.PluginContext) -> None:
-        self.context = context
+        super().__init__(context)
         self.group_chat_context = None
         try:
             self.group_chat_context = GroupChatContext(self.context)

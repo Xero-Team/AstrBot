@@ -2268,7 +2268,12 @@ export type RemoveCodingCliGlobalConfigResponse =
 export type ListBtwWorkSessionsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    /**
+     * Return sessions only for this configuration profile id.
+     */
+    config_id?: string;
+  };
   url: '/api/v1/btw/work-sessions';
 };
 

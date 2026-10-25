@@ -1084,10 +1084,14 @@ def pin_httpx_transport(transport: Any, policy: OutboundRequestPolicy) -> Any:
 
     pool = getattr(transport, "_pool", None)
     if pool is None:
-        return transport
+        raise OutboundRequestError(
+            "Unable to pin the outbound transport; refusing an unpinned connection."
+        )
     backend = getattr(pool, "_network_backend", None)
     if backend is None:
-        return transport
+        raise OutboundRequestError(
+            "Unable to pin the outbound transport; refusing an unpinned connection."
+        )
     pool._network_backend = PinnedAsyncNetworkBackend(backend, policy)
     return transport
 

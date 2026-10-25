@@ -371,6 +371,8 @@ Alkaid [长期记忆](../use/long-term-memory) 当前没有对应的启停配置
 | `totp.*`                 | 由 WebUI 管理 | 为配置导出保留的 Dashboard TOTP 快照，不是账户认证的权威来源。                          |
 | `ssl.enable`             | `false`       | 由 AstrBot 直接终止 TLS；证书、私钥和可选 CA 使用对应路径字段。                         |
 
+启用 `ssl.enable` 后，如果证书、私钥或已配置的 CA 文件缺失，启动会直接失败。Dashboard 不会回退到明文 HTTP；请修正路径或显式关闭 TLS。
+
 密码以 PBKDF2 哈希存放在 `pbkdf2_password`。新写入会把遗留的 `password` 字段清空。旧版本写入的 MD5 值不再用于登录：启动时会自动生成新的随机密码写入 `pbkdf2_password`，并要求登录后修改。不要在 JSON 中写明文，也不要手工生成或交换哈希。忘记密码时使用：
 
 ```bash

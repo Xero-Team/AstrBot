@@ -781,7 +781,11 @@ class TelegramPlatformAdapter(Platform):
             if role not in binding.allowed_roles:
                 return
 
-        self._callback_bindings.pop(token, None)
+        if self._callback_bindings.pop(token, None) is not binding:
+            # Another update for the same token was handled while this one was
+            # awaiting role lookup. Keep the binding single-use.
+            await self._ack_callback(query, text="This action is no longer available.")
+            return
 
         abm = AstrBotMessage()
         is_private = getattr(chat, "type", None) == ChatType.PRIVATE

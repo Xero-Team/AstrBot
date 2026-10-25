@@ -4241,6 +4241,11 @@ async def test_telegram_callback_rejects_unauthorized_actor_and_expired_token():
     assert not adapter._event_queue.empty()
     assert not adapter._callback_bindings
 
+    await adapter.callback_query_handler(
+        _callback_update(token, user_id=99, update_id=13), _build_context()
+    )
+    assert adapter._event_queue.qsize() == 1
+
     adapter = _interaction_adapter()
     await adapter.invoke_capability(
         TELEGRAM_CAPABILITY_NAME,

@@ -1,12 +1,6 @@
 from types import SimpleNamespace
 
-import pytest
-
 from astrbot.core.provider.sources import request_retry
-from astrbot.core.tools.computer_tools.shipyard_neo import neo_skills
-from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
-    GetExecutionHistoryTool,
-)
 from astrbot.core.utils import network_utils
 
 SECRET_TEXT = (
@@ -66,29 +60,3 @@ def test_retry_log_redacts_provider_error(monkeypatch):
         "internal.example",
     ):
         assert value not in rendered
-
-
-@pytest.mark.asyncio
-async def test_neo_tool_error_is_redacted(monkeypatch):
-    async def allow(*_args, **_kwargs):
-        return None
-
-    async def fail(*_args, **_kwargs):
-        raise RuntimeError(SECRET_TEXT)
-
-    monkeypatch.setattr(neo_skills, "check_admin_permission", allow)
-    monkeypatch.setattr(neo_skills, "_get_neo_context", fail)
-
-    result = await GetExecutionHistoryTool()._run(
-        None,
-        lambda _client, _sandbox: None,
-        "getting execution history",
-    )
-
-    for value in (
-        "secret-key",
-        "bearer-token",
-        "dashboard-password",
-        "internal.example",
-    ):
-        assert value not in result

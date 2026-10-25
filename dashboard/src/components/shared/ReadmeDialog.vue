@@ -5,6 +5,7 @@ import MarkdownIt from 'markdown-it';
 import DOMPurify from 'dompurify';
 import { pluginApi, statsApi } from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
+import { safeHttpUrl } from '@/utils/safeUrl';
 import { scrollToAnchorWithin } from '@/utils/anchorScroll';
 import { copyToClipboard } from '@/utils/clipboard';
 import {
@@ -428,8 +429,9 @@ const _show = computed({
 
 // 安全打开外部链接
 function openExternalLink(url: string | null | undefined) {
-  if (!url) return;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const safe = safeHttpUrl(url);
+  if (!safe) return;
+  window.open(safe, '_blank', 'noopener,noreferrer');
 }
 
 const showActionArea = computed(() => {

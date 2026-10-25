@@ -48,7 +48,7 @@ X-API-Key: abk_xxx
 | `file`     | 上传和下载对话附件                                 | `POST/GET /api/v1/file`、`POST /api/v1/files`                                                                                   |
 | `plugin`   | 管理插件、插件配置、插件源和市场                   | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/{plugin_id}/config`、`POST /api/v1/plugins/install/url`                         |
 | `mcp`      | 管理 MCP 服务器配置和服务端同步                    | `GET/POST /api/v1/mcp/servers`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
-| `skill`    | 管理 Skills、压缩包和文件                          | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills`                           |
+| `skill`    | 管理 Skills、压缩包和文件                          | `GET/POST /api/v1/skills`、`POST /api/v1/skills/batch`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`                     |
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
 

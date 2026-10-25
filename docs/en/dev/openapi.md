@@ -48,7 +48,7 @@ When creating an API Key, you can configure `scopes`. Each scope controls the ra
 | `file`     | Upload and download chat attachments                                         | `POST/GET /api/v1/file`, `POST /api/v1/files`                                                                                   |
 | `plugin`   | Manage plugins, plugin configuration, sources, and marketplace data          | `GET /api/v1/plugins`, `GET/PUT /api/v1/plugins/{plugin_id}/config`, `POST /api/v1/plugins/install/url`                         |
 | `mcp`      | Manage MCP server configuration and provider sync                            | `GET/POST /api/v1/mcp/servers`, `PATCH /api/v1/mcp/servers/{server_name}/enabled`, `POST /api/v1/mcp/providers/modelscope/sync` |
-| `skill`    | Manage Skills, archives, and files                                           | `GET/POST /api/v1/skills`, `PUT /api/v1/skills/{skill_name}/files/{file_path}`, `POST /api/v1/skills`                           |
+| `skill`    | Manage Skills, archives, and files                                           | `GET/POST /api/v1/skills`, `POST /api/v1/skills/batch`, `PUT /api/v1/skills/{skill_name}/files/{file_path}`                     |
 
 If the API Key does not include the required scope for the target endpoint, the request will return `403 Insufficient API key scope`.
 

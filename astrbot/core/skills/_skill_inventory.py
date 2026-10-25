@@ -1,3 +1,4 @@
+import os
 import re
 import zipfile
 from dataclasses import dataclass
@@ -20,18 +21,19 @@ def _validate_skill_dir_name(name: str | None) -> str:
     return skill_name
 
 
-def _resolve_skill_dir(
-    root: str | Path,
-    name: str | None,
-    *,
-    strict: bool = False,
-) -> Path:
-    """Resolve one skill directory and prove it stays under ``root``."""
+def _resolve_skill_dir(root: str | Path, name: str | None) -> Path:
+    """Resolve one skill directory and prove it stays under ``root``.
+
+    ``os.path.realpath`` normalizes ``..`` segments and follows symlinks before
+    the prefix check, so a symlinked skill cannot escape the skills root.
+    """
     skill_name = _validate_skill_dir_name(name)
     root_path = Path(root).resolve(strict=True)
     skill_dir = root_path / skill_name
-    resolved = skill_dir.resolve(strict=strict)
-    if resolved == root_path or not resolved.is_relative_to(root_path):
+    resolved = os.path.realpath(skill_dir)
+    if resolved == str(root_path) or not resolved.startswith(
+        os.path.join(str(root_path), "")
+    ):
         raise ValueError("Invalid skill path.")
     return skill_dir
 

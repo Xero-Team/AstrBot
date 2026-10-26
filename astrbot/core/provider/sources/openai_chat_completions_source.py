@@ -63,16 +63,20 @@ async def _await_abortable(awaitable: Any) -> Any:
         return await awaitable
     task = asyncio.ensure_future(awaitable)
     abort_task = asyncio.create_task(signal.wait())
-    done, _ = await asyncio.wait(
-        {task, abort_task}, return_when=asyncio.FIRST_COMPLETED
-    )
-    if abort_task in done:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
-        raise asyncio.CancelledError("OpenAI request aborted")
-    abort_task.cancel()
-    await asyncio.gather(abort_task, return_exceptions=True)
-    return await task
+    try:
+        done, _ = await asyncio.wait(
+            {task, abort_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if abort_task in done:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            raise asyncio.CancelledError("OpenAI request aborted")
+        return await task
+    finally:
+        for pending in (task, abort_task):
+            if not pending.done():
+                pending.cancel()
+        await asyncio.gather(task, abort_task, return_exceptions=True)
 
 
 class OpenAIChatStreamAccumulator:

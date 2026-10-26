@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
 from tests.unit.dashboard.dashboard_lifecycle_support import *  # noqa: F403
 
@@ -433,3 +436,48 @@ async def test_skill_file_browser_and_editor_security(
     binary_data = await binary_response.get_json()
     assert binary_data["status"] == "error"
     assert binary_data["message"] == "File is not valid UTF-8 text"
+
+
+@pytest.mark.asyncio
+async def test_skill_upload_closes_file_when_authorization_fails(monkeypatch):
+    from astrbot.dashboard.api import skills as skills_api
+
+    upload = SimpleNamespace(close=AsyncMock())
+
+    async def deny(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    monkeypatch.setattr(skills_api, "_authorize_skill_collection", deny)
+
+    with pytest.raises(HTTPException):
+        await skills_api.upload_skill(
+            request=SimpleNamespace(),
+            file=upload,
+            auth=SimpleNamespace(),
+            service=SimpleNamespace(),
+        )
+
+    upload.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_skill_batch_upload_closes_files_when_authorization_fails(monkeypatch):
+    from astrbot.dashboard.api import skills as skills_api
+
+    uploads = [SimpleNamespace(close=AsyncMock()), SimpleNamespace(close=AsyncMock())]
+
+    async def deny(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    monkeypatch.setattr(skills_api, "_authorize_skill_collection", deny)
+
+    with pytest.raises(HTTPException):
+        await skills_api.upload_skills_batch(
+            request=SimpleNamespace(),
+            files=uploads,
+            auth=SimpleNamespace(),
+            service=SimpleNamespace(),
+        )
+
+    for upload in uploads:
+        upload.close.assert_awaited_once()

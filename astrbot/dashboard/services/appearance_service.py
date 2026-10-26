@@ -156,11 +156,16 @@ class AppearanceService:
         orientation: str,
     ) -> dict[str, Any]:
         if orientation not in ORIENTATIONS:
+            await upload.close()
             raise AppearanceServiceError(
                 "Wallpaper orientation must be landscape or portrait"
             )
-        await self._ensure_state()
-        self._ensure_directories()
+        try:
+            await self._ensure_state()
+            self._ensure_directories()
+        except BaseException:
+            await upload.close()
+            raise
         wallpaper_id = uuid4().hex
         temporary_path = self.wallpaper_dir / f".{uuid4().hex}.upload"
         target_path: Path | None = None

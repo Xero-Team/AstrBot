@@ -172,3 +172,19 @@ async def test_limited_client_routes_media_groups_through_limiter():
 
 async def _noop() -> None:
     return None
+
+
+@pytest.mark.asyncio
+async def test_limiter_releases_coalesce_state_after_call():
+    limiter = TelegramDeliveryLimiter(global_interval=0.0, chat_interval=0.0)
+    limiter.supersede("draft:chat:1")
+
+    await limiter.call(
+        "chat",
+        _noop,
+        retryable=False,
+        coalesce_key="draft:chat:1",
+    )
+
+    assert limiter._generations == {}
+    assert limiter._coalesce_active == {}

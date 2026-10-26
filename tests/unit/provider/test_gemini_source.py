@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
@@ -740,15 +741,16 @@ def test_gemini_key_accessors_and_set_key_reinitialize_client(monkeypatch):
     assert init_client == ["key-b"]
 
 
-def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
+def test_gemini_init_client_creates_configured_http_client(monkeypatch):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = {}
     provider.request_headers = {}
     provider.timeout = 30
     provider.api_base = "https://gemini.example"
     provider.chosen_api_key = "key-a"
-    provider._http_client = object()
+    provider._http_client = None
     provider._stale_http_clients = []
+    provider._close_tasks = set()
 
     created_http_clients = []
 
@@ -771,13 +773,9 @@ def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
     monkeypatch.setattr(gemini_source_module.types, "HttpOptions", FakeHttpOptions)
     monkeypatch.setattr(gemini_source_module.genai, "Client", FakeGenAIClient)
 
-    provider.set_key("key-b")
+    provider._init_client()
 
-    assert provider.chosen_api_key == "key-b"
-    assert (
-        provider._stale_http_clients == [provider._http_client]
-        or len(created_http_clients) == 1
-    )
+    assert len(created_http_clients) == 1
     created_kwargs = created_http_clients[0].kwargs
     assert created_kwargs["event_hooks"] == {
         "request": [provider._enforce_astrbot_user_agent]
@@ -790,9 +788,60 @@ def test_gemini_init_client_tracks_previous_http_client_on_set_key(monkeypatch):
         "trust_env": False,
         "follow_redirects": False,
     }
-    assert provider._stale_http_clients[0] is not provider._http_client
-    assert provider.client.api_key == "key-b"
+    assert provider._stale_http_clients == []
+    assert provider.client.api_key == "key-a"
     assert provider.client.http_options.httpx_async_client is provider._http_client
+
+
+@pytest.mark.asyncio
+async def test_gemini_set_key_reuses_transport_and_closes_previous_sdk_client(
+    monkeypatch,
+):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.request_headers = {}
+    provider.timeout = 30
+    provider.api_base = "https://gemini.example"
+    provider.chosen_api_key = "key-a"
+
+    old_http = SimpleNamespace(aclose=AsyncMock())
+    old_genai = SimpleNamespace(aclose=AsyncMock())
+    provider._http_client = old_http
+    provider.client = old_genai
+    provider._stale_http_clients = []
+    provider._close_tasks = set()
+
+    created_http_clients = []
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            created_http_clients.append(self)
+
+    class FakeHttpOptions:
+        def __init__(self, **kwargs):
+            self.httpx_async_client = None
+            self.base_url = kwargs["base_url"]
+            self.timeout = kwargs["timeout"]
+
+    class FakeGenAIClient:
+        def __init__(self, *, api_key, http_options):
+            self.aio = SimpleNamespace(api_key=api_key, http_options=http_options)
+
+    monkeypatch.setattr(gemini_source_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(gemini_source_module.types, "HttpOptions", FakeHttpOptions)
+    monkeypatch.setattr(gemini_source_module.genai, "Client", FakeGenAIClient)
+
+    provider.set_key("key-b")
+    await asyncio.gather(*list(provider._close_tasks), return_exceptions=True)
+
+    assert created_http_clients == []
+    old_http.aclose.assert_not_awaited()
+    old_genai.aclose.assert_awaited_once()
+    assert provider._http_client is old_http
+    assert provider._stale_http_clients == []
+    assert provider.client.api_key == "key-b"
+    assert provider.client.http_options.httpx_async_client is old_http
+    assert provider._close_tasks == set()
 
 
 @pytest.mark.asyncio

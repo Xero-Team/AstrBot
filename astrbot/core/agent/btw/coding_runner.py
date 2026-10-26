@@ -439,6 +439,9 @@ async def _wait_for_exit(
     finally:
         if not waiter.done():
             waiter.cancel()
+            # ``return_exceptions=True`` absorbs the waiter's own cancellation
+            # while an outer cancellation still propagates from this await.
+            await asyncio.gather(waiter, return_exceptions=True)
     return STATUS_COMPLETED
 
 

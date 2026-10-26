@@ -244,3 +244,27 @@ def test_process_at_mention_requires_a_username_boundary():
 
     assert parts == ["@alice_bob hi"]
     assert remaining == "@alice_bob hi"
+
+
+def test_user_cache_stays_bounded():
+    from astrbot.core.platform.sources.misskey.misskey_utils import (
+        _MAX_USER_CACHE_ENTRIES,
+        cache_user_info,
+    )
+
+    cache: dict[str, object] = {}
+    for index in range(_MAX_USER_CACHE_ENTRIES + 10):
+        cache_user_info(
+            cache,
+            {
+                "sender_id": f"user-{index}",
+                "username": f"user-{index}",
+                "nickname": f"user-{index}",
+            },
+            {},
+            "bot-1",
+        )
+
+    assert len(cache) == _MAX_USER_CACHE_ENTRIES
+    assert "user-0" not in cache
+    assert f"user-{_MAX_USER_CACHE_ENTRIES + 9}" in cache

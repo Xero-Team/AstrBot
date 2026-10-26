@@ -1,6 +1,7 @@
 import asyncio
 import copy
 from typing import Any
+from weakref import WeakValueDictionary
 
 from mcp.types import PromptReference, ResourceTemplateReference
 
@@ -39,6 +40,30 @@ class ToolsService:
         self.config_manager = config_manager
         self.plugin_catalog = plugin_catalog
         self._oauth_probe_tasks: dict[str, asyncio.Task[None]] = {}
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._oauth_start_locks: WeakValueDictionary[str, asyncio.Lock] = (
+            WeakValueDictionary()
+        )
+
+    def _oauth_start_lock(self, identity: str) -> asyncio.Lock:
+        lock = self._oauth_start_locks.get(identity)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._oauth_start_locks[identity] = lock
+        return lock
+
+    def _track_background_task(self, task: asyncio.Task[Any], *, label: str) -> None:
+        self._background_tasks.add(task)
+
+        def _done(done: asyncio.Task[Any]) -> None:
+            self._background_tasks.discard(done)
+            if done.cancelled():
+                return
+            exc = done.exception()
+            if exc is not None:
+                logger.warning("%s failed: %s", label, safe_error("", exc))
+
+        task.add_done_callback(_done)
 
     def rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -217,16 +242,38 @@ class ToolsService:
         if config is None or not config.get("auth_ref"):
             raise ToolsServiceError("This MCP server has no OAuth configuration.")
         identity = f"{name}:{config['auth_ref']}"
+        async with self._oauth_start_lock(identity):
+            return await self._start_mcp_authorization_locked(name)
+
+    async def _start_mcp_authorization_locked(self, name: str) -> dict[str, Any]:
+        config = self.get_mcp_server_config(name)
+        if config is None or not config.get("auth_ref"):
+            raise ToolsServiceError("This MCP server has no OAuth configuration.")
+        identity = f"{name}:{config['auth_ref']}"
         runtime = self.tool_mgr.mcp_server_runtime_view.get(name)
         if runtime is not None and runtime.client.connection_status == "connected":
             client = runtime.client
-            asyncio.create_task(client.list_tools_and_save(), name=f"mcp-oauth:{name}")
+            await self.tool_mgr.mcp_authorization_coordinator.reset_identity(identity)
+            self._track_background_task(
+                asyncio.create_task(
+                    client.list_tools_and_save(),
+                    name=f"mcp-oauth:{name}",
+                ),
+                label=f"MCP OAuth catalog refresh for {name}",
+            )
+            # The server is already authorized: there is no redirect URL to
+            # wait for, so report pending immediately instead of blocking on
+            # the OAuth URL timeout.
+            return {"status": "pending"}
         else:
             # A protected endpoint may fail its first catalog request with 401,
             # so it has no runtime entry yet. Keep an owner task alive while the
             # SDK OAuth provider performs discovery, PKCE, and callback waiting.
             existing = self._oauth_probe_tasks.get(identity)
             if existing is None or existing.done():
+                await self.tool_mgr.mcp_authorization_coordinator.reset_identity(
+                    identity
+                )
                 client = MCPClient(
                     interaction_coordinator=self.tool_mgr.mcp_interaction_coordinator,
                     auth_store=self.tool_mgr.mcp_auth_store,
@@ -256,9 +303,20 @@ class ToolsService:
                                     safe_error("", exc),
                                 )
 
-                self._oauth_probe_tasks[identity] = asyncio.create_task(
-                    probe(), name=f"mcp-oauth:{name}"
-                )
+                probe_task = asyncio.create_task(probe(), name=f"mcp-oauth:{name}")
+                self._oauth_probe_tasks[identity] = probe_task
+
+                def _probe_done(
+                    done: asyncio.Task[None],
+                    identity: str = identity,
+                ) -> None:
+                    if self._oauth_probe_tasks.get(identity) is done:
+                        self._oauth_probe_tasks.pop(identity, None)
+                    if done.cancelled():
+                        return
+                    done.exception()
+
+                probe_task.add_done_callback(_probe_done)
         authorization_url = (
             await self.tool_mgr.mcp_authorization_coordinator.wait_for_url(identity)
         )

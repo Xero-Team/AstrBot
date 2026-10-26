@@ -651,7 +651,7 @@ class ProviderAnthropic(Provider):
         # 用于累积最终结果
         final_text = ""
         final_tool_calls = []
-        id = None
+        response_id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body") or {}
         if not isinstance(extra_body, dict):
@@ -687,7 +687,7 @@ class ProviderAnthropic(Provider):
             async for event in stream:
                 if event.type == "message_start":
                     # the usage contains input token usage
-                    id = event.message.id
+                    response_id = event.message.id
                     usage = self._extract_usage(event.message.usage)
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
@@ -697,7 +697,7 @@ class ProviderAnthropic(Provider):
                             completion_text="",
                             is_chunk=True,
                             usage=usage,
-                            id=id,
+                            id=response_id,
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
@@ -720,7 +720,7 @@ class ProviderAnthropic(Provider):
                             completion_text=event.delta.text,
                             is_chunk=True,
                             usage=usage,
-                            id=id,
+                            id=response_id,
                         )
                     elif event.delta.type == "thinking_delta":
                         # 思考增量
@@ -731,7 +731,7 @@ class ProviderAnthropic(Provider):
                                 reasoning_content=reasoning,
                                 is_chunk=True,
                                 usage=usage,
-                                id=id,
+                                id=response_id,
                                 reasoning_signature=reasoning_signature or None,
                             )
                             reasoning_content += reasoning
@@ -773,7 +773,7 @@ class ProviderAnthropic(Provider):
                                 tools_call_ids=[tool_info["id"]],
                                 is_chunk=True,
                                 usage=usage,
-                                id=id,
+                                id=response_id,
                             )
                         except json.JSONDecodeError:
                             # JSON 解析失败，跳过这个工具调用
@@ -792,7 +792,7 @@ class ProviderAnthropic(Provider):
             completion_text=final_text,
             is_chunk=False,
             usage=usage,
-            id=id,
+            id=response_id,
             reasoning_content=reasoning_content,
             reasoning_signature=reasoning_signature or None,
         )
@@ -806,7 +806,7 @@ class ProviderAnthropic(Provider):
 
         self._ensure_usable_response(
             final_response,
-            completion_id=id,
+            completion_id=response_id,
             stop_reason=None,
         )
         yield final_response

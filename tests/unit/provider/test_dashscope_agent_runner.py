@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
 from dashscope.app.application_response import ApplicationOutput, ApplicationResponse
 
 from astrbot.core.agent.llm_types import ProviderRequest
@@ -156,6 +157,16 @@ def _config(**overrides) -> dict:
     return config
 
 
+_ACTIVE_RUNNERS: list[DashscopeAgentRunner] = []
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _close_dashscope_runners():
+    yield
+    while _ACTIVE_RUNNERS:
+        await _ACTIVE_RUNNERS.pop().close()
+
+
 async def _runner(
     *,
     streaming: bool = True,
@@ -166,6 +177,7 @@ async def _runner(
     preferences = preferences or _Preferences()
     hooks = hooks or _Hooks()
     runner = DashscopeAgentRunner()
+    _ACTIVE_RUNNERS.append(runner)
     await runner.reset(
         ProviderRequest(
             prompt="hello",
@@ -223,6 +235,7 @@ async def test_dashscope_reset_rejects_missing_identity_and_invalid_timeout(
 ):
     config = _config(**override)
     runner = DashscopeAgentRunner()
+    _ACTIVE_RUNNERS.append(runner)
 
     with pytest.raises(ValueError, match=message):
         await runner.reset(

@@ -230,8 +230,10 @@ async def test_listing_uses_persisted_metadata_without_decoding(tmp_path, monkey
 @pytest.mark.asyncio
 async def test_upload_rejects_invalid_orientation(tmp_path):
     service = AppearanceService(tmp_path)
+    upload = _upload()
     with pytest.raises(AppearanceServiceError, match="orientation"):
-        await service.save_wallpaper(_upload(), "square")
+        await service.save_wallpaper(upload, "square")
+    assert upload.file.closed
 
 
 @pytest.mark.asyncio

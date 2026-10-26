@@ -391,6 +391,8 @@ async def upload(
         raise ApiError("Invalid Content-Length", status_code=422) from exc
     except DataFileServiceError as exc:
         _raise(exc)
+    finally:
+        await file.close()
 
 
 @router.get("/data-files/search")

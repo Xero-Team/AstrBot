@@ -54,7 +54,9 @@ async def test_different_platforms_do_not_share_rate_limit_state():
     assert not first_event.stopped
     assert not second_event.stopped
     assert set(limiter.event_timestamps) == expected_keys
-    assert set(limiter.locks) == expected_keys
+    first_lock = limiter._lock_for(first_event.unified_msg_origin)
+    second_lock = limiter._lock_for(second_event.unified_msg_origin)
+    assert first_lock is not second_lock
 
 
 @pytest.mark.asyncio
@@ -142,3 +144,27 @@ async def test_invalid_runtime_strategy_does_not_busy_loop():
     await asyncio.wait_for(limiter.process(event), timeout=0.5)
 
     assert event.stopped is False
+
+
+def test_idle_session_locks_are_released():
+    limiter = rate_limit_stage.RateLimitStage()
+
+    lock = limiter._lock_for("session-a")
+    assert "session-a" in limiter.locks
+
+    del lock
+
+    assert "session-a" not in limiter.locks
+
+
+@pytest.mark.asyncio
+async def test_prune_keeps_state_for_a_session_holding_its_lock():
+    limiter = rate_limit_stage.RateLimitStage()
+    limiter.event_timestamps["busy"]  # Create the empty queue other sessions prune.
+
+    async with limiter._lock_for("busy"):
+        limiter._prune_idle_sessions(
+            real_datetime.now(),
+            active_session_id="other",
+        )
+        assert "busy" in limiter.event_timestamps

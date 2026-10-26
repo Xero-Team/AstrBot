@@ -232,13 +232,16 @@ async def install_plugin_from_upload(
     _auth: AuthContext = Depends(require_plugin_install_scope),
     service: PluginService = Depends(get_service),
 ):
-    return await _run_service(
-        service.install_plugin_upload(
-            upload_file=file,
-            ignore_version_check=ignore_version_check,
-        ),
-        log_label="/api/v1/plugins/install/upload",
-    )
+    try:
+        return await _run_service(
+            service.install_plugin_upload(
+                upload_file=file,
+                ignore_version_check=ignore_version_check,
+            ),
+            log_label="/api/v1/plugins/install/upload",
+        )
+    finally:
+        await file.close()
 
 
 @router.get("/plugins/market")

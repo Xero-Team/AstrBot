@@ -676,18 +676,18 @@ class WakingCheckStage(Stage):
             if len(handler.event_filters) == 0:
                 continue
 
-            for filter in handler.event_filters:
+            for event_filter in handler.event_filters:
                 try:
-                    if isinstance(filter, CommandGroupFilter):
+                    if isinstance(event_filter, CommandGroupFilter):
                         passed = False
                         break
-                    if isinstance(filter, CommandFilter):
-                        if id(filter) not in matched_filter_ids:
+                    if isinstance(event_filter, CommandFilter):
+                        if id(event_filter) not in matched_filter_ids:
                             passed = False
                             break
                         group_allowed, fatal = await self._check_parent_group_filters(
                             event,
-                            filter,
+                            event_filter,
                             group_handlers,
                             group_gate_cache,
                         )
@@ -696,19 +696,21 @@ class WakingCheckStage(Stage):
                         if not group_allowed:
                             passed = False
                             break
-                        if not filter.filter(event, self.ctx.astrbot_config):
+                        if not event_filter.filter(event, self.ctx.astrbot_config):
                             passed = False
                             break
                         assert resolved_command is not None
                         bound = engine.bind(
-                            entries_by_filter[id(filter)], resolved_command
+                            entries_by_filter[id(event_filter)], resolved_command
                         )
                         bound_params = dict(bound.values)
-                    elif isinstance(filter, ActionPermissionFilter):
-                        if not await self._permission_filter_allowed(event, filter):
+                    elif isinstance(event_filter, ActionPermissionFilter):
+                        if not await self._permission_filter_allowed(
+                            event, event_filter
+                        ):
                             permission_not_pass = True
-                            permission_filter_raise_error = filter.raise_error
-                    elif not filter.filter(event, self.ctx.astrbot_config):
+                            permission_filter_raise_error = event_filter.raise_error
+                    elif not event_filter.filter(event, self.ctx.astrbot_config):
                         passed = False
                         break
                 except CommandError as exc:

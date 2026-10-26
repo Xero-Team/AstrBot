@@ -1233,8 +1233,6 @@ class SessionBridgeManager:
         *,
         locale: str = DEFAULT_LOCALE,
     ) -> MessageEnvelope:
-        from .message_protocol import MediaReference
-
         file_token_service = self._file_token_service
         base = (
             self._get_callback_base(target_umo).rstrip("/")

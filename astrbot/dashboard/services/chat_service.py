@@ -219,8 +219,6 @@ def build_thread_unified_msg_origin(creator: str, thread_id: str) -> str:
 
 
 def serialize_thread(thread) -> dict:
-    from astrbot.core.utils.datetime_utils import to_utc_isoformat
-
     return {
         "thread_id": thread.thread_id,
         "parent_session_id": thread.parent_session_id,

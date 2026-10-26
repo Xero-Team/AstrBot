@@ -25,6 +25,7 @@ from astrbot.core.db.po import (
     AuthRoleBinding,
 )
 from astrbot.core.db.protocols import DatabaseSessionStore
+from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
 
 @dataclass(slots=True)
@@ -56,7 +57,10 @@ async def inspect_authorization_upgrade(db: DatabaseSessionStore) -> PreflightRe
         capability.subject_id
         for capability in capabilities
         if capability.revoked_at is None
-        and (capability.expires_at is None or capability.expires_at > now)
+        and (
+            capability.expires_at is None
+            or normalize_datetime_utc(capability.expires_at) > now
+        )
     }
     for binding in bindings:
         if binding.revoked_at is not None:

@@ -20,6 +20,7 @@ from astrbot.core.auth.models import (
     parse_canonical_session_resource,
     utc_now,
 )
+from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
     AuthorizationBindingBatchRevokeRequest,
@@ -237,7 +238,10 @@ async def _authorize_identity_read(
             item.role == Role.INSTANCE_OPERATOR.value
             and item.scope_type == "instance"
             and item.config_id
-            and (item.expires_at is None or item.expires_at > utc_now())
+            and (
+                item.expires_at is None
+                or normalize_datetime_utc(item.expires_at) > utc_now()
+            )
         )
     }
     if not config_ids:

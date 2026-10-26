@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -44,6 +45,7 @@ from astrbot.core.star.star_handler import (
     StarHandlerMetadata,
 )
 from astrbot.core.star.star_manager import PluginManager
+from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 from astrbot.core.utils.task_utils import cancel_tracked_tasks
@@ -3555,3 +3557,52 @@ async def test_successful_reload_adopts_promoted_background_tasks(
             task.cancel()
         await asyncio.gather(staged_task, live_task, return_exceptions=True)
         _clear_plugin_runtime_state(plugin_manager_pm.catalog.runtime_catalogs)
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_staging_root_does_not_shadow_the_marker_file(
+    plugin_manager_pm: PluginManager, monkeypatch, tmp_path
+):
+    """Installing must not fail when the temp dir holds the marker file."""
+    system_temp = tmp_path / "system_temp"
+    system_temp.mkdir()
+    marker = system_temp / ".astrbot"
+    marker.write_text("", encoding="utf-8")
+    monkeypatch.setattr(tempfile, "tempdir", str(system_temp))
+    monkeypatch.setattr(
+        "astrbot.core.star.plugin_package_installer.get_astrbot_system_tmp_path",
+        get_astrbot_system_tmp_path,
+    )
+
+    events = []
+    _mock_missing_requirements(monkeypatch, {"networkx"})
+
+    async def mock_install(
+        repo_url: str, proxy="", download_url="", *, target_dir=None
+    ):
+        staged_path = Path(target_dir)
+        _write_local_test_plugin(staged_path, repo_url)
+        _write_requirements(staged_path)
+        return str(staged_path)
+
+    monkeypatch.setattr(plugin_manager_pm.packages._updator, "install", mock_install)
+    monkeypatch.setattr(
+        plugin_manager_pm.packages._pip_installer,
+        "install",
+        _build_dependency_install_mock(events, False),
+    )
+
+    def mock_load_and_register(*args, **kwargs):
+        plugin_manager_pm.catalog.runtime_catalogs.plugins.publish(
+            cast(StarMetadata, MockStar())
+        )
+        return _build_load_mock(events)(*args, **kwargs)
+
+    monkeypatch.setattr(
+        plugin_manager_pm.lifecycle, "_load_unlocked", mock_load_and_register
+    )
+
+    await plugin_manager_pm.lifecycle.install_plugin(TEST_PLUGIN_REPO)
+
+    assert marker.is_file()
+    assert events[-1] == ("load", TEST_PLUGIN_DIR)

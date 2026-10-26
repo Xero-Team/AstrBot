@@ -355,7 +355,7 @@ async def test_connect_does_not_write_http_error_after_tunnel_start(
         async with _proxy() as server:
 
             async def fail_relay(*_args, **_kwargs):
-                raise ConnectionResetError
+                raise RuntimeError("relay failure")
 
             monkeypatch.setattr(server, "_relay", fail_relay)
             lease = server.create_lease(_policy(port))

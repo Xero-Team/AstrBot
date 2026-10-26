@@ -865,9 +865,10 @@ class LocalProxyServer:
                         upstream_writer,
                         lease,
                     )
-                except ConnectionError, OSError:
-                    # The tunnel is already established. Writing an HTTP error
-                    # now would be delivered as tunnel payload.
+                except Exception:
+                    # The tunnel is already established. Any later failure,
+                    # not just a socket error, must be delivered as a closed
+                    # tunnel rather than an HTTP response.
                     return
             finally:
                 upstream_writer.close()

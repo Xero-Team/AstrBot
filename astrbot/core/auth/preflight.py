@@ -25,6 +25,7 @@ from astrbot.core.db.po import (
     AuthRoleBinding,
 )
 from astrbot.core.db.protocols import DatabaseSessionStore
+from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
 
 @dataclass(slots=True)
@@ -52,12 +53,13 @@ async def inspect_authorization_upgrade(db: DatabaseSessionStore) -> PreflightRe
     report.override_count = len(overrides)
     report.api_key_count = len(keys)
     now = utc_now()
-    live_capability_subjects = {
-        capability.subject_id
-        for capability in capabilities
-        if capability.revoked_at is None
-        and (capability.expires_at is None or capability.expires_at > now)
-    }
+    live_capability_subjects: set[str] = set()
+    for capability in capabilities:
+        if capability.revoked_at is not None:
+            continue
+        expires_at = normalize_datetime_utc(capability.expires_at)
+        if expires_at is None or expires_at > now:
+            live_capability_subjects.add(capability.subject_id)
     for binding in bindings:
         if binding.revoked_at is not None:
             continue

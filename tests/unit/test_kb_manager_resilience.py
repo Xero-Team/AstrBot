@@ -505,3 +505,128 @@ async def test_init_kb_database_uses_current_astrbot_root(
         assert Path(real_db.db_path).resolve() == expected
     finally:
         await real_db.close()
+
+
+@pytest.mark.asyncio
+async def test_load_kbs_pages_past_first_hundred(
+    stub_provider_manager_module,
+):
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    manager = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    manager.kb_insts = {}
+
+    records = [SimpleNamespace(kb_id=f"kb-{index}") for index in range(101)]
+
+    async def list_kbs(offset: int = 0, limit: int = 100):
+        return records[offset : offset + limit]
+
+    manager.kb_db = SimpleNamespace(list_kbs=AsyncMock(side_effect=list_kbs))
+
+    def build_helper(record):
+        return SimpleNamespace(kb=record, initialize=AsyncMock(), init_error=None)
+
+    manager._build_kb_helper = build_helper
+
+    await manager.load_kbs()
+
+    assert len(manager.kb_insts) == 101
+    assert "kb-0" in manager.kb_insts
+    assert "kb-100" in manager.kb_insts
+
+
+@pytest.mark.asyncio
+async def test_delete_kb_restores_directory_when_metadata_delete_fails(
+    tmp_path: Path,
+):
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    kb_dir = tmp_path / "kb-1"
+    kb_dir.mkdir()
+    (kb_dir / "index.faiss").write_bytes(b"index")
+    kb = SimpleNamespace(kb_id="kb-1")
+
+    class FailingSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def delete(self, _obj):
+            return None
+
+        async def commit(self):
+            raise RuntimeError("database unavailable")
+
+    class FailingDb:
+        def get_db(self):
+            return FailingSession()
+
+    async def stage_vec_db_deletion():
+        from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+        helper = KBHelper.__new__(KBHelper)
+        helper.kb_dir = kb_dir
+        helper.terminate = AsyncMock()
+        return await KBHelper.stage_vec_db_deletion(helper)
+
+    initialize = AsyncMock()
+    helper = SimpleNamespace(
+        kb=kb,
+        kb_dir=kb_dir,
+        init_error=None,
+        initialize=initialize,
+        stage_vec_db_deletion=stage_vec_db_deletion,
+        restore_staged_vec_db=lambda tombstone, path: (
+            tombstone.rename(path) if tombstone and tombstone.exists() else None
+        ),
+        finalize_staged_vec_db=lambda _tombstone: None,
+    )
+    manager = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    manager.kb_insts = {"kb-1": helper}
+    manager.kb_db = FailingDb()
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await manager.delete_kb("kb-1")
+
+    assert kb_dir.is_dir()
+    assert (kb_dir / "index.faiss").read_bytes() == b"index"
+    assert manager.kb_insts["kb-1"] is helper
+    initialize.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_terminate_drops_closed_vector_store():
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    helper = KBHelper.__new__(KBHelper)
+    vec_db = SimpleNamespace(close=AsyncMock())
+    helper.vec_db = vec_db
+
+    await helper.terminate()
+
+    vec_db.close.assert_awaited_once_with()
+    assert not hasattr(helper, "vec_db")
+
+
+@pytest.mark.asyncio
+async def test_faiss_single_insert_rolls_back_document_on_vector_failure():
+    from astrbot.core.db.vec_db.faiss import FaissVecDB
+
+    vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db.embedding_provider = SimpleNamespace(
+        get_embedding=AsyncMock(return_value=[0.1, 0.2])
+    )
+    vec_db.document_storage = SimpleNamespace(
+        insert_document=AsyncMock(return_value=7),
+        delete_document_by_doc_id=AsyncMock(),
+    )
+    vec_db.embedding_storage = SimpleNamespace(
+        insert=AsyncMock(side_effect=RuntimeError("index write failed"))
+    )
+
+    with pytest.raises(RuntimeError, match="index write failed"):
+        await vec_db.insert("content", metadata={}, id="doc-1")
+
+    vec_db.document_storage.delete_document_by_doc_id.assert_awaited_once_with("doc-1")

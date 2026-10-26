@@ -63,15 +63,21 @@ class KnowledgeBaseManager:
 
     async def load_kbs(self) -> None:
         """加载所有知识库实例"""
-        kb_records = await self.kb_db.list_kbs()
-        for record in kb_records:
-            kb_helper = self._build_kb_helper(record)
-            try:
-                await kb_helper.initialize()
-            except Exception as exc:
-                kb_helper.init_error = _KB_INITIALIZATION_ERROR
-                logger.error("知识库初始化失败: %s", safe_error("", exc))
-            self.kb_insts[record.kb_id] = kb_helper
+        offset = 0
+        page_size = 100
+        while True:
+            kb_records = await self.kb_db.list_kbs(offset=offset, limit=page_size)
+            for record in kb_records:
+                kb_helper = self._build_kb_helper(record)
+                try:
+                    await kb_helper.initialize()
+                except Exception as exc:
+                    kb_helper.init_error = _KB_INITIALIZATION_ERROR
+                    logger.error("知识库初始化失败: %s", safe_error("", exc))
+                self.kb_insts[record.kb_id] = kb_helper
+            if len(kb_records) < page_size:
+                break
+            offset += len(kb_records)
 
     async def create_kb(
         self,
@@ -148,12 +154,22 @@ class KnowledgeBaseManager:
         if not kb_helper:
             return False
 
-        await kb_helper.delete_vec_db()
-        async with self.kb_db.get_db() as session:
-            await session.delete(kb_helper.kb)
-            await session.commit()
+        tombstone = await kb_helper.stage_vec_db_deletion()
+        try:
+            async with self.kb_db.get_db() as session:
+                await session.delete(kb_helper.kb)
+                await session.commit()
+        except Exception:
+            kb_helper.restore_staged_vec_db(tombstone, kb_helper.kb_dir)
+            try:
+                await kb_helper.initialize()
+            except Exception as exc:
+                kb_helper.init_error = _KB_INITIALIZATION_ERROR
+                logger.error("知识库恢复后重新初始化失败: %s", safe_error("", exc))
+            raise
 
         self.kb_insts.pop(kb_id, None)
+        kb_helper.finalize_staged_vec_db(tombstone)
         return True
 
     async def list_kbs(self) -> list[KnowledgeBase]:

@@ -937,3 +937,43 @@ async def test_partial_blob_swap_failure_restores_the_previous_source(
     assert not bak.exists()
     assert "previous generation" in "\n".join(await _chunk_texts(helper, live_id))
     assert not helper._replacement_marker_path(live_id).exists()
+
+
+@pytest.mark.asyncio
+async def test_failed_backup_restore_restores_previous_source(kb_helper, monkeypatch):
+    helper, _embedding = kb_helper
+    doc_id = "doc-retry"
+    live_blob = helper._doc_blob_path(doc_id)
+    bak_blob = helper._doc_blob_path(doc_id, ".bak")
+    staging_blob = helper._doc_blob_path(doc_id, ".staging")
+    live_blob.parent.mkdir(parents=True, exist_ok=True)
+    live_blob.write_bytes(b"incoming")
+    bak_blob.write_bytes(b"previous")
+    staging_blob.write_bytes(b"staging")
+
+    monkeypatch.setattr(helper, "_try_relabel_staging", AsyncMock(return_value=False))
+    monkeypatch.setattr(helper, "_cleanup_failed_upload", AsyncMock())
+    monkeypatch.setattr(helper, "_retire_live_chunks", AsyncMock())
+    monkeypatch.setattr(
+        helper, "_reembed_from_stored_blob", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(helper, "_roll_forward_replacement", AsyncMock())
+
+    await helper._recover_failed_replace(
+        live_doc_id=doc_id,
+        staging_id="staging-id",
+        media_paths=[],
+        swapped_blob=True,
+        retired_live=True,
+        relabeled=False,
+        finalized=False,
+        saved_media=[],
+        replacement_metadata={},
+        live_blob=live_blob,
+        staging_blob=staging_blob,
+        bak_blob=bak_blob,
+    )
+
+    assert live_blob.read_bytes() == b"previous"
+    assert bak_blob.read_bytes() == b"previous"
+    assert not staging_blob.exists()

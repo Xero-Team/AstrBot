@@ -952,3 +952,77 @@ def test_lark_temp_file_name_is_sanitized_and_bounded():
 
     long_suffix = _build_temp_file_name("file", "clip." + "x" * 300, ".bin")
     assert len(long_suffix) < 200
+
+
+@pytest.mark.asyncio
+async def test_lark_streaming_card_returns_platform_send_result():
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.send_result import PlatformSendResult
+    from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
+
+    event = object.__new__(LarkMessageEvent)
+    event.platform_meta = SimpleNamespace(id="lark", name="lark")
+    event.route_identity = SimpleNamespace(target_id="chat-1")
+    event.message_obj = SimpleNamespace(message_id="msg-1")
+    event._metrics = None
+    event._has_send_oper = False
+    event._create_streaming_card = AsyncMock(return_value="card-1")
+    event._send_card_message = AsyncMock(return_value=True)
+    event._update_streaming_text = AsyncMock(return_value=True)
+    event._close_streaming_mode = AsyncMock()
+
+    async def generator():
+        yield MessageChain([Comp.Plain("hello")])
+
+    result = await event.send_streaming(generator())
+
+    assert isinstance(result, PlatformSendResult)
+    assert result.success
+    event._send_card_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_lark_streaming_sends_non_plain_components():
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
+
+    event = object.__new__(LarkMessageEvent)
+    event.platform_meta = SimpleNamespace(id="lark", name="lark")
+    event.route_identity = SimpleNamespace(target_id="chat-1")
+    event.message_obj = SimpleNamespace(message_id="msg-1")
+    event._metrics = None
+    event._has_send_oper = False
+    event.send = AsyncMock()
+    event.send.return_value = event._success_send_result()
+
+    async def generator():
+        yield MessageChain([Comp.Image(file="https://example.com/a.png")])
+
+    result = await event.send_streaming(generator())
+
+    assert result is not None and result.success
+    event.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_lark_file_message_resolves_url_sources(monkeypatch):
+    from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
+
+    file_comp = Comp.File(name="report.pdf", url="https://example.com/report.pdf")
+    get_file = AsyncMock(return_value="/tmp/report.pdf")
+    upload = AsyncMock(return_value="file-key")
+    send_im = AsyncMock()
+    monkeypatch.setattr(type(file_comp), "get_file", get_file)
+    monkeypatch.setattr(LarkMessageEvent, "_upload_lark_file", upload)
+    monkeypatch.setattr(LarkMessageEvent, "_send_im_message", send_im)
+
+    await LarkMessageEvent._send_file_message(
+        file_comp,
+        SimpleNamespace(),
+        reply_message_id="msg-1",
+    )
+
+    get_file.assert_awaited_once_with()
+    upload.assert_awaited_once()
+    assert upload.await_args.kwargs["path"] == "/tmp/report.pdf"
+    send_im.assert_awaited_once()

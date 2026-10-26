@@ -844,7 +844,9 @@ class PluginLifecycle:
                 download_url=download_url,
                 repo_url=repo_url,
                 loader=self._loader,
+                load_plugin=self._load_unlocked,
                 reload_plugin=self._reload_unlocked,
+                terminate_plugin=self.terminate_plugin,
             )
 
     async def uninstall_plugin(
@@ -1058,6 +1060,12 @@ class PluginLifecycle:
                 raise
             except Exception:
                 logger.error(traceback.format_exc())
+
+        # Mark this generation as terminated so a repeated teardown (for
+        # example an update's pre-promotion terminate followed by the reload
+        # teardown) cannot run terminate/__del__ and unload hooks twice.
+        metadata.star_cls = None
+        metadata.activated = False
 
     async def _watch_plugin_changes(self) -> None:
         """Watch plugin packages and reload each activated changed package once."""

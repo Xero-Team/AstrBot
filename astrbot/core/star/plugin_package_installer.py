@@ -439,28 +439,37 @@ class PluginPackageInstaller:
         download_url: str = "",
         repo_url: str = "",
         loader: PluginLoaderPort,
+        load_plugin: LoadPlugin,
         reload_plugin: ReloadPlugin,
+        terminate_plugin: TerminatePlugin | None = None,
     ) -> None:
-        """Update an installed non-bundled plugin and reload it."""
+        """Update an installed non-bundled plugin with rollback on failure."""
         plugin = self._catalogs.plugins.get_by_name(plugin_name)
         if not plugin:
             raise Exception("插件不存在。")
         if plugin.reserved:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
 
-        await self._updator.update(
-            plugin,
-            proxy=proxy,
-            download_url=download_url,
-            repo_url=repo_url,
-        )
-        if plugin.root_dir_name:
-            plugin_dir_path = os.path.join(
-                self._plugin_store_path, plugin.root_dir_name
+        with tempfile.TemporaryDirectory(
+            dir=self._staging_root(),
+            prefix=".plugin-update-",
+        ) as staging_dir:
+            staged_plugin_path = Path(staging_dir) / "plugin"
+            await self._updator.update(
+                plugin,
+                proxy=proxy,
+                download_url=download_url,
+                repo_url=repo_url,
+                target_dir=staged_plugin_path,
             )
-            loader.load_metadata(plugin_path=plugin_dir_path)
-            await self.ensure_requirements(plugin_dir_path, plugin_name)
-        await reload_plugin(plugin_name)
+            await self._install_from_staged_directory(
+                str(staged_plugin_path),
+                ignore_version_check=True,
+                loader=loader,
+                load_plugin=load_plugin,
+                reload_plugin=reload_plugin,
+                terminate_plugin=terminate_plugin,
+            )
 
     async def cleanup_optional_artifacts(
         self,

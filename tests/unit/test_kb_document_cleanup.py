@@ -248,3 +248,20 @@ async def test_update_kb_stats_counts_chunks_for_single_kb(kb_db, seeded_kb):
     mock_vec_db.count_documents.assert_awaited_once_with(
         metadata_filter={"kb_id": kb_id1},
     )
+
+
+@pytest.mark.asyncio
+async def test_delete_document_keeps_metadata_when_vector_delete_fails(
+    kb_db, seeded_media
+):
+    """A failed vector delete must leave the document retryable."""
+    _kb_id, doc_id, _media_ids = seeded_media
+
+    mock_vec_db = MagicMock()
+    mock_vec_db.delete_documents = AsyncMock(side_effect=RuntimeError("faiss down"))
+
+    with pytest.raises(RuntimeError, match="faiss down"):
+        await kb_db.delete_document_by_id(doc_id, mock_vec_db)
+
+    assert await kb_db.get_document_by_id(doc_id) is not None
+    assert len(await kb_db.list_media_by_doc(doc_id)) == 2

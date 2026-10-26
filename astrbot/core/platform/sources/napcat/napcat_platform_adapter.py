@@ -997,10 +997,12 @@ class NapCatPlatformAdapter(Platform):
                 "get_group_file_url",
                 "get_private_file_url",
             }:
+                data = result.get("data")
+                payload = data if isinstance(data, Mapping) else result
                 return OneBotFileResult(
-                    file_id=result.get("file_id"),
-                    url=result.get("url"),
-                    file=result.get("file"),
+                    file_id=payload.get("file_id"),
+                    url=payload.get("url"),
+                    file=payload.get("file"),
                     payload=result,
                 )
             return OneBotActionResult(

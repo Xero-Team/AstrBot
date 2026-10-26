@@ -597,7 +597,14 @@ class AstrBotImporter:
         result: ImportResult | None,
     ) -> dict[str, int]:
         imported: dict[str, int] = {}
-        for table_name, rows in data.items():
+        table_order = {
+            table_name: index for index, table_name in enumerate(MAIN_DB_MODELS)
+        }
+        ordered_tables = sorted(
+            data.items(),
+            key=lambda item: table_order.get(item[0], len(table_order)),
+        )
+        for table_name, rows in ordered_tables:
             model_class = MAIN_DB_MODELS.get(table_name)
             if not model_class:
                 logger.warning("未知的备份数据表，已跳过")

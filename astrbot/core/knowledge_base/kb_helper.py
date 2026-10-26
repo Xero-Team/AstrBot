@@ -227,15 +227,51 @@ class KBHelper:
 
     async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
-        import shutil
-
         await self.terminate()
         if self.kb_dir.exists():
             shutil.rmtree(self.kb_dir)
 
+    async def stage_vec_db_deletion(self) -> Path | None:
+        """Detach the KB directory so metadata deletion can roll back.
+
+        Returns:
+            The hidden tombstone path, or ``None`` when no directory existed.
+        """
+        await self.terminate()
+        if not self.kb_dir.exists():
+            return None
+        tombstone = self.kb_dir.with_name(
+            f".{self.kb_dir.name}.deleting-{uuid.uuid4().hex}"
+        )
+        self.kb_dir.rename(tombstone)
+        return tombstone
+
+    @staticmethod
+    def restore_staged_vec_db(tombstone: Path | None, kb_dir: Path) -> None:
+        """Restore a tombstoned KB directory after metadata deletion failed."""
+        if tombstone is not None and tombstone.exists() and not kb_dir.exists():
+            tombstone.rename(kb_dir)
+
+    @staticmethod
+    def finalize_staged_vec_db(tombstone: Path | None) -> None:
+        """Best-effort removal of a tombstoned KB directory."""
+        if tombstone is None or not tombstone.exists():
+            return
+        try:
+            shutil.rmtree(tombstone)
+        except OSError as exc:
+            logger.warning(
+                "Failed to remove deleted knowledge base files %s: %s",
+                tombstone,
+                exc,
+            )
+
     async def terminate(self) -> None:
         if hasattr(self, "vec_db") and self.vec_db:
             await self.vec_db.close()
+            # Drop the closed store so a later _ensure_vec_db() re-opens the
+            # directory instead of returning the unusable instance.
+            del self.vec_db
 
     async def _report_upload_progress(
         self,
@@ -1313,7 +1349,16 @@ class KBHelper:
             )
             if bak_blob.exists():
                 await self._retire_live_chunks(live_doc_id)
-                await self._reembed_from_stored_blob(live_doc_id, bak_blob)
+                restored = await self._reembed_from_stored_blob(live_doc_id, bak_blob)
+                if restored is None:
+                    logger.warning(
+                        "Failed to reindex the previous source for document %s; "
+                        "keeping it for startup recovery",
+                        live_doc_id,
+                    )
+                    await asyncio.to_thread(shutil.copy2, bak_blob, live_blob)
+                    staging_blob.unlink(missing_ok=True)
+                    return
                 live_blob.unlink(missing_ok=True)
                 bak_blob.replace(live_blob)
             else:
@@ -1346,7 +1391,16 @@ class KBHelper:
             staging_blob.unlink(missing_ok=True)
             return
         await self._retire_live_chunks(live_doc_id)
-        await self._reembed_from_stored_blob(live_doc_id, bak_blob)
+        restored = await self._reembed_from_stored_blob(live_doc_id, bak_blob)
+        if restored is None:
+            logger.warning(
+                "Failed to reindex the previous source for document %s; "
+                "keeping it for startup recovery",
+                live_doc_id,
+            )
+            await asyncio.to_thread(shutil.copy2, bak_blob, live_blob)
+            staging_blob.unlink(missing_ok=True)
+            return
         live_blob.unlink(missing_ok=True)
         bak_blob.replace(live_blob)
         staging_blob.unlink(missing_ok=True)

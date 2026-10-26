@@ -39,7 +39,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
-        self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
+        self.voice: str = provider_config.get("dashscope_tts_voice", "") or ""
         self.set_model(provider_config["model"])
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
 
@@ -75,6 +75,24 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             if path is not None and not completed:
                 path.unlink(missing_ok=True)
 
+    def _resolve_voice(self, model: str) -> str:
+        """Return a voice that belongs to the selected TTS model family."""
+        voice = self.voice.strip()
+        if self._is_qwen_tts_model(model):
+            if not voice:
+                logger.warning(
+                    "No voice specified for Qwen TTS model, using default 'Cherry'.",
+                )
+                return "Cherry"
+            if voice == "loongstella":
+                logger.warning(
+                    "The CosyVoice default voice 'loongstella' is not valid for "
+                    "Qwen TTS; using default 'Cherry'.",
+                )
+                return "Cherry"
+            return voice
+        return voice or "loongstella"
+
     def _call_qwen_tts(self, model: str, text: str):
         if MultiModalConversation is None:
             raise RuntimeError(
@@ -86,13 +104,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             "headers": self.request_headers.copy(),
             "messages": None,
             "api_key": self.chosen_api_key,
-            "voice": self.voice or "Cherry",
+            "voice": self._resolve_voice(model),
             "text": text,
         }
-        if not self.voice:
-            logger.warning(
-                "No voice specified for Qwen TTS model, using default 'Cherry'.",
-            )
         return MultiModalConversation.call(**kwargs)
 
     async def _synthesize_with_qwen_tts(
@@ -150,11 +164,18 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                         content_type,
                     )
                     return None
-                data = await response.content.read(MAX_AUDIO_DOWNLOAD_BYTES + 1)
-                if len(data) > MAX_AUDIO_DOWNLOAD_BYTES:
-                    logger.warning("[Dashscope TTS] Audio download exceeded size limit")
-                    return None
-                return data
+                data = bytearray()
+                while True:
+                    chunk = await response.content.read(64 * 1024)
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+                    if len(data) > MAX_AUDIO_DOWNLOAD_BYTES:
+                        logger.warning(
+                            "[Dashscope TTS] Audio download exceeded size limit"
+                        )
+                        return None
+                return bytes(data)
         except asyncio.CancelledError:
             raise
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:
@@ -179,7 +200,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                     name.lower(): value for name, value in self.request_headers.items()
                 },
                 model=model,
-                voice=self.voice,
+                voice=self._resolve_voice(model),
                 format=AudioFormat.WAV_24000HZ_MONO_16BIT,
             )
         finally:

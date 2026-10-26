@@ -4,6 +4,7 @@ import hashlib
 import importlib
 import json
 import os
+import shutil
 import sys
 import traceback
 from pathlib import Path
@@ -2187,8 +2188,12 @@ async def test_update_plugin_dependency_install_flow(
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
-    async def mock_update(plugin, proxy="", download_url="", repo_url=""):
+    async def mock_update(
+        plugin, proxy="", download_url="", repo_url="", *, target_dir=None
+    ):
         del proxy, download_url, repo_url
+        if target_dir is not None and Path(target_dir) != local_updator:
+            shutil.copytree(local_updator, target_dir)
         events.append(("update", plugin.name))
 
     monkeypatch.setattr(plugin_manager_pm.packages._updator, "update", mock_update)

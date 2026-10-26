@@ -2672,3 +2672,69 @@ async def test_data_manage_accepts_knowledge_base_subresources_for_root(authoriz
             subject, "data.manage", candidate, context
         )
         assert decision.allowed
+
+
+@pytest.mark.asyncio
+async def test_expiring_binding_read_from_sqlite_is_compared_as_utc(authorization):
+    subject = Subject.im(
+        platform_instance="onebot", bot_account_id="bot", sender_id="expiring"
+    )
+    await authorization.grant_binding(
+        actor=Subject.system("test"),
+        subject_id=subject.id,
+        role=Role.INSTANCE_OPERATOR,
+        scope_type="instance",
+        scope_id="default",
+        config_id="default",
+        expires_at=utc_now() + timedelta(days=1),
+        enforce_actor=False,
+    )
+
+    async with authorization._db.get_db() as session:
+        stored = (
+            await session.execute(
+                select(AuthRoleBinding).where(
+                    AuthRoleBinding.subject_id == subject.id,
+                )
+            )
+        ).scalar_one()
+        assert stored.expires_at is not None
+        assert stored.expires_at.tzinfo is None
+
+    decision = await authorization.authorize(
+        subject,
+        "provider.manage",
+        Resource.instance("default"),
+        _context(subject, "default"),
+    )
+
+    assert decision.allowed
+
+
+@pytest.mark.asyncio
+async def test_preflight_normalizes_capability_expiry_read_from_sqlite(tmp_path):
+    from astrbot.core.auth.preflight import inspect_authorization_upgrade
+    from astrbot.core.db.po import AuthCapability
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    db = SQLiteDatabase(str(tmp_path / "preflight-expiry.db"))
+    await db.initialize()
+    try:
+        async with db.get_db() as session:
+            async with session.begin():
+                session.add(
+                    AuthCapability(
+                        subject_id="api-key:expiring",
+                        action="identity.read",
+                        resource_type="instance",
+                        resource_id="default",
+                        config_id="default",
+                        expires_at=utc_now() + timedelta(days=1),
+                    )
+                )
+
+        report = await inspect_authorization_upgrade(db)
+
+        assert report.binding_count == 0
+    finally:
+        await db.close()

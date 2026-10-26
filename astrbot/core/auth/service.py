@@ -46,6 +46,7 @@ from astrbot.core.db.po import (
 from astrbot.core.db.protocols import ApiKeyStore, DatabaseSessionStore
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 _AUDIT_QUEUE_SIZE = 2048
@@ -1326,7 +1327,8 @@ class AuthorizationService:
                 )
             )
             for capability in result.scalars():
-                if capability.expires_at is not None and capability.expires_at <= now:
+                capability_expires_at = normalize_datetime_utc(capability.expires_at)
+                if capability_expires_at is not None and capability_expires_at <= now:
                     continue
                 if capability.resource_type != resource.type:
                     continue
@@ -1672,7 +1674,8 @@ class AuthorizationService:
                 )
             )
             for binding in bindings.scalars():
-                if binding.expires_at is not None and binding.expires_at <= now:
+                binding_expires_at = normalize_datetime_utc(binding.expires_at)
+                if binding_expires_at is not None and binding_expires_at <= now:
                     continue
                 try:
                     binding_role = Role(binding.role)

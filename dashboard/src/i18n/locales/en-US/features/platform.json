@@ -165,6 +165,7 @@
     "routingUpdateFailed": "Failed to update routing table: {message}",
     "createConfigFailed": "Failed to create config file: {message}",
     "platformIdMissing": "Unable to get platform ID.",
+    "routingLoadRequired": "Platform routes must load successfully before saving. Please retry.",
     "routingSaveFailed": "Failed to save routing table: {message}"
   },
   "status": {

@@ -324,7 +324,7 @@ class TestSessionIsolation:
             ("aiocqhttp", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
             ("napcat", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
             ("slack", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
-            ("dingtalk", MessageType.GROUP_MESSAGE, True, "group", "alice"),
+            ("dingtalk", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
             ("qq_official", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
             ("lark", MessageType.GROUP_MESSAGE, True, "group", "alice%group"),
             ("misskey", MessageType.GROUP_MESSAGE, True, "group", "group_alice"),

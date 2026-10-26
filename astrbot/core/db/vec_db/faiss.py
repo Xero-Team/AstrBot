@@ -62,8 +62,19 @@ class FaissVecDB:
         # 使用 DocumentStorage 的方法插入文档
         int_id = await self.document_storage.insert_document(str_id, content, metadata)
 
-        # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
+        # 插入向量到 FAISS；失败时撤销文档行，避免留下无向量文档。
+        try:
+            await self.embedding_storage.insert(vector, int_id)
+        except Exception:
+            try:
+                await self.document_storage.delete_document_by_doc_id(str_id)
+            except Exception as rollback_exc:
+                logger.warning(
+                    "Failed to roll back document storage entry %s: %s",
+                    str_id,
+                    rollback_exc,
+                )
+            raise
         return int_id
 
     async def insert_batch(

@@ -5,6 +5,7 @@ import copy
 import inspect
 import json
 import os
+import tempfile
 import threading
 import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
@@ -1025,13 +1026,31 @@ class FunctionToolManager:
             return DEFAULT_MCP_CONFIG
 
     def save_mcp_config(self, config: dict) -> bool:
+        temp_path: str | None = None
         try:
-            with open(self.mcp_config_path, "w", encoding="utf-8") as f:
+            path = Path(self.mcp_config_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd, temp_path = tempfile.mkstemp(
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(config, f, ensure_ascii=False, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, path)
+            temp_path = None
             return True
         except Exception as e:
             logger.error(f"保存 MCP 配置失败: {e}")
             return False
+        finally:
+            if temp_path is not None:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
 
     async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
         """从 ModelScope 平台同步 MCP 服务器配置"""

@@ -402,7 +402,11 @@ def _stub_plugin_update_fs(
 ) -> None:
     monkeypatch.setattr(updater, "validate_plugin_archive", lambda _path: None)
     monkeypatch.setattr("astrbot.core.star.updator.remove_dir", lambda _path: None)
-    monkeypatch.setattr(updater, "unzip_file", lambda *_args: None)
+
+    def fake_unzip(_archive: str, target: str) -> None:
+        Path(target).mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(updater, "unzip_file", fake_unzip)
 
 
 @pytest.mark.asyncio

@@ -165,8 +165,6 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> PlatformSendResult | None:
         """发送消息"""
-        if message is None:
-            return
         raw = self.message_obj.raw_message
         assert isinstance(raw, dict), (
             "wecom_ai_bot platform event raw_message should be a dict"
@@ -177,6 +175,36 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             "connection_mode"
         )
         req_id = pending_response.get("callback_params", {}).get("req_id")
+
+        if message is None:
+            # ``requires_empty_completion`` asks the scheduler to terminate a
+            # run that produced no reply. Emit the same terminal frames as a
+            # normal send so the client stops polling.
+            if (
+                connection_mode == "long_connection"
+                and self.long_connection_sender
+                and isinstance(req_id, str)
+                and req_id
+            ):
+                await self.long_connection_sender(
+                    req_id,
+                    {
+                        "msgtype": "stream",
+                        "stream": {
+                            "id": stream_id,
+                            "finish": True,
+                            "content": "",
+                        },
+                    },
+                )
+                await self._mark_stream_complete(stream_id)
+            else:
+                await WecomAIBotMessageEvent._send(None, stream_id, self.queue_mgr)
+            # Do not delegate to ``super().send`` here: the scheduler emits this
+            # empty completion after the concurrent turn was released, so the
+            # base implementation would acquire the group outbound turn lock
+            # without a later ``release_turn`` and wedge later sends.
+            return self._success_send_result()
 
         if (
             connection_mode == "long_connection"

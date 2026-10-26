@@ -83,8 +83,13 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
         workspace: Path,
         spec: SandboxSpec,
         env: dict[str, str],
+        *,
+        ready_path: Path | None = None,
     ) -> list[str]:
         """Build the Seatbelt command for validated inputs."""
+        # Seatbelt connects to the proxy through loopback ports, so it never
+        # needs an in-sandbox readiness marker.
+        del ready_path
         seatbelt_path = shutil.which("sandbox-exec", path="/usr/bin")
         if seatbelt_path != "/usr/bin/sandbox-exec":
             raise RuntimeError(
@@ -216,6 +221,7 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             raise RuntimeError("The Seatbelt profile exceeds its fixed rule budget.")
         bootstrap = [
             str(Path(sys.executable).resolve()),
+            "-I",
             "-S",
             "-c",
             _BOOTSTRAP,

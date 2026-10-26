@@ -129,33 +129,37 @@ def _relay(
     right: socket.socket,
     stop: threading.Event,
 ) -> None:
-    sockets = [left, right]
+    peers = {left: right, right: left}
+    readable_sockets = [left, right]
     last_activity = time.monotonic()
     try:
-        while not stop.is_set():
+        while readable_sockets and not stop.is_set():
             readable, _, errored = select.select(
-                sockets, [], sockets, _SOCKET_POLL_SECONDS
+                readable_sockets, [], readable_sockets, _SOCKET_POLL_SECONDS
             )
-            if not readable and not errored:
+            if errored:
+                return
+            if not readable:
                 if time.monotonic() - last_activity >= _RELAY_IDLE_SECONDS:
                     return
                 continue
-            for current in errored:
-                return
             for current in readable:
-                other = right if current is left else left
+                other = peers[current]
                 chunk = current.recv(65536)
                 if not chunk:
+                    # Propagate EOF to the opposite side but keep relaying the
+                    # remaining direction. A half-close is not a full teardown.
                     try:
                         other.shutdown(socket.SHUT_WR)
                     except OSError:
                         # The opposite direction is already closed.
                         pass
-                    return
+                    readable_sockets.remove(current)
+                    continue
                 other.sendall(chunk)
                 last_activity = time.monotonic()
     finally:
-        _close_quietly(*sockets)
+        _close_quietly(left, right)
 
 
 def _handle_connection(

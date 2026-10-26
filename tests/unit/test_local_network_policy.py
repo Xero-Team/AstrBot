@@ -127,6 +127,11 @@ def test_ipv6_port_requires_brackets_and_ambiguous_forms_are_rejected() -> None:
             {"allow_private_network": False, "allow_loopback": True},
             "private-network",
         ),
+        (
+            "fec0::1",
+            {"allow_private_network": False, "allow_loopback": True},
+            "private-network",
+        ),
     ],
 )
 def test_address_classes_stay_denied(address, flags, reason) -> None:
@@ -178,6 +183,7 @@ def test_private_and_loopback_flags_opt_in() -> None:
     )
     assert guard.denial_reason(ipaddress.ip_address("10.0.0.5"), 80) is None
     assert guard.denial_reason(ipaddress.ip_address("127.0.0.1"), 80) is None
+    assert guard.denial_reason(ipaddress.ip_address("fec0::1"), 80) is None
     assert (
         guard.denial_reason(ipaddress.ip_address("192.168.1.10"), 80)
         == "host-interface"

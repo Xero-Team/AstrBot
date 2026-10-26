@@ -241,6 +241,35 @@ except OSError:
     assert b"denied" in result.stdout
 
 
+def test_caller_environment_reaches_the_sandboxed_workload(tmp_path: Path) -> None:
+    result = create_process_sandbox().run(
+        ["/bin/sh", "-c", 'printf "%s" "$SANDBOX_TEST_VALUE"'],
+        SandboxSpec(workspace=tmp_path, policy=_policy()),
+        env={"SANDBOX_TEST_VALUE": "visible"},
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stdout == b"visible"
+
+
+def test_launcher_environment_cannot_spoof_the_readiness_path(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    victim = tmp_path / "host-secret.txt"
+    victim.write_text("keep", encoding="utf-8")
+    result = create_process_sandbox().run(
+        [sys.executable, "-c", "print('ok')"],
+        SandboxSpec(workspace=workspace, policy=_policy()),
+        env={"--ready-file": str(victim)},
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert b"ok" in result.stdout
+    assert victim.read_text(encoding="utf-8") == "keep"
+
+
 @pytest.mark.asyncio
 async def test_natural_completion_releases_lease_without_another_poll(
     tmp_path: Path,

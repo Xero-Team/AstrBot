@@ -238,6 +238,8 @@ def _address_class(address: Address) -> str | None:
         return "broadcast"
     if address.is_loopback:
         return "loopback"
+    if isinstance(address, ipaddress.IPv6Address) and address.is_site_local:
+        return "private"
     if address.is_reserved or (
         isinstance(address, ipaddress.IPv4Address) and address in _RESERVED_V4
     ):

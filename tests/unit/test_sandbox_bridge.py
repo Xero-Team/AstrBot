@@ -142,6 +142,39 @@ def test_filter_only_bridge_closes_inherited_descriptors() -> None:
     sys.platform == "win32",
     reason="The bridge relay uses Unix sockets.",
 )
+def test_bridge_relay_preserves_half_close() -> None:
+    client, relay_left = socket.socketpair()
+    relay_right, server = socket.socketpair()
+    for current in (client, relay_left, relay_right, server):
+        current.settimeout(5)
+    stop = threading.Event()
+    thread = threading.Thread(
+        target=bridge._relay,  # noqa: SLF001
+        args=(relay_left, relay_right, stop),
+        daemon=True,
+    )
+    thread.start()
+    try:
+        client.sendall(b"request")
+        client.shutdown(socket.SHUT_WR)
+        assert server.recv(1024) == b"request"
+        assert server.recv(1024) == b""
+        server.sendall(b"response")
+        server.shutdown(socket.SHUT_WR)
+        assert client.recv(1024) == b"response"
+        assert client.recv(1024) == b""
+    finally:
+        stop.set()
+        client.close()
+        server.close()
+        thread.join(3)
+    assert not thread.is_alive()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="The bridge relay uses Unix sockets.",
+)
 def test_bridge_serves_concurrent_connections() -> None:
     with tempfile.TemporaryDirectory(prefix="astrbot-bridge-") as directory:
         _assert_bridge_serves_concurrent_connections(Path(directory))

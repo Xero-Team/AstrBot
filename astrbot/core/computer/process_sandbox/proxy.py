@@ -725,15 +725,15 @@ class LocalProxyServer:
 
     def _reserve_global(self, *, authenticated: bool) -> bool:
         with self._limits_lock:
+            total = self._global_connections + self._unauthenticated_connections
             if authenticated:
-                if self._global_connections >= MAX_CONNECTIONS_GLOBAL:
+                if total >= MAX_CONNECTIONS_GLOBAL:
                     return False
                 self._global_connections += 1
                 return True
             if (
                 self._unauthenticated_connections >= MAX_UNAUTHENTICATED
-                or self._global_connections + self._unauthenticated_connections
-                >= MAX_CONNECTIONS_GLOBAL
+                or total >= MAX_CONNECTIONS_GLOBAL
             ):
                 return False
             self._unauthenticated_connections += 1
@@ -1019,33 +1019,44 @@ class LocalProxyServer:
             source: asyncio.StreamReader,
             destination: asyncio.StreamWriter,
         ) -> None:
-            while chunk := await source.read(65536):
-                activity[0] = time.monotonic()
-                destination.write(chunk)
-                await destination.drain()
-                activity[0] = time.monotonic()
+            try:
+                while chunk := await source.read(65536):
+                    activity[0] = time.monotonic()
+                    destination.write(chunk)
+                    await destination.drain()
+                    activity[0] = time.monotonic()
+            finally:
+                # Forward EOF without tearing down the opposite direction.
+                # HTTP clients may signal the end of a request body with a
+                # write half-close and still wait for the response.
+                if destination.can_write_eof():
+                    with contextlib.suppress(Exception):
+                        destination.write_eof()
 
         tasks = {
             asyncio.create_task(pump(client_reader, upstream_writer)),
             asyncio.create_task(pump(upstream_reader, client_writer)),
         }
+        pending = set(tasks)
         try:
-            while True:
-                done, pending = await asyncio.wait(
-                    tasks,
+            while pending:
+                done, still_pending = await asyncio.wait(
+                    pending,
                     timeout=_IDLE_CHECK_SECONDS,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
-                if done:
-                    break
-                if time.monotonic() - activity[0] >= idle_timeout:
+                pending = set(still_pending)
+                for task in done:
+                    try:
+                        task.result()
+                    except Exception:
+                        for other in pending:
+                            other.cancel()
+                        await asyncio.gather(*pending, return_exceptions=True)
+                        pending.clear()
+                        raise
+                if not done and time.monotonic() - activity[0] >= idle_timeout:
                     raise TimeoutError
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            for task in done:
-                with contextlib.suppress(Exception):
-                    task.result()
         finally:
             for task in tasks:
                 if not task.done():

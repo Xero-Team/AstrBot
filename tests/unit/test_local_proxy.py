@@ -180,6 +180,50 @@ async def test_http_proxy_auth_forwarding_and_loopback_policy() -> None:
 
 
 @pytest.mark.asyncio
+async def test_http_proxy_preserves_client_half_close() -> None:
+    seen = b""
+
+    async def origin(reader, writer) -> None:
+        nonlocal seen
+        seen = await reader.read(-1)
+        body = b"half-close-response"
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Length: "
+            + str(len(body)).encode()
+            + b"\r\nConnection: close\r\n\r\n"
+            + body
+        )
+        await writer.drain()
+        writer.close()
+
+    listener = await asyncio.start_server(origin, "127.0.0.1", 0)
+    port = listener.sockets[0].getsockname()[1]
+    try:
+        async with _proxy() as server:
+            lease = server.create_lease(_policy(port))
+            reader, writer = await asyncio.open_unix_connection(str(server.http_socket))
+            request = (
+                f"POST http://localhost:{port}/upload HTTP/1.0\r\n"
+                f"Host: localhost:{port}\r\n"
+                f"Proxy-Authorization: {_authorization(lease.token).decode()}\r\n\r\n"
+                "body-bytes"
+            ).encode()
+            writer.write(request)
+            await writer.drain()
+            writer.write_eof()
+            response = await asyncio.wait_for(reader.read(-1), 5)
+            assert b"200 OK" in response
+            assert b"half-close-response" in response
+            assert seen.endswith(b"body-bytes")
+            writer.close()
+            await writer.wait_closed()
+            server.drop_lease(lease)
+    finally:
+        listener.close()
+        await listener.wait_closed()
+
+
+@pytest.mark.asyncio
 async def test_http_proxy_rejects_denied_targets_and_bad_framing() -> None:
     async with _proxy() as server:
         lease = server.create_lease(_policy())
@@ -284,6 +328,17 @@ async def test_connect_closes_upstream_when_relay_never_runs(
         await asyncio.wait_for(closed.wait(), 2)
     listener.close()
     await listener.wait_closed()
+
+
+def test_global_connection_cap_counts_unauthenticated_slots(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.computer.process_sandbox.proxy.MAX_CONNECTIONS_GLOBAL",
+        2,
+    )
+    server = LocalProxyServer(platform="linux")
+    assert server._reserve_global(authenticated=False)  # noqa: SLF001
+    assert server._reserve_global(authenticated=True)  # noqa: SLF001
+    assert not server._reserve_global(authenticated=True)  # noqa: SLF001
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ import pytest
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import _attach_proxy_lease
 from astrbot.core.computer.local_policy import (
+    LocalFilesystemPolicy,
     LocalNetworkPolicy,
     LocalSandboxPolicy,
     LocalUnixSocketPolicy,
@@ -22,6 +23,9 @@ from astrbot.core.computer.process_sandbox import SandboxProxyEndpoint, SandboxS
 from astrbot.core.computer.process_sandbox.bridge import (
     BRIDGE_HTTP_PORT,
     BRIDGE_SOCKS_PORT,
+)
+from astrbot.core.computer.process_sandbox.bubblewrap import (
+    BubblewrapProcessSandbox,
 )
 from astrbot.core.computer.process_sandbox.proxy import LocalProxyServer
 
@@ -212,6 +216,55 @@ def test_proxy_token_is_inherited_but_not_in_launcher_argv(tmp_path) -> None:
         proxy.drop_lease(lease)
     finally:
         proxy.shutdown()
+
+
+def test_readiness_marker_uses_a_writable_root(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    writable = tmp_path / "writable"
+    writable.mkdir()
+    policy = LocalSandboxPolicy(
+        allow_execution=True,
+        filesystem_scope="workspace",
+        network=LocalNetworkPolicy(
+            mode="allowlist",
+            allowed_domains=("example.com",),
+            allow_loopback=True,
+        ),
+        filesystem=LocalFilesystemPolicy(deny_write=(str(workspace),)),
+        unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+    )
+    spec = SandboxSpec(
+        workspace=workspace,
+        policy=policy,
+        writable_roots=(writable,),
+        proxy=SandboxProxyEndpoint(
+            token="test-token",
+            http_socket="/tmp/http.sock",
+            socks_socket="/tmp/socks.sock",
+        ),
+    )
+    command = BubblewrapProcessSandbox().build_command(["/bin/true"], spec)
+    ready_path = Path(command[command.index("--ready-file") + 1])
+    assert ready_path.is_relative_to(writable.resolve())
+
+
+def test_launcher_environment_drops_dynamic_loader_variables(tmp_path) -> None:
+    environment = BubblewrapProcessSandbox()._launch_environment(
+        SandboxSpec(workspace=tmp_path),
+        {
+            "LD_PRELOAD": "/tmp/evil.so",
+            "ld_library_path": "/tmp",
+            "DYLD_INSERT_LIBRARIES": "/tmp/evil.dylib",
+            "GCONV_PATH": "/tmp/gconv",
+            "SAFE_VALUE": "1",
+        },
+    )
+    assert "LD_PRELOAD" not in environment
+    assert "ld_library_path" not in environment
+    assert "DYLD_INSERT_LIBRARIES" not in environment
+    assert "GCONV_PATH" not in environment
+    assert environment["SAFE_VALUE"] == "1"
 
 
 def test_off_mode_uses_filter_without_proxy_sockets(tmp_path) -> None:

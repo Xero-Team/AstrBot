@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-import uuid
 from pathlib import Path
 
 from .base import SandboxSpec, sandbox_ca_file
@@ -16,6 +15,8 @@ _SANDBOX_RUNTIME_ROOT = "/tmp/astrbot-sandbox-runtime"  # noqa: S108  # nosec B1
 
 class BubblewrapProcessSandbox(UnixProcessSandbox):
     """Linux restricted-process launcher backed by bubblewrap."""
+
+    _uses_bridge_ready_path = True
 
     @staticmethod
     def _ca_readonly_paths() -> tuple[Path, ...]:
@@ -41,6 +42,8 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
         workspace: Path,
         spec: SandboxSpec,
         env: dict[str, str],
+        *,
+        ready_path: Path | None = None,
     ) -> list[str]:
         """Build the bubblewrap command for validated inputs."""
         bwrap_path = shutil.which("bwrap")
@@ -213,7 +216,7 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                 "LANG",
                 "C.UTF-8",
                 "--",
-                *self._workload_argv(argv, spec, workspace),
+                *self._workload_argv(argv, spec, ready_path),
             )
         )
         return command
@@ -253,7 +256,7 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
         self,
         argv: list[str],
         spec: SandboxSpec,
-        workspace: Path,
+        ready_path: Path | None,
     ) -> list[str]:
         """Build either the direct workload or the unfiltered bridge runner."""
         if spec.proxy is None:
@@ -261,6 +264,7 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                 return build_resource_limited_argv(argv, spec.limits)
             filter_argv = [
                 str(sys.executable),
+                "-I",
                 "-S",
                 f"{_SANDBOX_RUNTIME_ROOT}/bridge/bridge.py",  # noqa: S108  # nosec B108
                 "--filter-only",
@@ -270,9 +274,11 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                 *argv,
             ]
             return build_resource_limited_argv(filter_argv, spec.limits)
-        ready_path = workspace / f".astrbot-bridge-ready-{uuid.uuid4().hex}"
+        if ready_path is None:
+            raise RuntimeError("The sandbox bridge readiness path is missing.")
         bridge_argv = [
             str(sys.executable),
+            "-I",
             "-S",
             f"{_SANDBOX_RUNTIME_ROOT}/bridge/bridge.py",  # noqa: S108  # nosec B108
             "--http-socket",

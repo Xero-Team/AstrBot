@@ -12,7 +12,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, replace
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Literal
 
 MAX_DOMAIN_RULES = 256
@@ -425,16 +425,19 @@ def path_rule_matches(rule: str, path: Path) -> bool:
     """Return whether a configured path or glob rule covers ``path``.
 
     ``~`` is expanded against the AstrBot account, and ``*``/``?``/``[]``/``**``
-    follow ``pathlib.PurePath.full_match`` semantics. Platforms are compared as
-    normalized POSIX-style paths so persisted rules remain portable.
+    follow ``pathlib.PurePath.full_match`` semantics. Windows comparisons use
+    ``PureWindowsPath`` so drive paths remain case-insensitive.
     """
     expression = expand_path_rule(rule)
     candidate = str(path)
     if sys.platform == "win32":
         expression = expression.replace("\\", "/")
         candidate = candidate.replace("\\", "/")
-    candidate_path = PurePosixPath(candidate)
-    expression_path = PurePosixPath(expression)
+        path_type = PureWindowsPath
+    else:
+        path_type = PurePosixPath
+    candidate_path = path_type(candidate)
+    expression_path = path_type(expression)
     if not _contains_glob(expression):
         return candidate_path == expression_path or candidate_path.is_relative_to(
             expression_path

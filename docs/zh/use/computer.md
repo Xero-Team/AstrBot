@@ -105,11 +105,11 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 - `allowlist`：只有获批目标能通过带认证的 AstrBot 代理出站。`allowed_domains` 支持精确域名、`*.example.com` 子域规则、规范化 IP 字面量或 `*`，并可附加端口。拒绝规则始终优先。
 - `unrestricted`：不设域名白名单，但流量仍必须经过代理；它不表示允许直接 IP 出站。元数据、链路本地、组播、未指定、保留、广播和宿主接口地址的内置防护仍然生效。
 
-`allow_private_network` 和 `allow_loopback` 分别选择加入 RFC1918/ULA/CGNAT 和环回类别。元数据、链路本地、组播、未指定、保留、广播和宿主接口地址始终拒绝。允许列表中的规范化 IP 字面量会显式放行该 IP 及端口，即使其类别默认被阻止，但更具体的拒绝规则仍优先。IPv4-mapped、6to4、NAT64 及其他内嵌 IPv4 形式只会增加拒绝。
+`allow_private_network` 和 `allow_loopback` 分别选择加入 RFC1918/ULA/CGNAT/站点本地和环回类别。元数据、链路本地、组播、未指定、保留、广播和宿主接口地址始终拒绝。允许列表中的规范化 IP 字面量会显式放行该 IP 及端口，即使其类别默认被阻止，但更具体的拒绝规则仍优先。IPv4-mapped、6to4、NAT64 及其他内嵌 IPv4 形式只会增加拒绝。
 
 代理由宿主机执行一次 DNS 解析，并为连接固定数值地址，绝不要求沙箱解析域名。HTTPS 使用 `CONNECT`，因此使用宿主系统或 certifi CA 存储即可完成正常证书校验。支持明文 `http://` 绝对形式请求；拒绝 `https://` 绝对形式，因为 TLS 终止/MITM 不在范围内。`Proxy-Authorization` 只认证一次调用租约，并被消费而不是转发。直接 SSH、Git-over-SSH 以及绕过已配置 HTTP/SOCKS 代理的 SOCKS-only 工作负载不在覆盖范围内。
 
-代理令牌按调用随机生成，仅通过继承的环境变量进入沙箱，不会出现在启动 argv 或内联 Python 源码中。以下环境变量会在调用方值之后按所有大小写形式覆盖：`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`；`NO_PROXY`/`no_proxy` 为空。受支持的 SOCKS 客户端使用 `socks5h`，由代理而非工作负载解析域名。
+代理令牌按调用随机生成，仅通过继承的环境变量进入沙箱，不会出现在启动 argv 或内联 Python 源码中。以下环境变量会在调用方值之后按所有大小写形式覆盖：`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`；`NO_PROXY`/`no_proxy` 为空。受支持的 SOCKS 客户端使用 `socks5h`，由代理而非工作负载解析域名。动态加载器与 glibc 模块变量（例如 `LD_*`、`DYLD_*`、`GCONV_PATH`）会从启动器环境中移除，避免调用方提供的 `env` 在隔离生效前于 `bwrap` 或 `sandbox-exec` 中执行代码。
 
 ### 文件系统拒绝策略
 

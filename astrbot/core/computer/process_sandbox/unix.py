@@ -8,6 +8,7 @@ import subprocess  # noqa: S404  # subprocess is an intentional runtime dependen
 import sys
 import tempfile
 import time
+import uuid
 from abc import abstractmethod
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from .base import (
     SandboxStdout,
     SandboxTimeoutError,
 )
+from .fs_policy import DenyRuleSet
 
 
 class UnixSandboxProcess:
@@ -85,6 +87,8 @@ class UnixSandboxProcess:
 class UnixProcessSandbox(ProcessSandbox):
     """Common launcher behavior for Unix sandbox implementations."""
 
+    _uses_bridge_ready_path = False
+
     def build_command(
         self,
         argv: list[str],
@@ -102,8 +106,69 @@ class UnixProcessSandbox(ProcessSandbox):
         Returns:
             Platform sandbox command and arguments.
         """
+        command, _ready_path = self._build_command_with_ready(argv, spec, env=env)
+        return command
+
+    def _build_command_with_ready(
+        self,
+        argv: list[str],
+        spec: SandboxSpec,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> tuple[list[str], Path | None]:
+        """Build a launcher command and its structured readiness path.
+
+        The readiness path is generated here instead of being recovered from
+        launcher argv. Scanning argv would let caller-controlled environment
+        names or workload arguments spoof the path, and the path is later
+        deleted after launch.
+        """
         argv, workspace, env = self._prepare_command(argv, spec, env=env)
-        return self._build_command(argv, workspace, spec, env)
+        ready_path = (
+            self._ready_file_path(workspace, spec)
+            if spec.proxy is not None and self._uses_bridge_ready_path
+            else None
+        )
+        return (
+            self._build_command(
+                argv,
+                workspace,
+                spec,
+                env,
+                ready_path=ready_path,
+            ),
+            ready_path,
+        )
+
+    @staticmethod
+    def _ready_file_path(workspace: Path, spec: SandboxSpec) -> Path:
+        """Return a host-visible path for the bridge readiness marker.
+
+        The marker must be written from inside the sandbox and observed by the
+        host. A workspace-scoped sandbox only exposes its workspace and
+        writable roots, so a configured deny rule can make the workspace
+        read-only. Prefer the workspace, then fall back to a mounted writable
+        root that the same deny policy does not cover.
+        """
+        rules = DenyRuleSet(spec.policy.filesystem)
+        candidates: list[Path] = []
+        if spec.workspace_writable or spec.policy.filesystem_scope == "host":
+            candidates.append(workspace)
+        candidates.extend(root.resolve() for root in spec.writable_roots)
+        if spec.policy.filesystem_scope == "host":
+            # Host scope sees the real temporary directory, so it remains a
+            # valid marker location when a deny rule covers the workspace.
+            candidates.append(Path(tempfile.gettempdir()).resolve())
+        for candidate in dict.fromkeys(candidates):
+            if not candidate.is_dir() or not os.access(candidate, os.W_OK):
+                continue
+            probe = candidate / ".astrbot-bridge-ready-probe"
+            if not rules.matches(probe, "edit"):
+                return candidate / f".astrbot-bridge-ready-{uuid.uuid4().hex}"
+        raise RuntimeError(
+            "No writable Local sandbox path is available for the bridge "
+            "readiness marker; adjust the configured filesystem deny rules."
+        )
 
     def run(
         self,
@@ -135,8 +200,7 @@ class UnixProcessSandbox(ProcessSandbox):
         if output_limit is not None and output_limit <= 0:
             raise ValueError("Sandbox output limit must be greater than 0.")
 
-        command = self.build_command(argv, spec, env=env)
-        ready_path = _bridge_ready_path(command)
+        command, ready_path = self._build_command_with_ready(argv, spec, env=env)
         with (
             tempfile.TemporaryFile() as stdout_file,
             tempfile.TemporaryFile() as stderr_file,
@@ -199,8 +263,11 @@ class UnixProcessSandbox(ProcessSandbox):
         Returns:
             Process adapter whose lifecycle methods affect the process group.
         """
-        platform_command = self.build_command(["/bin/sh", "-c", command], spec, env=env)
-        ready_path = _bridge_ready_path(platform_command)
+        platform_command, ready_path = self._build_command_with_ready(
+            ["/bin/sh", "-c", command],
+            spec,
+            env=env,
+        )
         process = await asyncio.create_subprocess_exec(
             *platform_command,
             cwd=spec.workspace.resolve(),
@@ -236,19 +303,10 @@ class UnixProcessSandbox(ProcessSandbox):
         workspace: Path,
         spec: SandboxSpec,
         env: dict[str, str],
+        *,
+        ready_path: Path | None = None,
     ) -> list[str]:
         """Build a Unix sandbox command after common input validation."""
-
-
-def _bridge_ready_path(command: list[str]) -> Path | None:
-    """Extract the bridge readiness path from a built launcher command."""
-    try:
-        index = command.index("--ready-file")
-    except ValueError:
-        return None
-    if index + 1 >= len(command):
-        raise RuntimeError("The sandbox bridge command is missing its ready path.")
-    return Path(command[index + 1])
 
 
 def _wait_for_bridge_ready(

@@ -9,6 +9,26 @@ from typing import Protocol
 
 from astrbot.core.computer.local_policy import LocalSandboxPolicy
 
+# Caller environment is inherited by platform launchers before the sandbox is
+# active. Dynamic-loader and glibc module variables would execute caller-chosen
+# code inside bwrap/sandbox-exec itself, so they never reach the launcher.
+_LAUNCHER_ENV_PREFIXES = ("LD_", "DYLD_")
+_LAUNCHER_ENV_NAMES = frozenset(
+    {
+        "GCONV_PATH",
+        "LOCPATH",
+        "NLSPATH",
+        "MALLOC_CONF",
+        "GLIBC_TUNABLES",
+    }
+)
+
+
+def _unsafe_launcher_environment_name(name: str) -> bool:
+    """Return whether a variable can inject code into the launcher process."""
+    upper = name.upper()
+    return upper.startswith(_LAUNCHER_ENV_PREFIXES) or upper in _LAUNCHER_ENV_NAMES
+
 
 @dataclass(frozen=True, slots=True)
 class SandboxLimits:
@@ -229,14 +249,22 @@ class ProcessSandbox(ABC):
         platform commands never place them in argv or inline Python source.
         Case variants of proxy variables are always overridden after caller
         environment values so an explicit ``no_proxy`` cannot bypass policy.
+        Dynamic-loader and glibc module variables are dropped from the launcher
+        environment; platform launchers pass caller variables to the workload
+        through their own sandbox-only mechanism.
         """
         python_path = str(Path(sys.executable).parent)
         fallback_paths = [
             entry for entry in os.defpath.split(os.pathsep) if entry and entry != "."
         ]
+        caller_environment = {
+            str(key): str(value)
+            for key, value in (extra or {}).items()
+            if not _unsafe_launcher_environment_name(str(key))
+        }
         environment = {
             "PATH": os.pathsep.join((python_path, *fallback_paths)),
-            **(extra or {}),
+            **caller_environment,
         }
         if spec.proxy is not None:
             proxy = spec.proxy

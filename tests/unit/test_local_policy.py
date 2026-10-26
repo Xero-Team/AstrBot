@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import astrbot.core.computer.local_policy as local_policy
 from astrbot.core.computer.local_policy import (
     MAX_DOMAIN_RULES,
     MAX_PATH_RULES,
@@ -248,6 +249,13 @@ def test_path_rule_matching_supports_globs_and_descendants(tmp_path: Path) -> No
     assert path_rule_matches(str(secret), secret / "child")
     assert path_rule_matches(str(tmp_path / "*"), secret)
     assert not path_rule_matches(str(tmp_path / "*.txt"), secret / "child.txt")
+
+
+def test_windows_glob_denies_are_case_insensitive(monkeypatch) -> None:
+    monkeypatch.setattr(local_policy.sys, "platform", "win32")
+    assert path_rule_matches("C:/Secrets/*.txt", Path("C:/Secrets/A.TXT"))
+    assert path_rule_matches(r"C:\Secrets\*.TXT", Path("c:/secrets/a.txt"))
+    assert not path_rule_matches("C:/Secrets/*.txt", Path("C:/Other/A.TXT"))
 
 
 def test_macos_only_socket_paths_are_rejected_on_linux(tmp_path: Path) -> None:

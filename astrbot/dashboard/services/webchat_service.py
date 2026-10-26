@@ -113,6 +113,26 @@ class WebChatService:
         if self.mcp_interaction_coordinator is not None:
             self.mcp_interaction_coordinator.set_publisher(self._publish_mcp_input)
 
+    @staticmethod
+    def _chat_umo(username: str, chat_session_id: str) -> str:
+        """Return the event UMO used for one WebChat conversation."""
+        return f"webchat:FriendMessage:webchat!{username}!{chat_session_id}"
+
+    def _register_mcp_publisher(
+        self,
+        session: WebChatSession,
+        chat_session_id: str,
+        send_json: SendJson,
+    ) -> str:
+        umo = self._chat_umo(session.username, chat_session_id)
+        self._mcp_publishers[umo] = (session, send_json)
+        return umo
+
+    def _unregister_mcp_publisher(self, session: WebChatSession) -> None:
+        for umo, (owner, _send_json) in list(self._mcp_publishers.items()):
+            if owner is session:
+                self._mcp_publishers.pop(umo, None)
+
     async def _publish_mcp_input(self, payload: dict) -> None:
         """Send elicitation to only the WebChat connection owning its UMO."""
         umo = payload.get("unified_msg_origin")
@@ -230,6 +250,7 @@ class WebChatService:
         return True
 
     async def cleanup_session(self, session: WebChatSession) -> None:
+        self._unregister_mcp_publisher(session)
         if session.session_id in self.sessions:
             await self.cleanup_chat_subscriptions(session)
             del self.sessions[session.session_id]
@@ -324,7 +345,6 @@ class WebChatService:
 
         finally:
             await self.cleanup_session(session)
-            self._mcp_publishers.pop(session.session_id, None)
             logger.info(f"[WebChat] WebSocket connection closed: {username}")
 
     async def create_attachment_from_file(
@@ -553,6 +573,8 @@ class WebChatService:
                 send_json,
             )
             return
+
+        self._register_mcp_publisher(session, str(session_id), send_json)
 
         (
             message_parts,
@@ -919,6 +941,7 @@ class WebChatService:
                 )
                 return True
 
+            self._register_mcp_publisher(session, chat_session_id, send_json)
             request_id = await self.ensure_chat_subscription(
                 session, chat_session_id, send_json
             )
@@ -983,14 +1006,16 @@ class WebChatService:
         request_id = str(message.get("request_id") or message.get("message_id") or "")
         run_id = str(message.get("run_id") or "")
         server_name = str(message.get("server_name") or "")
-        origin = str(message.get("unified_msg_origin") or session.session_id)
+        origin = str(message.get("unified_msg_origin") or "")
         action = message.get("action")
+        target = self._mcp_publishers.get(origin)
+        owns_origin = target is not None and target[0] is session
         if (
             coordinator is None
             or not request_id
             or not run_id
             or not server_name
-            or origin != session.session_id
+            or not owns_origin
         ):
             accepted = False
         else:

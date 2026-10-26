@@ -275,7 +275,6 @@ class WebChatService:
             return
 
         session = self.create_session(username, dashboard_principal)
-        self._mcp_publishers[session.session_id] = (session, send_json)
         logger.info(f"[WebChat] WebSocket connection established: {username}")
 
         def finish_chat_request(completed: asyncio.Task, request_id: str) -> None:

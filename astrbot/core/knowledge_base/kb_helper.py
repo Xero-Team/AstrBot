@@ -269,6 +269,9 @@ class KBHelper:
     async def terminate(self) -> None:
         if hasattr(self, "vec_db") and self.vec_db:
             await self.vec_db.close()
+            # Drop the closed store so a later _ensure_vec_db() re-opens the
+            # directory instead of returning the unusable instance.
+            del self.vec_db
 
     async def _report_upload_progress(
         self,

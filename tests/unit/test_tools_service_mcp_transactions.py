@@ -108,3 +108,76 @@ async def test_delete_cancels_orphaned_oauth_probe():
     assert "server" not in manager.config["mcpServers"]
     assert probe_task.cancelled()
     assert "server:ref-1" not in service._oauth_probe_tasks
+
+
+@pytest.mark.asyncio
+async def test_update_cancels_oauth_probes_for_old_and_new_names():
+    old_config = {
+        "command": "python",
+        "args": ["old.py"],
+        "auth_ref": "ref-old",
+        "active": True,
+    }
+    service, manager = _service({"server": old_config})
+
+    async def probe() -> None:
+        await asyncio.sleep(3600)
+
+    old_probe = asyncio.create_task(probe())
+    new_probe = asyncio.create_task(probe())
+    service._oauth_probe_tasks["server:ref-old"] = old_probe
+    service._oauth_probe_tasks["renamed:ref-new"] = new_probe
+
+    await service.update_mcp_server(
+        "server",
+        {
+            "name": "renamed",
+            "command": "python",
+            "args": ["new.py"],
+            "auth_ref": "ref-new",
+            "active": True,
+        },
+    )
+
+    assert old_probe.cancelled()
+    assert new_probe.cancelled()
+    assert service._oauth_probe_tasks == {}
+    assert "renamed" in manager.config["mcpServers"]
+
+
+@pytest.mark.asyncio
+async def test_failed_update_rollback_cancels_oauth_probes():
+    old_config = {
+        "command": "python",
+        "args": ["old.py"],
+        "auth_ref": "ref-old",
+        "active": True,
+    }
+    service, manager = _service({"server": old_config})
+    manager.fail_enable = True
+
+    async def probe() -> None:
+        await asyncio.sleep(3600)
+
+    old_probe = asyncio.create_task(probe())
+    new_probe = asyncio.create_task(probe())
+    service._oauth_probe_tasks["server:ref-old"] = old_probe
+    service._oauth_probe_tasks["renamed:ref-new"] = new_probe
+
+    with pytest.raises(ToolsServiceError, match="Timed out"):
+        await service.update_mcp_server(
+            "server",
+            {
+                "name": "renamed",
+                "command": "python",
+                "args": ["new.py"],
+                "auth_ref": "ref-new",
+                "active": True,
+            },
+        )
+
+    assert old_probe.cancelled()
+    assert new_probe.cancelled()
+    assert service._oauth_probe_tasks == {}
+    assert "server" in manager.config["mcpServers"]
+    assert "renamed" not in manager.config["mcpServers"]

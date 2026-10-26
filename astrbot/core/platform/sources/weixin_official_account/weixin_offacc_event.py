@@ -122,7 +122,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                             message=cast(dict, self.message_obj.raw_message)["message"],
                         )
                         xml = reply.render()
-                        self.message_out.setdefault("cached_xml", []).append(xml)
+                        self.message_out.setdefault("cached_xml", []).append(
+                            {"xml": xml}
+                        )
                         self._complete_passive_future()
 
             elif isinstance(comp, Record):
@@ -150,7 +152,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                                 ],
                             )
                             xml = reply.render()
-                            self.message_out.setdefault("cached_xml", []).append(xml)
+                            self.message_out.setdefault("cached_xml", []).append(
+                                {"xml": xml}
+                            )
                             self._complete_passive_future()
                 finally:
                     if record_path_amr != record_path and os.path.exists(

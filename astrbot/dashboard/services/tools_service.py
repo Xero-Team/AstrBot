@@ -84,6 +84,25 @@ class ToolsService:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
+    @staticmethod
+    def _oauth_identity(name: str, config: dict | None) -> str | None:
+        if not isinstance(config, dict):
+            return None
+        auth_ref = config.get("auth_ref")
+        if not isinstance(auth_ref, str) or not auth_ref:
+            return None
+        return f"{name}:{auth_ref}"
+
+    async def _cancel_oauth_probes(self, *servers: tuple[str, dict | None]) -> None:
+        """Cancel probes whose captured name/config is about to become stale."""
+        identities = {
+            identity
+            for name, config in servers
+            if (identity := self._oauth_identity(name, config)) is not None
+        }
+        for identity in identities:
+            await self._cancel_oauth_probe(identity)
+
     async def _restore_mcp_runtime(
         self,
         *,
@@ -115,6 +134,10 @@ class ToolsService:
         try:
             rollback_config = self.tool_mgr.load_mcp_config()
             servers = rollback_config.setdefault("mcpServers", {})
+            await self._cancel_oauth_probes(
+                (old_name, old_config),
+                (name, servers.get(name)),
+            )
             if is_rename:
                 servers.pop(name, None)
             servers[old_name] = old_config
@@ -491,6 +514,13 @@ class ToolsService:
             )
             self._validate_server_config(server_config)
 
+            # A running OAuth probe captured the old name/config. Cancel it
+            # before switching the config so it cannot re-enable a stale entry.
+            await self._cancel_oauth_probes(
+                (old_name, old_config),
+                (name, server_config),
+            )
+
             if is_rename:
                 config["mcpServers"].pop(old_name)
                 config["mcpServers"][name] = server_config
@@ -542,17 +572,13 @@ class ToolsService:
 
             old_config = copy.deepcopy(config["mcpServers"][name])
             was_running = name in self.tool_mgr.mcp_server_runtime_view
+            await self._cancel_oauth_probes((name, old_config))
             if was_running:
                 await self._disable_server(name)
 
             del config["mcpServers"][name]
 
             if self.tool_mgr.save_mcp_config(config):
-                auth_ref = (
-                    old_config.get("auth_ref") if isinstance(old_config, dict) else None
-                )
-                if isinstance(auth_ref, str) and auth_ref:
-                    await self._cancel_oauth_probe(f"{name}:{auth_ref}")
                 return f"Successfully deleted MCP server {name}"
 
             await self._restore_mcp_runtime(

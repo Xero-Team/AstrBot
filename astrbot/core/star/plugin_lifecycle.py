@@ -1061,6 +1061,12 @@ class PluginLifecycle:
             except Exception:
                 logger.error(traceback.format_exc())
 
+        # Mark this generation as terminated so a repeated teardown (for
+        # example an update's pre-promotion terminate followed by the reload
+        # teardown) cannot run terminate/__del__ and unload hooks twice.
+        metadata.star_cls = None
+        metadata.activated = False
+
     async def _watch_plugin_changes(self) -> None:
         """Watch plugin packages and reload each activated changed package once."""
         assert awatch is not None and PythonFilter is not None

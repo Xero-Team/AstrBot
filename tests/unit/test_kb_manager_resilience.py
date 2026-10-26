@@ -571,9 +571,12 @@ async def test_delete_kb_restores_directory_when_metadata_delete_fails(
         helper.terminate = AsyncMock()
         return await KBHelper.stage_vec_db_deletion(helper)
 
+    initialize = AsyncMock()
     helper = SimpleNamespace(
         kb=kb,
         kb_dir=kb_dir,
+        init_error=None,
+        initialize=initialize,
         stage_vec_db_deletion=stage_vec_db_deletion,
         restore_staged_vec_db=lambda tombstone, path: (
             tombstone.rename(path) if tombstone and tombstone.exists() else None
@@ -590,6 +593,21 @@ async def test_delete_kb_restores_directory_when_metadata_delete_fails(
     assert kb_dir.is_dir()
     assert (kb_dir / "index.faiss").read_bytes() == b"index"
     assert manager.kb_insts["kb-1"] is helper
+    initialize.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_terminate_drops_closed_vector_store():
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    helper = KBHelper.__new__(KBHelper)
+    vec_db = SimpleNamespace(close=AsyncMock())
+    helper.vec_db = vec_db
+
+    await helper.terminate()
+
+    vec_db.close.assert_awaited_once_with()
+    assert not hasattr(helper, "vec_db")
 
 
 @pytest.mark.asyncio

@@ -161,6 +161,11 @@ class KnowledgeBaseManager:
                 await session.commit()
         except Exception:
             kb_helper.restore_staged_vec_db(tombstone, kb_helper.kb_dir)
+            try:
+                await kb_helper.initialize()
+            except Exception as exc:
+                kb_helper.init_error = _KB_INITIALIZATION_ERROR
+                logger.error("知识库恢复后重新初始化失败: %s", safe_error("", exc))
             raise
 
         self.kb_insts.pop(kb_id, None)

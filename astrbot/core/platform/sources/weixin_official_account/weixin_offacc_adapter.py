@@ -179,23 +179,32 @@ class WeixinOfficialAccountServer:
                     )
                     return self._maybe_encrypt(reply_xml, nonce, timestamp)
 
+                def _reply_cached(cached: Any, *, partial: bool) -> str:
+                    if isinstance(cached, dict) and "xml" in cached:
+                        # Media replies are already complete XML documents and
+                        # cannot be wrapped as text or extended with a hint.
+                        return self._maybe_encrypt(
+                            str(cached.get("xml", "")), nonce, timestamp
+                        )
+                    text = str(cached)
+                    if partial:
+                        text += "\n【后续消息还在缓冲中，回复任意文字继续获取】"
+                    return _reply_text(text)
+
                 # if in cached state, return cached result or placeholder
                 if state:
                     logger.debug(f"用户消息缓冲状态: user={from_user} state={state}")
                     cached = state.get("cached_xml")
-                    # send one cached each time, if cached is empty after pop, remove the buffer
+                    # Send one cached reply per callback and keep the finished
+                    # state so a WeChat retry with the same MsgId is a no-op.
                     if cached and len(cached) > 0:
                         logger.info(f"wx buffer hit on trigger: user={from_user}")
-                        cached_xml = cached.pop(0)
+                        cached_reply = cached.pop(0)
                         if len(cached) == 0:
-                            self.user_buffer.pop(from_user, None)
                             result_kind = "cached-final"
-                            return _reply_text(cached_xml)
+                            return _reply_cached(cached_reply, partial=False)
                         result_kind = "cached-partial"
-                        return _reply_text(
-                            cached_xml
-                            + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
-                        )
+                        return _reply_cached(cached_reply, partial=True)
 
                     task: asyncio.Task | None = cast(
                         asyncio.Task | None,
@@ -203,15 +212,15 @@ class WeixinOfficialAccountServer:
                     )
                     if task and task.done():
                         error = _task_exception(task)
-                        self.user_buffer.pop(from_user, None)
-                        if error is not None:
+                        same_message = state.get("msg_id") == msg_id
+                        if error is not None and same_message:
                             logger.error(
                                 "wx task failed without a passive reply",
                                 exc_info=error,
                             )
                             result_kind = "stale-task-error"
                             return _reply_text("处理消息失败，请稍后再试。")
-                        if state.get("msg_id") == msg_id:
+                        if error is None and same_message:
                             logger.info(
                                 "wx task finished without a passive reply; ignoring the "
                                 "same-message retry: user=%s msg_id=%s",
@@ -220,9 +229,16 @@ class WeixinOfficialAccountServer:
                             )
                             result_kind = "stale-task-retry"
                             return "success"
-                        logger.info(
-                            "wx task finished without a passive reply; starting a new trigger"
-                        )
+                        self.user_buffer.pop(from_user, None)
+                        if error is not None:
+                            logger.error(
+                                "wx previous task failed; starting a new trigger",
+                                exc_info=error,
+                            )
+                        else:
+                            logger.info(
+                                "wx task finished without a passive reply; starting a new trigger"
+                            )
                         # Fall through to the new-trigger path below.
                     else:
                         placeholder = (
@@ -240,29 +256,27 @@ class WeixinOfficialAccountServer:
                             if done:
                                 try:
                                     cached = state.get("cached_xml")
-                                    # send one cached each time, if cached is empty after pop, remove the buffer
+                                    # Send one cached reply per callback and keep the finished
+                                    # state so a WeChat retry with the same MsgId is a no-op.
                                     if cached and len(cached) > 0:
                                         logger.info(
                                             f"wx buffer hit on retry window: user={from_user}"
                                         )
-                                        cached_xml = cached.pop(0)
+                                        cached_reply = cached.pop(0)
                                         if len(cached) == 0:
-                                            self.user_buffer.pop(from_user, None)
                                             logger.debug(
                                                 f"wx finished message sending in passive window: user={from_user} msg_id={msg_id} "
                                             )
                                             result_kind = "retry-window-final"
-                                            return _reply_text(cached_xml)
+                                            return _reply_cached(
+                                                cached_reply, partial=False
+                                            )
                                         logger.debug(
                                             f"wx finished message sending in passive window but not final: user={from_user} msg_id={msg_id} "
                                         )
                                         result_kind = "retry-window-partial"
-                                        return _reply_text(
-                                            cached_xml
-                                            + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
-                                        )
+                                        return _reply_cached(cached_reply, partial=True)
                                     error = _task_exception(task)
-                                    self.user_buffer.pop(from_user, None)
                                     if error is not None:
                                         logger.error(
                                             "wx task failed in passive window",
@@ -271,7 +285,7 @@ class WeixinOfficialAccountServer:
                                         result_kind = "retry-window-error"
                                         return _reply_text("处理消息失败，请稍后再试。")
                                     logger.info(
-                                        f"wx finished in window without a passive reply; clearing state: user={from_user} msg_id={msg_id} "
+                                        f"wx finished in window without a passive reply; keeping state for retries: user={from_user} msg_id={msg_id} "
                                     )
                                     result_kind = "retry-window-empty"
                                     return "success"
@@ -324,21 +338,17 @@ class WeixinOfficialAccountServer:
                 if done:
                     try:
                         cached = state.get("cached_xml", None)
-                        # send one cached each time, if cached is empty after pop, remove the buffer
+                        # Send one cached reply per callback and keep the finished
+                        # state so a WeChat retry with the same MsgId is a no-op.
                         if cached and len(cached) > 0:
                             logger.info(f"wx buffer hit immediately: user={from_user}")
-                            cached_xml = cached.pop(0)
+                            cached_reply = cached.pop(0)
                             if len(cached) == 0:
-                                self.user_buffer.pop(from_user, None)
                                 result_kind = "first-window-final"
-                                return _reply_text(cached_xml)
+                                return _reply_cached(cached_reply, partial=False)
                             result_kind = "first-window-partial"
-                            return _reply_text(
-                                cached_xml
-                                + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
-                            )
+                            return _reply_cached(cached_reply, partial=True)
                         error = _task_exception(task)
-                        self.user_buffer.pop(from_user, None)
                         if error is not None:
                             logger.error(
                                 "wx task failed in first window",
@@ -347,7 +357,7 @@ class WeixinOfficialAccountServer:
                             result_kind = "first-window-error"
                             return _reply_text("处理消息失败，请稍后再试。")
                         logger.info(
-                            f"wx finished in first window without a passive reply; clearing state: user={from_user} msg_id={msg_id} "
+                            f"wx finished in first window without a passive reply; keeping state for retries: user={from_user} msg_id={msg_id} "
                         )
                         result_kind = "first-window-empty"
                         return "success"

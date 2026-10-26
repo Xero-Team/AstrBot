@@ -202,7 +202,9 @@ async def test_passive_send_accumulates_components_and_completes_future(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_callback_clears_completed_state_without_passive_reply(monkeypatch):
+async def test_callback_keeps_completed_state_to_ignore_same_message_retries(
+    monkeypatch,
+):
     adapter = _adapter()
     adapter.server._maybe_encrypt = lambda xml, *_args: xml
 
@@ -243,7 +245,13 @@ async def test_callback_clears_completed_state_without_passive_reply(monkeypatch
     result = await adapter.server.handle_callback(_Request())
 
     assert result == "success"
-    assert "user-stuck" not in adapter.user_buffer
+    assert adapter.user_buffer["user-stuck"]["msg_id"] == "301"
+    assert adapter.server.callback.await_count == 1
+
+    retry_result = await adapter.server.handle_callback(_Request())
+
+    assert retry_result == "success"
+    assert adapter.server.callback.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -284,5 +292,86 @@ async def test_callback_does_not_reprocess_a_completed_same_message(monkeypatch)
     result = await adapter.server.handle_callback(_Request())
 
     assert result == "success"
-    assert "user-retry" not in adapter.user_buffer
+    assert adapter.user_buffer["user-retry"]["msg_id"] == "401"
     adapter.server.callback.assert_not_awaited()
+
+
+def _request_stub():
+    class _Request:
+        args = {"msg_signature": "sig", "timestamp": "1", "nonce": "n"}
+
+        async def get_data(self):
+            return b"<xml/>"
+
+    return _Request()
+
+
+def _text_message(*, user: str, msg_id: int) -> TextMessage:
+    return TextMessage(
+        {
+            "MsgType": "text",
+            "Content": "retry",
+            "ToUserName": "bot-1",
+            "FromUserName": user,
+            "MsgId": msg_id,
+            "CreateTime": 903,
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_callback_ignores_same_message_retry_after_cached_reply_drains(
+    monkeypatch,
+):
+    adapter = _adapter()
+    adapter.server._maybe_encrypt = lambda xml, *_args: xml
+    adapter.server.crypto = SimpleNamespace(decrypt_message=lambda *_args: "<xml/>")
+    msg = _text_message(user="user-drained", msg_id=501)
+    monkeypatch.setattr(weixin_offacc_adapter, "parse_message", lambda _xml: msg)
+
+    completed = asyncio.create_task(asyncio.sleep(0))
+    await completed
+    adapter.user_buffer["user-drained"] = {
+        "msg_id": "501",
+        "preview": "retry",
+        "task": completed,
+        "cached_xml": ["final reply"],
+        "started_at": 0.0,
+    }
+    adapter.server.callback = AsyncMock(return_value=None)
+
+    first = await adapter.server.handle_callback(_request_stub())
+
+    assert "final reply" in first
+    assert adapter.user_buffer["user-drained"]["msg_id"] == "501"
+
+    retry = await adapter.server.handle_callback(_request_stub())
+
+    assert retry == "success"
+    adapter.server.callback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_callback_returns_cached_media_xml_without_wrapping(monkeypatch):
+    adapter = _adapter()
+    adapter.server._maybe_encrypt = lambda xml, *_args: xml
+    adapter.server.crypto = SimpleNamespace(decrypt_message=lambda *_args: "<xml/>")
+    msg = _text_message(user="user-media", msg_id=601)
+    monkeypatch.setattr(weixin_offacc_adapter, "parse_message", lambda _xml: msg)
+
+    completed = asyncio.create_task(asyncio.sleep(0))
+    await completed
+    media_xml = "<xml><Image><MediaId>media-1</MediaId></Image></xml>"
+    adapter.user_buffer["user-media"] = {
+        "msg_id": "601",
+        "preview": "image",
+        "task": completed,
+        "cached_xml": [{"xml": media_xml}],
+        "started_at": 0.0,
+    }
+    adapter.server.callback = AsyncMock(return_value=None)
+
+    result = await adapter.server.handle_callback(_request_stub())
+
+    assert result == media_xml
+    assert "&lt;" not in result

@@ -352,6 +352,32 @@ async def test_callback_ignores_same_message_retry_after_cached_reply_drains(
 
 
 @pytest.mark.asyncio
+async def test_callback_starts_a_new_trigger_when_message_has_no_unique_id(
+    monkeypatch,
+):
+    adapter = _adapter()
+    adapter.server._maybe_encrypt = lambda xml, *_args: xml
+    adapter.server.crypto = SimpleNamespace(decrypt_message=lambda *_args: "<xml/>")
+    msg = _text_message(user="user-event", msg_id=0)
+    monkeypatch.setattr(weixin_offacc_adapter, "parse_message", lambda _xml: msg)
+
+    completed = asyncio.create_task(asyncio.sleep(0))
+    await completed
+    adapter.user_buffer["user-event"] = {
+        "msg_id": "0",
+        "preview": "event",
+        "task": completed,
+        "cached_xml": [],
+        "started_at": 0.0,
+    }
+    adapter.server.callback = AsyncMock(return_value=None)
+
+    await adapter.server.handle_callback(_request_stub())
+
+    assert adapter.server.callback.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_callback_returns_cached_media_xml_without_wrapping(monkeypatch):
     adapter = _adapter()
     adapter.server._maybe_encrypt = lambda xml, *_args: xml

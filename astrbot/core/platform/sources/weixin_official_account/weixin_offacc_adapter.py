@@ -157,6 +157,10 @@ class WeixinOfficialAccountServer:
             callback_started_at = time.monotonic()
             from_user = str(getattr(msg, "source", ""))
             msg_id = str(cast(str | int, getattr(msg, "id", "")))
+            # WeChat events carry no MsgId, and wechatpy defaults it to "0".
+            # Only a real MsgId identifies a retry; otherwise every later event
+            # from the same user would look like a duplicate of the previous one.
+            has_stable_msg_id = bool(msg_id) and msg_id != "0"
             result_kind = "success"
 
             try:
@@ -212,7 +216,9 @@ class WeixinOfficialAccountServer:
                     )
                     if task and task.done():
                         error = _task_exception(task)
-                        same_message = state.get("msg_id") == msg_id
+                        same_message = has_stable_msg_id and (
+                            state.get("msg_id") == msg_id
+                        )
                         if error is not None and same_message:
                             logger.error(
                                 "wx task failed without a passive reply",
@@ -247,7 +253,7 @@ class WeixinOfficialAccountServer:
                         )
 
                         # same msgid => WeChat retry: wait a little; new msgid => user trigger: just placeholder
-                        if task and state.get("msg_id") == msg_id:
+                        if task and has_stable_msg_id and state.get("msg_id") == msg_id:
                             done, _ = await asyncio.wait(
                                 {task},
                                 timeout=self._wx_msg_time_out,

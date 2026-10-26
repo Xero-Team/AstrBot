@@ -198,9 +198,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 )
                 await self._mark_stream_complete(stream_id)
-                return await super().send(MessageChain([]))
-            await WecomAIBotMessageEvent._send(None, stream_id, self.queue_mgr)
-            return await super().send(MessageChain([]))
+            else:
+                await WecomAIBotMessageEvent._send(None, stream_id, self.queue_mgr)
+            # Do not delegate to ``super().send`` here: the scheduler emits this
+            # empty completion after the concurrent turn was released, so the
+            # base implementation would acquire the group outbound turn lock
+            # without a later ``release_turn`` and wedge later sends.
+            return self._success_send_result()
 
         if (
             connection_mode == "long_connection"

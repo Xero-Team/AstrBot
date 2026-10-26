@@ -190,3 +190,56 @@ async def test_satori_outbound_mention_target_all_is_plain_text():
     )
 
     assert payload == "@all"
+
+
+@pytest.mark.asyncio
+async def test_satori_sequence_never_moves_backwards():
+    adapter = SatoriPlatformAdapter(
+        {
+            "id": "satori-test",
+            "satori_endpoint": "ws://localhost:5140/satori/v1/events",
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.handle_event = AsyncMock()  # type: ignore[method-assign]
+
+    await adapter.handle_message(json.dumps({"op": 0, "body": {"sn": 10}}))
+    await adapter.handle_message(json.dumps({"op": 0, "body": {"sn": 5}}))
+
+    assert adapter.sequence == 10
+    if adapter._event_tasks:
+        await asyncio.gather(*list(adapter._event_tasks), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_satori_event_task_does_not_rewrite_sequence():
+    adapter = SatoriPlatformAdapter(
+        {
+            "id": "satori-test",
+            "satori_endpoint": "ws://localhost:5140/satori/v1/events",
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.sequence = 11
+
+    await adapter.handle_event({"type": "unknown", "sn": 5})
+
+    assert adapter.sequence == 11
+
+
+@pytest.mark.asyncio
+async def test_satori_unknown_tag_text_is_not_duplicated():
+    adapter = SatoriPlatformAdapter(
+        {
+            "id": "satori-test",
+            "satori_endpoint": "ws://localhost:5140/satori/v1/events",
+        },
+        {},
+        asyncio.Queue(),
+    )
+
+    elements = await adapter.parse_satori_elements("<unknown>abc</unknown>")
+
+    assert elements == [Plain(text="abc")]

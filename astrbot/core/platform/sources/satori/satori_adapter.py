@@ -293,24 +293,33 @@ class SatoriPlatformAdapter(Platform):
                         )
 
                 if "sn" in body:
-                    self.sequence = body["sn"]
+                    self._advance_sequence(body["sn"])
 
             elif op == 2:  # PONG
                 pass
 
             elif op == 0:  # EVENT
                 if "sn" in body:
-                    self.sequence = body["sn"]
+                    self._advance_sequence(body["sn"])
                 self._start_event_task(self.handle_event(body))
 
             elif op == 5:  # META
                 if "sn" in body:
-                    self.sequence = body["sn"]
+                    self._advance_sequence(body["sn"])
 
         except json.JSONDecodeError as e:
             logger.error(f"解析 WebSocket 消息失败: {e}, 消息内容: {message}")
         except Exception as e:
             logger.error(f"处理 WebSocket 消息异常: {e}")
+
+    def _advance_sequence(self, sn: object) -> None:
+        """Advance the resume sequence monotonically from the receive loop."""
+        try:
+            value = int(sn)
+        except TypeError, ValueError:
+            return
+        if value > self.sequence:
+            self.sequence = value
 
     def _start_event_task(self, coro: Coroutine[Any, Any, None]) -> None:
         task = asyncio.create_task(coro, name="satori:event")
@@ -328,9 +337,6 @@ class SatoriPlatformAdapter(Platform):
     async def handle_event(self, event_data: dict) -> None:
         try:
             event_type = event_data.get("type")
-            sn = event_data.get("sn")
-            if sn:
-                self.sequence = sn
 
             if event_type == "message-created":
                 message = event_data.get("message", {})
@@ -776,9 +782,7 @@ class SatoriPlatformAdapter(Platform):
                     elements.append(Plain(text="[JSON卡片]"))
 
             else:
-                # 未知标签，递归处理其内容
-                if child.text and child.text.strip():
-                    elements.append(Plain(text=child.text))
+                # 未知标签，递归处理其内容（递归入口会追加节点文本）。
                 await self._parse_xml_node(child, elements)
 
             # 处理标签后的文本

@@ -48,6 +48,7 @@ EXPECTED_TABLE_NAMES = frozenset(
         "session_bridge_rules",
         "session_project_relations",
         "umo_aliases",
+        "umo_senders",
         "webchat_threads",
     }
 )
@@ -89,6 +90,7 @@ EXPECTED_TABLE_MODELS = frozenset(
         "SessionBridgeRule",
         "SessionProjectRelation",
         "UmoAlias",
+        "UmoSender",
         "WebChatThread",
     }
 )

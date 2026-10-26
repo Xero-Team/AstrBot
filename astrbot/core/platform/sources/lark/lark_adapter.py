@@ -880,8 +880,10 @@ class LarkPlatformAdapter(Platform):
         abm.raw_message = message
         sender_open_id = event.event.sender.sender_id.open_id
         sender_name = sender_open_id[:8]
+        if not hasattr(self, "_user_name_cache"):
+            self._user_name_cache = {}
         if getattr(event.event.sender, "sender_type", "user") == "user":
-            cached_name = self._user_name_cache.get(sender_open_id)
+            cached_name = getattr(self, "_user_name_cache", {}).get(sender_open_id)
             if cached_name and time.time() <= cached_name[1]:
                 sender_name = cached_name[0]
             else:

@@ -818,7 +818,12 @@ class LarkMessageEvent(AstrMessageEvent):
         Raises:
             RuntimeError: A proactive message cannot be delivered.
         """
-        file_path = file_comp.file or ""
+        file_path = await file_comp.get_file()
+        if not file_path:
+            logger.warning("[Lark] File source could not be resolved; skipping upload")
+            if not reply_message_id:
+                raise RuntimeError("[Lark] Attachment upload failed")
+            return
         file_key = await LarkMessageEvent._upload_lark_file(
             lark_client, path=file_path, file_type="stream"
         )
@@ -1235,11 +1240,18 @@ class LarkMessageEvent(AstrMessageEvent):
                     buffer.chain.extend(chain.chain)
             if buffer:
                 buffer.squash_plain()
-                await self.send(buffer)
+                result = await self.send(buffer)
+            else:
+                result = None
             self._schedule_metric(
                 name=f"metric:lark-fallback-consume:{self.platform_meta.name}",
             )
             self._has_send_oper = True
+            if isinstance(result, PlatformSendResult):
+                return result
+            return self._success_send_result(
+                message_count=len(buffer.chain) if buffer is not None else 0
+            )
 
         async def _flush_and_close_card() -> None:
             """补发最终文本并关闭当前卡片的流式模式。"""
@@ -1286,8 +1298,9 @@ class LarkMessageEvent(AstrMessageEvent):
                                 logger.warning(
                                     "[Lark] 无法创建流式卡片，回退到非流式发送"
                                 )
-                                await _consume_rest_and_fallback(generator, delta)
-                                return
+                                return await _consume_rest_and_fallback(
+                                    generator, delta
+                                )
 
                             sent = await self._send_card_message(
                                 card_id,
@@ -1297,13 +1310,22 @@ class LarkMessageEvent(AstrMessageEvent):
                                 logger.error(
                                     "[Lark] 发送流式卡片消息失败，回退到非流式发送"
                                 )
-                                await _consume_rest_and_fallback(generator, delta)
-                                return
+                                return await _consume_rest_and_fallback(
+                                    generator, delta
+                                )
 
                             logger.info("[Lark] 流式输出: 使用 CardKit 流式卡片")
                             sender_task = asyncio.create_task(_sender_loop())
 
                         text_changed.set()
+                    else:
+                        try:
+                            await self.send(MessageChain([comp]))
+                        except Exception as exc:
+                            logger.warning(
+                                "[Lark] 流式期间发送非文本组件失败: %s",
+                                safe_error("", exc),
+                            )
         finally:
             done = True
             text_changed.set()
@@ -1318,10 +1340,11 @@ class LarkMessageEvent(AstrMessageEvent):
                     name=f"metric:lark-empty-stream:{self.platform_meta.name}",
                 )
                 self._has_send_oper = True
-            return
+            return self._success_send_result()
 
         # 内联父类 send_streaming 的副作用
         self._schedule_metric(
             name=f"metric:lark-stream:{self.platform_meta.name}",
         )
         self._has_send_oper = True
+        return self._success_send_result(message_count=1)

@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import time
 from collections.abc import Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from xml.etree.ElementTree import Element  # noqa: S405  # type-only import; parsing uses defusedxml
 
 import websockets
@@ -30,13 +32,10 @@ from astrbot.core.platform import (
     Platform,
     PlatformMetadata,
 )
-from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.media_utils import MediaResolver
-
-if TYPE_CHECKING:
-    from .satori_event import SatoriPlatformEvent
 
 
 @register_platform_adapter(
@@ -99,6 +98,7 @@ class SatoriPlatformAdapter(Platform):
         session: MessageSession,
         message_chain: MessageChain,
     ):
+        # Lazy import: the event module imports this adapter only for typing.
         from .satori_event import SatoriPlatformEvent
 
         await SatoriPlatformEvent.send_with_adapter(
@@ -785,7 +785,7 @@ class SatoriPlatformAdapter(Platform):
             if child.tail and child.tail.strip():
                 elements.append(Plain(text=child.tail))
 
-    def create_event(self, message: AstrBotMessage) -> SatoriPlatformEvent:
+    def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
         """Creates a Satori message event.
 
         Args:
@@ -794,6 +794,7 @@ class SatoriPlatformAdapter(Platform):
         Returns:
             Created Satori message event.
         """
+        # Lazy import: the event module imports this adapter only for typing.
         from .satori_event import SatoriPlatformEvent
 
         return SatoriPlatformEvent(

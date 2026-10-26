@@ -7,9 +7,11 @@ from typing import TYPE_CHECKING
 
 from astrbot.core.config import AstrBotConfig
 
+from .base import StarDeclaration
+
 if TYPE_CHECKING:
-    from . import Star
-    from .dashboard_extension import DashboardExtensionManifest
+    from .base import Star
+    from .dashboard_extension_types import DashboardExtensionManifest
 
 
 @dataclass
@@ -90,19 +92,6 @@ class StarMetadata:
 
     def __repr__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
-
-
-@dataclass(frozen=True, slots=True)
-class StarDeclaration:
-    """Static plugin declaration attached to a :class:`Star` subclass.
-
-    Importing a plugin may create declarations, but it must not publish mutable
-    state into a process-wide registry.  A runtime catalog materializes this
-    declaration only after the plugin module has been validated.
-    """
-
-    star_cls_type: type[Star]
-    module_path: str
 
 
 class PluginRegistry:

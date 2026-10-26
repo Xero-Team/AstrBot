@@ -22,6 +22,12 @@ from urllib.parse import unquote
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from .dashboard_extension_types import (
+    DashboardExtensionManifest,
+    DashboardPageAsset,
+    DashboardPageManifest,
+)
+
 if TYPE_CHECKING:
     from .base import Star
     from .star import StarMetadata
@@ -397,33 +403,6 @@ class _AssetsManifestDeclaration(BaseModel):
         min_length=1,
         max_length=MAX_PAGE_ASSET_FILES,
     )
-
-
-@dataclass(frozen=True)
-class DashboardPageAsset:
-    path: str
-    resolved_path: Path
-    sha256: str
-    size: int
-    content_type: str
-
-
-@dataclass(frozen=True)
-class DashboardPageManifest:
-    id: str
-    title: str
-    module: str
-    assets_manifest: str
-    styles: tuple[str, ...]
-    icon: str | None
-    actions: tuple[str, ...]
-    assets: Mapping[str, DashboardPageAsset]
-
-
-@dataclass(frozen=True)
-class DashboardExtensionManifest:
-    extension_id: str
-    pages: tuple[DashboardPageManifest, ...]
 
 
 def validate_extension_id(extension_id: str) -> None:

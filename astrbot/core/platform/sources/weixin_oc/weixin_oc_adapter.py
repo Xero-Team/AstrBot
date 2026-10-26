@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import copy
@@ -9,7 +11,7 @@ from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from urllib.parse import quote
 
 import qrcode as qrcode_lib
@@ -24,7 +26,7 @@ from astrbot.core.platform import (
     Platform,
     PlatformMetadata,
 )
-from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -41,7 +43,6 @@ from .weixin_oc_client import (
     build_base_info,
     resolve_weixin_https_base_url,
 )
-from .weixin_oc_event import WeixinOCMessageEvent
 from .weixin_oc_quote import ref_message_id, resolve_partial_quote
 from .weixin_oc_text import (
     TEXT_CHUNK_LIMIT,
@@ -50,9 +51,6 @@ from .weixin_oc_text import (
     parse_tool_progress,
     split_plain_text,
 )
-
-if TYPE_CHECKING:  # pragma: no cover - typing-only helper
-    pass
 
 
 @dataclass
@@ -2152,7 +2150,7 @@ class WeixinOCAdapter(Platform):
         message: AstrBotMessage,
         *,
         run_id: str | None = None,
-    ) -> WeixinOCMessageEvent:
+    ) -> AstrMessageEvent:
         """Creates a Weixin OC message event.
 
         Args:
@@ -2163,6 +2161,9 @@ class WeixinOCAdapter(Platform):
         Returns:
             Created Weixin OC message event.
         """
+        # Lazy import: the event module imports this adapter only for typing.
+        from .weixin_oc_event import WeixinOCMessageEvent
+
         return WeixinOCMessageEvent(
             message_str=message.message_str,
             message_obj=message,

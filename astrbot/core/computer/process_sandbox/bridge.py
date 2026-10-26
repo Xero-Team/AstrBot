@@ -320,31 +320,15 @@ def main(argv: list[str] | None = None) -> int:
     stop = threading.Event()
     failures: list[BaseException] = []
     slots = threading.BoundedSemaphore(_MAX_RELAY_CONNECTIONS)
-    threads = [
-        threading.Thread(
-            target=_bridge_loop,
-            args=(listeners[0], http_socket, stop, failures, slots),
-            name="sandbox-bridge-http",
-            daemon=True,
-        ),
-        threading.Thread(
-            target=_bridge_loop,
-            args=(listeners[1], socks_socket, stop, failures, slots),
-            name="sandbox-bridge-socks",
-            daemon=True,
-        ),
-    ]
-    for thread in threads:
-        thread.start()
 
-    _write_ready(ready_file)
-
+    # Fork while this process is still single-threaded. The relay threads are
+    # started only in the parent so the child never runs Python after a
+    # multithreaded fork.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         child = os.fork()
     if child == 0:
         try:
-            stop.set()
             for listener in listeners:
                 listener.close()
             _close_inherited_descriptors()
@@ -365,6 +349,32 @@ def main(argv: list[str] | None = None) -> int:
                 sys.stderr.flush()
             finally:
                 os._exit(127)
+
+    threads = [
+        threading.Thread(
+            target=_bridge_loop,
+            args=(listeners[0], http_socket, stop, failures, slots),
+            name="sandbox-bridge-http",
+            daemon=True,
+        ),
+        threading.Thread(
+            target=_bridge_loop,
+            args=(listeners[1], socks_socket, stop, failures, slots),
+            name="sandbox-bridge-socks",
+            daemon=True,
+        ),
+    ]
+    try:
+        for thread in threads:
+            thread.start()
+        _write_ready(ready_file)
+    except BaseException:
+        stop.set()
+        try:
+            os.kill(child, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        raise
 
     received_signal = 0
 

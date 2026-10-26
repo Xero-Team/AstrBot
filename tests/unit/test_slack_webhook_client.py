@@ -83,9 +83,9 @@ async def test_slack_webhook_accepts_fresh_valid_signature(
 
 @pytest.mark.asyncio
 async def test_slack_webhook_ignores_retry_deliveries(monkeypatch):
-    body = json.dumps(
-        {"type": "event_callback", "event": {"type": "message"}}
-    ).encode("utf-8")
+    body = json.dumps({"type": "event_callback", "event": {"type": "message"}}).encode(
+        "utf-8"
+    )
     handler = AsyncMock()
     client = SlackWebhookClient(
         web_client=SimpleNamespace(),

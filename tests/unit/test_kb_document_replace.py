@@ -954,7 +954,9 @@ async def test_failed_backup_restore_keeps_source_for_retry(kb_helper, monkeypat
     monkeypatch.setattr(helper, "_try_relabel_staging", AsyncMock(return_value=False))
     monkeypatch.setattr(helper, "_cleanup_failed_upload", AsyncMock())
     monkeypatch.setattr(helper, "_retire_live_chunks", AsyncMock())
-    monkeypatch.setattr(helper, "_reembed_from_stored_blob", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        helper, "_reembed_from_stored_blob", AsyncMock(return_value=None)
+    )
     monkeypatch.setattr(helper, "_roll_forward_replacement", AsyncMock())
 
     await helper._recover_failed_replace(

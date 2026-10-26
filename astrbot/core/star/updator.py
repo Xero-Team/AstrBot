@@ -190,9 +190,7 @@ class PluginUpdator(RepoZipUpdator):
                 try:
                     os.replace(extracted_path, plugin_path)
                 except Exception:
-                    if os.path.exists(backup_path) and not os.path.exists(
-                        plugin_path
-                    ):
+                    if os.path.exists(backup_path) and not os.path.exists(plugin_path):
                         os.replace(backup_path, plugin_path)
                     raise
                 if os.path.exists(backup_path):

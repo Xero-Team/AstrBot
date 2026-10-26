@@ -1346,9 +1346,7 @@ class KBHelper:
             )
             if bak_blob.exists():
                 await self._retire_live_chunks(live_doc_id)
-                restored = await self._reembed_from_stored_blob(
-                    live_doc_id, bak_blob
-                )
+                restored = await self._reembed_from_stored_blob(live_doc_id, bak_blob)
                 if restored is None:
                     logger.warning(
                         "Keeping previous source for document %s after a failed "

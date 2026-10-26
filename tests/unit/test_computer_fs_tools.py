@@ -33,13 +33,13 @@ def _make_context(
                 "computer_use_local_permissions": {
                     "member": {
                         "allow_execution": False,
-                        "allow_network": False,
                         "filesystem_scope": "workspace",
+                        "network": {"mode": "off"},
                     },
                     "admin": {
                         "allow_execution": True,
-                        "allow_network": True,
                         "filesystem_scope": "workspace",
+                        "network": {"mode": "off"},
                     },
                 },
             }

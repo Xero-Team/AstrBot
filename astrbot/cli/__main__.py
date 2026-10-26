@@ -60,9 +60,9 @@ def cli() -> None:
     click.echo(f"AstrBot CLI version: {__version__}")
 
 
-@click.command()
+@click.command(name="help")
 @click.argument("command_name", required=False, type=str)
-def help(command_name: str | None) -> None:
+def help_command(command_name: str | None) -> None:
     """Display help information for commands."""
     ctx = click.get_current_context()
     if command_name:
@@ -76,7 +76,7 @@ def help(command_name: str | None) -> None:
         click.echo(cli.get_help(ctx))
 
 
-cli.add_command(help)
+cli.add_command(help_command)
 
 if __name__ == "__main__":
     cli()

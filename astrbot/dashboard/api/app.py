@@ -46,6 +46,10 @@ from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseServi
 from astrbot.dashboard.services.log_service import LogService
 from astrbot.dashboard.services.memory_service import MemoryService
 from astrbot.dashboard.services.open_api_service import OpenApiService
+from astrbot.dashboard.services.pip_install_service import (
+    PipInstallService,
+    call_pip_install,
+)
 from astrbot.dashboard.services.platform_service import PlatformService
 from astrbot.dashboard.services.plugin_dashboard_service import PluginDashboardService
 from astrbot.dashboard.services.plugin_file_ticket_service import (
@@ -64,10 +68,6 @@ from astrbot.dashboard.services.stat_service import StatService
 from astrbot.dashboard.services.subagent_service import SubAgentService
 from astrbot.dashboard.services.t2i_service import T2iService
 from astrbot.dashboard.services.tools_service import ToolsService
-from astrbot.dashboard.services.update_service import (
-    UpdateService,
-    call_pip_install,
-)
 from astrbot.dashboard.services.webchat_service import WebChatService
 
 from .error_handling import internal_error_response
@@ -77,8 +77,6 @@ from .plugin_files import router as plugin_files_router
 from .plugin_page_assets import router as plugin_page_assets_router
 from .router import API_V1_PREFIX, build_api_router
 from .static_files import router as static_files_router
-
-CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
 
 
 def _build_observability(runtime: CoreRuntime) -> Observability:
@@ -420,12 +418,11 @@ def create_dashboard_asgi_app(
             runtime.astrbot_config_mgr,
             runtime.catalogs.plugins,
         ),
-        updates=UpdateService(
+        pip_install=PipInstallService(
             pip_install_func=lambda *args, **kwargs: call_pip_install(
                 runtime.services.pip_installer, *args, **kwargs
             ),
             demo_mode=runtime.services.demo_mode,
-            clear_site_data_headers=CLEAR_SITE_DATA_HEADERS,
         ),
     )
 
@@ -516,7 +513,6 @@ def create_dashboard_asgi_app(
 
     async def shutdown_plugin_dashboard_services() -> None:
         await app.state.services.knowledge_bases.shutdown()
-        await app.state.services.updates.shutdown()
         await plugin_page_sessions.shutdown()
         await plugin_file_tickets.shutdown()
 

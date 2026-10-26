@@ -124,3 +124,20 @@ async def test_weixin_offacc_convert_message_voice_keeps_raw_audio_when_conversi
     assert record.file == raw_path
     assert record.path == raw_path
     assert getattr(abm, "temporary_file_paths", []) == [raw_path]
+
+
+@pytest.mark.asyncio
+async def test_unparseable_callback_raises_value_error(monkeypatch):
+    adapter = _adapter()
+    adapter.server.crypto = SimpleNamespace(decrypt_message=lambda *_args: "<xml/>")
+
+    class _Request:
+        args = {"msg_signature": "sig", "timestamp": "1", "nonce": "n"}
+
+        async def get_data(self):
+            return b"<xml/>"
+
+    monkeypatch.setattr(weixin_offacc_adapter, "parse_message", lambda _xml: None)
+
+    with pytest.raises(ValueError, match="Failed to parse WeChat message"):
+        await adapter.server.handle_callback(_Request())

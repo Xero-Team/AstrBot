@@ -67,6 +67,7 @@ async def test_dify_requests_pass_resolved_custom_proxy():
         }
     )
     client = DifyAPIClient("key", proxy_route=route)
+    await client.session.close()
     session = _CapturingSession()
     client.session = session
     await client.get_chat_convs("user")
@@ -77,6 +78,7 @@ async def test_dify_requests_pass_resolved_custom_proxy():
 async def test_dify_direct_mode_omits_proxy():
     route = resolve_proxy_route(local_config={"proxy_mode": "direct"})
     client = DifyAPIClient("key", proxy_route=route)
+    await client.session.close()
     session = _CapturingSession()
     client.session = session
     await client.get_chat_convs("user")

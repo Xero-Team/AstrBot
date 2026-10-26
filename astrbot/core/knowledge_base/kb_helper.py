@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
+from weakref import WeakValueDictionary
 
 import aiofiles
 
@@ -117,7 +118,9 @@ class KBHelper:
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
         self.sparse_retriever = None
-        self._identity_locks: dict[str, asyncio.Lock] = {}
+        self._identity_locks: WeakValueDictionary[str, asyncio.Lock] = (
+            WeakValueDictionary()
+        )
         self._identity_locks_mutex = asyncio.Lock()
 
     def _invalidate_bm25_cache(self) -> None:

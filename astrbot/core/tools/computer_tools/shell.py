@@ -2,12 +2,14 @@ import asyncio
 import json
 import shlex
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.process_sandbox import SandboxSpec
 
 from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
@@ -106,6 +108,20 @@ class ExecuteShellTool(FunctionTool):
                 local_policy is not None
                 and local_policy.filesystem_scope == "workspace"
             )
+            spec = (
+                SandboxSpec(
+                    workspace=Path(cwd),
+                    policy=local_policy.sandbox,
+                    readable_roots=(
+                        _read_allowed_roots(umo) if workspace_scope else ()
+                    ),
+                    writable_roots=(
+                        _write_allowed_roots(umo) if workspace_scope else ()
+                    ),
+                )
+                if sandboxed and local_policy is not None
+                else None
+            )
             requested_timeout = timeout_seconds
             result = await shell_component.exec_managed(
                 command,
@@ -113,14 +129,10 @@ class ExecuteShellTool(FunctionTool):
                 runtime_id="local",
                 sender_id=creator_id,
                 creator_is_admin=creator_is_admin,
-                sandboxed=sandboxed,
+                spec=spec,
                 permission_check=lambda: (
                     is_local_runtime(context)
                     and get_local_permission_policy(context) == local_policy
-                ),
-                allow_network=(local_policy.allow_network if local_policy else True),
-                filesystem_scope=(
-                    local_policy.filesystem_scope if local_policy else "host"
                 ),
                 cwd=cwd,
                 env=dict(env or {}),
@@ -131,8 +143,6 @@ class ExecuteShellTool(FunctionTool):
                 ),
                 yield_time_ms=0 if background else yield_time_ms,
                 allowed_root=str(current_workspace_root),
-                readable_roots=_read_allowed_roots(umo) if workspace_scope else (),
-                writable_roots=_write_allowed_roots(umo) if workspace_scope else (),
             )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:

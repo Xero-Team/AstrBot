@@ -9,8 +9,8 @@ from astrbot.core.db.migrations.runner import Migration
 
 async def _initial_schema(conn: AsyncConnection) -> None:
     """Create the current document schema on a fresh store."""
-    # Imported lazily to avoid a cycle with document_storage, which imports
-    # this module for its migration sequence.
+    # Lazy import: document_storage imports this module for its migration
+    # sequence, so importing it at module scope would create a cycle.
     from astrbot.core.db.vec_db.document_storage import BaseDocModel
 
     await conn.run_sync(BaseDocModel.metadata.create_all)

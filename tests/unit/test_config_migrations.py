@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
 import pytest
@@ -118,7 +119,31 @@ def test_retired_gemini_embedding_model_is_migrated_without_changing_others():
     ]
 
 
-def test_revision_three_preserves_saved_local_permission_policies():
+def _nested_policy(
+    *,
+    allow_execution: bool,
+    filesystem_scope: str,
+    mode: str,
+    private: bool,
+    loopback: bool,
+    socket_mode: str,
+) -> dict:
+    return {
+        "allow_execution": allow_execution,
+        "filesystem_scope": filesystem_scope,
+        "network": {
+            "mode": mode,
+            "allowed_domains": [],
+            "denied_domains": [],
+            "allow_private_network": private,
+            "allow_loopback": loopback,
+        },
+        "filesystem": {"deny_read": [], "deny_write": []},
+        "unix_sockets": {"mode": socket_mode, "allowed_paths": []},
+    }
+
+
+def test_revision_six_migrates_saved_flat_local_permission_policies():
     permissions = {
         "member": {
             "allow_execution": False,
@@ -133,15 +158,38 @@ def test_revision_three_preserves_saved_local_permission_policies():
     }
     conf = {
         "schema_revision": 2,
-        "provider_settings": {"computer_use_local_permissions": permissions},
+        "provider_settings": {
+            "computer_use_local_permissions": copy.deepcopy(permissions)
+        },
     }
 
     assert migrate_config_dict(conf) is True
     assert conf["schema_revision"] == CONFIG_SCHEMA_REVISION
-    assert conf["provider_settings"]["computer_use_local_permissions"] == permissions
+    assert conf["provider_settings"]["computer_use_local_permissions"] == {
+        "member": _nested_policy(
+            allow_execution=False,
+            filesystem_scope="none",
+            mode="off",
+            private=False,
+            loopback=False,
+            socket_mode="deny",
+        ),
+        "admin": _nested_policy(
+            allow_execution=True,
+            filesystem_scope="host",
+            mode="unrestricted",
+            private=True,
+            loopback=True,
+            socket_mode="allow_all",
+        ),
+    }
+    assert (
+        "allow_network"
+        not in conf["provider_settings"]["computer_use_local_permissions"]["member"]
+    )
 
 
-def test_local_permission_migration_preserves_other_policies():
+def test_local_permission_migration_preserves_partial_roles():
     member = {
         "allow_execution": True,
         "allow_network": False,
@@ -155,9 +203,78 @@ def test_local_permission_migration_preserves_other_policies():
     }
 
     assert migrate_config_dict(conf) is True
-    assert (
-        conf["provider_settings"]["computer_use_local_permissions"]["member"] == member
+    migrated = conf["provider_settings"]["computer_use_local_permissions"]["member"]
+    assert migrated == _nested_policy(
+        allow_execution=True,
+        filesystem_scope="workspace",
+        mode="off",
+        private=False,
+        loopback=False,
+        socket_mode="deny",
     )
+
+
+def test_local_permission_migration_handles_missing_flat_value():
+    conf = {
+        "schema_revision": 2,
+        "provider_settings": {
+            "computer_use_local_permissions": {
+                "member": {"filesystem_scope": "workspace"}
+            }
+        },
+    }
+
+    assert migrate_config_dict(conf) is True
+    migrated = conf["provider_settings"]["computer_use_local_permissions"]["member"]
+    assert migrated["network"]["mode"] == "off"
+    assert migrated["network"]["allow_private_network"] is False
+    assert migrated["network"]["allow_loopback"] is False
+    assert migrated["unix_sockets"] == {"mode": "deny", "allowed_paths": []}
+
+
+def test_local_permission_migration_is_idempotent():
+    conf = {
+        "schema_revision": 5,
+        "provider_settings": {
+            "computer_use_local_permissions": {
+                "admin": {"allow_execution": True, "allow_network": True}
+            }
+        },
+    }
+    assert migrate_config_dict(conf) is True
+    snapshot = json.dumps(conf, sort_keys=True)
+    assert migrate_config_dict(conf) is False
+    assert json.dumps(conf, sort_keys=True) == snapshot
+
+
+def test_local_sandbox_migration_round_trips_through_config_store(tmp_path):
+    config_path = tmp_path / "cmd_config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_revision": 5,
+                "provider_settings": {
+                    "computer_use_local_permissions": {
+                        "admin": {
+                            "allow_execution": True,
+                            "allow_network": True,
+                            "filesystem_scope": "host",
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    AstrBotConfig(config_path=str(config_path))
+    stored = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    policy = stored["provider_settings"]["computer_use_local_permissions"]["admin"]
+    assert stored["schema_revision"] == CONFIG_SCHEMA_REVISION
+    assert "allow_network" not in policy
+    assert policy["network"]["mode"] == "unrestricted"
+    assert policy["network"]["allow_private_network"] is True
+    assert policy["network"]["allow_loopback"] is True
+    assert policy["unix_sockets"] == {"mode": "allow_all", "allowed_paths": []}
 
 
 def test_retired_sandbox_runtime_fails_closed_to_none():

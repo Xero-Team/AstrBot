@@ -82,7 +82,6 @@ from astrbot.core.tool_catalog import (
     resolve_catalog_surface,
 )
 from astrbot.core.tools.computer_tools import (
-    LOCAL_NETWORK_POLICY_NOTICE,
     get_local_permission_policy,
     normalize_umo_for_workspace,
     resolve_local_permission_role,
@@ -620,14 +619,9 @@ async def _apply_local_env_tools(
     )
     await resolve_local_permission_role(run_context)
     local_policy = get_local_permission_policy(run_context)
-    if (
-        local_policy.allow_execution
-        and not local_policy.allow_network
-        and LOCAL_NETWORK_POLICY_NOTICE not in (req.system_prompt or "")
-    ):
-        req.system_prompt = (
-            f"{req.system_prompt or ''}\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
-        )
+    notice = local_policy.network_notice
+    if local_policy.allow_execution and notice not in (req.system_prompt or ""):
+        req.system_prompt = f"{req.system_prompt or ''}\n{notice}\n"
 
 
 def _has_enabled_coding_agent(profile: object) -> bool:
@@ -903,7 +897,7 @@ async def _ensure_prompt_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure prompt and skills are applied to the request's system prompt or user prompt."""
-    event.set_extra("_trace_persona_id", None)
+    event.set_extra("_trace_prompt_id", None)
     if not req.conversation:
         return
 
@@ -921,7 +915,7 @@ async def _ensure_prompt_and_skills(
     set_prompt_custom_error_message_on_event(
         event, extract_prompt_custom_error_message_from_prompt(prompt_spec)
     )
-    event.set_extra("_trace_persona_id", prompt_id)
+    event.set_extra("_trace_prompt_id", prompt_id)
 
     if req.system_prompt is None:
         req.system_prompt = ""

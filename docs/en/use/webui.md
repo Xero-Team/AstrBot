@@ -169,7 +169,7 @@ The toolbar also has font-size controls from 8–16px (12px by default, in 2px s
 
 ### Trace
 
-The Agent execution heading shows chips for recorded model and persona IDs, plus the number of actual tool calls when nonzero. Hover over a model chip to see its provider ID. These remain visible when the execution chain is collapsed; nested and parallel Agents are counted separately, and unavailable metadata is omitted.
+The Agent execution heading shows chips for recorded model and prompt IDs, plus the number of actual tool calls when nonzero. Hover over a model chip to see its provider ID. These remain visible when the execution chain is collapsed; nested and parallel Agents are counted separately, and unavailable metadata is omitted.
 
 Below the detail title, UMO and sender appear on separate icon-and-value rows. UMO aliases retain their hover tooltip showing the full identifier.
 
@@ -214,7 +214,7 @@ Timeline chips show the runner name without an execution-mode prefix, using the 
 
 Consecutive nodes of the same type are collapsed by default, such as "Call plugin" with an "Event listener" chip, with a record count and stacked icons. Click to expand or collapse the individual records. Different handler categories and records separated by another node type remain separate, preserving execution order. Collapsed groups still show error counts, and summary cards continue to count actual calls.
 
-The message list and message-received node show the platform logo. The message-received node shows `platform_id` in a secondary chip. A generic icon is used when no logo matches or the image fails to load; text still indicates processing status. The former standalone Select persona node is removed; the resolved `persona_id` appears in the Agent request prepared details. The search placeholder is "Search messages, sessions, or plugins in X records". Summary cards show duration, plugin handler calls, and responses, without counting steps.
+The message list and message-received node show the platform logo. The message-received node shows `platform_id` in a secondary chip. A generic icon is used when no logo matches or the image fails to load; text still indicates processing status. The former standalone Select persona node is removed; the resolved `prompt_id` appears in the Agent request prepared details. The search placeholder is "Search messages, sessions, or plugins in X records". Summary cards show duration, plugin handler calls, and responses, without counting steps.
 
 ## ChatUI
 

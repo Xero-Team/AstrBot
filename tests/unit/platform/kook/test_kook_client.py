@@ -280,6 +280,7 @@ async def test_kook_handle_signal_background_dispatches_message_callback():
     await asyncio.wait_for(callback_finished.wait(), timeout=1.0)
     if client._event_tasks:
         await asyncio.gather(*list(client._event_tasks), return_exceptions=True)
+    await client.close()
 
 
 @pytest.mark.asyncio

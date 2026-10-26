@@ -54,6 +54,7 @@ MAX_MCP_RESOURCE_TEXT_BYTES = 1_000_000
 MAX_MCP_RESOURCE_BINARY_BYTES = 5_000_000
 MAX_MCP_INTERACTION_SECONDS = 300
 MAX_MCP_INTERACTION_ROUNDS = 10
+MAX_PENDING_OAUTH_STATES = 64
 
 if (
     LATEST_PROTOCOL_VERSION != MCP_PROTOCOL_VERSION
@@ -837,21 +838,36 @@ class MCPAuthorizationCoordinator:
 
     async def redirect_handler(self, identity: str, authorization_url: str) -> None:
         async with self._lock:
-            future = self._urls.setdefault(
-                identity, asyncio.get_running_loop().create_future()
-            )
+            future = self._urls.get(identity)
+            if future is None or future.done():
+                future = asyncio.get_running_loop().create_future()
+                self._urls[identity] = future
             state = parse_qs(urlparse(authorization_url).query).get("state", [None])[0]
             if state:
                 self._states[state] = identity
+                while len(self._states) > MAX_PENDING_OAUTH_STATES:
+                    self._states.pop(next(iter(self._states)))
             if not future.done():
                 future.set_result(authorization_url)
 
     async def callback_handler(self, identity: str) -> AuthorizationCodeResult:
         async with self._lock:
-            future = self._codes.setdefault(
-                identity, asyncio.get_running_loop().create_future()
-            )
+            future = self._codes.get(identity)
+            if future is None or future.done():
+                future = asyncio.get_running_loop().create_future()
+                self._codes[identity] = future
         return await asyncio.wait_for(future, MAX_MCP_INTERACTION_SECONDS)
+
+    async def reset_identity(self, identity: str) -> None:
+        """Discard a previous authorization attempt for one MCP server."""
+        async with self._lock:
+            for futures in (self._urls, self._codes):
+                future = futures.pop(identity, None)
+                if future is not None and not future.done():
+                    future.cancel()
+            for state, owner in list(self._states.items()):
+                if owner == identity:
+                    self._states.pop(state, None)
 
     async def wait_for_url(self, identity: str, wait_seconds: float = 10) -> str | None:
         async with self._lock:

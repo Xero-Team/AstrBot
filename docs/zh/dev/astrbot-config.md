@@ -183,8 +183,15 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 ### Computer Use 与本地隔离
 
 - `computer_use_runtime`：`none` 或 `local`，默认 `none`。旧值 `sandbox` 和未知运行环境一律按 `none` 处理；已移除的 `provider_settings.sandbox` 配置块会被清理。
-- `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.computer_use`、`tool.local_exec`、`tool.file_read` 和 `tool.file_write` 等动作统一授权。WebChat 高风险实例工具仍要 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up。
+- `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.local_exec`、`tool.python_exec`、`tool.file_read`、`tool.file_write` 等动作统一授权。`tool.computer_use` 保留给第三方 computer-use 工具，当前没有内置工具声明它。WebChat 高风险实例工具仍要 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up。
   本地模式直接操作 AstrBot 主机，应仅在可信环境使用。本地进程隔离在 Linux 上依赖 bubblewrap、在 macOS 上依赖 Seatbelt；隔离不可用时受限执行会失败关闭。仍需限制管理员、Prompt 工具和外部网络。
+- `computer_use_local_permissions.<role>` 保存嵌套键 `allow_execution`、`filesystem_scope`、`network`、`filesystem` 和 `unix_sockets`。网络对象使用 `mode`（`off`、`allowlist`、`unrestricted`）、`allowed_domains`、`denied_domains`、`allow_private_network` 和 `allow_loopback`。文件系统对象使用 `deny_read` 与 `deny_write`；套接字对象使用 `mode`（`deny`、`allow_all`）和仅 macOS 的字面 `allowed_paths`。
+- 配置 schema revision 6 替换扁平 `allow_network` 键，运行时代码不再读取旧键。旧值 `true` 会变为 `unrestricted` 并开启两个地址标志；`false` 或缺失变为 `off`。执行与范围值保持不变。新的受限策略两个地址标志默认关闭。
+- 原生执行恰好是 `filesystem_scope=host`、网络 `unrestricted`、两个地址标志均开启、没有文件系统拒绝规则、套接字 `allow_all`。其他组合都需要沙箱后端；后端缺失或内核/架构不受支持时失败关闭。
+- 网络允许列表项为精确 IDNA 名称、`*.example.com` 子域规则、规范化 IP 字面量或 `*`，可附加 `:port`。拒绝规则优先。即使开启私有网络或环回访问，元数据、链路本地、组播、未指定、保留、广播和宿主接口地址仍被阻止。
+- Linux 在所有授权之后应用文件系统拒绝掩码；通配仅在启动时按固定掩码与遍历上限展开一次。macOS 使用同一套有界展开，在所有授权之后追加字面 Seatbelt 拒绝规则。目标缺失或超限会使启动失败。预先存在的硬链接别名属于已记录限制，而非 inode 级隔离。
+- 沙箱联网使用按调用认证的代理。令牌随机生成，仅通过继承环境变量传递，绝不进入启动 argv 或内联 Python 源码。直接 IP/DNS 出站被阻止；DNS 由宿主机解析一次并固定数值地址。支持明文 HTTP 绝对形式和 HTTPS `CONNECT`；不做 TLS 终止。
+- 文件工具与本地 grep 在工作区和宿主范围都应用解析后的拒绝策略。缺少沙箱后端、`rg` 或套接字过滤器时会阻止操作，而不是直接执行。
 
 ### 搜索与图片
 

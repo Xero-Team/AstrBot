@@ -26,6 +26,7 @@ _ED25519_SEED_SIZE = 32
 _ED25519_SIGNATURE_SIZE = 64
 _SIGNATURE_MAX_SKEW_SECONDS = 300
 _EVENT_DEDUP_TTL_SECONDS = 600
+_EXTRA_DATA_CACHE_MAX_ENTRIES = 1024
 _VALIDATION_EVENT_TS_RE = re.compile(r"^\d{10,16}$")
 _VALIDATION_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 _VALIDATION_RATE_LIMIT = 10
@@ -292,6 +293,12 @@ class QQOfficialWebhook:
                         extra["message_scene"] = message_scene
                     if extra:
                         self._extra_data_cache[msg_id] = extra
+                        while (
+                            len(self._extra_data_cache) > _EXTRA_DATA_CACHE_MAX_ENTRIES
+                        ):
+                            self._extra_data_cache.pop(
+                                next(iter(self._extra_data_cache))
+                            )
             try:
                 func = connection.parser[event]
             except KeyError:

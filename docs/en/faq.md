@@ -127,7 +127,7 @@ Under **Config → select a profile → AI → Capabilities → Agent Computer U
 - `local` to operate directly on the AstrBot host, only in a trusted environment;
 - `none` to disable it, which is the default.
 
-Computer capabilities are checked through the unified action-based authorization service (for example `tool.computer_use`, `tool.local_exec`, and `tool.file_write`). An authenticated Dashboard-driven WebChat may use instance-scoped high-risk tools in its current session/config after the WebChat one-time step-up. An IM sender bound as `instance_operator` on that config may use the same set without step-up. Global control-plane actions remain Dashboard-only; anonymous WebChat, plugins, agents, API keys, and unbound IM members do not inherit Dashboard roles. Local process isolation restricts execution but does not change authorization. See [Computer Use](./use/computer).
+Computer capabilities are checked through the unified action-based authorization service (for example `tool.local_exec` and `tool.file_write`; `tool.computer_use` is reserved for third-party computer-use tools and has no built-in producer). An authenticated Dashboard-driven WebChat may use instance-scoped high-risk tools in its current session/config after the WebChat one-time step-up. An IM sender bound as `instance_operator` on that config may use the same set without step-up. Global control-plane actions remain Dashboard-only; anonymous WebChat, plugins, agents, API keys, and unbound IM members do not inherit Dashboard roles. Local process isolation restricts execution but does not change authorization. See [Computer Use](./use/computer).
 
 ### CJK text is garbled in T2I output
 

@@ -17,6 +17,12 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.auth.models import Role
 from astrbot.core.computer.booters import local
 from astrbot.core.computer.computer_client import ComputerRuntime
+from astrbot.core.computer.local_policy import (
+    LocalFilesystemPolicy,
+    LocalNetworkPolicy,
+    LocalSandboxPolicy,
+    LocalUnixSocketPolicy,
+)
 from astrbot.core.computer.process_sandbox import (
     SandboxSpec,
     bubblewrap,
@@ -28,6 +34,37 @@ from astrbot.core.tools.computer_tools import fs, python, shell
 from astrbot.core.tools.computer_tools import util as computer_util
 from astrbot.core.tools.computer_tools.util import normalize_umo_for_workspace
 from tests.fixtures.auth import attach_authorized_tool_context
+
+
+def _spec(
+    workspace: Path,
+    *,
+    scope: str = "workspace",
+    network: str = "off",
+    private: bool = False,
+    loopback: bool = False,
+    deny_read: tuple[str, ...] = (),
+    deny_write: tuple[str, ...] = (),
+    socket_mode: str = "deny",
+) -> SandboxSpec:
+    return SandboxSpec(
+        workspace=workspace,
+        policy=LocalSandboxPolicy(
+            allow_execution=True,
+            filesystem_scope=scope,  # type: ignore[arg-type]
+            network=LocalNetworkPolicy(
+                mode=network,  # type: ignore[arg-type]
+                allow_private_network=private,
+                allow_loopback=loopback,
+            ),
+            filesystem=LocalFilesystemPolicy(
+                deny_read=deny_read,
+                deny_write=deny_write,
+            ),
+            unix_sockets=LocalUnixSocketPolicy(mode=socket_mode),  # type: ignore[arg-type]
+        ),
+    )
+
 
 requires_local_sandbox = pytest.mark.skipif(
     not (
@@ -74,11 +111,19 @@ print("original process output")
             owner_id="test:GroupMessage:output",
             sender_id="member",
             creator_is_admin=False,
-            sandboxed=True,
+            spec=SandboxSpec(
+                workspace=workspace,
+                policy=LocalSandboxPolicy(
+                    allow_execution=True,
+                    filesystem_scope="workspace",
+                    network=LocalNetworkPolicy(mode="off"),
+                    unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+                ),
+                writable_roots=(shared_temp,),
+            ),
             permission_check=lambda: True,
             cwd=str(workspace),
             allowed_root=str(workspace),
-            writable_roots=(shared_temp,),
             timeout=10,
         )
         assert result["exit_code"] == 0, result
@@ -138,6 +183,18 @@ print("existing dependencies are read-only")
     assert result.returncode == 0, result.stderr.decode()
     assert result.stdout.strip() == b"existing dependencies are read-only"
     assert (tmp_path / "output.txt").read_text() == "workspace remains writable"
+
+
+@requires_local_sandbox
+def test_synchronous_sandbox_run_does_not_inherit_host_stdin(tmp_path):
+    """A sandboxed one-shot command must not read the operator terminal."""
+    result = create_process_sandbox().run(
+        [sys.executable, "-c", "import sys; print(repr(sys.stdin.read()))"],
+        SandboxSpec(workspace=tmp_path),
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stdout.strip() == b"''"
 
 
 @requires_local_sandbox
@@ -224,6 +281,12 @@ print("virtualenv is read-only")
         [str(executable), "-c", code],
         SandboxSpec(
             workspace=workspace,
+            policy=LocalSandboxPolicy(
+                allow_execution=True,
+                filesystem_scope="workspace",
+                network=LocalNetworkPolicy(mode="off"),
+                unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+            ),
             writable_roots=(
                 package.parent if location == "writable_packages" else attachments,
             ),
@@ -237,28 +300,6 @@ print("virtualenv is read-only")
     assert config.read_bytes() == original_config
     assert not package.with_name("new_dependency.py").exists()
     assert (workspace / "output.txt").read_text() == "workspace remains writable"
-
-
-@requires_local_sandbox
-@pytest.mark.parametrize("filesystem_scope", ["workspace", "host"])
-def test_local_sandbox_resolves_dns_with_network_enabled(tmp_path, filesystem_scope):
-    """Resolve a public hostname through the operating system's real DNS resolver."""
-    result = create_process_sandbox().run(
-        [
-            sys.executable,
-            "-c",
-            "import socket; assert socket.getaddrinfo('example.com', 443, type=socket.SOCK_STREAM); print('DNS resolution succeeded')",
-        ],
-        SandboxSpec(
-            workspace=tmp_path,
-            allow_network=True,
-            filesystem_scope=filesystem_scope,
-        ),
-        timeout=20,
-    )
-
-    assert result.returncode == 0, result.stderr.decode()
-    assert result.stdout.strip() == b"DNS resolution succeeded"
 
 
 @requires_local_sandbox
@@ -281,78 +322,12 @@ else:
 """
         result = create_process_sandbox().run(
             [sys.executable, "-c", code],
-            SandboxSpec(
-                workspace=tmp_path,
-                allow_network=False,
-                filesystem_scope=filesystem_scope,
-            ),
+            _spec(tmp_path, scope=filesystem_scope, network="off"),
             timeout=10,
         )
 
     assert result.returncode == 0, result.stderr.decode()
     assert result.stdout.strip() == b"Network access denied"
-
-
-@pytest.mark.skipif(
-    not sys.platform.startswith("linux") or not shutil.which("bwrap"),
-    reason="Requires Linux and bubblewrap.",
-)
-@pytest.mark.parametrize("allow_network", [False, True])
-def test_bubblewrap_exposes_symlinked_dns_config_only_with_network(
-    monkeypatch, tmp_path, allow_network
-):
-    """Expose resolver contents without granting access to their host directory."""
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    resolver = tmp_path / "run" / "resolved.conf"
-    resolver.parent.mkdir()
-    resolver.write_text("nameserver 192.0.2.1\n", encoding="utf-8")
-    config = tmp_path / "etc" / "resolv.conf"
-    config.parent.mkdir()
-    config.symlink_to(resolver)
-    monkeypatch.setattr(bubblewrap, "_NETWORK_CONFIG_PATHS", {config})
-
-    code = f"""
-from pathlib import Path
-
-config = Path({str(config)!r})
-assert config.exists() is {allow_network!r}
-if config.exists():
-    assert config.read_text() == "nameserver 192.0.2.1\\n"
-    try:
-        config.write_text("changed")
-    except OSError:
-        pass
-    else:
-        raise AssertionError("Resolver configuration is writable")
-assert not Path({str(resolver)!r}).exists()
-print("resolver access verified")
-"""
-    result = bubblewrap.BubblewrapProcessSandbox().run(
-        [sys.executable, "-c", code],
-        SandboxSpec(workspace=workspace, allow_network=allow_network),
-        timeout=10,
-    )
-
-    assert result.returncode == 0, result.stderr.decode()
-    assert result.stdout.strip() == b"resolver access verified"
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="Requires Unix paths.")
-def test_bubblewrap_includes_host_resolver_configuration(monkeypatch, tmp_path):
-    """Include available host resolver and hosts files when network is enabled."""
-    monkeypatch.setattr(bubblewrap.shutil, "which", lambda name: f"/usr/bin/{name}")
-    command = bubblewrap.BubblewrapProcessSandbox().build_command(
-        [sys.executable, "-c", "pass"],
-        SandboxSpec(workspace=tmp_path, allow_network=True),
-    )
-
-    for path in (Path("/etc/resolv.conf"), Path("/etc/hosts")):
-        if path.exists():
-            assert any(
-                command[index : index + 3] == ["--ro-bind", str(path), str(path)]
-                for index in range(len(command) - 2)
-            )
 
 
 def test_seatbelt_grants_additional_roots_with_separate_write_access(
@@ -433,7 +408,15 @@ async def test_local_execution_obeys_file_tool_roots(
                 role: {
                     "filesystem_scope": "workspace",
                     "allow_execution": True,
-                    "allow_network": False,
+                    "network": {
+                        "mode": "off",
+                        "allowed_domains": [],
+                        "denied_domains": [],
+                        "allow_private_network": False,
+                        "allow_loopback": False,
+                    },
+                    "filesystem": {"deny_read": [], "deny_write": []},
+                    "unix_sockets": {"mode": "deny", "allowed_paths": []},
                 }
             },
         },
@@ -513,3 +496,27 @@ print("file policy verified")
             assert (root / "output.txt").read_text() == "created"
     finally:
         await runtime.terminate()
+
+
+def test_network_enabled_without_proxy_fails_closed(monkeypatch, tmp_path):
+    """A network-enabled sandbox spec never falls back to direct execution."""
+    spec = _spec(
+        tmp_path,
+        network="allowlist",
+        socket_mode="deny",
+    )
+    if sys.platform.startswith("linux"):
+        monkeypatch.setattr(bubblewrap.shutil, "which", lambda name: f"/usr/bin/{name}")
+        with pytest.raises(RuntimeError, match="requires the runtime Local proxy"):
+            bubblewrap.BubblewrapProcessSandbox().build_command(
+                [sys.executable, "-c", "pass"],
+                spec,
+            )
+    monkeypatch.setattr(
+        seatbelt.shutil, "which", lambda name, **kwargs: f"/usr/bin/{name}"
+    )
+    with pytest.raises(RuntimeError, match="requires the runtime Local proxy"):
+        seatbelt.SeatbeltProcessSandbox().build_command(
+            [sys.executable, "-c", "pass"],
+            spec,
+        )

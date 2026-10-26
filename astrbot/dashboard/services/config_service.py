@@ -11,6 +11,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from astrbot import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.local_policy import (
+    MAX_VALIDATION_ERRORS,
+    sandbox_policy_from_config,
+)
 from astrbot.core.config.agent_runner import (
     get_agent_runner_config_default,
     normalize_agent_runner,
@@ -22,7 +26,6 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3_SYSTEM,
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
-    get_local_permission_defaults,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_runtime import CoreControl
@@ -641,7 +644,6 @@ def _validate_local_permissions(
     errors: list[str],
 ) -> None:
     provider_settings = data.get("provider_settings", {})
-    defaults = get_local_permission_defaults()
     permissions = (
         provider_settings.get("computer_use_local_permissions", {})
         if isinstance(provider_settings, dict)
@@ -650,24 +652,89 @@ def _validate_local_permissions(
     if not isinstance(permissions, dict):
         errors.append("Local computer permissions must be an object.")
         return
+    role_errors: list[str] = []
     for role in ("member", "admin"):
         if role not in permissions:
             continue
-        policy = permissions[role]
-        if not isinstance(policy, dict):
-            errors.append(f"Local computer permissions for {role} must be an object.")
-            continue
-        for key in ("allow_execution", "allow_network"):
-            if key in policy and not isinstance(policy[key], bool):
-                errors.append(f"Local permission {role}.{key} must be a boolean.")
-        scope = policy.get("filesystem_scope", defaults[role]["filesystem_scope"])
-        if scope not in ("none", "workspace", "host"):
-            errors.append(f"Invalid local filesystem scope for {role}: {scope}.")
-        if scope == "none":
-            policy["allow_execution"] = False
-            policy["allow_network"] = False
-        elif policy.get("allow_execution", defaults[role]["allow_execution"]) is False:
-            policy["allow_network"] = False
+        policy, current_errors = sandbox_policy_from_config(
+            permissions[role],
+            role=role,
+        )
+        role_errors.extend(current_errors)
+        if not current_errors:
+            permissions[role] = policy.to_dict()
+    errors.extend(role_errors[:MAX_VALIDATION_ERRORS])
+
+
+_LOCAL_SCOPE_LOG_VALUES = {
+    "none": "none",
+    "workspace": "workspace",
+    "host": "host",
+}
+_LOCAL_NETWORK_MODE_LOG_VALUES = {
+    "off": "off",
+    "allowlist": "allowlist",
+    "unrestricted": "unrestricted",
+}
+_LOCAL_SOCKET_MODE_LOG_VALUES = {
+    "deny": "deny",
+    "allow_all": "allow_all",
+}
+_COMPUTER_RUNTIME_LOG_VALUES = {
+    "none": "none",
+    "local": "local",
+}
+
+
+def _safe_log_choice(value: object, allowed: dict[str, str]) -> str:
+    """Return a fixed label for a configured choice, never the raw value."""
+    if isinstance(value, str):
+        label = allowed.get(value)
+        if label is not None:
+            return label
+    return "<invalid>"
+
+
+def _safe_log_bool(value: object) -> object:
+    """Return a boolean or a fixed invalid marker."""
+    return value if isinstance(value, bool) else "<invalid>"
+
+
+def _safe_log_count(value: object) -> int:
+    """Return a list length without trusting arbitrary sequence types."""
+    return len(value) if isinstance(value, (list, tuple)) else -1
+
+
+def _local_policy_log_signature(role_policy: object) -> dict[str, object]:
+    """Return a redacted signature that is safe for log interpolation."""
+    if not isinstance(role_policy, dict):
+        return {"configured": False}
+    network = role_policy.get("network")
+    filesystem = role_policy.get("filesystem")
+    unix_sockets = role_policy.get("unix_sockets")
+    network = network if isinstance(network, dict) else {}
+    filesystem = filesystem if isinstance(filesystem, dict) else {}
+    unix_sockets = unix_sockets if isinstance(unix_sockets, dict) else {}
+    return {
+        "configured": True,
+        "allow_execution": _safe_log_bool(role_policy.get("allow_execution")),
+        "filesystem_scope": _safe_log_choice(
+            role_policy.get("filesystem_scope"), _LOCAL_SCOPE_LOG_VALUES
+        ),
+        "network_mode": _safe_log_choice(
+            network.get("mode"), _LOCAL_NETWORK_MODE_LOG_VALUES
+        ),
+        "allow_private_network": _safe_log_bool(network.get("allow_private_network")),
+        "allow_loopback": _safe_log_bool(network.get("allow_loopback")),
+        "allowed_domains": _safe_log_count(network.get("allowed_domains")),
+        "denied_domains": _safe_log_count(network.get("denied_domains")),
+        "deny_read": _safe_log_count(filesystem.get("deny_read")),
+        "deny_write": _safe_log_count(filesystem.get("deny_write")),
+        "unix_socket_mode": _safe_log_choice(
+            unix_sockets.get("mode"), _LOCAL_SOCKET_MODE_LOG_VALUES
+        ),
+        "allowed_socket_paths": _safe_log_count(unix_sockets.get("allowed_paths")),
+    }
 
 
 def _log_computer_config_changes(
@@ -679,9 +746,15 @@ def _log_computer_config_changes(
     log_info = log_info or logger.info
     old_ps = old_config.get("provider_settings", {})
     new_ps = new_config.get("provider_settings", {})
+    old_ps = old_ps if isinstance(old_ps, dict) else {}
+    new_ps = new_ps if isinstance(new_ps, dict) else {}
 
-    old_runtime = old_ps.get("computer_use_runtime", "none")
-    new_runtime = new_ps.get("computer_use_runtime", "none")
+    old_runtime = _safe_log_choice(
+        old_ps.get("computer_use_runtime", "none"), _COMPUTER_RUNTIME_LOG_VALUES
+    )
+    new_runtime = _safe_log_choice(
+        new_ps.get("computer_use_runtime", "none"), _COMPUTER_RUNTIME_LOG_VALUES
+    )
     if old_runtime != new_runtime:
         log_info(
             "[Computer] Config changed: computer_use_runtime %s -> %s",
@@ -691,12 +764,13 @@ def _log_computer_config_changes(
 
     old_permissions = old_ps.get("computer_use_local_permissions", {})
     new_permissions = new_ps.get("computer_use_local_permissions", {})
+    old_permissions = old_permissions if isinstance(old_permissions, dict) else {}
+    new_permissions = new_permissions if isinstance(new_permissions, dict) else {}
     for role in ("member", "admin"):
-        old_role = old_permissions.get(role, {})
-        new_role = new_permissions.get(role, {})
-        for key in ("allow_execution", "allow_network", "filesystem_scope"):
-            old_value = old_role.get(key)
-            new_value = new_role.get(key)
+        old_signature = _local_policy_log_signature(old_permissions.get(role))
+        new_signature = _local_policy_log_signature(new_permissions.get(role))
+        for key, new_value in new_signature.items():
+            old_value = old_signature.get(key)
             if old_value != new_value:
                 log_info(
                     "[Computer] Config changed: local_permissions.%s.%s %s -> %s",

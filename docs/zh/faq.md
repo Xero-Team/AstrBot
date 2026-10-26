@@ -127,7 +127,7 @@ uv run python scripts/sync_dashboard_dist.py
 - `local`：直接操作 AstrBot 主机，只适合可信环境；
 - `none`：关闭，默认值。
 
-电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.computer_use`、`tool.local_exec` 和 `tool.file_write`）。已认证 Dashboard 驱动的 WebChat 在当前 session/config 内，经 WebChat 一次性 step-up 后可使用实例级高风险工具。IM 发送者若绑成该配置的 `instance_operator`，可免 step-up 使用同一组工具。全局控制面仍 Dashboard-only；匿名 WebChat、插件、Agent、API Key 和未绑定的 IM member 不会继承 Dashboard 角色。本地进程隔离只限制执行方式，不会改变授权策略。详见 [使用电脑能力](./use/computer)。
+电脑能力现在按工具动作经过统一授权服务检查（例如 `tool.local_exec` 和 `tool.file_write`；`tool.computer_use` 保留给第三方 computer-use 工具，当前无内置生产者）。已认证 Dashboard 驱动的 WebChat 在当前 session/config 内，经 WebChat 一次性 step-up 后可使用实例级高风险工具。IM 发送者若绑成该配置的 `instance_operator`，可免 step-up 使用同一组工具。全局控制面仍 Dashboard-only；匿名 WebChat、插件、Agent、API Key 和未绑定的 IM member 不会继承 Dashboard 角色。本地进程隔离只限制执行方式，不会改变授权策略。详见 [使用电脑能力](./use/computer)。
 
 ### T2I 中文乱码
 

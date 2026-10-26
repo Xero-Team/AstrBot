@@ -10,6 +10,9 @@ from astrbot.core.memory.writeback.profile_refresher import MemoryProfileRefresh
 from astrbot.core.utils.error_redaction import safe_error
 from astrbot.core.utils.task_utils import create_tracked_task
 
+_MAX_REFRESH_TASKS = 128
+_ACTIVE_REFRESH_STATUSES = frozenset({"pending", "running"})
+
 
 class MemoryServiceError(Exception):
     pass
@@ -22,6 +25,19 @@ class MemoryService:
         self.profile_refresher = MemoryProfileRefresher(db)
         self.refresh_tasks: dict[str, dict[str, Any]] = {}
         self._background_tasks: set = set()
+
+    def _prune_refresh_tasks(self) -> None:
+        """Keep only recent terminal refresh tasks for dashboard polling."""
+        overflow = len(self.refresh_tasks) - _MAX_REFRESH_TASKS
+        if overflow <= 0:
+            return
+        for task_id, info in list(self.refresh_tasks.items()):
+            if overflow <= 0:
+                break
+            if info.get("status") in _ACTIVE_REFRESH_STATUSES:
+                continue
+            self.refresh_tasks.pop(task_id, None)
+            overflow -= 1
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -309,6 +325,7 @@ class MemoryService:
             "error": None,
             "updated_at": datetime.now(UTC).isoformat(),
         }
+        self._prune_refresh_tasks()
         create_tracked_task(
             self._background_tasks,
             self._refresh_profile_task(

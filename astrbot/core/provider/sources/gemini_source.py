@@ -4,7 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import httpx
 from google import genai
@@ -81,7 +81,8 @@ class ProviderGoogleGenAI(Provider):
             self.api_base = self.api_base[:-1]
 
         self._http_client: httpx.AsyncClient | None = None
-        self._stale_http_clients: list[httpx.AsyncClient] = []
+        self._stale_http_clients: list[Any] = []
+        self._close_tasks: set[asyncio.Task[Any]] = set()
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
@@ -105,15 +106,18 @@ class ProviderGoogleGenAI(Provider):
             **httpx_client_kwargs(route),
         }
 
-        # Track every replaced client so terminate() closes all of them when
-        # _init_client runs repeatedly (e.g. via set_key).
-        if self._http_client is not None:
-            self._stale_http_clients.append(self._http_client)
+        # Key rotation only replaces the SDK wrapper. The HTTP transport is
+        # shared across rotations and closed by terminate(): closing it here
+        # would abort requests and response streams still using the old key.
+        previous_client = getattr(self, "client", None)
+        if previous_client is not None:
+            self._schedule_client_close(previous_client)
 
-        self._http_client = httpx.AsyncClient(
-            event_hooks={"request": [self._enforce_astrbot_user_agent]},
-            **async_client_kwargs,
-        )
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(
+                event_hooks={"request": [self._enforce_astrbot_user_agent]},
+                **async_client_kwargs,
+            )
         http_options.httpx_async_client = self._http_client
 
         self.client = genai.Client(
@@ -657,7 +661,7 @@ class ProviderGoogleGenAI(Provider):
                 client = self._require_client()
                 result = await retry_provider_request(
                     "Gemini",
-                    lambda: client.models.generate_content(
+                    lambda client=client, config=config: client.models.generate_content(
                         model=model,
                         contents=cast(types.ContentListUnion, conversation),
                         config=config,
@@ -752,10 +756,12 @@ class ProviderGoogleGenAI(Provider):
                 client = self._require_client()
                 result = await retry_provider_request(
                     "Gemini",
-                    lambda: client.models.generate_content_stream(
-                        model=model,
-                        contents=cast(types.ContentListUnion, conversation),
-                        config=config,
+                    lambda client=client, config=config: (
+                        client.models.generate_content_stream(
+                            model=model,
+                            contents=cast(types.ContentListUnion, conversation),
+                            config=config,
+                        )
                     ),
                     max_attempts=request_max_retries,
                 )
@@ -1161,6 +1167,32 @@ class ProviderGoogleGenAI(Provider):
             )
         return image_data.to_data_url()
 
+    def _schedule_client_close(self, client: Any) -> None:
+        """Close a rotated client promptly when an event loop is available."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._stale_http_clients.append(client)
+            return
+
+        close = getattr(client, "aclose", None)
+        if not callable(close):
+            return
+
+        def _done(task: asyncio.Task[Any]) -> None:
+            self._close_tasks.discard(task)
+            if task.cancelled():
+                return
+            task.exception()
+
+        task = loop.create_task(cast(Any, close)(), name="gemini-client-close")
+        close_tasks = getattr(self, "_close_tasks", None)
+        if close_tasks is None:
+            close_tasks = set()
+            self._close_tasks = close_tasks
+        close_tasks.add(task)
+        task.add_done_callback(_done)
+
     async def _close_httpx_client(self, client: httpx.AsyncClient | None) -> None:
         """Safely close an httpx.AsyncClient, swallowing errors for idempotency."""
         if client is None:
@@ -1187,6 +1219,11 @@ class ProviderGoogleGenAI(Provider):
         for client in self._stale_http_clients:
             await self._close_httpx_client(client)
         self._stale_http_clients.clear()
+        pending_close_tasks = list(getattr(self, "_close_tasks", set()))
+        if pending_close_tasks:
+            await asyncio.gather(*pending_close_tasks, return_exceptions=True)
+        if hasattr(self, "_close_tasks"):
+            self._close_tasks.clear()
         await self._close_httpx_client(self._http_client)
         self._http_client = None
 

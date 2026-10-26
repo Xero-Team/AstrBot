@@ -281,7 +281,7 @@ class CoreExecutionContext:
         self.assistant_history_committer = AssistantHistoryCommitter()
         """Serializes accepted assistant-history projections per conversation."""
         self.computer_runtime = computer_runtime
-        """Runtime-owned local and sandbox computer capability."""
+        """Runtime-owned local computer capability."""
         self.skill_manager: SkillManager | None = None
         """Runtime-owned Skill inventory, bound after plugin initialization."""
         self.tool_image_cache = tool_image_cache
@@ -424,7 +424,9 @@ class CoreExecutionContext:
             ChatProviderNotFoundError: If the specified chat provider ID is not found
             Exception: For other errors during LLM generation
         """
-        # Import here to avoid circular imports
+        # Lazy runtime imports keep this module import-inert. The agent
+        # modules import CoreExecutionContext at module scope, so loading
+        # them here is safe only after the runtime has been constructed.
         from astrbot.core.agent.request_preparation import (
             image_compress_args_from_settings,
             prepare_provider_request,
@@ -439,7 +441,6 @@ class CoreExecutionContext:
             prepare_event_attachments,
         )
         from astrbot.core.tools.computer_tools import (
-            LOCAL_NETWORK_POLICY_NOTICE,
             get_local_permission_policy,
             is_local_runtime,
             resolve_local_permission_role,
@@ -512,14 +513,11 @@ class CoreExecutionContext:
         ):
             await resolve_local_permission_role(run_context)
             local_policy = get_local_permission_policy(run_context)
-            if (
-                local_policy.allow_execution
-                and not local_policy.allow_network
-                and LOCAL_NETWORK_POLICY_NOTICE not in (request.system_prompt or "")
+            notice = local_policy.network_notice
+            if local_policy.allow_execution and notice not in (
+                request.system_prompt or ""
             ):
-                request.system_prompt = (
-                    f"{request.system_prompt or ''}\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
-                )
+                request.system_prompt = f"{request.system_prompt or ''}\n{notice}\n"
         agent_runner = ToolLoopAgentRunner(self.tool_image_cache)
         tool_executor = FunctionToolExecutor()
 

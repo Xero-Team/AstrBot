@@ -60,6 +60,9 @@ def hold_runtime_instance_lock(data_dir: Path) -> Iterator[None]:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
 
 
 def test_second_process_times_out_on_the_same_data_dir(tmp_path: Path) -> None:

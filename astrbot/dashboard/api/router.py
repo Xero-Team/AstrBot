@@ -22,6 +22,7 @@ from .knowledge_bases import router as knowledge_bases_router
 from .logs import router as logs_router
 from .memory import router as memory_router
 from .open_api import router as open_api_router
+from .pip_install import router as pip_install_router
 from .platform import router as platform_router
 from .plugin_dashboard import router as plugin_dashboard_router
 from .plugins import router as plugins_router
@@ -33,7 +34,6 @@ from .stats import router as stats_router
 from .subagents import router as subagents_router
 from .t2i import router as t2i_router
 from .tools import router as tools_router
-from .updates import router as updates_router
 from .webchat import router as webchat_router
 
 API_V1_PREFIX = "/api/v1"
@@ -71,7 +71,7 @@ def build_api_router() -> APIRouter:
     router.include_router(platform_router)
     router.include_router(t2i_router)
     router.include_router(prompts_router)
-    router.include_router(updates_router)
+    router.include_router(pip_install_router)
     router.include_router(open_api_router)
     router.include_router(webchat_router)
     return router

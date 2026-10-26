@@ -206,3 +206,31 @@ async def test_missing_anchor_uses_new_history():
     history = manager.update_conversation.await_args.kwargs["history"]
     assert history[-1]["content"] == "x"
     assert history[0]["role"] == "assistant"
+
+
+@pytest.mark.asyncio
+async def test_commit_does_not_retain_per_conversation_lock():
+    committer = AssistantHistoryCommitter()
+    manager = SimpleNamespace(update_conversation=AsyncMock())
+
+    assert await committer.commit(manager, _pending(), _accepted()) is True
+    assert "conversation-1" not in committer._locks
+
+    assert (
+        await committer.commit(manager, _pending(sequence=2), _accepted("newer"))
+        is True
+    )
+    assert "conversation-1" not in committer._locks
+
+
+def test_latest_sequence_state_is_bounded():
+    committer = AssistantHistoryCommitter()
+    committer._latest_sequence_by_conversation = {
+        f"conversation-{index}": index for index in range(5000)
+    }
+
+    committer._prune_latest_sequences()
+
+    assert len(committer._latest_sequence_by_conversation) == 4096
+    assert "conversation-0" not in committer._latest_sequence_by_conversation
+    assert "conversation-4999" in committer._latest_sequence_by_conversation

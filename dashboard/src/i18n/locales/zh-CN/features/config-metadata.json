@@ -434,7 +434,10 @@
           "admin": "管理员"
         },
         "modes": {
-          "none": "关闭"
+          "none": "关闭",
+          "off": "关闭",
+          "allowlist": "白名单",
+          "unrestricted": "不限制"
         },
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
@@ -473,6 +476,42 @@
             "unavailable": "{backend} · 已安装但无法启动",
             "unsupported": "暂不支持"
           }
+        },
+        "sockets": {
+          "deny": "拒绝 Unix 套接字",
+          "allowAll": "允许全部 Unix 套接字"
+        },
+        "networkRules": "规则",
+        "denyRules": "拒绝规则",
+        "socketRules": "套接字",
+        "nativeWarning": "至少一个角色选择了原生执行。它没有操作系统隔离、可访问整个环境并拥有不受限的联网能力，不提供任何沙箱保证。",
+        "globWarning": "Linux 文件系统通配规则仅在启动时展开一次，无法覆盖启动后新建的路径。",
+        "hardLinkWarning": "文件系统掩码和文件工具会拒绝多硬链接文件，但预先存在的硬链接别名仍可能在拒绝路径之外暴露同一 inode 内容。",
+        "networkDialog": {
+          "title": "网络规则",
+          "private": "允许私有网络目标",
+          "loopback": "允许环回目标",
+          "allowed": "允许的域名",
+          "denied": "拒绝的域名",
+          "hint": "每行一个。支持精确域名、*.example.com 子域规则、IP 字面量或 *，可附加 :端口。"
+        },
+        "filesystemDialog": {
+          "title": "文件系统拒绝规则",
+          "read": "拒绝读取",
+          "write": "拒绝写入",
+          "hint": "绝对路径或以 ~ 开头的路径及启动时通配，每行一个。"
+        },
+        "socketDialog": {
+          "title": "Unix 套接字规则",
+          "mode": "Unix 套接字模式",
+          "paths": "允许的套接字路径",
+          "macHint": "仅 macOS：在拒绝全部套接字后重新开放的规范化字面路径。",
+          "linuxHint": "Linux 使用全有或全无的 seccomp 决策，按路径白名单仅适用于 macOS。",
+          "offHint": "网络模式为关闭时，始终强制 Unix 套接字为拒绝模式且不允许任何路径。"
+        },
+        "dialog": {
+          "cancel": "取消",
+          "save": "保存"
         }
       }
     },

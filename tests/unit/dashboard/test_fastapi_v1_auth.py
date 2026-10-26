@@ -21,11 +21,11 @@ def test_dashboard_uses_the_runtime_log_broker(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_shutdown_owns_update_service(asgi_app: FastAPI, monkeypatch):
-    update_shutdown = AsyncMock()
+async def test_dashboard_shutdown_owns_plugin_dashboard_services(
+    asgi_app: FastAPI, monkeypatch
+):
     page_shutdown = AsyncMock()
     ticket_shutdown = AsyncMock()
-    monkeypatch.setattr(asgi_app.state.services.updates, "shutdown", update_shutdown)
     monkeypatch.setattr(
         asgi_app.state.services.plugin_page_sessions,
         "shutdown",
@@ -40,7 +40,6 @@ async def test_dashboard_shutdown_owns_update_service(asgi_app: FastAPI, monkeyp
     for handler in asgi_app.router.on_shutdown:
         await handler()
 
-    update_shutdown.assert_awaited_once()
     page_shutdown.assert_awaited_once()
     ticket_shutdown.assert_awaited_once()
 

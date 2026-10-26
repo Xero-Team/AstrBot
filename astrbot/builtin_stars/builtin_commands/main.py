@@ -24,7 +24,7 @@ from .commands import (
 
 class Main(star.Star):
     def __init__(self, context: star.PluginContext) -> None:
-        self.context = context
+        super().__init__(context)
 
         self.admin_c = AdminCommands(self.context)
         self.bot_c = BotCommands(self.context)

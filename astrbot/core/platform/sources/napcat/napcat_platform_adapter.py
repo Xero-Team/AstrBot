@@ -43,7 +43,7 @@ from astrbot.core.message.components import (
     Xml,
 )
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSession
 from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.contracts.onebot import (
     ONEBOT_CAPABILITIES,
@@ -152,7 +152,6 @@ from .generated.ob11_events import (
     OnlineFileSegment as OB11OnlineFileSegment,
 )
 from .inbound_events import NapCatGenericEvent, NapCatInboundEvent
-from .message_event import NapCatMessageEvent
 from .types import (
     NapCatFetchedMessage,
     NapCatLoginInfo,
@@ -1562,7 +1561,10 @@ class NapCatPlatformAdapter(Platform):
             return fallback
         return "[Unsupported message]"
 
-    def create_event(self, message: AstrBotMessage) -> NapCatMessageEvent:
+    def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
+        # Lazy import: message_event imports this adapter only for typing.
+        from .message_event import NapCatMessageEvent
+
         event = NapCatMessageEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -2444,7 +2446,7 @@ class NapCatPlatformAdapter(Platform):
 
     def _populate_event_extras(
         self,
-        event: NapCatMessageEvent,
+        event: AstrMessageEvent,
         raw_event: object,
     ) -> None:
         event.set_extra("platform_event", "napcat")

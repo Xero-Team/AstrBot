@@ -215,9 +215,9 @@ Skills 可来自 `data/skills`、插件 `skills/` 和当前会话 workspace。�
 | Skill 声明     | 已启用 Skill 前言 `tools:`                            | 是。只过滤已有工具名                          |
 | 按需电脑工具   | `computer_use_runtime` 为 `local`，且通过提示词与硬裁 | 可声明，但不能扩权。`runtime=none` 时本层为空 |
 
-提示词 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表只移除插件、MCP 和会话工具，内置工具仍由平台基线、配置、授权与场景决定；非空列表只对这些扩展工具求交，内置工具始终保留。`read_skill` 属于内置工具，因此同样保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。远程沙箱与生命周期工具不属于平台基线。
+提示词 `tools is None` 表示不收缩这四层，不是「Skill 没声明就不给插件工具」。空列表只移除插件、MCP 和会话工具，内置工具仍由平台基线、配置、授权与场景决定；非空列表只对这些扩展工具求交，内置工具始终保留。`read_skill` 属于内置工具，因此同样保留。装配阶段只做静态可见性过滤，不调用完整 `authorize()`。按需电脑工具不属于平台基线。
 
-社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。匿名 WebChat、插件、Agent、API Key 一律裁掉。已认证 WebChat 只放行已 step-up 的动作交集。IM 在该配置上绑了 `instance_operator` 及以上时，挂出整组动作且不走 Dashboard step-up；新动作加入该集合后自动进入这条路径。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。全局 `root`/`operator` 绑定不会继承到 IM 主体。
+社交表面按 `WEBCHAT_INSTANCE_TOOL_ACTIONS` 硬裁：`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.browser_control`、`tool.mcp_write`、`tool.computer_use`。`tool.computer_use` 保留给第三方 computer-use 工具，当前无内置生产者，但仍须留在此集合中。匿名 WebChat、插件、Agent、API Key 一律裁掉。已认证 WebChat 只放行已 step-up 的动作交集。IM 在该配置上绑了 `instance_operator` 及以上时，挂出整组动作且不走 Dashboard step-up；新动作加入该集合后自动进入这条路径。不要用整份 `HIGH_RISK_ACTIONS` 当工具目录黑名单。`tool.file_read` 不在硬裁集；IM 上不要仅因 Skill 声明就挂出工作区读文件。全局 `root`/`operator` 绑定不会继承到 IM 主体。
 
 `read_skill` 使用请求创建时冻结的快照，不按名称重扫全局目录。宿主冻结单文件 64 KiB、目录合计 256 KiB / 32 个文件。路径相对 Skill 目录；拒绝 `..`、绝对路径、符号链接逃逸。Unix 使用 `O_NOFOLLOW`。前言只认 `tools:`，忽略 `allowed-tools`；声明是过滤不是授权。不要照搬 Claude Code 预批准、Codex `$mention` / `skill://`、或 OpenCode 全工具池目录。
 
@@ -240,6 +240,25 @@ Tool Loop 每完成一次模型调用都会发出 `agent_stats`，包括工具�
 插件持久化小数据应使用 Star KV API；在 `Star` 实例中通过 `self.context.storage.data_directory()` 获取 `data/plugin_data/<plugin>` 目录，而不是把文件写到插件源码目录。
 
 插件 Dashboard 页面使用 Extension Protocol v1：metadata 同时声明 `requires.dashboard_extension: 1` 与 `dashboard`，静态资源由带摘要的 `assets.v1.json` 完整列举，Python Action 只能在 `initialize()` 中通过 `astrbot.api.dashboard` 注册。页面运行在只有 `allow-scripts` 的 sandbox iframe 中，特权操作必须经过宿主管理的结构化 Action；不支持旧 Page metadata、任意 HTTP proxy 或直接读取 Dashboard 认证状态。具体契约见[插件 Dashboard 扩展开发指南](/dev/star/plugin-dashboard-extension)。
+
+### 已接受的导入环
+
+静态导入图（含 `TYPE_CHECKING` 边）必须保持无环。少量运行时环是有意保留的：每个环都由函数内惰性导入闭合，因此不会在模块初始化时执行。改动这些路径时，请保留导入处的说明注释。
+
+| 模块对                                                                                             | 惰性导入位置                                     | 为什么安全                                                                      |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `astrbot.core.execution_context` ↔ `astr_agent_context`、`astr_agent_tool_exec`、`astr_main_agent` | `execution_context.py` 的 `tool_loop_agent` 设置 | Agent 模块在模块级导入 `CoreExecutionContext`；运行时只在构造完成后才加载它们。 |
+| `astrbot.core.astr_agent_tool_exec` ↔ `astr_main_agent`                                            | `FunctionToolExecutor` 的转交路径                | `astr_main_agent` 在模块级导入该执行器。                                        |
+| `astrbot.core.execution_context` ↔ `tools.computer_tools`（含 `fs`、`util`、`message_tools`）      | `execution_context.py` 的本地运行时设置          | 电脑工具导入 `astr_agent_context`，后者又导入执行上下文。                       |
+| `astrbot.core.command.catalog` ↔ `astrbot.core.command.occupancy`                                  | `build_command_catalog`                          | `occupancy` 在模块级导入目录模块。                                              |
+| `astrbot.core.command.occupancy` ↔ `astrbot.core.pipeline.turn_router`                             | 前缀校验                                         | 路由器导入命令包，命令包经目录到达 `occupancy`。                                |
+| `astrbot.core.star.star_handler` ↔ `astrbot.core.star.filter.command`                              | Handler 物化                                     | 命令过滤器在模块级导入 Handler 元数据。                                         |
+| `astrbot.core.subagent_orchestrator` ↔ `astrbot.core.astr_agent_context`                           | `reload_from_config`                             | Agent 上下文导入执行上下文，执行上下文的模块作用域到达该编排器。                |
+| `astrbot.core.platform.contracts.onebot` ↔ `astrbot.core.platform.contracts.telegram`              | `get_capability_descriptor`                      | Telegram 适配历史 OneBot 契约模块。                                             |
+| `astrbot.core.db.migrations.doc` ↔ `astrbot.core.db.vec_db.document_storage`                       | `_initial_schema`                                | 文档存储导入迁移序列模块。                                                      |
+| `astrbot.core.platform.sources.napcat.napcat_platform_adapter` ↔ `...napcat.message_event`         | `create_event`                                   | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
+| `astrbot.core.platform.sources.satori.satori_adapter` ↔ `...satori.satori_event`                   | `send_by_session` / `create_event`               | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
+| `astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter` ↔ `...weixin_oc.weixin_oc_event`       | `create_event`                                   | 事件模块仅为类型标注导入适配器；适配器按需构造事件。                            |
 
 ## 统一授权系统
 

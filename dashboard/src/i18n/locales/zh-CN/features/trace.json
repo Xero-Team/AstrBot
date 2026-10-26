@@ -88,7 +88,7 @@
   },
   "chips": {
     "provider": "提供商：{id}",
-    "persona": "人格：{id}",
+    "prompt": "提示词：{id}",
     "toolCalls": "{count} 次工具调用"
   },
   "groups": {
@@ -129,7 +129,6 @@
     "llm_tool": "LLM 工具"
   },
   "actions": {
-    "selectPersona": "选择人格",
     "eventReceived": "收到消息",
     "pipelineStart": "开始处理管道",
     "pipelineEnd": "完成",

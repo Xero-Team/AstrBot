@@ -124,8 +124,6 @@ def _download_plugin_archive(
     Returns:
         Downloaded archive bytes wrapped in ``BytesIO``.
     """
-    import tempfile
-
     from astrbot.core.utils.outbound_http import (
         PLUGIN_DOWNLOAD_URL,
         PLUGIN_REPOSITORY,

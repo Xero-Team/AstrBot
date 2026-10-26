@@ -357,7 +357,7 @@ const timelineRows = computed(() => {
     const owner = group.ancestors.at(-1);
     if (!owner) continue;
     if (!agentMetadata.has(owner))
-      agentMetadata.set(owner, { models: [], personas: [], toolCalls: 0 });
+      agentMetadata.set(owner, { models: [], prompts: [], toolCalls: 0 });
     const metadata = agentMetadata.get(owner);
     for (const record of group.records) {
       if (record.action === 'astr_agent_prepare') {
@@ -374,9 +374,9 @@ const timelineRows = computed(() => {
             provider: provider.id || '',
           });
         }
-        const persona = record.fields.persona_id;
-        if (persona && !metadata.personas.includes(persona))
-          metadata.personas.push(persona);
+        const prompt = record.fields.prompt_id ?? record.fields.persona_id;
+        if (prompt && !metadata.prompts.includes(prompt))
+          metadata.prompts.push(prompt);
       }
       if (record.action === 'agent_tool_call') metadata.toolCalls += 1;
     }
@@ -1714,15 +1714,15 @@ onBeforeUnmount(() => {
                             </div>
                           </v-tooltip>
                           <v-chip
-                            v-for="persona in row.agentInfo.personas"
-                            :key="persona"
+                            v-for="prompt in row.agentInfo.prompts"
+                            :key="prompt"
                             class="timeline-metadata-chip"
                             size="x-small"
                             variant="tonal"
-                            :title="tm('chips.persona', { id: persona })"
+                            :title="tm('chips.prompt', { id: prompt })"
                             ><template #prepend
                               ><Heart :size="12" aria-hidden="true" /></template
-                            >{{ persona }}</v-chip
+                            >{{ prompt }}</v-chip
                           >
                           <v-chip
                             v-if="row.agentInfo.toolCalls"

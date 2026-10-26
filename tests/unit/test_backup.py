@@ -1885,3 +1885,46 @@ async def test_kb_metadata_import_skips_unsafe_kb_ids():
 
     assert imported["kb_knowledge_bases"] == 1
     assert [record.kb_id for record in session.added] == ["safe-kb_1"]
+
+
+@pytest.mark.asyncio
+async def test_restore_preserves_prompts_inside_folders(tmp_path, monkeypatch):
+    """Prompt folders must be restored before prompts that reference them."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    source = SQLiteDatabase(str(tmp_path / "source.db"))
+    target = SQLiteDatabase(str(tmp_path / "target.db"))
+    try:
+        folder = po.PromptFolder(name="folder")
+        async with source.get_db() as session:
+            async with session.begin():
+                session.add(folder)
+                await session.flush()
+                session.add(
+                    po.Prompt(
+                        prompt_id="folder-prompt",
+                        system_prompt="system",
+                        folder_id=folder.folder_id,
+                    )
+                )
+
+        exporter = AstrBotExporter(
+            main_db=source,
+            config_path=str(tmp_path / "missing-config.json"),
+        )
+        zip_path = await exporter.export_all(output_dir=str(tmp_path / "backups"))
+        result = await AstrBotImporter(main_db=target).import_all(zip_path)
+
+        assert result.success, result.errors
+        async with target.get_db() as session:
+            restored_folders = (
+                (await session.execute(select(po.PromptFolder))).scalars().all()
+            )
+            restored_prompts = (
+                (await session.execute(select(po.Prompt))).scalars().all()
+            )
+        assert [item.name for item in restored_folders] == ["folder"]
+        assert [item.prompt_id for item in restored_prompts] == ["folder-prompt"]
+        assert restored_prompts[0].folder_id == restored_folders[0].folder_id
+    finally:
+        await source.engine.dispose()
+        await target.engine.dispose()

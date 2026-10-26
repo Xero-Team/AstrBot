@@ -664,13 +664,18 @@ def create_mock_updater_update(
         proxy: str = "",
         download_url: str = "",
         repo_url: str = "",
+        *,
+        target_dir: Path | str | None = None,
     ) -> None:
         """Mock updater.update 方法。"""
         del proxy, download_url, repo_url
         plugin_dir = plugin_builder.get_plugin_path(plugin.name)
+        output_dir = Path(target_dir) if target_dir is not None else plugin_dir
+        if output_dir != plugin_dir:
+            shutil.copytree(plugin_dir, output_dir)
 
         # 创建更新标记文件
-        (plugin_dir / ".updated").write_text("ok", encoding="utf-8")
+        (output_dir / ".updated").write_text("ok", encoding="utf-8")
 
         # 调用回调
         if update_callback:

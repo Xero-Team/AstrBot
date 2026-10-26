@@ -194,3 +194,63 @@ async def test_dashscope_tts_cancellation_cleans_partial_file(
         await provider.get_audio("text")
 
     assert list(tmp_path.glob("*")) == []
+
+
+@pytest.mark.asyncio
+async def test_dashscope_tts_download_reads_until_eof(monkeypatch) -> None:
+    provider = _provider()
+
+    class _Content:
+        def __init__(self) -> None:
+            self.chunks = [b"first-", b"second", b""]
+
+        async def read(self, _size: int) -> bytes:
+            return self.chunks.pop(0)
+
+    class _Response:
+        headers = {"Content-Type": "audio/wav"}
+        content = _Content()
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _Request:
+        async def __aenter__(self) -> _Response:
+            return _Response()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class _Session:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        async def __aenter__(self) -> _Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        def get(self, *_args: object, **_kwargs: object) -> _Request:
+            return _Request()
+
+    monkeypatch.setattr(dashscope_tts.aiohttp, "ClientSession", _Session)
+
+    assert await provider._download_audio_from_url("https://example.test/a.wav") == (
+        b"first-second"
+    )
+
+
+def test_dashscope_tts_selects_voice_for_model_family() -> None:
+    provider = _provider("qwen3-tts-flash")
+    provider.voice = ""
+    assert provider._resolve_voice("qwen3-tts-flash") == "Cherry"
+    provider.voice = "loongstella"
+    assert provider._resolve_voice("qwen3-tts-flash") == "Cherry"
+    provider.voice = "Cherry-plus"
+    assert provider._resolve_voice("qwen3-tts-flash") == "Cherry-plus"
+
+    provider.voice = ""
+    assert provider._resolve_voice("cosyvoice-v1") == "loongstella"
+    provider.voice = "longxiaochun"
+    assert provider._resolve_voice("cosyvoice-v1") == "longxiaochun"

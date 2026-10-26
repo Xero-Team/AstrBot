@@ -2083,7 +2083,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "model": "cosyvoice-v1",
-                        "dashscope_tts_voice": "loongstella",
+                        "dashscope_tts_voice": "",
                         "timeout": "20",
                     },
                     "Azure TTS": {

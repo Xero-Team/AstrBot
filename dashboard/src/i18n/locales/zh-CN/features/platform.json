@@ -165,6 +165,7 @@
     "routingUpdateFailed": "更新路由表失败: {message}",
     "createConfigFailed": "创建新配置文件失败: {message}",
     "platformIdMissing": "无法获取平台 ID。",
+    "routingLoadRequired": "保存前必须先成功加载平台路由，请重试。",
     "routingSaveFailed": "保存路由表失败: {message}"
   },
   "status": {

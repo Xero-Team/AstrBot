@@ -334,6 +334,7 @@ interface ComponentState {
   newConfigMetadata: RecordValue | null;
   newConfigLoading: boolean;
   platformRoutes: PlatformRoute[];
+  platformRoutesLoaded: boolean;
   isEditingRoutes: boolean;
   knownRouteUmos: string[];
   knownRouteUmoInfoMap: Record<string, KnownRouteUmoInfo>;
@@ -395,6 +396,7 @@ const state = reactive<ComponentState>({
   newConfigMetadata: null,
   newConfigLoading: false,
   platformRoutes: [],
+  platformRoutesLoaded: false,
   isEditingRoutes: false,
   knownRouteUmos: [],
   knownRouteUmoInfoMap: {},
@@ -731,6 +733,12 @@ async function newPlatform() {
 }
 
 async function updatePlatform() {
+  if (!state.platformRoutesLoaded) {
+    state.loading = false;
+    showError(tm('messages.routingLoadRequired'));
+    return;
+  }
+
   const platformId =
     state.originalUpdatingPlatformId ??
     getString(updatingPlatformConfig.value.id);
@@ -1014,6 +1022,7 @@ function handlePlatformRegistrationCreated(data: RegistrationCreatedPayload) {
 }
 
 async function getPlatformConfigs(platformId: string) {
+  state.platformRoutesLoaded = false;
   if (!platformId) {
     state.platformRoutes = [];
     return;
@@ -1051,9 +1060,11 @@ async function getPlatformConfigs(platformId: string) {
         configId: 'default',
       });
     }
+    state.platformRoutesLoaded = true;
   } catch (error) {
     console.error('获取平台路由配置失败:', error);
     state.platformRoutes = [];
+    state.platformRoutesLoaded = false;
   }
 }
 
@@ -1148,6 +1159,10 @@ function moveRouteDown(index: number) {
 }
 
 async function saveRoutesInternal() {
+  if (!state.platformRoutesLoaded) {
+    throw new Error(tm('messages.routingLoadRequired'));
+  }
+
   const originalPlatformId =
     state.originalUpdatingPlatformId ??
     getString(updatingPlatformConfig.value.id);

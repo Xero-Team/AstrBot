@@ -9,10 +9,10 @@ from astrbot.dashboard.schemas import (
     PipInstallRequest,
     model_dict,
 )
-from astrbot.dashboard.services.update_service import (
-    UpdateService,
-    UpdateServiceError,
-    UpdateServiceResult,
+from astrbot.dashboard.services.pip_install_service import (
+    PipInstallResult,
+    PipInstallService,
+    PipInstallServiceError,
 )
 
 from .auth import AuthContext, require_resource_action, require_scope
@@ -20,8 +20,8 @@ from .auth import AuthContext, require_resource_action, require_scope
 router = APIRouter(tags=["Updates"])
 
 
-def get_service(request: Request) -> UpdateService:
-    return request.app.state.services.updates
+def get_service(request: Request) -> PipInstallService:
+    return request.app.state.services.pip_install
 
 
 async def _require_system_action(
@@ -48,7 +48,7 @@ async def require_system_pip_install_scope(request: Request) -> AuthContext:
     )
 
 
-def _result_payload(result: UpdateServiceResult) -> dict:
+def _result_payload(result: PipInstallResult) -> dict:
     if result.status == "success":
         return {
             "status": "success",
@@ -62,7 +62,7 @@ def _result_payload(result: UpdateServiceResult) -> dict:
     }
 
 
-def _service_response(result: UpdateServiceResult) -> JSONResponse:
+def _service_response(result: PipInstallResult) -> JSONResponse:
     return JSONResponse(
         _result_payload(result),
         status_code=200,
@@ -70,7 +70,7 @@ def _service_response(result: UpdateServiceResult) -> JSONResponse:
     )
 
 
-def _service_error(exc: UpdateServiceError) -> JSONResponse:
+def _service_error(exc: PipInstallServiceError) -> JSONResponse:
     logger.error("Dashboard pip install failed: %s", safe_error("", exc))
     return JSONResponse(
         {"status": "error", "message": "An internal error has occurred.", "data": None},
@@ -82,7 +82,7 @@ async def _run(operation) -> JSONResponse:
     try:
         result = await run_maybe_async(operation)
         return _service_response(result)
-    except UpdateServiceError as exc:
+    except PipInstallServiceError as exc:
         return _service_error(exc)
 
 
@@ -90,6 +90,6 @@ async def _run(operation) -> JSONResponse:
 async def install_pip_package(
     payload: PipInstallRequest,
     _auth: AuthContext = Depends(require_system_pip_install_scope),
-    service: UpdateService = Depends(get_service),
+    service: PipInstallService = Depends(get_service),
 ):
     return await _run(lambda: service.install_pip_package(model_dict(payload)))

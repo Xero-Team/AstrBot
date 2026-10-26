@@ -1792,7 +1792,7 @@ class TestEnsurePromptAndSkills:
         await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
         assert "You are helpful." in req.system_prompt
-        mock_event.set_extra.assert_any_call("_trace_persona_id", "test-prompt")
+        mock_event.set_extra.assert_any_call("_trace_prompt_id", "test-prompt")
         assert not any(
             call.args[0] == "sel_persona"
             for call in mock_event.trace.record.call_args_list
@@ -1813,7 +1813,7 @@ class TestEnsurePromptAndSkills:
         await module._ensure_prompt_and_skills(req, {}, mock_context, mock_event)
 
         assert "Custom prompt." in req.system_prompt
-        mock_event.set_extra.assert_any_call("_trace_persona_id", "conv-prompt")
+        mock_event.set_extra.assert_any_call("_trace_prompt_id", "conv-prompt")
 
     @pytest.mark.asyncio
     async def test_ensure_prompt_none_explicit(self, mock_event, mock_context):

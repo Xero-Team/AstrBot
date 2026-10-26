@@ -183,7 +183,7 @@ API Key 属于敏感配置。不要把真实 `cmd_config.json`、截图、日志
 ### Computer Use 与本地隔离
 
 - `computer_use_runtime`：`none` 或 `local`，默认 `none`。旧值 `sandbox` 和未知运行环境一律按 `none` 处理；已移除的 `provider_settings.sandbox` 配置块会被清理。
-- `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.computer_use`、`tool.local_exec`、`tool.file_read` 和 `tool.file_write` 等动作统一授权。WebChat 高风险实例工具仍要 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up。
+- `computer_use_require_admin` 已不再作为运行时授权开关。电脑能力按 `tool.local_exec`、`tool.python_exec`、`tool.file_read`、`tool.file_write` 等动作统一授权。`tool.computer_use` 保留给第三方 computer-use 工具，当前没有内置工具声明它。WebChat 高风险实例工具仍要 step-up；IM 上绑了该配置 `instance_operator` 则免 step-up。
   本地模式直接操作 AstrBot 主机，应仅在可信环境使用。本地进程隔离在 Linux 上依赖 bubblewrap、在 macOS 上依赖 Seatbelt；隔离不可用时受限执行会失败关闭。仍需限制管理员、Prompt 工具和外部网络。
 
 ### 搜索与图片

@@ -43,7 +43,6 @@ async def test_local_python_tool_rejects_nonlocal_runtime(runtime_settings, role
         get_config=lambda **_kwargs: {
             "provider_settings": {
                 **runtime_settings,
-                "computer_use_require_admin": False,
             }
         },
         computer_runtime=SimpleNamespace(get_local_booter=get_local_booter),

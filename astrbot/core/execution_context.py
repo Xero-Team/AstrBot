@@ -281,7 +281,7 @@ class CoreExecutionContext:
         self.assistant_history_committer = AssistantHistoryCommitter()
         """Serializes accepted assistant-history projections per conversation."""
         self.computer_runtime = computer_runtime
-        """Runtime-owned local and sandbox computer capability."""
+        """Runtime-owned local computer capability."""
         self.skill_manager: SkillManager | None = None
         """Runtime-owned Skill inventory, bound after plugin initialization."""
         self.tool_image_cache = tool_image_cache

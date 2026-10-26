@@ -331,7 +331,6 @@
   "skills": {
     "searchPlaceholder": "Search skills...",
     "noSearchResult": "No matching skills found",
-    "modeLocal": "Local Skills",
     "actions": "Actions",
     "upload": "Upload Skills",
     "refresh": "Refresh",
@@ -400,7 +399,6 @@
     "batchDeleteConfirm": "Delete {count}",
     "batchDeleteSuccess": "All {count} skill(s) deleted successfully.",
     "batchDeletePartial": "Deleted {succeeded}; failed to delete {failed}",
-    "runtimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
     "runtimeHint": "Set the Computer Use runtime to \"local\" in the configuration to let AstrBot use the Skills you provide. Workspace Skills are not shown on this page.",
     "sourceLocalOnly": "Local Skill",
     "sourcePlugin": "Plugin: {plugin}",

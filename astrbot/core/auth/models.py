@@ -81,6 +81,7 @@ ACTIONS = frozenset(
         "tool.browser_control",
         "tool.mcp_read",
         "tool.mcp_write",
+        # Reserved for third-party computer-use tools; no built-in tool declares it.
         "tool.computer_use",
         "tool.web_search",
         "tool.kb_read",
@@ -143,6 +144,7 @@ HIGH_RISK_ACTIONS = frozenset(
         "tool.file_write",
         "tool.browser_control",
         "tool.mcp_write",
+        # Reserved for third-party computer-use tools; no built-in tool declares it.
         "tool.computer_use",
         "data.export_all",
         "provider.credentials.write",
@@ -166,6 +168,7 @@ WEBCHAT_INSTANCE_TOOL_ACTIONS = frozenset(
         "tool.file_write",
         "tool.browser_control",
         "tool.mcp_write",
+        # Reserved for third-party computer-use tools; no built-in tool declares it.
         "tool.computer_use",
     }
 )

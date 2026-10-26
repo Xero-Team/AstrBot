@@ -75,11 +75,12 @@ Windows 通过原生文件句柄支持工作区范围内的文件读取、写入
 
 电脑能力走统一授权服务，不再使用“需要 AstrBot 管理员权限”开关。常见动作包括：
 
-- `tool.computer_use`
 - `tool.local_exec`
 - `tool.python_exec`
 - `tool.file_read`
 - `tool.file_write`
+
+`tool.computer_use` 保留给第三方 computer-use 工具，当前没有内置工具声明它。它仍留在高风险与 WebChat 硬裁集合中，避免这类工具绕过授权。
 
 `tool.file_read` 对当前会话的 member 及以上开放，但仍受路径约束。`tool.local_exec`、`tool.python_exec`、`tool.file_write`、`tool.mcp_write` 和 `tool.computer_use` 是实例级高风险动作：已认证 Dashboard 驱动的 WebChat 仅可在当前 session/config 内，经 WebChat 一次性 step-up 后使用。IM 发送者若在该配置上绑了 `instance_operator`，可免 step-up 使用同一组动作。全局控制面仍 Dashboard-only；匿名 WebChat、插件、Agent、API Key 以及未绑定的 IM member 不会继承 Dashboard 角色。路径和 Prompt/工具声明限制仍然有效。
 

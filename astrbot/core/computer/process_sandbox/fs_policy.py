@@ -195,9 +195,22 @@ class DenyRuleSet:
         return arguments
 
 
+def _glob_matches_path_or_parent(rule: str, path: Path) -> bool:
+    """Return whether a glob matches the path or a directory containing it.
+
+    The launch masks treat a matched directory as a subtree (tmpfs or read-only
+    bind), so policy-level matching must deny descendants of that directory too.
+    """
+    if path_rule_matches(rule, path):
+        return True
+    return any(path_rule_matches(rule, parent) for parent in path.parents)
+
+
 def _rule_matches(rule: str, candidate: Path, resolved: Path) -> bool:
     if _is_glob_rule(rule):
-        return path_rule_matches(rule, candidate) or path_rule_matches(rule, resolved)
+        return _glob_matches_path_or_parent(
+            rule, candidate
+        ) or _glob_matches_path_or_parent(rule, resolved)
     expanded = Path(expand_path_rule(rule))
     try:
         expanded_target = expanded.resolve(strict=False)

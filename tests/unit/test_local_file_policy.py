@@ -281,3 +281,26 @@ async def test_host_writes_and_edits_use_descriptors_when_denies_exist(
         assert secret.read_text() == "TOPSECRET"
     finally:
         await runtime.terminate()
+
+
+@pytest.mark.asyncio
+async def test_glob_matched_directory_deny_covers_descendants_in_file_tools(
+    monkeypatch, tmp_path
+) -> None:
+    secret_dir = tmp_path / "secrets"
+    nested = secret_dir / "nested"
+    nested.mkdir(parents=True)
+    secret = nested / "token"
+    secret.write_text("TOPSECRET", encoding="utf-8")
+    context, _workspace, runtime = _context(
+        monkeypatch,
+        tmp_path,
+        scope="host",
+        deny_read=(str(tmp_path / "secret*"),),
+    )
+    try:
+        read = await fs_tools.FileReadTool().call(context, path=str(secret))
+        assert "Access denied" in read
+        assert "TOPSECRET" not in read
+    finally:
+        await runtime.terminate()

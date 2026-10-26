@@ -34,6 +34,19 @@ def test_deny_rule_set_matches_literal_descendants_and_symlink_targets(
     assert link_rules.matches(target, "write")
 
 
+def test_glob_matched_directory_denies_descendants(tmp_path: Path) -> None:
+    secret = tmp_path / "secrets"
+    nested = secret / "nested"
+    nested.mkdir(parents=True)
+    target = nested / "token"
+    target.write_text("TOPSECRET", encoding="utf-8")
+    rules = DenyRuleSet(LocalFilesystemPolicy(deny_read=(str(tmp_path / "secret*"),)))
+    assert rules.matches(secret, "read")
+    assert rules.matches(nested, "read")
+    assert rules.matches(target, "read")
+    assert not rules.matches(tmp_path / "visible.txt", "read")
+
+
 @pytest.mark.skipif(
     sys.platform == "win32",
     reason="POSIX deny paths are compared as POSIX paths in this test.",

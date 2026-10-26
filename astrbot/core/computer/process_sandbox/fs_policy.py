@@ -196,18 +196,18 @@ class DenyRuleSet:
 
 
 def _rule_matches(rule: str, candidate: Path, resolved: Path) -> bool:
-    expanded = Path(expand_path_rule(rule))
     if _is_glob_rule(rule):
         return path_rule_matches(rule, candidate) or path_rule_matches(rule, resolved)
+    expanded = Path(expand_path_rule(rule))
     try:
         expanded_target = expanded.resolve(strict=False)
     except OSError:
         expanded_target = expanded
-    for path in (candidate, resolved):
-        for denied in (expanded, expanded_target):
-            if path == denied or path.is_relative_to(denied):
-                return True
-    return False
+    return any(
+        path_rule_matches(str(denied), path)
+        for path in (candidate, resolved)
+        for denied in (expanded, expanded_target)
+    )
 
 
 def _expand_rule(rule: str) -> tuple[Path, ...]:

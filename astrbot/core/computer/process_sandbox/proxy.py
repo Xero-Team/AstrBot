@@ -691,9 +691,17 @@ class LocalProxyServer:
 
     def shutdown(self) -> None:
         """Synchronous best-effort stop used by process teardown."""
-        if self.state in {"new", "stopped"}:
-            with self._state_lock:
+        with self._state_lock:
+            if self._state in {"new", "stopped"}:
                 self._state = "stopped"
+                already_stopped = True
+            else:
+                # Mark the transition before waiting so ``_serve`` observes the
+                # request even when shutdown races startup and ``_stop_event``
+                # does not exist yet.
+                self._state = "stopping"
+                already_stopped = False
+        if already_stopped:
             self._cleanup_paths()
             return
         loop = self._loop

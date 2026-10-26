@@ -11,6 +11,7 @@ import ipaddress
 import os
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Literal
@@ -435,6 +436,12 @@ def path_rule_matches(rule: str, path: Path) -> bool:
         candidate = candidate.replace("\\", "/")
         path_type = PureWindowsPath
     else:
+        if sys.platform == "darwin":
+            # Default macOS volumes are case-insensitive and may normalize
+            # Unicode. Fold both sides so a case variant of a denied path
+            # cannot bypass the deny policy.
+            expression = _macos_path_key(expression)
+            candidate = _macos_path_key(candidate)
         path_type = PurePosixPath
     candidate_path = path_type(candidate)
     expression_path = path_type(expression)
@@ -443,6 +450,11 @@ def path_rule_matches(rule: str, path: Path) -> bool:
             expression_path
         )
     return candidate_path.full_match(expression)
+
+
+def _macos_path_key(value: str) -> str:
+    """Return a case- and normalization-folded macOS path for deny matching."""
+    return unicodedata.normalize("NFC", value).casefold()
 
 
 def sandbox_policy_from_config(

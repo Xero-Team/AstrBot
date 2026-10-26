@@ -34,6 +34,31 @@ def test_deny_rule_set_matches_literal_descendants_and_symlink_targets(
     assert link_rules.matches(target, "write")
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX deny paths are compared as POSIX paths in this test.",
+)
+def test_macos_deny_matching_folds_case_and_unicode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    secret = tmp_path / "Café.SECRET"
+    secret.write_text("value", encoding="utf-8")
+    rules = DenyRuleSet(LocalFilesystemPolicy(deny_read=(str(secret),)))
+    glob_rules = DenyRuleSet(
+        LocalFilesystemPolicy(deny_write=(str(tmp_path / "*.ENV"),))
+    )
+    case_variant = tmp_path / "cafe\u0301.secret"
+    if sys.platform != "darwin":
+        assert not rules.matches(case_variant, "read")
+    monkeypatch.setattr(
+        "astrbot.core.computer.local_policy.sys.platform",
+        "darwin",
+    )
+    assert rules.matches(case_variant, "read")
+    assert glob_rules.matches(tmp_path / "settings.env", "write")
+
+
 def test_glob_expansion_is_canonical_and_deduplicated(tmp_path: Path) -> None:
     first = tmp_path / "one" / ".env"
     second = tmp_path / "two" / ".env"

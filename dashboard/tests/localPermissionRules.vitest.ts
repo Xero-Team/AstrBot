@@ -31,7 +31,13 @@ describe('localPermissionRules', () => {
     expect(validateDomainRule('::::')).toMatch(/IPv6/);
     expect(validateDomainRule('foo::bar')).toMatch(/IPv6/);
     expect(validateDomainRule('01.2.3.4')).toMatch(/canonical/);
+    expect(validateDomainRule('Example.COM')).toBeNull();
+    expect(validateDomainRule('*.Example.COM.')).toBeNull();
+    expect(validateDomainRule('例子.测试')).toBeNull();
+    expect(validateDomainRule('bad/path.example')).toMatch(/Malformed/);
+    expect(validateDomainRule('%65xample.com')).toMatch(/Malformed/);
     expect(validatePathRule('~/.ssh', 'linux')).toBeNull();
+    expect(validatePathRule('/home/user@example.com/.ssh', 'linux')).toBeNull();
     expect(validatePathRule('relative/path', 'linux')).toMatch(/absolute/);
     expect(validatePathRule('/tmp/../secret', 'linux')).toMatch(/\.\./);
     expect(validatePathRule('/tmp/*.env', 'linux')).toBeNull();
@@ -41,6 +47,7 @@ describe('localPermissionRules', () => {
     expect(validatePathRule('/tmp/[', 'linux')).toMatch(/unclosed/);
     expect(validateUnixPathRule('/tmp/*.sock', 'darwin')).toMatch(/literal/);
     expect(validateUnixPathRule('/tmp/api.sock', 'darwin')).toBeNull();
+    expect(validateUnixPathRule('/tmp/user@host.sock', 'darwin')).toBeNull();
     expect(validatePathRule('C:\\Users\\operator\\.ssh', 'windows')).toBeNull();
     expect(validatePathRule('C:\\Users\\operator\\.ssh', 'win32')).toBeNull();
     expect(

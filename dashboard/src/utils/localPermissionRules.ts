@@ -57,6 +57,14 @@ function boundedRule(rule: string): string | null {
   if (rule.length > MAX_RULE_CHARACTERS) {
     return `Rules must be at most ${MAX_RULE_CHARACTERS} characters.`;
   }
+  return null;
+}
+
+function boundedDomainRule(rule: string): string | null {
+  const bounded = boundedRule(rule);
+  if (bounded) {
+    return bounded;
+  }
   if (rule.includes('@')) {
     return 'Rules must not contain credentials.';
   }
@@ -73,6 +81,23 @@ function validateHostLabels(host: string): string | null {
   return null;
 }
 
+function normalizeDomainHost(host: string): string {
+  const trimmed = host.replace(/\.+$/, '');
+  const hasNonAscii = [...trimmed].some(
+    (character) => (character.codePointAt(0) ?? 0) > 0x7f,
+  );
+  if (!hasNonAscii) {
+    return trimmed.toLowerCase();
+  }
+  try {
+    return new URL(`http://${trimmed}/`).hostname
+      .replace(/\.+$/, '')
+      .toLowerCase();
+  } catch {
+    return trimmed.toLowerCase();
+  }
+}
+
 function isValidIpv6Literal(host: string): boolean {
   if (!host.includes(':')) {
     return false;
@@ -86,7 +111,7 @@ function isValidIpv6Literal(host: string): boolean {
 }
 
 export function validateDomainRule(rule: string): string | null {
-  const bounded = boundedRule(rule);
+  const bounded = boundedDomainRule(rule);
   if (bounded) {
     return bounded;
   }
@@ -139,6 +164,13 @@ export function validateDomainRule(rule: string): string | null {
       return 'A wildcard rule requires a domain suffix.';
     }
   }
+  host = host.replace(/\.+$/, '');
+  if (!host) {
+    return 'Malformed domain rule.';
+  }
+  if (/[\\/%]/.test(host)) {
+    return 'Malformed domain rule.';
+  }
   if (IPV4.test(host)) {
     const octetTexts = host.split('.');
     const octets = octetTexts.map(Number);
@@ -150,7 +182,7 @@ export function validateDomainRule(rule: string): string | null {
     }
     return wildcard ? 'IP literal rules cannot use a wildcard.' : null;
   }
-  return validateHostLabels(host);
+  return validateHostLabels(normalizeDomainHost(host));
 }
 
 export function validatePathRule(

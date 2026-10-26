@@ -328,6 +328,11 @@ class KBSQLiteDatabase:
         kb_files_dir: Path | None = None,
     ) -> None:
         """删除单个文档及其相关数据（包括多媒体记录）"""
+        # Remove vectors first. If this fails the metadata is still intact and
+        # the deletion can be retried; committing metadata first would leave
+        # unaddressable orphan vectors behind.
+        await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+
         async with self.get_db() as session, session.begin():
             # 删除多媒体记录
             delete_media_stmt = delete(KBMedia).where(col(KBMedia.doc_id) == doc_id)
@@ -337,8 +342,6 @@ class KBSQLiteDatabase:
             delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
             await session.execute(delete_stmt)
 
-        # 在 vec db 中删除相关向量
-        await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
         if kb_files_dir is not None:
             self.unlink_document_source_blobs(kb_files_dir, doc_id)
 

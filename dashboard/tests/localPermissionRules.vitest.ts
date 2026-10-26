@@ -25,6 +25,12 @@ describe('localPermissionRules', () => {
     expect(validateDomainRule('*.example.com:443')).toBeNull();
     expect(validateDomainRule('example.com:65536')).toMatch(/65535/);
     expect(validateDomainRule('bad host')).toMatch(/Malformed/);
+    expect(validateDomainRule('[::1]:443')).toBeNull();
+    expect(validateDomainRule('::1')).toBeNull();
+    expect(validateDomainRule('[::::]')).toMatch(/IPv6/);
+    expect(validateDomainRule('::::')).toMatch(/IPv6/);
+    expect(validateDomainRule('foo::bar')).toMatch(/IPv6/);
+    expect(validateDomainRule('01.2.3.4')).toMatch(/canonical/);
     expect(validatePathRule('~/.ssh', 'linux')).toBeNull();
     expect(validatePathRule('relative/path', 'linux')).toMatch(/absolute/);
     expect(validatePathRule('/tmp/../secret', 'linux')).toMatch(/\.\./);
@@ -37,6 +43,12 @@ describe('localPermissionRules', () => {
     expect(validateUnixPathRule('/tmp/api.sock', 'darwin')).toBeNull();
     expect(validatePathRule('C:\\Users\\operator\\.ssh', 'windows')).toBeNull();
     expect(validatePathRule('C:\\Users\\operator\\.ssh', 'win32')).toBeNull();
+    expect(
+      validatePathRule('\\\\server\\share\\operator\\.ssh', 'windows'),
+    ).toBeNull();
+    expect(validatePathRule('//server/share/operator', 'linux')).toMatch(
+      /Windows path/,
+    );
   });
 
   it('bounds validation errors and rule counts', () => {
@@ -82,6 +94,17 @@ describe('localPermissionRules', () => {
     );
     expect(member.network.mode).toBe('off');
     expect(member.unix_sockets).toEqual({ mode: 'deny', allowed_paths: [] });
+    const admin = normalizePolicy(
+      {
+        ...localPermissionDefaults.admin,
+        unix_sockets: { mode: 'allow_all', allowed_paths: ['/tmp/socket'] },
+      },
+      localPermissionDefaults.admin,
+    );
+    expect(admin.unix_sockets).toEqual({
+      mode: 'allow_all',
+      allowed_paths: [],
+    });
   });
 
   it('clears a stale allowlist in unrestricted mode but keeps denies', () => {

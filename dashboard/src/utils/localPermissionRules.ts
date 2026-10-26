@@ -73,6 +73,18 @@ function validateHostLabels(host: string): string | null {
   return null;
 }
 
+function isValidIpv6Literal(host: string): boolean {
+  if (!host.includes(':')) {
+    return false;
+  }
+  try {
+    const parsed = new URL(`http://[${host}]/`);
+    return parsed.hostname.startsWith('[') && parsed.hostname.endsWith(']');
+  } catch {
+    return false;
+  }
+}
+
 export function validateDomainRule(rule: string): string | null {
   const bounded = boundedRule(rule);
   if (bounded) {
@@ -80,7 +92,8 @@ export function validateDomainRule(rule: string): string | null {
   }
   let host = rule;
   let port: string | null = null;
-  if (rule.startsWith('[')) {
+  const bracketedIpv6 = rule.startsWith('[');
+  if (bracketedIpv6) {
     const closing = rule.indexOf(']');
     if (closing < 0) {
       return 'Bracketed IPv6 rules require a closing bracket.';
@@ -93,16 +106,13 @@ export function validateDomainRule(rule: string): string | null {
       }
       port = remainder.slice(1);
     }
-    if (!host.includes(':')) {
+    if (!isValidIpv6Literal(host)) {
       return 'Malformed IPv6 address rule.';
     }
   } else if ((rule.match(/:/g) || []).length === 1) {
     [host, port] = rule.split(':');
   } else if ((rule.match(/:/g) || []).length > 1) {
-    if (!rule.includes(':')) {
-      return 'Malformed IPv6 address rule.';
-    }
-    return null;
+    return isValidIpv6Literal(rule) ? null : 'Malformed IPv6 address rule.';
   }
   if (port !== null) {
     if (!/^\d+$/.test(port)) {
@@ -112,6 +122,9 @@ export function validateDomainRule(rule: string): string | null {
     if (numeric < 1 || numeric > 65535) {
       return 'Domain rule ports must be between 1 and 65535.';
     }
+  }
+  if (bracketedIpv6) {
+    return null;
   }
   if (host === '*') {
     return null;
@@ -127,9 +140,13 @@ export function validateDomainRule(rule: string): string | null {
     }
   }
   if (IPV4.test(host)) {
-    const octets = host.split('.').map(Number);
+    const octetTexts = host.split('.');
+    const octets = octetTexts.map(Number);
     if (octets.some((octet) => octet < 0 || octet > 255)) {
       return 'Malformed IPv4 address rule.';
+    }
+    if (octetTexts.some((octet) => octet.length > 1 && octet.startsWith('0'))) {
+      return 'IPv4 rules must use canonical notation.';
     }
     return wildcard ? 'IP literal rules cannot use a wildcard.' : null;
   }
@@ -173,6 +190,7 @@ export function validatePathRule(
     }
   } else if (!(
     /^[A-Za-z]:[\\/]/.test(rule) ||
+    /^[\\/]{2}[^\\/]/.test(rule) ||
     rule === '~' ||
     /^~[\\/]/.test(rule)
   )) {
@@ -307,6 +325,11 @@ export function normalizePolicy(
   }
   if (network.mode === 'off') {
     unixSockets.mode = 'deny';
+    unixSockets.allowed_paths = [];
+  }
+  if (unixSockets.mode === 'allow_all') {
+    // The backend rejects `allow_all` combined with path rules; clear stale
+    // entries when the mode changes instead of failing the whole save.
     unixSockets.allowed_paths = [];
   }
   if (scope === 'none') {

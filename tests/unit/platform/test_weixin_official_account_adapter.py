@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from wechatpy.messages import VoiceMessage
+from wechatpy.messages import TextMessage, VoiceMessage
 
 from astrbot.core.platform.sources.weixin_official_account import weixin_offacc_adapter
 from astrbot.core.platform.sources.weixin_official_account.weixin_offacc_adapter import (
@@ -141,3 +141,106 @@ async def test_unparseable_callback_raises_value_error(monkeypatch):
 
     with pytest.raises(ValueError, match="Failed to parse WeChat message"):
         await adapter.server.handle_callback(_Request())
+
+
+@pytest.mark.asyncio
+async def test_active_send_mode_still_commits_inbound_events():
+    adapter = _adapter()
+    adapter.active_send_mode = True
+    adapter.server.active_send_mode = True
+
+    async def handle(message):
+        await WeixinOfficialAccountPlatformAdapter.handle_msg(adapter, message)
+
+    adapter.handle_msg = handle
+    msg = TextMessage(
+        {
+            "MsgType": "text",
+            "Content": "hello active",
+            "ToUserName": "bot-1",
+            "FromUserName": "user-active",
+            "MsgId": 201,
+            "CreateTime": 900,
+        }
+    )
+
+    await adapter.convert_message(msg)
+
+    event = adapter._event_queue.get_nowait()
+    assert event.message_str == "hello active"
+    assert event.message_obj.sender.user_id == "user-active"
+    assert adapter.user_buffer == {}
+
+
+@pytest.mark.asyncio
+async def test_passive_send_accumulates_components_and_completes_future(monkeypatch):
+    from astrbot.core.message.components import Plain
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
+    from astrbot.core.platform.sources.weixin_official_account.weixin_offacc_event import (
+        WeixinOfficialAccountPlatformEvent,
+    )
+
+    async def fake_send(_self, _message):
+        return None
+
+    monkeypatch.setattr(AstrMessageEvent, "send", fake_send)
+    future = asyncio.get_running_loop().create_future()
+    event = object.__new__(WeixinOfficialAccountPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        raw_message={"active_send_mode": False, "future": future},
+        sender=SimpleNamespace(user_id="user-1"),
+    )
+    event.message_out = {"cached_xml": []}
+
+    await event.send(MessageChain([Plain("first"), Plain("second")]))
+    await event.send(MessageChain([Plain("third")]))
+
+    assert event.message_out["cached_xml"] == ["first", "second", "third"]
+    assert future.done()
+    assert future.result() is None
+
+
+@pytest.mark.asyncio
+async def test_callback_clears_completed_state_without_passive_reply(monkeypatch):
+    adapter = _adapter()
+    adapter.server._maybe_encrypt = lambda xml, *_args: xml
+
+    class _Request:
+        args = {"msg_signature": "sig", "timestamp": "1", "nonce": "n"}
+
+        async def get_data(self):
+            return b"<xml/>"
+
+    adapter.server.crypto = SimpleNamespace(decrypt_message=lambda *_args: "<xml/>")
+    msg = TextMessage(
+        {
+            "MsgType": "text",
+            "Content": "trigger",
+            "ToUserName": "bot-1",
+            "FromUserName": "user-stuck",
+            "MsgId": 301,
+            "CreateTime": 901,
+        }
+    )
+    monkeypatch.setattr(
+        weixin_offacc_adapter,
+        "parse_message",
+        lambda _xml: msg,
+    )
+
+    completed = asyncio.create_task(asyncio.sleep(0))
+    await completed
+    adapter.user_buffer["user-stuck"] = {
+        "msg_id": "300",
+        "preview": "old",
+        "task": completed,
+        "cached_xml": [],
+        "started_at": 0.0,
+    }
+    adapter.server.callback = AsyncMock(return_value=None)
+
+    result = await adapter.server.handle_callback(_Request())
+
+    assert result == "success"
+    assert "user-stuck" not in adapter.user_buffer

@@ -83,12 +83,17 @@ class SandboxProxyEndpoint:
     platform: str = "linux"
 
     def http_url(self) -> str:
-        """Return the HTTP proxy URL for this endpoint."""
-        return f"http://{self.token}@127.0.0.1:{self.http_port}"
+        """Return the HTTP proxy URL for this endpoint.
+
+        The token is repeated as a non-empty password because common clients
+        (urllib, requests) only send proxy credentials when both URL userinfo
+        fields are present.
+        """
+        return f"http://{self.token}:{self.token}@127.0.0.1:{self.http_port}"
 
     def socks_url(self) -> str:
         """Return the SOCKS5h proxy URL for this endpoint."""
-        return f"socks5h://{self.token}@127.0.0.1:{self.socks_port}"
+        return f"socks5h://{self.token}:{self.token}@127.0.0.1:{self.socks_port}"
 
 
 @dataclass(frozen=True, slots=True)

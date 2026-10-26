@@ -250,8 +250,10 @@ def _apply_workload_environment(
     for key in list(os.environ):
         if key.lower() in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}:
             os.environ.pop(key, None)
-    http_url = f"http://{token}@127.0.0.1:{http_port}"
-    socks_url = f"socks5h://{token}@127.0.0.1:{socks_port}"
+    # Keep the token in both userinfo fields: urllib and requests omit proxy
+    # credentials when the URL has no non-empty password.
+    http_url = f"http://{token}:{token}@127.0.0.1:{http_port}"
+    socks_url = f"socks5h://{token}:{token}@127.0.0.1:{socks_port}"
     os.environ["HTTP_PROXY"] = http_url
     os.environ["HTTPS_PROXY"] = http_url
     os.environ["ALL_PROXY"] = socks_url

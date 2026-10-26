@@ -6,6 +6,7 @@ import asyncio
 import base64
 import contextlib
 import os
+import urllib.request
 from collections.abc import AsyncIterator
 
 import pytest
@@ -15,6 +16,7 @@ from astrbot.core.computer.local_policy import (
     LocalSandboxPolicy,
     LocalUnixSocketPolicy,
 )
+from astrbot.core.computer.process_sandbox import SandboxProxyEndpoint
 from astrbot.core.computer.process_sandbox.proxy import (
     MAX_LEASES,
     LocalProxyServer,
@@ -198,6 +200,43 @@ async def test_http_proxy_auth_forwarding_and_loopback_policy() -> None:
             assert b"407" in denied
             server.drop_lease(lease)
     finally:
+        await origin.stop()
+
+
+@pytest.mark.asyncio
+async def test_standard_python_urllib_authenticates_with_endpoint_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    origin = OriginServer()
+    await origin.start()
+    server = LocalProxyServer(platform="darwin")
+    server.start()
+    lease = None
+    try:
+        lease = server.create_lease(_policy(origin.port))
+        assert server.http_port is not None
+        endpoint = SandboxProxyEndpoint(
+            token=lease.token,
+            http_port=server.http_port,
+            platform="darwin",
+        )
+        monkeypatch.setattr(urllib.request, "proxy_bypass", lambda _host: False)
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": endpoint.http_url()})
+        )
+        response = await asyncio.to_thread(
+            opener.open,
+            f"http://localhost:{origin.port}/",
+            timeout=5,
+        )
+        try:
+            assert response.read() == b"origin-response"
+        finally:
+            response.close()
+    finally:
+        if lease is not None:
+            server.drop_lease(lease)
+        await server.stop()
         await origin.stop()
 
 

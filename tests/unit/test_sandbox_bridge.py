@@ -54,6 +54,18 @@ def test_bridge_rejects_missing_workload() -> None:
         bridge._parse_arguments(["bridge.py", "--http-port", "1"])  # noqa: SLF001
 
 
+def test_bridge_environment_uses_password_capable_proxy_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = {"HTTP_PROXY": "http://127.0.0.1:9", "no_proxy": "*"}
+    monkeypatch.setattr(os, "environ", environment)
+    bridge._apply_workload_environment(31280, 31080, "token", "")  # noqa: SLF001
+    assert environment["HTTP_PROXY"] == "http://token:token@127.0.0.1:31280"
+    assert environment["HTTPS_PROXY"] == "http://token:token@127.0.0.1:31280"
+    assert environment["ALL_PROXY"] == "socks5h://token:token@127.0.0.1:31080"
+    assert environment["NO_PROXY"] == ""
+
+
 def test_bridge_readiness_fails_fast_when_the_launcher_exits(tmp_path: Path) -> None:
     process = subprocess.Popen([sys.executable, "-c", "raise SystemExit(3)"])
     try:

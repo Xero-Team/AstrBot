@@ -386,3 +386,23 @@ def test_sensitive_path_classification_is_case_insensitive(tmp_path: Path):
     assert svc.path_is_sensitive("CONFIG/x.json")
     assert svc.path_is_sensitive("Backups/x.db")
     assert not svc.path_is_sensitive("plugins/readme.txt")
+
+
+def test_read_text_allows_cjk_sample_ending_mid_codepoint(tmp_path: Path):
+    svc = service(tmp_path)
+    content = "测" * 3000
+    (svc.root / "note.txt").write_text(content, encoding="utf-8")
+
+    loaded = svc.read_text("note.txt", is_root=False, can_read=True, can_write=True)
+
+    assert loaded["content"] == content
+
+
+def test_read_text_still_rejects_invalid_utf8(tmp_path: Path):
+    svc = service(tmp_path)
+    (svc.root / "bad.bin.txt").write_bytes(b"valid" + b"\xff\xfe")
+
+    with pytest.raises(DataFileServiceError) as exc:
+        svc.read_text("bad.bin.txt", is_root=False, can_read=True, can_write=True)
+
+    assert exc.value.status_code == 415

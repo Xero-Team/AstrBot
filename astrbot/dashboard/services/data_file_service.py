@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import codecs
 import hashlib
 import json
 import mimetypes
@@ -104,9 +105,10 @@ _HARD_READONLY_DIRS = {"dist", "site-packages"}
 _HARD_READONLY_ROOT_FILES = {LOCK_FILENAME}
 
 
-def _decode_utf8(data: bytes) -> str | None:
+def _decode_utf8(data: bytes, *, truncated: bool = False) -> str | None:
+    decoder = codecs.getincrementaldecoder("utf-8")()
     try:
-        return data.decode("utf-8")
+        return decoder.decode(data, final=not truncated)
     except UnicodeDecodeError:
         return None
 
@@ -400,7 +402,9 @@ class DataFileService:
         try:
             with self._safe_open(path, os.O_RDONLY) as handle:
                 sample = handle.read(min(info.st_size, 8192))
-            return b"\x00" in sample or bool(_decode_utf8(sample) is None)
+            return b"\x00" in sample or bool(
+                _decode_utf8(sample, truncated=len(sample) < info.st_size) is None
+            )
         except OSError:
             return True
 

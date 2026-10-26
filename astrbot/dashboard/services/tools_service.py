@@ -41,6 +41,7 @@ class ToolsService:
         self.plugin_catalog = plugin_catalog
         self._oauth_probe_tasks: dict[str, asyncio.Task[None]] = {}
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._mcp_config_lock = asyncio.Lock()
         self._oauth_start_locks: WeakValueDictionary[str, asyncio.Lock] = (
             WeakValueDictionary()
         )
@@ -75,6 +76,66 @@ class ToolsService:
         except Exception:
             logger.exception("Failed to roll back MCP server %s", name)
             return False
+
+    async def _cancel_oauth_probe(self, identity: str) -> None:
+        task = self._oauth_probe_tasks.pop(identity, None)
+        if task is None or task.done():
+            return
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    async def _restore_mcp_runtime(
+        self,
+        *,
+        name: str,
+        config: dict,
+        was_running: bool,
+    ) -> None:
+        """Best-effort runtime restore after a config/runtime mutation failed."""
+        if not was_running or not config.get("active", True):
+            return
+        try:
+            await self.tool_mgr.enable_mcp_server(name, config, timeout_seconds=30)
+        except Exception as exc:
+            logger.error(
+                "Failed to restore MCP server %s after a failed update: %s",
+                name,
+                safe_error("", exc),
+            )
+
+    async def _rollback_mcp_update(
+        self,
+        *,
+        name: str,
+        old_name: str,
+        old_config: dict,
+        is_rename: bool,
+        old_was_running: bool,
+    ) -> None:
+        try:
+            rollback_config = self.tool_mgr.load_mcp_config()
+            servers = rollback_config.setdefault("mcpServers", {})
+            if is_rename:
+                servers.pop(name, None)
+            servers[old_name] = old_config
+            self.tool_mgr.save_mcp_config(rollback_config)
+        except Exception:
+            logger.exception("Failed to roll back MCP config for %s", old_name)
+
+        try:
+            if name in self.tool_mgr.mcp_server_runtime_view:
+                await self.tool_mgr.disable_mcp_server(name, timeout_seconds=10)
+        except Exception:
+            logger.warning(
+                "Failed to stop MCP server %s during rollback",
+                name,
+                exc_info=True,
+            )
+        await self._restore_mcp_runtime(
+            name=old_name,
+            config=old_config,
+            was_running=old_was_running,
+        )
 
     def get_mcp_servers(self) -> list[dict]:
         try:
@@ -351,6 +412,10 @@ class ToolsService:
         await self.tool_mgr.mcp_auth_store.revoke(identity)
 
     async def add_mcp_server(self, server_data: Any) -> str:
+        async with self._mcp_config_lock:
+            return await self._add_mcp_server_locked(server_data)
+
+    async def _add_mcp_server_locked(self, server_data: Any) -> str:
         try:
             name = server_data.get("name", "")
             if not name:
@@ -393,6 +458,10 @@ class ToolsService:
             raise ToolsServiceError(f"Failed to add MCP server: {exc!s}") from exc
 
     async def update_mcp_server(self, old_name: str, server_data: Any) -> str:
+        async with self._mcp_config_lock:
+            return await self._update_mcp_server_locked(old_name, server_data)
+
+    async def _update_mcp_server_locked(self, old_name: str, server_data: Any) -> str:
         try:
             name = server_data.get("name", "")
 
@@ -408,10 +477,11 @@ class ToolsService:
             if name in config["mcpServers"] and is_rename:
                 raise ToolsServiceError(f"Server {name} already exists")
 
-            old_config = config["mcpServers"][old_name]
+            old_config = copy.deepcopy(config["mcpServers"][old_name])
             old_active = (
                 old_config.get("active", True) if isinstance(old_config, dict) else True
             )
+            old_was_running = old_name in self.tool_mgr.mcp_server_runtime_view
             active = server_data.get("active", old_active)
 
             only_update_active, server_config = self._build_updated_server_config(
@@ -428,14 +498,24 @@ class ToolsService:
                 config["mcpServers"][name] = server_config
 
             if self.tool_mgr.save_mcp_config(config):
-                await self._sync_updated_server_runtime(
-                    name=name,
-                    old_name=old_name,
-                    active=active,
-                    is_rename=is_rename,
-                    only_update_active=only_update_active,
-                    server_config=config["mcpServers"][name],
-                )
+                try:
+                    await self._sync_updated_server_runtime(
+                        name=name,
+                        old_name=old_name,
+                        active=active,
+                        is_rename=is_rename,
+                        only_update_active=only_update_active,
+                        server_config=config["mcpServers"][name],
+                    )
+                except BaseException:
+                    await self._rollback_mcp_update(
+                        name=name,
+                        old_name=old_name,
+                        old_config=old_config,
+                        is_rename=is_rename,
+                        old_was_running=old_was_running,
+                    )
+                    raise
                 return f"Successfully updated MCP server {name}"
             raise ToolsServiceError("Failed to save configuration")
         except ToolsServiceError:
@@ -445,6 +525,10 @@ class ToolsService:
             raise ToolsServiceError(f"Failed to update MCP server: {exc!s}") from exc
 
     async def delete_mcp_server(self, server_data: Any) -> str:
+        async with self._mcp_config_lock:
+            return await self._delete_mcp_server_locked(server_data)
+
+    async def _delete_mcp_server_locked(self, server_data: Any) -> str:
         try:
             name = server_data.get("name", "")
 
@@ -456,12 +540,26 @@ class ToolsService:
             if name not in config["mcpServers"]:
                 raise ToolsServiceError(f"Server {name} does not exist")
 
+            old_config = copy.deepcopy(config["mcpServers"][name])
+            was_running = name in self.tool_mgr.mcp_server_runtime_view
+            if was_running:
+                await self._disable_server(name)
+
             del config["mcpServers"][name]
 
             if self.tool_mgr.save_mcp_config(config):
-                if name in self.tool_mgr.mcp_server_runtime_view:
-                    await self._disable_server(name)
+                auth_ref = (
+                    old_config.get("auth_ref") if isinstance(old_config, dict) else None
+                )
+                if isinstance(auth_ref, str) and auth_ref:
+                    await self._cancel_oauth_probe(f"{name}:{auth_ref}")
                 return f"Successfully deleted MCP server {name}"
+
+            await self._restore_mcp_runtime(
+                name=name,
+                config=old_config,
+                was_running=was_running,
+            )
             raise ToolsServiceError("Failed to save configuration")
         except ToolsServiceError:
             raise

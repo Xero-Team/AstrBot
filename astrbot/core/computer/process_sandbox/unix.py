@@ -212,6 +212,7 @@ class UnixProcessSandbox(ProcessSandbox):
                     spec,
                     {str(k): str(v) for k, v in (env or {}).items()},
                 ),
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL if discard_stdout else stdout_file,
                 stderr=stderr_file,
             )

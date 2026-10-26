@@ -186,6 +186,18 @@ print("existing dependencies are read-only")
 
 
 @requires_local_sandbox
+def test_synchronous_sandbox_run_does_not_inherit_host_stdin(tmp_path):
+    """A sandboxed one-shot command must not read the operator terminal."""
+    result = create_process_sandbox().run(
+        [sys.executable, "-c", "import sys; print(repr(sys.stdin.read()))"],
+        SandboxSpec(workspace=tmp_path),
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stdout.strip() == b"''"
+
+
+@requires_local_sandbox
 @pytest.mark.parametrize(
     "location", ["outside", "workspace", "writable_root", "writable_packages"]
 )

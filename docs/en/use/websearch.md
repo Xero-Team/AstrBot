@@ -82,11 +82,11 @@ In addition to general web search, AnySearch can accept a provider-supported dom
 
 ## SerpApi
 
-Go to the [SerpApi dashboard](https://serpapi.com/manage-api-key) to get an API Key, then fill it in the corresponding configuration item. SerpApi provides Google web search and dedicated tools for Google Images Light, Google Finance, and Google Scholar. The specialist tools are available whenever the key is configured and web search is enabled; they do not need to be listed in the web search source route.
+See [Web Search → SerpApi](./websearch/serpapi.md) for API keys, configuration, the `websearch_route` entry, and the Google web, image, finance, and academic search tools. The specialist tools are available whenever the key is configured and web search is enabled; they do not need to be listed in the web search source route.
 
 ## DeepSeek
 
-Go to the [DeepSeek Platform](https://platform.deepseek.com/api_keys) to get an API Key, then fill it in the corresponding configuration item. DeepSeek search is configured independently of the chat model: even if the chat model already uses DeepSeek, enter the key separately for search. Search and page extraction each have an account-level limit of 5 QPS; adding multiple keys under the same account does not increase this limit.
+See [Web Search → DeepSeek Search API](./websearch/deepseek.md) for API keys, configuration, the `websearch_route` entry, page extraction through `web_fetch`, search operators, and rate limits. DeepSeek search is configured independently of the chat model: even if the chat model already uses DeepSeek, enter the key separately for search.
 
 ## Page extraction
 

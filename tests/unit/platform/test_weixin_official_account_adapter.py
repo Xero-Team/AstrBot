@@ -244,3 +244,45 @@ async def test_callback_clears_completed_state_without_passive_reply(monkeypatch
 
     assert result == "success"
     assert "user-stuck" not in adapter.user_buffer
+
+
+@pytest.mark.asyncio
+async def test_callback_does_not_reprocess_a_completed_same_message(monkeypatch):
+    adapter = _adapter()
+    adapter.server._maybe_encrypt = lambda xml, *_args: xml
+
+    class _Request:
+        args = {"msg_signature": "sig", "timestamp": "1", "nonce": "n"}
+
+        async def get_data(self):
+            return b"<xml/>"
+
+    adapter.server.crypto = SimpleNamespace(decrypt_message=lambda *_args: "<xml/>")
+    msg = TextMessage(
+        {
+            "MsgType": "text",
+            "Content": "retry",
+            "ToUserName": "bot-1",
+            "FromUserName": "user-retry",
+            "MsgId": 401,
+            "CreateTime": 902,
+        }
+    )
+    monkeypatch.setattr(weixin_offacc_adapter, "parse_message", lambda _xml: msg)
+
+    completed = asyncio.create_task(asyncio.sleep(0))
+    await completed
+    adapter.user_buffer["user-retry"] = {
+        "msg_id": "401",
+        "preview": "retry",
+        "task": completed,
+        "cached_xml": [],
+        "started_at": 0.0,
+    }
+    adapter.server.callback = AsyncMock(return_value=None)
+
+    result = await adapter.server.handle_callback(_Request())
+
+    assert result == "success"
+    assert "user-retry" not in adapter.user_buffer
+    adapter.server.callback.assert_not_awaited()

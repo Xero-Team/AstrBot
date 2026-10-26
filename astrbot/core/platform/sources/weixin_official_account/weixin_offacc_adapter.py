@@ -211,6 +211,15 @@ class WeixinOfficialAccountServer:
                             )
                             result_kind = "stale-task-error"
                             return _reply_text("处理消息失败，请稍后再试。")
+                        if state.get("msg_id") == msg_id:
+                            logger.info(
+                                "wx task finished without a passive reply; ignoring the "
+                                "same-message retry: user=%s msg_id=%s",
+                                from_user,
+                                msg_id,
+                            )
+                            result_kind = "stale-task-retry"
+                            return "success"
                         logger.info(
                             "wx task finished without a passive reply; starting a new trigger"
                         )

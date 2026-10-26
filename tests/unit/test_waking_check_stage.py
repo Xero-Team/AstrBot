@@ -1196,3 +1196,24 @@ def test_unique_session_does_not_change_session_admission_key():
         session_admission_key_from_event(on_event)
     )
     assert session_admission_key_from_event(on_event) == "session:napcat:group:room-a"
+
+
+def test_dingtalk_unique_session_includes_group_id():
+    from astrbot.core.event_bus import build_unique_session_id
+
+    first = FakeEvent(
+        [],
+        platform="dingtalk",
+        sender_id="user-1",
+        group_id="group-a",
+    )
+    second = FakeEvent(
+        [],
+        platform="dingtalk",
+        sender_id="user-1",
+        group_id="group-b",
+    )
+
+    assert build_unique_session_id(first) == "user-1_group-a"
+    assert build_unique_session_id(second) == "user-1_group-b"
+    assert build_unique_session_id(first) != build_unique_session_id(second)

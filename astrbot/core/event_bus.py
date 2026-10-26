@@ -42,7 +42,7 @@ UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] 
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "napcat": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "dingtalk": lambda e: e.get_sender_id(),
+    "dingtalk": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "qq_official": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "qq_official_webhook": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",

@@ -342,6 +342,41 @@ def test_global_connection_cap_counts_unauthenticated_slots(monkeypatch) -> None
 
 
 @pytest.mark.asyncio
+async def test_connect_does_not_write_http_error_after_tunnel_start(
+    monkeypatch,
+) -> None:
+    async def origin(reader, writer):
+        await reader.read(-1)
+        writer.close()
+
+    listener = await asyncio.start_server(origin, "127.0.0.1", 0)
+    port = listener.sockets[0].getsockname()[1]
+    try:
+        async with _proxy() as server:
+
+            async def fail_relay(*_args, **_kwargs):
+                raise ConnectionResetError
+
+            monkeypatch.setattr(server, "_relay", fail_relay)
+            lease = server.create_lease(_policy(port))
+            response = await _http_request(
+                str(server.http_socket),
+                (
+                    f"CONNECT localhost:{port} HTTP/1.1\r\n"
+                    f"Host: localhost:{port}\r\n"
+                    f"Proxy-Authorization: {_authorization(lease.token).decode()}\r\n\r\n"
+                ).encode(),
+            )
+            assert response == (
+                b"HTTP/1.1 200 Connection Established\r\nProxy-Agent: AstrBot\r\n\r\n"
+            )
+            server.drop_lease(lease)
+    finally:
+        listener.close()
+        await listener.wait_closed()
+
+
+@pytest.mark.asyncio
 async def test_lease_registry_is_bounded_and_stops_cleanly() -> None:
     async with _proxy() as server:
         leases = [server.create_lease(_policy()) for _ in range(MAX_LEASES)]

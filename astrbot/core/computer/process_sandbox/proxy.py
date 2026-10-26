@@ -857,13 +857,18 @@ class LocalProxyServer:
                     b"Proxy-Agent: AstrBot\r\n\r\n"
                 )
                 await writer.drain()
-                await self._relay(
-                    reader,
-                    writer,
-                    upstream_reader,
-                    upstream_writer,
-                    lease,
-                )
+                try:
+                    await self._relay(
+                        reader,
+                        writer,
+                        upstream_reader,
+                        upstream_writer,
+                        lease,
+                    )
+                except ConnectionError, OSError:
+                    # The tunnel is already established. Writing an HTTP error
+                    # now would be delivered as tunnel payload.
+                    return
             finally:
                 upstream_writer.close()
                 with contextlib.suppress(Exception):

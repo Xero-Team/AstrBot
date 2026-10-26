@@ -117,6 +117,50 @@ def _read_until_headers(
     return buffer[:marker], buffer[marker + 4 :]
 
 
+async def _copy_exactly(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    length: int,
+) -> None:
+    """Copy exactly ``length`` request-body bytes without buffering the body."""
+    remaining = length
+    while remaining > 0:
+        chunk = await reader.read(min(65536, remaining))
+        if not chunk:
+            raise ConnectionError(
+                "The client closed before the request body was complete."
+            )
+        writer.write(chunk)
+        await writer.drain()
+        remaining -= len(chunk)
+
+
+def _request_body_framing(head: HttpRequestHead) -> tuple[str, int]:
+    """Return how the request body ends and its declared byte length.
+
+    Only ``chunked`` transfer coding is supported so the forwarded body can be
+    bounded. HTTP/1.1 requests without framing have no body. HTTP/1.0 requests
+    without framing carry a body terminated by the client half-close.
+
+    Raises:
+        ProxyProtocolError: If the transfer coding cannot be framed.
+    """
+    transfer_codings: list[bytes] = []
+    for name, value in head.headers:
+        lowered = name.lower()
+        if lowered == b"transfer-encoding":
+            transfer_codings.extend(
+                token.strip().lower() for token in value.split(b",") if token.strip()
+            )
+        elif lowered == b"content-length":
+            return "length", int(value)
+    if transfer_codings:
+        if transfer_codings[-1] != b"chunked":
+            raise ProxyProtocolError("Unsupported request Transfer-Encoding.")
+        return "chunked", 0
+    return ("eof", 0) if head.version == "HTTP/1.0" else ("none", 0)
+
+
 def parse_http_request_head(head: bytes) -> HttpRequestHead:
     """Parse one HTTP/1.1 proxy request head with bounded framing."""
     if not head:
@@ -156,7 +200,10 @@ def parse_http_request_head(head: bytes) -> HttpRequestHead:
         lowered = name.lower()
         if lowered == b"content-length":
             content_length_count += 1
-            content_lengths.add(value.strip().decode("ascii", errors="ignore"))
+            try:
+                content_lengths.add(value.strip().decode("ascii"))
+            except UnicodeDecodeError as exc:
+                raise ProxyProtocolError("Invalid Content-Length header.") from exc
         if lowered == b"transfer-encoding":
             has_transfer_encoding = True
         if lowered == b"host":
@@ -760,7 +807,10 @@ class LocalProxyServer:
             await self._close(writer)
             return
         try:
-            head = await self._read_http_head(reader)
+            head = await asyncio.wait_for(
+                self._read_http_head(reader),
+                timeout=READINESS_TIMEOUT_SECONDS,
+            )
             if head is None:
                 await self._http_error(writer, 400, "Bad Request")
                 return
@@ -898,6 +948,7 @@ class LocalProxyServer:
                 or header_authority[1] != port
             ):
                 raise ProxyProtocolError("Host header does not match the target.")
+        body = _request_body_framing(head)
         destination = await lease.resolve(host, port)
         try:
             upstream_reader, upstream_writer = await self._dial(destination)
@@ -908,6 +959,7 @@ class LocalProxyServer:
             headers = self._forward_headers(
                 head.headers,
                 authority=_format_authority(host, port),
+                force_close=True,
             )
             request = (
                 f"{head.method} {origin_target} {head.version}\r\n".encode("latin-1")
@@ -916,23 +968,192 @@ class LocalProxyServer:
             )
             upstream_writer.write(request)
             await upstream_writer.drain()
-            await self._relay(
-                reader,
-                writer,
-                upstream_reader,
-                upstream_writer,
-                lease,
-            )
+            try:
+                await self._relay_plain_http(
+                    reader,
+                    writer,
+                    upstream_reader,
+                    upstream_writer,
+                    lease,
+                    body,
+                )
+            except Exception:
+                # The request is already on the wire. A proxy error written
+                # now would be parsed as the origin's response, so deliver a
+                # closed connection instead.
+                return
         finally:
             upstream_writer.close()
             with contextlib.suppress(Exception):
                 await upstream_writer.wait_closed()
+
+    async def _relay_plain_http(
+        self,
+        client_reader: asyncio.StreamReader,
+        client_writer: asyncio.StreamWriter,
+        upstream_reader: asyncio.StreamReader,
+        upstream_writer: asyncio.StreamWriter,
+        lease: ProxyLease,
+        body: tuple[str, int],
+    ) -> None:
+        """Forward one request body, then relay only the origin response.
+
+        Forwarding is bounded by the request framing so bytes after the body,
+        which may be a pipelined request carrying ``Proxy-Authorization``, are
+        never delivered to the origin.
+        """
+        closed = False
+
+        def close_tunnel() -> None:
+            nonlocal closed
+            if closed:
+                return
+            closed = True
+            upstream_writer.close()
+            client_writer.close()
+
+        if not lease.register_tunnel(close_tunnel):
+            close_tunnel()
+            return
+        body_task = asyncio.create_task(
+            self._forward_request_body(client_reader, upstream_writer, body),
+            name="astrbot-proxy-request-body",
+        )
+        response_task = asyncio.create_task(
+            self._pump_response(upstream_reader, client_writer),
+            name="astrbot-proxy-response",
+        )
+        try:
+            done, _pending = await asyncio.wait(
+                {body_task, response_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if response_task in done:
+                # The origin finished before the client body was complete.
+                body_task.cancel()
+                await asyncio.gather(body_task, return_exceptions=True)
+                response_task.result()
+            else:
+                body_task.result()
+                with contextlib.suppress(Exception):
+                    upstream_writer.write_eof()
+                await response_task
+        except TimeoutError:
+            lease.violations.record("network", "idle response timed out")
+        finally:
+            for task in (body_task, response_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(body_task, response_task, return_exceptions=True)
+            lease.unregister_tunnel(close_tunnel)
+            close_tunnel()
+            for stream_writer in (client_writer, upstream_writer):
+                with contextlib.suppress(Exception):
+                    await stream_writer.wait_closed()
+
+    @staticmethod
+    async def _forward_request_body(
+        client_reader: asyncio.StreamReader,
+        upstream_writer: asyncio.StreamWriter,
+        body: tuple[str, int],
+    ) -> None:
+        """Forward exactly one framed request body to the origin."""
+        kind, length = body
+        if kind == "none":
+            return
+        if kind == "eof":
+            while chunk := await client_reader.read(65536):
+                upstream_writer.write(chunk)
+                await upstream_writer.drain()
+            return
+        if kind == "length":
+            await _copy_exactly(client_reader, upstream_writer, length)
+            return
+        if kind != "chunked":
+            raise ProxyProtocolError("Unsupported request body framing.")
+        while True:
+            try:
+                line = await client_reader.readuntil(b"\r\n")
+            except asyncio.IncompleteReadError as exc:
+                raise ConnectionError(
+                    "The client closed during a chunked request body."
+                ) from exc
+            except asyncio.LimitOverrunError as exc:
+                raise ProxyProtocolError("Malformed chunked request body.") from exc
+            size_token = line[:-2].split(b";", 1)[0].strip()
+            if not size_token or not all(
+                byte in b"0123456789abcdefABCDEF" for byte in size_token
+            ):
+                raise ProxyProtocolError("Malformed chunked request size.")
+            try:
+                size = int(size_token, 16)
+            except ValueError as exc:
+                raise ProxyProtocolError("Malformed chunked request size.") from exc
+            upstream_writer.write(line)
+            if size == 0:
+                trailer_bytes = 0
+                while True:
+                    try:
+                        trailer = await client_reader.readuntil(b"\r\n")
+                    except asyncio.IncompleteReadError as exc:
+                        raise ConnectionError(
+                            "The client closed during chunked request trailers."
+                        ) from exc
+                    except asyncio.LimitOverrunError as exc:
+                        raise ProxyProtocolError(
+                            "Malformed chunked request trailers."
+                        ) from exc
+                    trailer_bytes += len(trailer)
+                    if trailer_bytes > MAX_HEADER_BYTES:
+                        raise ProxyProtocolError("The request trailers are too large.")
+                    upstream_writer.write(trailer)
+                    if trailer == b"\r\n":
+                        await upstream_writer.drain()
+                        return
+            await _copy_exactly(client_reader, upstream_writer, size)
+            try:
+                terminator = await client_reader.readexactly(2)
+            except asyncio.IncompleteReadError as exc:
+                raise ConnectionError(
+                    "The client closed during a chunked request body."
+                ) from exc
+            if terminator != b"\r\n":
+                raise ProxyProtocolError("Malformed chunked request terminator.")
+            upstream_writer.write(terminator)
+            await upstream_writer.drain()
+
+    @staticmethod
+    async def _pump_response(
+        upstream_reader: asyncio.StreamReader,
+        client_writer: asyncio.StreamWriter,
+    ) -> None:
+        """Relay the origin response and half-close the client at EOF."""
+        activity = time.monotonic()
+        while True:
+            try:
+                chunk = await asyncio.wait_for(
+                    upstream_reader.read(65536),
+                    timeout=_IDLE_CHECK_SECONDS,
+                )
+            except TimeoutError:
+                if time.monotonic() - activity >= IDLE_TUNNEL_SECONDS:
+                    raise
+                continue
+            if not chunk:
+                if client_writer.can_write_eof():
+                    with contextlib.suppress(Exception):
+                        client_writer.write_eof()
+                return
+            activity = time.monotonic()
+            client_writer.write(chunk)
+            await client_writer.drain()
 
     def _forward_headers(
         self,
         headers: tuple[tuple[bytes, bytes], ...],
         *,
         authority: str,
+        force_close: bool = False,
     ) -> list[tuple[bytes, bytes]]:
         connection_tokens: set[bytes] = set()
         for name, value in headers:
@@ -951,6 +1172,8 @@ class LocalProxyServer:
             forwarded.append((name, value))
         if not any(name.lower() == b"host" for name, _ in forwarded):
             forwarded.insert(0, (b"Host", authority.encode("latin-1", "replace")))
+        if force_close:
+            forwarded.append((b"Connection", b"close"))
         return forwarded
 
     async def _dial(
@@ -1083,36 +1306,36 @@ class LocalProxyServer:
             await self._close(writer)
             return
         try:
-            greeting = await asyncio.wait_for(
-                reader.readexactly(2),
-                timeout=READINESS_TIMEOUT_SECONDS,
-            )
-            methods = await reader.readexactly(greeting[1])
-            version, methods = parse_socks_greeting(greeting + methods)
-            if version != _SOCKS_VERSION or 0x02 not in methods:
-                writer.write(b"\x05\xff")
+            # The whole unauthenticated handshake is time-bounded so a stalled
+            # client cannot pin a shared connection slot indefinitely.
+            async with asyncio.timeout(READINESS_TIMEOUT_SECONDS):
+                greeting = await reader.readexactly(2)
+                methods = await reader.readexactly(greeting[1])
+                version, methods = parse_socks_greeting(greeting + methods)
+                if version != _SOCKS_VERSION or 0x02 not in methods:
+                    writer.write(b"\x05\xff")
+                    await writer.drain()
+                    return
+                writer.write(b"\x05\x02")
                 await writer.drain()
-                return
-            writer.write(b"\x05\x02")
-            await writer.drain()
-            username, password = await self._read_socks_credentials(reader)
-            lease = self._lookup_lease(username) or self._lookup_lease(password)
-            if lease is None:
-                writer.write(b"\x01\x01")
+                username, password = await self._read_socks_credentials(reader)
+                lease = self._lookup_lease(username) or self._lookup_lease(password)
+                if lease is None:
+                    writer.write(b"\x01\x01")
+                    await writer.drain()
+                    return
+                reserved = self._reserve_global(authenticated=True)
+                if not reserved or not lease.register_connection():
+                    if reserved:
+                        self._finish_global(authenticated=True)
+                    writer.write(b"\x01\x01")
+                    await writer.drain()
+                    return
+                authenticated = True
+                self._finish_global(authenticated=False)
+                writer.write(b"\x01\x00")
                 await writer.drain()
-                return
-            reserved = self._reserve_global(authenticated=True)
-            if not reserved or not lease.register_connection():
-                if reserved:
-                    self._finish_global(authenticated=True)
-                writer.write(b"\x01\x01")
-                await writer.drain()
-                return
-            authenticated = True
-            self._finish_global(authenticated=False)
-            writer.write(b"\x01\x00")
-            await writer.drain()
-            host, port = await self._read_socks_request(reader)
+                host, port = await self._read_socks_request(reader)
             try:
                 destination = await lease.resolve(host, port)
             except NetworkPolicyError:
@@ -1128,13 +1351,18 @@ class LocalProxyServer:
             try:
                 writer.write(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
                 await writer.drain()
-                await self._relay(
-                    reader,
-                    writer,
-                    upstream_reader,
-                    upstream_writer,
-                    lease,
-                )
+                try:
+                    await self._relay(
+                        reader,
+                        writer,
+                        upstream_reader,
+                        upstream_writer,
+                        lease,
+                    )
+                except Exception:
+                    # The CONNECT succeeded, so a later failure must close the
+                    # tunnel instead of injecting another SOCKS reply.
+                    return
             finally:
                 upstream_writer.close()
                 with contextlib.suppress(Exception):

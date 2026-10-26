@@ -35,12 +35,15 @@ async def get_qq_group(bot: Client, group: Group) -> Group:
     cache = getattr(bot, "_astrbot_group_info_cache", None)
     if cache is None:
         cache = OrderedDict()
-        bot._astrbot_group_info_cache = cache
-        bot._astrbot_group_info_lock = asyncio.Lock()
+        setattr(bot, "_astrbot_group_info_cache", cache)
+    lock = getattr(bot, "_astrbot_group_info_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        setattr(bot, "_astrbot_group_info_lock", lock)
 
     cached = cache.get(group.group_id)
     if cached is None or cached[0] <= monotonic():
-        async with bot._astrbot_group_info_lock:
+        async with lock:
             cached = cache.get(group.group_id)
             if cached is None or cached[0] <= monotonic():
                 payload = {}

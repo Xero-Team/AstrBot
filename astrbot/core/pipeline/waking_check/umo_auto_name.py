@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
 from astrbot.core.umo_alias import get_event_auto_name, normalize_umo_name
@@ -58,32 +58,56 @@ class UmoAutoNameRecorder:
         sender_id = str(event.get_sender_id() or "")
         sender_name = normalize_umo_name(event.get_sender_name())
         # Sender changes must be recorded even when the group name is unchanged.
-        for key, name, cache, pending in (
-            (umo, auto_name, self._cache, self._pending),
-            ((umo, sender_id), sender_name, self._sender_cache, self._sender_pending),
-        ):
-            is_sender = isinstance(key, tuple)
-            if (is_sender and not sender_id) or (not is_sender and not name):
-                continue
-            cached_name = cache.get(key)
-            if cached_name == name or (not name and cached_name):
-                cache.move_to_end(key)
-                continue
-
-            cache[key] = name
-            cache.move_to_end(key)
-            if len(cache) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
-                cache.popitem(last=False)
-
-            pending[key] = (sender_id, name)
-            pending.move_to_end(key)
-            if len(pending) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
-                dropped_key, (_, dropped_name) = pending.popitem(last=False)
-                if cache.get(dropped_key) == dropped_name:
-                    cache.pop(dropped_key, None)
+        self._queue_name(
+            umo,
+            auto_name,
+            self._cache,
+            self._pending,
+            sender_id,
+            require_sender_id=False,
+        )
+        self._queue_name(
+            (umo, sender_id),
+            sender_name,
+            self._sender_cache,
+            self._sender_pending,
+            sender_id,
+            require_sender_id=True,
+        )
 
         if self._pending or self._sender_pending:
             self._ensure_writer()
+
+    @staticmethod
+    def _queue_name(
+        key: Any,
+        name: str,
+        cache: OrderedDict[Any, str],
+        pending: OrderedDict[Any, tuple[str, str]],
+        sender_id: str,
+        *,
+        require_sender_id: bool,
+    ) -> None:
+        if require_sender_id and not sender_id:
+            return
+        if not require_sender_id and not name:
+            return
+        cached_name = cache.get(key)
+        if cached_name == name or (not name and cached_name):
+            cache.move_to_end(key)
+            return
+
+        cache[key] = name
+        cache.move_to_end(key)
+        if len(cache) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
+            cache.popitem(last=False)
+
+        pending[key] = (sender_id, name)
+        pending.move_to_end(key)
+        if len(pending) > MAX_UMO_AUTO_NAME_CACHE_SIZE:
+            dropped_key, (_, dropped_name) = pending.popitem(last=False)
+            if cache.get(dropped_key) == dropped_name:
+                cache.pop(dropped_key, None)
 
     def _ensure_writer(self) -> None:
         """Start a background writer when none is running."""
@@ -107,8 +131,12 @@ class UmoAutoNameRecorder:
         try:
             while self._pending or self._sender_pending:
                 is_sender = not self._pending
-                pending = self._sender_pending if is_sender else self._pending
-                cache = self._sender_cache if is_sender else self._cache
+                pending: OrderedDict[Any, tuple[str, str]] = (
+                    self._sender_pending if is_sender else self._pending
+                )
+                cache: OrderedDict[Any, str] = (
+                    self._sender_cache if is_sender else self._cache
+                )
                 key, (sender_id, name) = pending.popitem(last=False)
                 umo = key[0] if is_sender else key
                 try:

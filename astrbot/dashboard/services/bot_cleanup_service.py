@@ -2,7 +2,8 @@
 
 import asyncio
 
-from sqlmodel import col, delete, func, select
+from sqlalchemy import func
+from sqlmodel import col, delete, select
 
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.po import (
@@ -104,30 +105,34 @@ async def delete_bot_data(
 
     if targets & {"preferences", "conversations"}:
         manager = core.conversation_manager
-        for umo in list(manager.session_conversations):
-            if umo.partition(":")[0] == bot_id:
-                manager.session_conversations.pop(umo, None)
+        if manager is not None:
+            for umo in list(manager.session_conversations):
+                if umo.partition(":")[0] == bot_id:
+                    manager.session_conversations.pop(umo, None)
 
     if "routing" in targets:
         router = core.umop_config_router
-        await router.update_routing_data(
-            {
-                pattern: config_id
-                for pattern, config_id in router.umop_to_conf_id.items()
-                if pattern.partition(":")[0] != bot_id
-            }
-        )
+        if router is not None:
+            await router.update_routing_data(
+                {
+                    pattern: config_id
+                    for pattern, config_id in router.umop_to_conf_id.items()
+                    if pattern.partition(":")[0] != bot_id
+                }
+            )
 
     async with core.db.get_db() as session:
         async with session.begin():
             if "conversations" in targets:
                 await session.execute(
-                    delete(ConversationV2).where(ConversationV2.platform_id == bot_id)
+                    delete(ConversationV2).where(
+                        col(ConversationV2.platform_id) == bot_id
+                    )
                 )
             if "message_history" in targets:
                 await session.execute(
                     delete(PlatformMessageHistory).where(
-                        PlatformMessageHistory.platform_id == bot_id
+                        col(PlatformMessageHistory.platform_id) == bot_id
                     )
                 )
                 for model in (UmoAlias, UmoSender):

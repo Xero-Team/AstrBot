@@ -58,7 +58,7 @@ from astrbot.dashboard.upload_utils import (
 )
 
 if TYPE_CHECKING:
-    from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+    pass
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -1572,7 +1572,7 @@ class BotConfigService:
         platform_catalog: PlatformCatalog,
         platform_manager: PlatformManager,
         *,
-        core_lifecycle: AstrBotCoreLifecycle | None = None,
+        core_lifecycle: Any | None = None,
     ) -> None:
         self.config = config
         self.platform_catalog = platform_catalog

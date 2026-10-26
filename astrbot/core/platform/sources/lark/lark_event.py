@@ -89,6 +89,10 @@ class LarkMessageEvent(AstrMessageEvent):
         if group is None:
             return basic_group
 
+        if self._bot.im is None:
+            logger.warning("[Lark] IM API is unavailable while getting members")
+            return group
+
         group.members = None
         members: list[MessageMember] = []
         members_complete = False

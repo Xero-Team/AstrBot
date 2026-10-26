@@ -375,6 +375,7 @@ class CronJobManager:
         if not job or (not job.enabled and not ignore_enabled):
             return
         task = asyncio.current_task()
+        assert task is not None
         self._running_tasks.setdefault(job_id, set()).add(task)
         try:
             start_time = datetime.now(UTC)

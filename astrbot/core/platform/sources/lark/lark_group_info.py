@@ -29,7 +29,7 @@ async def get_lark_group(bot: lark.Client, group: Group) -> Group | None:
     Returns:
         The enriched incoming group, or None if group details are unavailable.
     """
-    if not group.group_id:
+    if not group.group_id or bot.im is None:
         return None
 
     cache = getattr(bot, "_astrbot_group_info_cache", None)

@@ -346,3 +346,26 @@ async def test_hold_turn_registers_same_event_once_under_concurrency():
     assert gate._turn_umos == {id(event): umo}
 
     await gate.release_turn(event)
+
+
+@pytest.mark.asyncio
+async def test_nested_hold_does_not_deadlock_behind_waiting_sender():
+    gate = GroupOutboundGate()
+    umo = "aiocqhttp:GroupMessage:group-1"
+    event_a = object()
+    event_b = object()
+    b_waiting = asyncio.Event()
+
+    async def holder_a():
+        await gate.hold_turn(umo, event_a)
+        await b_waiting.wait()
+        await asyncio.sleep(0.05)
+        await asyncio.wait_for(gate.hold_turn(umo, event_a), timeout=1)
+        await gate.release_turn(event_a)
+
+    async def holder_b():
+        b_waiting.set()
+        await gate.hold_turn(umo, event_b)
+        await gate.release_turn(event_b)
+
+    await asyncio.wait_for(asyncio.gather(holder_a(), holder_b()), timeout=3)

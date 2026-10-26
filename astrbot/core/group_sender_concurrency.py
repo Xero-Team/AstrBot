@@ -108,6 +108,7 @@ class GroupOutboundGate:
         self._locks = lock_manager or SessionLockManager()
         self._turn_cms: dict[int, Any] = {}
         self._turn_umos: dict[int, str] = {}
+        self._pending_events: set[int] = set()
         self._depth: dict[tuple[int, str], int] = defaultdict(int)
         self._registry_lock = asyncio.Lock()
 
@@ -123,19 +124,30 @@ class GroupOutboundGate:
         """Acquire the UMO outbound lock for this concurrent turn if needed."""
         event_id = id(event)
         key = self._task_key(umo)
-        # The event check, depth bookkeeping, and registration must be one
-        # critical section. Otherwise two tasks can both observe an unheld
-        # event while one is suspended acquiring the outbound lock.
+        cm = None
+        # Reserve the event and update depth under one lock, but never wait for
+        # the outbound lock while holding the registry lock. Waiting under the
+        # registry lock can deadlock with another send from the current holder.
         async with self._registry_lock:
-            if event_id in self._turn_cms:
+            if event_id in self._turn_cms or event_id in self._pending_events:
                 return
             if self._depth[key]:
                 self._depth[key] += 1
                 self._turn_cms[event_id] = None
                 self._turn_umos[event_id] = umo
                 return
-            cm = self._locks.acquire_lock(f"{umo}{OUTBOUND_LOCK_SUFFIX}")
+            self._pending_events.add(event_id)
+
+        cm = self._locks.acquire_lock(f"{umo}{OUTBOUND_LOCK_SUFFIX}")
+        try:
             await cm.__aenter__()
+        except BaseException:
+            async with self._registry_lock:
+                self._pending_events.discard(event_id)
+            raise
+
+        async with self._registry_lock:
+            self._pending_events.discard(event_id)
             self._turn_cms[event_id] = cm
             self._turn_umos[event_id] = umo
             self._depth[key] = 1

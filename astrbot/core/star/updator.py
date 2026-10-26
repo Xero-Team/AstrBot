@@ -194,7 +194,14 @@ class PluginUpdator(RepoZipUpdator):
                         os.replace(backup_path, plugin_path)
                     raise
                 if os.path.exists(backup_path):
-                    remove_dir(backup_path)
+                    try:
+                        remove_dir(backup_path)
+                    except Exception:
+                        logger.warning(
+                            "删除插件更新备份失败: %s",
+                            backup_path,
+                            exc_info=True,
+                        )
             finally:
                 shutil.rmtree(staging_root, ignore_errors=True)
             return plugin_path

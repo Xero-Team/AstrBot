@@ -163,7 +163,7 @@ The export dialog offers `Last hour`, `Last 12 hours`, `Last day`, `Last 3 days`
 
 In the diagnostic bundle, cached logs are stored in `logs/astrbot.in-memory.log`, cached traces in `traces/history.in-memory.jsonl`, and persisted trace history in `traces/history.jsonl`. The `webui_version` field in `environment.json` records the version declared by the WebUI assets being served, or `null` when unavailable.
 
-Open `Filters` next to the search box to filter by level, source (System/Plugin), individual plugin, and bot platform. Combine these conditions with `Search logs`. Plugin menus prefer display names and show plugin IDs as subtitles; `System` replaces the former Core source label.
+Open `Filters` next to the search box to filter by level, source (System/Plugin), individual plugin, and bot platform. Combine these conditions with `Search logs`. The plugin dropdown lists only plugins that appear in the current logs, not every installed plugin, so installed plugins that have not logged anything are absent. Plugin menus prefer display names and show plugin IDs as subtitles; `System` replaces the former Core source label.
 
 The toolbar also has font-size controls from 8–16px (12px by default, in 2px steps), plus the `Hide user chat` and `Auto-scroll` switches. Turn off `Auto-scroll` to read older entries without being pulled to the newest log. Logs stay in memory without new file-reading or database persistence.
 

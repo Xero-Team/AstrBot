@@ -137,12 +137,15 @@
             item-title="title"
             item-value="value"
             :disabled="selectedSource === 'core' || pluginOptions.length === 0"
-            :placeholder="tm('filters.allPlugins')"
+            :placeholder="tm('filters.pluginsInLogs')"
           >
             <template #item="{ props: itemProps, item }">
               <v-list-item v-bind="itemProps" :subtitle="item.subtitle" />
             </template>
           </v-select>
+          <div class="console-filter-hint">
+            {{ tm('filters.pluginsInLogsHint') }}
+          </div>
         </div>
 
         <div class="console-filter-block console-filter-block--last">
@@ -852,6 +855,13 @@ onBeforeUnmount(() => {
   font-size: var(--astrbot-meta-size);
   font-weight: 600;
   margin-bottom: 4px;
+}
+
+.console-filter-hint {
+  color: rgba(var(--v-theme-on-surface), 0.52);
+  font-size: var(--astrbot-meta-size);
+  line-height: 1.45;
+  margin-top: 6px;
 }
 
 .console-filter-option {

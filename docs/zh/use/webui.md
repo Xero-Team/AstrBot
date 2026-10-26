@@ -159,7 +159,7 @@ AstrBot WebUI 支持基于 TOTP（Time-based One-Time Password）的双因素认
 
 诊断包中的内存日志位于 `logs/astrbot.in-memory.log`，内存 Trace 位于 `traces/history.in-memory.jsonl`，持久化 Trace 历史位于 `traces/history.jsonl`。`environment.json` 的 `webui_version` 记录当前提供服务的 WebUI 资源版本，无法读取时为 `null`。
 
-点击搜索框左侧的“过滤器”，可按日志级别、来源（系统/插件）、具体插件、机器人平台筛选；这些条件可与“搜索日志”叠加使用。插件优先显示 display name，菜单副标题显示插件 ID；“系统”对应原先的 Core 来源。
+点击搜索框左侧的“过滤器”，可按日志级别、来源（系统/插件）、具体插件、机器人平台筛选；这些条件可与“搜索日志”叠加使用。插件下拉框只列出当前日志中出现过的插件，而不是全部已安装插件，因此尚未产生日志的已安装插件不会出现。插件优先显示 display name，菜单副标题显示插件 ID；“系统”对应原先的 Core 来源。
 
 工具栏还提供字号调整（默认 12px，可按 2px 步长在 8–16px 之间调整），以及“排除用户对话”和“自动滚动”开关。关闭“自动滚动”后，上翻查看旧日志时不会被拉到最新日志。日志仍使用内存缓存，不新增文件读取或数据库持久化。
 

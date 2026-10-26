@@ -156,6 +156,55 @@ describe('ConsoleDisplayer log rendering', () => {
     expect(source).toContain("tm('filters.unscopedPlatform')");
   });
 
+  it('labels the plugin filter as current-log sources with an explicit hint', async () => {
+    const source = await readFile(
+      'src/components/shared/ConsoleDisplayer.vue',
+      'utf8',
+    );
+
+    expect(source).toContain("tm('filters.pluginsInLogs')");
+    expect(source).toContain("tm('filters.pluginsInLogsHint')");
+    expect(source).not.toContain("tm('filters.allPlugins')");
+  });
+
+  it('builds plugin filter options only from retained logs', async () => {
+    api.history.mockResolvedValue({
+      data: {
+        data: {
+          logs: [
+            {
+              time: 1,
+              level: 'INFO',
+              data: 'cached',
+              plugin_name: 'uninstalled',
+            },
+          ],
+        },
+      },
+    });
+    api.pluginList.mockResolvedValue({
+      data: { data: [{ name: 'weather', display_name: 'Weather Forecast' }] },
+    });
+
+    const wrapper = mountWithVuetify(ConsoleDisplayer, {
+      props: { workspaceMode: true },
+    });
+    await flushPromises();
+
+    const filterButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Filters'));
+    await filterButton?.trigger('click');
+
+    const pluginSelect = wrapper.findAllComponents({ name: 'VSelect' })[0];
+    const items = pluginSelect.props('items') as Array<{
+      title: string;
+      value: string;
+    }>;
+    expect(items.map((item) => item.value)).toEqual(['uninstalled']);
+    expect(items.map((item) => item.title)).toEqual(['uninstalled']);
+  });
+
   it('prefers plugin display names while keeping ids as values', async () => {
     const source = await readFile(
       'src/components/shared/ConsoleDisplayer.vue',

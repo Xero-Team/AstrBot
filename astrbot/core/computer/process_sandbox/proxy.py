@@ -121,6 +121,7 @@ async def _copy_exactly(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     length: int,
+    activity: list[float] | None = None,
 ) -> None:
     """Copy exactly ``length`` request-body bytes without buffering the body."""
     remaining = length
@@ -130,8 +131,12 @@ async def _copy_exactly(
             raise ConnectionError(
                 "The client closed before the request body was complete."
             )
+        if activity is not None:
+            activity[0] = time.monotonic()
         writer.write(chunk)
         await writer.drain()
+        if activity is not None:
+            activity[0] = time.monotonic()
         remaining -= len(chunk)
 
 
@@ -1015,12 +1020,18 @@ class LocalProxyServer:
         if not lease.register_tunnel(close_tunnel):
             close_tunnel()
             return
+        activity = [time.monotonic()]
         body_task = asyncio.create_task(
-            self._forward_request_body(client_reader, upstream_writer, body),
+            self._forward_request_body(
+                client_reader,
+                upstream_writer,
+                body,
+                activity,
+            ),
             name="astrbot-proxy-request-body",
         )
         response_task = asyncio.create_task(
-            self._pump_response(upstream_reader, client_writer),
+            self._pump_response(upstream_reader, client_writer, activity),
             name="astrbot-proxy-response",
         )
         try:
@@ -1056,6 +1067,7 @@ class LocalProxyServer:
         client_reader: asyncio.StreamReader,
         upstream_writer: asyncio.StreamWriter,
         body: tuple[str, int],
+        activity: list[float],
     ) -> None:
         """Forward exactly one framed request body to the origin."""
         kind, length = body
@@ -1063,11 +1075,13 @@ class LocalProxyServer:
             return
         if kind == "eof":
             while chunk := await client_reader.read(65536):
+                activity[0] = time.monotonic()
                 upstream_writer.write(chunk)
                 await upstream_writer.drain()
+                activity[0] = time.monotonic()
             return
         if kind == "length":
-            await _copy_exactly(client_reader, upstream_writer, length)
+            await _copy_exactly(client_reader, upstream_writer, length, activity)
             return
         if kind != "chunked":
             raise ProxyProtocolError("Unsupported request body framing.")
@@ -1110,7 +1124,7 @@ class LocalProxyServer:
                     if trailer == b"\r\n":
                         await upstream_writer.drain()
                         return
-            await _copy_exactly(client_reader, upstream_writer, size)
+            await _copy_exactly(client_reader, upstream_writer, size, activity)
             try:
                 terminator = await client_reader.readexactly(2)
             except asyncio.IncompleteReadError as exc:
@@ -1126,9 +1140,9 @@ class LocalProxyServer:
     async def _pump_response(
         upstream_reader: asyncio.StreamReader,
         client_writer: asyncio.StreamWriter,
+        activity: list[float],
     ) -> None:
         """Relay the origin response and half-close the client at EOF."""
-        activity = time.monotonic()
         while True:
             try:
                 chunk = await asyncio.wait_for(
@@ -1136,7 +1150,7 @@ class LocalProxyServer:
                     timeout=_IDLE_CHECK_SECONDS,
                 )
             except TimeoutError:
-                if time.monotonic() - activity >= IDLE_TUNNEL_SECONDS:
+                if time.monotonic() - activity[0] >= IDLE_TUNNEL_SECONDS:
                     raise
                 continue
             if not chunk:
@@ -1144,9 +1158,10 @@ class LocalProxyServer:
                     with contextlib.suppress(Exception):
                         client_writer.write_eof()
                 return
-            activity = time.monotonic()
+            activity[0] = time.monotonic()
             client_writer.write(chunk)
             await client_writer.drain()
+            activity[0] = time.monotonic()
 
     def _forward_headers(
         self,

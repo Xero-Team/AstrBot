@@ -57,7 +57,7 @@ def test_unknown_filter_mode_is_rejected() -> None:
     not sys.platform.startswith("linux"),
     reason="Seccomp installation requires Linux.",
 )
-def test_installed_filter_denies_unix_and_allows_inet() -> None:
+def test_installed_filter_denies_unix_and_allows_inet_and_socketpair() -> None:
     code = textwrap.dedent(
         """
         import socket
@@ -66,17 +66,19 @@ def test_installed_filter_denies_unix_and_allows_inet() -> None:
         from astrbot.core.computer.process_sandbox.seccomp import install_socket_filter
 
         install_socket_filter("deny")
-        for factory in (
-            lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM),
-            lambda: socket.socketpair(socket.AF_UNIX),
-        ):
-            try:
-                factory()
-            except OSError as exc:
-                if exc.errno != 13:
-                    raise AssertionError(exc.errno)
-            else:
-                raise AssertionError("Unix socket creation was not denied")
+        try:
+            socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        except OSError as exc:
+            if exc.errno != 13:
+                raise AssertionError(exc.errno)
+        else:
+            raise AssertionError("Unix socket creation was not denied")
+        left, right = socket.socketpair(socket.AF_UNIX)
+        left.close()
+        right.close()
+        import asyncio
+
+        asyncio.run(asyncio.sleep(0))
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM):
             pass
         print("filter-verified")

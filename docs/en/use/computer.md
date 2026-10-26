@@ -123,7 +123,7 @@ Local grep applies deny masks through the sandbox backend. If the required `rg` 
 
 ### Unix sockets
 
-- Linux `deny` blocks `socket(AF_UNIX)`, `socket(AF_VSOCK)`, `socketpair(AF_UNIX)`, and `io_uring_setup` with `EACCES` in the workload branch. The unfiltered bridge is forked first and keeps working through the proxy Unix sockets; the workload inherits no Unix, ring, or bridge descriptor. `allow_all` installs no deny filter.
+- Linux `deny` blocks `socket(AF_UNIX)`, `socket(AF_VSOCK)`, and `io_uring_setup` with `EACCES` in the workload branch. Anonymous `socketpair(AF_UNIX)` stays allowed because it has no path or abstract name and `asyncio` needs it for its self-pipe. The unfiltered bridge is forked first and keeps working through the proxy Unix sockets; the workload inherits no Unix, ring, or bridge descriptor. `allow_all` installs no deny filter.
 - macOS `deny` blocks Unix socket family creation and pathname/abstract connections. `allowed_paths` is macOS-only and accepts normalized literal socket paths, not globs. Linux rejects nonempty `allowed_paths` instead of ignoring them. `allow_all` on macOS reopens outbound Unix sockets as a whole rather than per path.
 - Network mode `off` always uses socket mode `deny`. Windows does not support process isolation; its native file security remains separate from these settings.
 

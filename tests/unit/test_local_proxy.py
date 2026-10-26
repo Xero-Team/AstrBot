@@ -232,6 +232,60 @@ async def test_http_proxy_preserves_client_half_close() -> None:
 
 
 @pytest.mark.asyncio
+async def test_http_proxy_slow_body_keeps_the_idle_timer_alive(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.computer.process_sandbox.proxy.IDLE_TUNNEL_SECONDS",
+        0.5,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.process_sandbox.proxy._IDLE_CHECK_SECONDS",
+        0.02,
+    )
+
+    async def origin(reader, writer) -> None:
+        await reader.readuntil(b"\r\n\r\n")
+        await reader.readexactly(10)
+        body = b"slow-upload-ok"
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Length: "
+            + str(len(body)).encode()
+            + b"\r\nConnection: close\r\n\r\n"
+            + body
+        )
+        await writer.drain()
+        writer.close()
+
+    listener = await asyncio.start_server(origin, "127.0.0.1", 0)
+    port = listener.sockets[0].getsockname()[1]
+    try:
+        async with _proxy() as server:
+            lease = server.create_lease(_policy(port))
+            reader, writer = await asyncio.open_unix_connection(str(server.http_socket))
+            writer.write(
+                (
+                    f"POST http://localhost:{port}/upload HTTP/1.1\r\n"
+                    f"Host: localhost:{port}\r\n"
+                    f"Proxy-Authorization: {_authorization(lease.token).decode()}\r\n"
+                    "Content-Length: 10\r\n\r\n"
+                ).encode()
+            )
+            await writer.drain()
+            for _ in range(10):
+                await asyncio.sleep(0.1)
+                writer.write(b"x")
+                await writer.drain()
+            response = await asyncio.wait_for(reader.read(-1), 5)
+            assert b"200 OK" in response
+            assert b"slow-upload-ok" in response
+            writer.close()
+            await writer.wait_closed()
+            server.drop_lease(lease)
+    finally:
+        listener.close()
+        await listener.wait_closed()
+
+
+@pytest.mark.asyncio
 async def test_http_proxy_rejects_denied_targets_and_bad_framing() -> None:
     async with _proxy() as server:
         lease = server.create_lease(_policy())

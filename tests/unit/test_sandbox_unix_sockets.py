@@ -38,16 +38,18 @@ def _spec(
     not sys.platform.startswith("linux"),
     reason="Linux seccomp socket family checks run on Linux.",
 )
-def test_socketpair_and_io_uring_denied_in_workload(tmp_path: Path) -> None:
+def test_socketpair_allowed_and_io_uring_denied_in_workload(tmp_path: Path) -> None:
     code = """
+import asyncio
 import ctypes
 import socket
-try:
-    socket.socketpair(socket.AF_UNIX)
-except OSError as exc:
-    print("socketpair", exc.errno)
-else:
-    raise SystemExit("socketpair allowed")
+
+left, right = socket.socketpair(socket.AF_UNIX)
+left.close()
+right.close()
+print("socketpair allowed")
+asyncio.run(asyncio.sleep(0))
+print("asyncio allowed")
 libc = ctypes.CDLL(None, use_errno=True)
 result = libc.syscall(425, ctypes.c_uint(8), ctypes.c_void_p(0))
 print("io_uring", result, ctypes.get_errno())
@@ -66,7 +68,8 @@ else:
         timeout=20,
     )
     assert result.returncode == 0, result.stderr.decode()
-    assert b"socketpair 13" in result.stdout
+    assert b"socketpair allowed" in result.stdout
+    assert b"asyncio allowed" in result.stdout
     assert b"io_uring -1 13" in result.stdout
     # Host+off cannot create AF_UNIX at all, so the pathname conn fails at
     # socket creation with EACCES regardless of whether the socket exists.

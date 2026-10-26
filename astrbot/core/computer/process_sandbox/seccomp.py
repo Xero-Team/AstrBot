@@ -106,7 +106,7 @@ def build_socket_filter(
     architecture: int | None = None,
     syscall_table: dict[str, int] | None = None,
 ) -> SockFprog:
-    """Build a filter denying Unix sockets, socketpairs and io_uring.
+    """Build a filter denying path-based Unix sockets and io_uring.
 
     Args:
         architecture: ``AUDIT_ARCH_*`` value; defaults to the running platform.
@@ -138,11 +138,10 @@ def build_socket_filter(
         _jump(BPF_JEQ, AF_VSOCK, jt=1, jf=0),
         _allow(),
         _deny_errno(),
-        _jump(BPF_JEQ, numbers["socketpair"], jt=0, jf=4),
-        _load(arg0_offset),
-        _jump(BPF_JEQ, AF_UNIX, jt=1, jf=0),
+        # Anonymous AF_UNIX socketpairs have no path or abstract name and
+        # cannot reach a host socket, but asyncio's self-pipe needs them.
+        _jump(BPF_JEQ, numbers["socketpair"], jt=0, jf=1),
         _allow(),
-        _deny_errno(),
         _jump(BPF_JEQ, numbers["io_uring_setup"], jt=0, jf=1),
         _deny_errno(),
         _allow(),

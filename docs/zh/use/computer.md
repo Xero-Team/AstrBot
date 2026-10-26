@@ -123,7 +123,7 @@ macOS 上，同一套有界展开会生成字面 Seatbelt 拒绝规则，并排�
 
 ### Unix 套接字
 
-- Linux `deny` 会在工作负载分支以 `EACCES` 阻止 `socket(AF_UNIX)`、`socket(AF_VSOCK)`、`socketpair(AF_UNIX)` 和 `io_uring_setup`。未过滤的 bridge 会先被 fork，并通过代理 Unix 套接字继续工作；工作负载不继承任何 Unix、ring 或 bridge 描述符。`allow_all` 不安装拒绝过滤器。
+- Linux `deny` 会在工作负载分支以 `EACCES` 阻止 `socket(AF_UNIX)`、`socket(AF_VSOCK)` 和 `io_uring_setup`。匿名 `socketpair(AF_UNIX)` 仍然允许，因为它没有路径或抽象名称，且 `asyncio` 需要它作为自管道。未过滤的 bridge 会先被 fork，并通过代理 Unix 套接字继续工作；工作负载不继承任何 Unix、ring 或 bridge 描述符。`allow_all` 不安装拒绝过滤器。
 - macOS `deny` 阻止 Unix 套接字族创建及路径名/抽象连接。`allowed_paths` 仅适用于 macOS，接受规范化字面套接字路径而非通配。Linux 会拒绝非空 `allowed_paths`，而不是忽略。macOS 的 `allow_all` 整体重新开放出站 Unix 套接字，而不是按路径开放。
 - 网络模式 `off` 始终使用套接字模式 `deny`。Windows 不支持进程隔离；其原生文件安全与本组设置相互独立。
 

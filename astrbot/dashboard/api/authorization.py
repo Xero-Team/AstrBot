@@ -33,6 +33,12 @@ from astrbot.dashboard.schemas import (
 
 from .auth import object_resource, require_dashboard_session_principal
 
+
+def _binding_is_unexpired(expires_at) -> bool:
+    normalized = normalize_datetime_utc(expires_at)
+    return normalized is None or normalized > utc_now()
+
+
 router = APIRouter(prefix="/authorization", tags=["Authorization"])
 
 
@@ -238,10 +244,7 @@ async def _authorize_identity_read(
             item.role == Role.INSTANCE_OPERATOR.value
             and item.scope_type == "instance"
             and item.config_id
-            and (
-                item.expires_at is None
-                or normalize_datetime_utc(item.expires_at) > utc_now()
-            )
+            and _binding_is_unexpired(item.expires_at)
         )
     }
     if not config_ids:

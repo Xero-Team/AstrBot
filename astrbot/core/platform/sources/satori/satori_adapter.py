@@ -314,9 +314,11 @@ class SatoriPlatformAdapter(Platform):
 
     def _advance_sequence(self, sn: object) -> None:
         """Advance the resume sequence monotonically from the receive loop."""
+        if not isinstance(sn, int | str):
+            return
         try:
             value = int(sn)
-        except TypeError, ValueError:
+        except ValueError:
             return
         if value > self.sequence:
             self.sequence = value

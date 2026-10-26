@@ -1224,7 +1224,9 @@ class LarkMessageEvent(AstrMessageEvent):
                     if delta != snapshot:
                         text_changed.set()
 
-        async def _consume_rest_and_fallback(gen, initial_text: str) -> None:
+        async def _consume_rest_and_fallback(
+            gen, initial_text: str
+        ) -> PlatformSendResult:
             """Card creation failed; preserve the already-consumed text delta.
 
             This remains local because the CardKit path has consumed part of the

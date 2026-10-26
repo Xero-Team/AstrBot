@@ -7,6 +7,7 @@ import os
 import shutil
 import stat
 import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -25,6 +26,7 @@ MaskMode = Literal["read", "write"]
 
 _MASK_SOURCE_DIR: Path | None = None
 _EMPTY_MASK_FILE: Path | None = None
+_MASK_LOCK = threading.Lock()
 
 
 class DenyPolicyError(RuntimeError):
@@ -43,20 +45,28 @@ class DenyMask:
 
 def _empty_mask_file() -> Path:
     global _MASK_SOURCE_DIR, _EMPTY_MASK_FILE
-    if _EMPTY_MASK_FILE is not None and _EMPTY_MASK_FILE.exists():
-        return _EMPTY_MASK_FILE
-    _MASK_SOURCE_DIR = Path(tempfile.mkdtemp(prefix="astrbot-deny-mask-"))
-    empty = _MASK_SOURCE_DIR / "empty"
-    empty.write_bytes(b"")
-    os.chmod(empty, 0)
-    _EMPTY_MASK_FILE = empty
+    with _MASK_LOCK:
+        if _EMPTY_MASK_FILE is not None and _EMPTY_MASK_FILE.exists():
+            return _EMPTY_MASK_FILE
+        _MASK_SOURCE_DIR = Path(tempfile.mkdtemp(prefix="astrbot-deny-mask-"))
+        empty = _MASK_SOURCE_DIR / "empty"
+        empty.write_bytes(b"")
+        os.chmod(empty, 0)
+        _EMPTY_MASK_FILE = empty
+        return empty
 
-    def cleanup() -> None:
-        if _MASK_SOURCE_DIR is not None:
-            shutil.rmtree(_MASK_SOURCE_DIR, ignore_errors=True)
 
-    atexit.register(cleanup)
-    return empty
+def _cleanup_mask_sources() -> None:
+    global _MASK_SOURCE_DIR, _EMPTY_MASK_FILE
+    with _MASK_LOCK:
+        directory = _MASK_SOURCE_DIR
+        _MASK_SOURCE_DIR = None
+        _EMPTY_MASK_FILE = None
+    if directory is not None:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
+atexit.register(_cleanup_mask_sources)
 
 
 def _is_glob_rule(rule: str) -> bool:

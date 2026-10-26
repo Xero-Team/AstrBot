@@ -105,11 +105,22 @@ class DomainMatcher:
 
 
 def _nat64_embedded(address: Address) -> Address | None:
+    """Return the IPv4 address carried by a known NAT64 prefix.
+
+    RFC 6052 places the IPv4 bits immediately after a /96 prefix, but after a
+    /48 prefix the first 16 bits precede the reserved ``u`` octet and the last
+    16 bits follow it. The local-use prefix is fixed at /48 by RFC 8215, so the
+    two layouts can be distinguished from the known prefixes alone.
+    """
     if not isinstance(address, ipaddress.IPv6Address):
         return None
-    if address in _NAT64 or address in _NAT64_LOCAL:
-        packed = address.packed[-4:]
-        return ipaddress.IPv4Address(packed)
+    packed = address.packed
+    if address in _NAT64:
+        return ipaddress.IPv4Address(packed[-4:])
+    if address in _NAT64_LOCAL:
+        if packed[8] != 0:
+            return None
+        return ipaddress.IPv4Address(packed[6:8] + packed[9:11])
     return None
 
 

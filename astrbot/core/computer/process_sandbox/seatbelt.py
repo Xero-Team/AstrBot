@@ -5,6 +5,8 @@ import subprocess  # noqa: S404  # subprocess is an intentional runtime dependen
 import sys
 from pathlib import Path
 
+from astrbot.core.computer.local_policy import expand_path_rule
+
 from .base import SandboxSpec, sandbox_ca_file
 from .fs_policy import DenyPolicyError, DenyRuleSet
 from .unix import UnixProcessSandbox, build_resource_limited_argv
@@ -125,14 +127,22 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
                     f"(deny network*)\n{allowed_endpoints}",
                 )
         if spec.policy.unix_sockets.mode == "allow_all":
-            profile += "\n(allow network-outbound (remote unix-socket))\n"
+            # socket(AF_UNIX, ...) is a system-socket operation without a path,
+            # so the path/remote filters below cannot authorize creation.
+            profile += (
+                "\n(allow system-socket (socket-domain AF_UNIX))"
+                "\n(allow network-outbound (remote unix-socket))\n"
+            )
         else:
             escaped_sockets = "\n".join(
-                f'(allow network-outbound (remote unix-socket (path-literal "{self._escape(Path(path))}")))'
+                f'(allow network-outbound (remote unix-socket (path-literal "{self._escape(Path(expand_path_rule(path)))}")))'
                 for path in spec.policy.unix_sockets.allowed_paths
             )
             if escaped_sockets:
-                profile += f"\n{escaped_sockets}\n"
+                profile += (
+                    "\n(allow system-socket (socket-domain AF_UNIX))"
+                    f"\n{escaped_sockets}\n"
+                )
 
         ca_paths = tuple(
             path
@@ -232,7 +242,13 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
     @staticmethod
     def _escape(path: Path) -> str:
         """Escape a literal path for a Seatbelt string."""
-        return str(path).replace("\\", "\\\\").replace('"', '\\"')
+        return (
+            str(path)
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+        )
 
     def _executable_read_paths(self, executable_path: Path) -> tuple[Path, ...]:
         """Collect executable and dynamic-library paths needed by Seatbelt.

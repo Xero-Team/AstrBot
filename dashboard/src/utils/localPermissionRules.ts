@@ -144,8 +144,13 @@ export function validatePathRule(
   if (bounded) {
     return bounded;
   }
-  if (rule.includes('\0')) {
-    return 'Filesystem rules must not contain NUL bytes.';
+  if (
+    [...rule].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 0x20 || code === 0x7f;
+    })
+  ) {
+    return 'Filesystem rules must not contain control characters.';
   }
   const normalized = rule.replace(/\\/g, '/');
   if (normalized.endsWith('/') && normalized !== '/') {

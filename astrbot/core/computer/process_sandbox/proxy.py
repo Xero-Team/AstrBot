@@ -851,17 +851,23 @@ class LocalProxyServer:
             except OSError:
                 await self._http_error(writer, 502, "Bad Gateway")
                 return
-            writer.write(
-                b"HTTP/1.1 200 Connection Established\r\nProxy-Agent: AstrBot\r\n\r\n"
-            )
-            await writer.drain()
-            await self._relay(
-                reader,
-                writer,
-                upstream_reader,
-                upstream_writer,
-                lease,
-            )
+            try:
+                writer.write(
+                    b"HTTP/1.1 200 Connection Established\r\n"
+                    b"Proxy-Agent: AstrBot\r\n\r\n"
+                )
+                await writer.drain()
+                await self._relay(
+                    reader,
+                    writer,
+                    upstream_reader,
+                    upstream_writer,
+                    lease,
+                )
+            finally:
+                upstream_writer.close()
+                with contextlib.suppress(Exception):
+                    await upstream_writer.wait_closed()
             return
 
         parsed = _split_absolute_target(head)
@@ -895,7 +901,7 @@ class LocalProxyServer:
         try:
             headers = self._forward_headers(
                 head.headers,
-                authority=f"{host}:{port}",
+                authority=_format_authority(host, port),
             )
             request = (
                 f"{head.method} {origin_target} {head.version}\r\n".encode("latin-1")
@@ -1198,6 +1204,12 @@ class LocalProxyServer:
         with contextlib.suppress(Exception):
             writer.close()
             await writer.wait_closed()
+
+
+def _format_authority(host: str, port: int) -> str:
+    """Return an HTTP Host authority, bracketing IPv6 literals."""
+    formatted_host = f"[{host}]" if ":" in host else host
+    return f"{formatted_host}:{port}"
 
 
 def _split_absolute_target(

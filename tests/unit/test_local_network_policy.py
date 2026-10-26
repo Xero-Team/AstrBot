@@ -12,6 +12,7 @@ from astrbot.core.computer.process_sandbox.network import (
     NetworkPolicyError,
     ResolvedAddressGuard,
     _host_interface_addresses,
+    _nat64_embedded,
     resolve_and_check,
     resolve_host_addresses_async,
 )
@@ -141,7 +142,7 @@ def test_address_classes_stay_denied(address, flags, reason) -> None:
         ("::ffff:10.0.0.1", True),
         ("2002:7f00:1::", True),
         ("64:ff9b::7f00:1", True),
-        ("64:ff9b:1::a00:1", True),
+        ("64:ff9b:1:7f00:0:100::", True),
         ("93.184.216.34", False),
     ],
 )
@@ -151,6 +152,19 @@ def test_embedded_ipv4_forms_only_add_denials(address, expected) -> None:
     assert (
         guard.denial_reason(ipaddress.ip_address(address), 443) is not None
     ) is expected
+
+
+def test_nat64_embedded_ipv4_uses_the_rfc6052_layout() -> None:
+    assert _nat64_embedded(
+        ipaddress.ip_address("64:ff9b::a00:1")
+    ) == ipaddress.IPv4Address("10.0.0.1")
+    assert _nat64_embedded(
+        ipaddress.ip_address("64:ff9b:1:a00:0:100::")
+    ) == ipaddress.IPv4Address("10.0.0.1")
+    # A /48 suffix is not the embedded IPv4.
+    assert _nat64_embedded(
+        ipaddress.ip_address("64:ff9b:1::a00:1")
+    ) == ipaddress.IPv4Address("0.0.0.0")
 
 
 def test_private_and_loopback_flags_opt_in() -> None:

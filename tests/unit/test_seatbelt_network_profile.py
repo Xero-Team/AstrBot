@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -137,6 +138,7 @@ def test_macos_socket_modes_and_literal_paths(monkeypatch, tmp_path) -> None:
     )
     assert "remote unix-socket" in profile
     assert str(socket_path) in profile
+    assert "(allow system-socket (socket-domain AF_UNIX))" in profile
     allow_all = LocalSandboxPolicy(
         allow_execution=True,
         filesystem_scope="workspace",
@@ -149,7 +151,48 @@ def test_macos_socket_modes_and_literal_paths(monkeypatch, tmp_path) -> None:
             SandboxSpec(workspace=tmp_path, policy=allow_all, proxy=_endpoint()),
         )
     )
+    assert "(allow system-socket (socket-domain AF_UNIX))" in allow_profile
     assert "(allow network-outbound (remote unix-socket))" in allow_profile
+
+
+def test_macos_socket_paths_expand_home(monkeypatch, tmp_path) -> None:
+    policy = LocalSandboxPolicy(
+        allow_execution=True,
+        filesystem_scope="workspace",
+        network=LocalNetworkPolicy(mode="allowlist", allowed_domains=("a.com",)),
+        unix_sockets=LocalUnixSocketPolicy(
+            mode="deny", allowed_paths=("~/astrbot-test.sock",)
+        ),
+    )
+    profile = _profile(
+        _command(
+            monkeypatch,
+            SandboxSpec(workspace=tmp_path, policy=policy, proxy=_endpoint()),
+        )
+    )
+    expanded = str(Path.home() / "astrbot-test.sock")
+    assert f'path-literal "{expanded}"' in profile
+    assert 'path-literal "~/astrbot-test.sock"' not in profile
+
+
+def test_socket_allow_rules_are_not_injected_by_control_characters(
+    monkeypatch, tmp_path
+) -> None:
+    policy = LocalSandboxPolicy(
+        allow_execution=True,
+        filesystem_scope="workspace",
+        network=LocalNetworkPolicy(mode="allowlist", allowed_domains=("a.com",)),
+        unix_sockets=LocalUnixSocketPolicy(
+            mode="deny", allowed_paths=("/tmp/sock\n(deny default)",)
+        ),
+    )
+    profile = _profile(
+        _command(
+            monkeypatch,
+            SandboxSpec(workspace=tmp_path, policy=policy, proxy=_endpoint()),
+        )
+    )
+    assert profile.count("\n(deny default)") == 1
 
 
 def test_profile_budget_fails_before_launch(monkeypatch, tmp_path) -> None:

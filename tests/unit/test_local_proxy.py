@@ -20,6 +20,7 @@ from astrbot.core.computer.process_sandbox.proxy import (
     LocalProxyServer,
     ProxyLimitError,
     ProxyProtocolError,
+    _format_authority,
     parse_http_request_head,
     parse_proxy_authorization,
     parse_socks_auth,
@@ -104,6 +105,11 @@ async def _http_request(
     writer.close()
     await writer.wait_closed()
     return data
+
+
+def test_format_authority_brackets_ipv6_hosts() -> None:
+    assert _format_authority("example.com", 80) == "example.com:80"
+    assert _format_authority("2001:db8::1", 8080) == "[2001:db8::1]:8080"
 
 
 def test_parse_authorization_and_protocol_helpers() -> None:
@@ -244,6 +250,40 @@ async def test_socks5_authenticated_connect_and_revocation() -> None:
             await writer.wait_closed()
     finally:
         await origin.stop()
+
+
+@pytest.mark.asyncio
+async def test_connect_closes_upstream_when_relay_never_runs(
+    monkeypatch,
+) -> None:
+    closed = asyncio.Event()
+
+    async def origin(reader, writer):
+        await reader.read(-1)
+        closed.set()
+        writer.close()
+
+    listener = await asyncio.start_server(origin, "127.0.0.1", 0)
+    port = listener.sockets[0].getsockname()[1]
+    async with _proxy() as server:
+
+        async def fail_relay(*_args, **_kwargs):
+            raise RuntimeError("relay failure")
+
+        monkeypatch.setattr(server, "_relay", fail_relay)
+        lease = server.create_lease(_policy(port))
+        response = await _http_request(
+            str(server.http_socket),
+            (
+                f"CONNECT localhost:{port} HTTP/1.1\r\n"
+                f"Host: localhost:{port}\r\n"
+                f"Proxy-Authorization: {_authorization(lease.token).decode()}\r\n\r\n"
+            ).encode(),
+        )
+        assert b"200 Connection Established" in response
+        await asyncio.wait_for(closed.wait(), 2)
+    listener.close()
+    await listener.wait_closed()
 
 
 @pytest.mark.asyncio

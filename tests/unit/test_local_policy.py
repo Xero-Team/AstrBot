@@ -233,6 +233,8 @@ def test_path_rules_require_anchors_and_reject_bad_forms(tmp_path: Path) -> None
         "/tmp/../secret",
         "/tmp/trailing/",
         "/tmp/nul\x00byte",
+        "/tmp/newline\n(deny default)",
+        "/tmp/control\x7fcharacter",
         "/tmp/[",
     ):
         with pytest.raises(ValueError):

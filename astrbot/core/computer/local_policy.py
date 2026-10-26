@@ -333,8 +333,8 @@ def normalize_path_rule(rule: str) -> str:
     value = rule.strip()
     if not value:
         raise ValueError("Filesystem rules must not be empty.")
-    if "\x00" in value:
-        raise ValueError("Filesystem rules must not contain NUL bytes.")
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
+        raise ValueError("Filesystem rules must not contain control characters.")
     if len(value) > MAX_RULE_CHARACTERS:
         raise ValueError(
             f"Filesystem rules must be at most {MAX_RULE_CHARACTERS} characters."

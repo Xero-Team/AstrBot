@@ -29,6 +29,9 @@ describe('localPermissionRules', () => {
     expect(validatePathRule('relative/path', 'linux')).toMatch(/absolute/);
     expect(validatePathRule('/tmp/../secret', 'linux')).toMatch(/\.\./);
     expect(validatePathRule('/tmp/*.env', 'linux')).toBeNull();
+    expect(validatePathRule('/tmp/new\n(deny default)', 'linux')).toMatch(
+      /control/,
+    );
     expect(validatePathRule('/tmp/[', 'linux')).toMatch(/unclosed/);
     expect(validateUnixPathRule('/tmp/*.sock', 'darwin')).toMatch(/literal/);
     expect(validateUnixPathRule('/tmp/api.sock', 'darwin')).toBeNull();

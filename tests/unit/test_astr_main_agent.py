@@ -35,6 +35,7 @@ from astrbot.core.provider import Provider
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.tools.computer_tools import LOCAL_NETWORK_POLICY_NOTICE
 
 
 @pytest.mark.asyncio
@@ -2174,8 +2175,19 @@ class TestEnsurePromptAndSkills:
                 "computer_use_local_permissions": {
                     role: {
                         "allow_execution": allow_execution,
-                        "allow_network": allow_network,
                         "filesystem_scope": "workspace",
+                        "network": {
+                            "mode": "unrestricted" if allow_network else "off",
+                            "allowed_domains": [],
+                            "denied_domains": [],
+                            "allow_private_network": allow_network,
+                            "allow_loopback": allow_network,
+                        },
+                        "filesystem": {"deny_read": [], "deny_write": []},
+                        "unix_sockets": {
+                            "mode": "allow_all" if allow_network else "deny",
+                            "allowed_paths": [],
+                        },
                     }
                 },
             }
@@ -2214,7 +2226,7 @@ class TestEnsurePromptAndSkills:
             assert "astrbot_execute_shell" not in tool_names
             assert "astrbot_execute_python" not in tool_names
             assert result.provider_request.system_prompt.count(
-                module.LOCAL_NETWORK_POLICY_NOTICE
+                LOCAL_NETWORK_POLICY_NOTICE
             ) == int(
                 allow_execution and not allow_network and isolation_status == "detected"
             )

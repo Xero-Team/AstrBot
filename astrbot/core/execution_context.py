@@ -441,7 +441,6 @@ class CoreExecutionContext:
             prepare_event_attachments,
         )
         from astrbot.core.tools.computer_tools import (
-            LOCAL_NETWORK_POLICY_NOTICE,
             get_local_permission_policy,
             is_local_runtime,
             resolve_local_permission_role,
@@ -514,14 +513,11 @@ class CoreExecutionContext:
         ):
             await resolve_local_permission_role(run_context)
             local_policy = get_local_permission_policy(run_context)
-            if (
-                local_policy.allow_execution
-                and not local_policy.allow_network
-                and LOCAL_NETWORK_POLICY_NOTICE not in (request.system_prompt or "")
+            notice = local_policy.network_notice
+            if local_policy.allow_execution and notice not in (
+                request.system_prompt or ""
             ):
-                request.system_prompt = (
-                    f"{request.system_prompt or ''}\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
-                )
+                request.system_prompt = f"{request.system_prompt or ''}\n{notice}\n"
         agent_runner = ToolLoopAgentRunner(self.tool_image_cache)
         tool_executor = FunctionToolExecutor()
 

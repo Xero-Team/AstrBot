@@ -9,7 +9,9 @@ value survives the rename.
 
 from __future__ import annotations
 
-CONFIG_SCHEMA_REVISION = 5
+from astrbot.core.computer.local_policy import default_policy_dict
+
+CONFIG_SCHEMA_REVISION = 6
 
 
 class ConfigMigrationError(RuntimeError):
@@ -138,6 +140,69 @@ def _migrate_retired_computer_use_runtime(conf: dict) -> bool:
     return changed
 
 
+def _migrate_local_sandbox_policy(conf: dict) -> bool:
+    """Replace the flat Local network switch with the nested policy shape.
+
+    A legacy ``allow_network=true`` value restored full host reachability, so it
+    becomes ``unrestricted`` with both address guards enabled. ``false`` and
+    missing values become ``off``. Saved execution/scope values and already
+    nested fields are preserved, and the old key is always removed.
+    """
+    provider_settings = conf.get("provider_settings")
+    if not isinstance(provider_settings, dict):
+        return False
+    permissions = provider_settings.get("computer_use_local_permissions")
+    if not isinstance(permissions, dict):
+        return False
+
+    changed = False
+    for role in ("member", "admin"):
+        raw = permissions.get(role)
+        if not isinstance(raw, dict):
+            continue
+        legacy_present = "allow_network" in raw
+        legacy_value = raw.pop("allow_network", None) is True
+        defaults = default_policy_dict(role)
+        network = raw.get("network")
+        if not isinstance(network, dict):
+            network = defaults["network"]
+            if legacy_present:
+                network = {
+                    **network,
+                    "mode": "unrestricted" if legacy_value else "off",
+                    "allow_private_network": legacy_value,
+                    "allow_loopback": legacy_value,
+                }
+            raw["network"] = network
+            changed = True
+        elif legacy_present and network.get("mode") is None:
+            network["mode"] = "unrestricted" if legacy_value else "off"
+            if network.get("allow_private_network") is None:
+                network["allow_private_network"] = legacy_value
+            if network.get("allow_loopback") is None:
+                network["allow_loopback"] = legacy_value
+            changed = True
+
+        filesystem = raw.get("filesystem")
+        if not isinstance(filesystem, dict):
+            raw["filesystem"] = defaults["filesystem"]
+            changed = True
+        unix_sockets = raw.get("unix_sockets")
+        if not isinstance(unix_sockets, dict):
+            sockets = defaults["unix_sockets"]
+            if legacy_present:
+                sockets = {
+                    **sockets,
+                    "mode": "allow_all" if legacy_value else "deny",
+                    "allowed_paths": [],
+                }
+            raw["unix_sockets"] = sockets
+            changed = True
+        if legacy_present:
+            changed = True
+    return changed
+
+
 def migrate_config_dict(conf: dict) -> bool:
     """Bring a raw configuration document to the current revision.
 
@@ -180,6 +245,8 @@ def migrate_config_dict(conf: dict) -> bool:
             changed |= _migrate_trace_storage(conf)
         elif revision == 4:
             changed |= _migrate_retired_computer_use_runtime(conf)
+        elif revision == 5:
+            changed |= _migrate_local_sandbox_policy(conf)
         revision += 1
         changed = True
 

@@ -10,6 +10,7 @@ import pytest
 from astrbot.core.computer import process_sandbox
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalFileSystemComponent
+from astrbot.core.computer.local_policy import LocalSandboxPolicy
 
 
 def _allow_tmp_root(monkeypatch, tmp_path: Path) -> None:
@@ -225,8 +226,11 @@ def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox
         LocalFileSystemComponent().search_files(
             "needle",
             path=str(tmp_path / "target.txt"),
-            sandboxed=True,
-            sandbox_root=str(tmp_path),
+            spec=process_sandbox.SandboxSpec(
+                workspace=tmp_path,
+                policy=LocalSandboxPolicy(),
+                workspace_writable=False,
+            ),
         )
     )
 

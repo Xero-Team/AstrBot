@@ -3,6 +3,7 @@
 import os
 
 from astrbot import __version__
+from astrbot.core.computer.local_policy import default_policy_dict
 from astrbot.core.config.migrations import CONFIG_SCHEMA_REVISION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -32,16 +33,8 @@ def get_local_permission_defaults() -> dict:
         execution for administrators. Neither policy requires process isolation.
     """
     return {
-        "member": {
-            "allow_execution": False,
-            "allow_network": False,
-            "filesystem_scope": "workspace",
-        },
-        "admin": {
-            "allow_execution": True,
-            "allow_network": True,
-            "filesystem_scope": "host",
-        },
+        "member": default_policy_dict("member"),
+        "admin": default_policy_dict("admin"),
     }
 
 
@@ -100,6 +93,44 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 ]
 
 # 默认配置
+_LOCAL_ROLE_METADATA = {
+    "type": "object",
+    "items": {
+        "allow_execution": {"type": "bool"},
+        "filesystem_scope": {
+            "type": "string",
+            "options": ["none", "workspace", "host"],
+        },
+        "network": {
+            "type": "object",
+            "items": {
+                "mode": {
+                    "type": "string",
+                    "options": ["off", "allowlist", "unrestricted"],
+                },
+                "allowed_domains": {"type": "list"},
+                "denied_domains": {"type": "list"},
+                "allow_private_network": {"type": "bool"},
+                "allow_loopback": {"type": "bool"},
+            },
+        },
+        "filesystem": {
+            "type": "object",
+            "items": {
+                "deny_read": {"type": "list"},
+                "deny_write": {"type": "list"},
+            },
+        },
+        "unix_sockets": {
+            "type": "object",
+            "items": {
+                "mode": {"type": "string", "options": ["deny", "allow_all"]},
+                "allowed_paths": {"type": "list"},
+            },
+        },
+    },
+}
+
 DEFAULT_CONFIG = {
     "schema_revision": CONFIG_SCHEMA_REVISION,
     "platform_settings": {
@@ -4129,28 +4160,8 @@ CONFIG_METADATA_3 = {
                         "_special": "local_permission_matrix",
                         "full_width": True,
                         "items": {
-                            "member": {
-                                "type": "object",
-                                "items": {
-                                    "allow_execution": {"type": "bool"},
-                                    "allow_network": {"type": "bool"},
-                                    "filesystem_scope": {
-                                        "type": "string",
-                                        "options": ["none", "workspace", "host"],
-                                    },
-                                },
-                            },
-                            "admin": {
-                                "type": "object",
-                                "items": {
-                                    "allow_execution": {"type": "bool"},
-                                    "allow_network": {"type": "bool"},
-                                    "filesystem_scope": {
-                                        "type": "string",
-                                        "options": ["none", "workspace", "host"],
-                                    },
-                                },
-                            },
+                            "member": _LOCAL_ROLE_METADATA,
+                            "admin": _LOCAL_ROLE_METADATA,
                         },
                         "condition": {
                             "provider_settings.computer_use_runtime": "local",

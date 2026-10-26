@@ -12,6 +12,11 @@ import pytest
 
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.local_policy import (
+    LocalNetworkPolicy,
+    LocalSandboxPolicy,
+    LocalUnixSocketPolicy,
+)
 
 
 def _powershell_quote(value: str) -> str:
@@ -554,6 +559,68 @@ def test_managed_shell_enforces_session_count_and_shutdown(tmp_path):
     asyncio.run(scenario())
 
 
+def test_sandboxed_session_limit_rejects_before_creating_proxy_lease(tmp_path):
+    created = []
+    dropped = []
+
+    class FakeLease:
+        token = "lease-token"
+
+    class FakeProxy:
+        http_socket = tmp_path / "http.sock"
+        socks_socket = tmp_path / "socks.sock"
+        http_port = 1234
+        socks_port = 1235
+
+        def create_lease(self, policy):
+            created.append(policy)
+            return FakeLease()
+
+        def drop_lease(self, lease):
+            dropped.append(lease)
+
+    async def scenario() -> None:
+        shell = LocalShellComponent(
+            max_sessions=1,
+            session_ttl_seconds=60,
+            proxy_provider=lambda: FakeProxy(),
+        )
+        await shell.exec_managed(
+            _python_command("import time; time.sleep(10)"),
+            owner_id="owner",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=0,
+        )
+        try:
+            with pytest.raises(ValueError, match="session limit"):
+                await shell.exec_managed(
+                    "echo second",
+                    owner_id="owner",
+                    cwd=str(tmp_path),
+                    allowed_root=str(tmp_path),
+                    yield_time_ms=0,
+                    spec=local_booter.SandboxSpec(
+                        workspace=tmp_path,
+                        policy=LocalSandboxPolicy(
+                            allow_execution=True,
+                            filesystem_scope="workspace",
+                            network=LocalNetworkPolicy(
+                                mode="allowlist",
+                                allowed_domains=("example.com",),
+                            ),
+                            unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+                        ),
+                    ),
+                )
+        finally:
+            await shell.shutdown_sessions()
+
+    asyncio.run(scenario())
+    assert created == []
+    assert dropped == []
+
+
 def test_managed_shell_timeout_marks_session_and_terminates(tmp_path):
     async def scenario() -> None:
         shell = LocalShellComponent(session_ttl_seconds=60)
@@ -658,7 +725,15 @@ async def test_exec_managed_skips_blocklist_inside_sandbox(tmp_path, monkeypatch
             owner_id="owner",
             cwd=str(tmp_path),
             allowed_root=str(tmp_path),
-            sandboxed=True,
+            spec=local_booter.SandboxSpec(
+                workspace=tmp_path,
+                policy=LocalSandboxPolicy(
+                    allow_execution=True,
+                    filesystem_scope="workspace",
+                    network=LocalNetworkPolicy(mode="off"),
+                    unix_sockets=LocalUnixSocketPolicy(mode="deny"),
+                ),
+            ),
         )
 
 

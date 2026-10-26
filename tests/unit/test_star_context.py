@@ -496,8 +496,19 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
                     "computer_use_local_permissions": {
                         "member": {
                             "allow_execution": True,
-                            "allow_network": allow_network,
                             "filesystem_scope": "workspace",
+                            "network": {
+                                "mode": "unrestricted" if allow_network else "off",
+                                "allowed_domains": [],
+                                "denied_domains": [],
+                                "allow_private_network": allow_network,
+                                "allow_loopback": allow_network,
+                            },
+                            "filesystem": {"deny_read": [], "deny_write": []},
+                            "unix_sockets": {
+                                "mode": "allow_all" if allow_network else "deny",
+                                "allowed_paths": [],
+                            },
                         }
                     },
                 }

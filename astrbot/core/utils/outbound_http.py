@@ -281,6 +281,27 @@ def _is_ip_literal(hostname: str) -> bool:
     return True
 
 
+def expand_embedded_addresses(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]:
+    """Return an address and every IPv4 form embedded inside it.
+
+    This is a side-effect-free classification primitive shared by download URL
+    validation and the Local sandbox proxy. It never performs DNS I/O.
+    """
+    return tuple(_iter_check_addresses(address))
+
+
+def is_metadata_address(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Return whether an address or an embedded IPv4 form is metadata."""
+    return any(
+        candidate in _METADATA_ADDRESSES
+        for candidate in expand_embedded_addresses(address)
+    )
+
+
 def _is_proxy_fake_ip(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
 ) -> bool:

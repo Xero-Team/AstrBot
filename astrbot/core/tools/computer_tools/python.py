@@ -7,6 +7,7 @@ import mcp
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
+from astrbot.core.computer.process_sandbox import SandboxSpec
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
@@ -70,6 +71,17 @@ async def handle_result(
     if text:
         resp.content.append(mcp.types.TextContent(type="text", text=text))
 
+    violations = data.get("violations") or []
+    if violations:
+        details = "; ".join(
+            f"{violation.get('kind', 'policy')}: {violation.get('reason', '')}"
+            + (f" ({violation['target']})" if violation.get("target") else "")
+            for violation in violations
+        )
+        resp.content.append(
+            mcp.types.TextContent(type="text", text=f"sandbox denials: {details}")
+        )
+
     if not resp.content:
         resp.content.append(mcp.types.TextContent(type="text", text="No output."))
 
@@ -122,22 +134,29 @@ class LocalPythonTool(FunctionTool):
             )
             current_workspace_root.mkdir(parents=True, exist_ok=True)
             python_component = cast(Any, sb.python)
-            sandbox_roots = {}
-            if sandboxed and local_policy.filesystem_scope == "workspace":
+            spec = None
+            if sandboxed:
                 umo = context.context.event.unified_msg_origin
-                sandbox_roots = {
-                    "readable_roots": _read_allowed_roots(umo),
-                    "writable_roots": _write_allowed_roots(umo),
-                }
+                spec = SandboxSpec(
+                    workspace=current_workspace_root,
+                    policy=local_policy.sandbox,
+                    readable_roots=(
+                        _read_allowed_roots(umo)
+                        if local_policy.filesystem_scope == "workspace"
+                        else ()
+                    ),
+                    writable_roots=(
+                        _write_allowed_roots(umo)
+                        if local_policy.filesystem_scope == "workspace"
+                        else ()
+                    ),
+                )
             result = await python_component.exec(
                 code,
                 timeout_seconds=effective_timeout,
                 silent=silent,
                 cwd=str(current_workspace_root),
-                sandboxed=sandboxed,
-                allow_network=local_policy.allow_network,
-                filesystem_scope=local_policy.filesystem_scope,
-                **sandbox_roots,
+                spec=spec,
             )
             return await handle_result(result, context.context.event)
         except Exception as e:

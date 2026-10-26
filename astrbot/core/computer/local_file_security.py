@@ -8,6 +8,8 @@ import stat
 from pathlib import Path
 from typing import Literal, NoReturn
 
+from astrbot.core.computer.local_policy import LocalFilesystemPolicy
+
 
 def _descriptor_relative_access_available() -> bool:
     return not (
@@ -296,6 +298,7 @@ def open_file_in_allowed_roots(
     *,
     access: Literal["read", "write", "edit"],
     create_parents: bool = False,
+    deny_policy: LocalFilesystemPolicy | None = None,
 ) -> int:
     """Open a regular file without following attacker-controlled path links.
 
@@ -305,6 +308,8 @@ def open_file_in_allowed_roots(
         access: Whether the descriptor is used for reading, writing, or editing.
         create_parents: Whether missing parent directories and the final file may
             be created.
+        deny_policy: Optional Local filesystem deny rules checked before any
+            platform dispatch or directory creation.
 
     Returns:
         An open file descriptor owned by the caller.
@@ -316,6 +321,13 @@ def open_file_in_allowed_roots(
             link, is not a regular file, or aliases a multiply linked file.
         ValueError: If an unsupported access mode is requested.
     """
+    if deny_policy is not None:
+        from .process_sandbox.fs_policy import DenyRuleSet
+
+        if DenyRuleSet(deny_policy).matches(Path(path), access):
+            raise PermissionError(
+                "Access denied by the configured Local filesystem policy."
+            )
     root, parts = _match_allowed_root(Path(path), allowed_roots, path)
     if os.name == "nt":
         from .local_file_security_windows import open_windows_file

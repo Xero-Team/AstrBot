@@ -1,9 +1,33 @@
 from __future__ import annotations
 
+import os
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
+
+from astrbot.core.computer.local_policy import LocalSandboxPolicy
+
+# Caller environment is inherited by platform launchers before the sandbox is
+# active. Dynamic-loader and glibc module variables would execute caller-chosen
+# code inside bwrap/sandbox-exec itself, so they never reach the launcher.
+_LAUNCHER_ENV_PREFIXES = ("LD_", "DYLD_")
+_LAUNCHER_ENV_NAMES = frozenset(
+    {
+        "GCONV_PATH",
+        "LOCPATH",
+        "NLSPATH",
+        "MALLOC_CONF",
+        "GLIBC_TUNABLES",
+    }
+)
+
+
+def _unsafe_launcher_environment_name(name: str) -> bool:
+    """Return whether a variable can inject code into the launcher process."""
+    upper = name.upper()
+    return upper.startswith(_LAUNCHER_ENV_PREFIXES) or upper in _LAUNCHER_ENV_NAMES
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,15 +68,42 @@ class SandboxLimits:
 
 
 @dataclass(frozen=True, slots=True)
+class SandboxProxyEndpoint:
+    """Token-bearing proxy endpoint attached to one sandboxed invocation.
+
+    The token is only ever delivered through inherited process environment
+    values. It must not appear in launcher argv or Python ``-c`` source.
+    """
+
+    token: str
+    http_socket: str | None = None
+    socks_socket: str | None = None
+    http_port: int = 31280
+    socks_port: int = 31080
+    platform: str = "linux"
+
+    def http_url(self) -> str:
+        """Return the HTTP proxy URL for this endpoint.
+
+        The token is repeated as a non-empty password because common clients
+        (urllib, requests) only send proxy credentials when both URL userinfo
+        fields are present.
+        """
+        return f"http://{self.token}:{self.token}@127.0.0.1:{self.http_port}"
+
+    def socks_url(self) -> str:
+        """Return the SOCKS5h proxy URL for this endpoint."""
+        return f"socks5h://{self.token}:{self.token}@127.0.0.1:{self.socks_port}"
+
+
+@dataclass(frozen=True, slots=True)
 class SandboxSpec:
     """Permissions, workspace, and limits for a sandboxed process.
 
     Args:
         workspace: Directory exposed as the process working directory.
+        policy: Complete immutable Local sandbox policy.
         workspace_writable: Whether the process may modify the workspace.
-        allow_network: Whether the process may access the network.
-        filesystem_scope: Whether the process sees only its workspace or the
-            host filesystem.
         limits: Resource ceilings enforced by the platform backend.
         readable_roots: Additional directories that may be read in workspace scope.
         writable_roots: Additional directories that may be read and modified in
@@ -60,12 +111,22 @@ class SandboxSpec:
     """
 
     workspace: Path
+    policy: LocalSandboxPolicy = field(default_factory=LocalSandboxPolicy)
     workspace_writable: bool = True
-    allow_network: bool = False
-    filesystem_scope: str = "workspace"
+    proxy: SandboxProxyEndpoint | None = None
     limits: SandboxLimits = field(default_factory=SandboxLimits)
     readable_roots: tuple[Path, ...] = ()
     writable_roots: tuple[Path, ...] = ()
+
+    @property
+    def filesystem_scope(self) -> str:
+        """Return the resolved filesystem scope."""
+        return self.policy.filesystem_scope
+
+    @property
+    def allow_network(self) -> bool:
+        """Return whether sandboxed networking is enabled."""
+        return self.policy.network.enabled
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,8 +212,97 @@ class SandboxProcess(Protocol):
         ...
 
 
+def sandbox_ca_file() -> Path | None:
+    """Return the verified CA bundle path exposed to sandboxed clients."""
+    candidates: list[Path] = []
+    override = os.environ.get("ASTRBOT_SANDBOX_CA_FILE")
+    if override:
+        candidates.append(Path(override))
+    try:
+        import certifi
+
+        candidates.append(Path(certifi.where()))
+    except Exception:  # noqa: BLE001  # optional runtime dependency lookup
+        pass
+    candidates.extend(
+        (
+            Path("/etc/ssl/certs/ca-certificates.crt"),
+            Path("/etc/pki/tls/certs/ca-bundle.crt"),
+            Path("/etc/ssl/cert.pem"),
+        )
+    )
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
 class ProcessSandbox(ABC):
     """Platform-independent launcher for restricted child processes."""
+
+    def _launch_environment(
+        self,
+        spec: SandboxSpec,
+        extra: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        """Return minimal inherited environment for launcher secrets.
+
+        Tokens and CA paths travel through inherited parent environment only;
+        platform commands never place them in argv or inline Python source.
+        Case variants of proxy variables are always overridden after caller
+        environment values so an explicit ``no_proxy`` cannot bypass policy.
+        Dynamic-loader and glibc module variables are dropped from the launcher
+        environment; platform launchers pass caller variables to the workload
+        through their own sandbox-only mechanism.
+        """
+        python_path = str(Path(sys.executable).parent)
+        fallback_paths = [
+            entry for entry in os.defpath.split(os.pathsep) if entry and entry != "."
+        ]
+        caller_environment = {
+            str(key): str(value)
+            for key, value in (extra or {}).items()
+            if not _unsafe_launcher_environment_name(str(key))
+        }
+        environment = {
+            "PATH": os.pathsep.join((python_path, *fallback_paths)),
+            **caller_environment,
+        }
+        if spec.proxy is not None:
+            proxy = spec.proxy
+            environment["ASTRBOT_SANDBOX_PROXY_TOKEN"] = proxy.token
+            ca_file = sandbox_ca_file()
+            if ca_file is not None:
+                environment["ASTRBOT_SANDBOX_CA_FILE"] = str(ca_file)
+                environment["SSL_CERT_FILE"] = str(ca_file)
+                environment["REQUESTS_CA_BUNDLE"] = str(ca_file)
+                environment["CURL_CA_BUNDLE"] = str(ca_file)
+            for key in list(environment):
+                if key.lower() in {
+                    "http_proxy",
+                    "https_proxy",
+                    "all_proxy",
+                    "no_proxy",
+                }:
+                    environment.pop(key, None)
+            http_url = proxy.http_url()
+            socks_url = proxy.socks_url()
+            environment.update(
+                {
+                    "HTTP_PROXY": http_url,
+                    "HTTPS_PROXY": http_url,
+                    "ALL_PROXY": socks_url,
+                    "http_proxy": http_url,
+                    "https_proxy": http_url,
+                    "all_proxy": socks_url,
+                    "NO_PROXY": "",
+                    "no_proxy": "",
+                }
+            )
+        return environment
 
     def _prepare_command(
         self,

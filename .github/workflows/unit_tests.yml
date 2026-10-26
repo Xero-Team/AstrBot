@@ -75,6 +75,12 @@ jobs:
         if: runner.os == 'macOS'
         run: test -x /usr/bin/sandbox-exec
 
+      - name: Run verified Local sandbox security matrix
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: |
+          chmod +x scripts/run_pytests_ci.sh
+          bash ./scripts/run_pytests_ci.sh tests/unit/test_local_sandbox_security.py --test-profile all -q -rs
+
       - name: Run tests
         run: |
           chmod +x scripts/run_pytests_ci.sh

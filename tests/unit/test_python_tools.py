@@ -6,7 +6,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.auth.models import Role
-from astrbot.core.tools.computer_tools.python import LocalPythonTool
+from astrbot.core.tools.computer_tools.python import LocalPythonTool, handle_result
 from tests.fixtures.auth import attach_authorized_tool_context
 
 
@@ -83,8 +83,16 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
                 "computer_use_local_permissions": {
                     "admin": {
                         "allow_execution": True,
-                        "allow_network": True,
                         "filesystem_scope": "host",
+                        "network": {
+                            "mode": "unrestricted",
+                            "allowed_domains": [],
+                            "denied_domains": [],
+                            "allow_private_network": True,
+                            "allow_loopback": True,
+                        },
+                        "filesystem": {"deny_read": [], "deny_write": []},
+                        "unix_sockets": {"mode": "allow_all", "allowed_paths": []},
                     }
                 },
             }
@@ -115,9 +123,7 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         timeout_seconds=30,
         silent=False,
         cwd=str(workspace.resolve(strict=False)),
-        sandboxed=False,
-        allow_network=True,
-        filesystem_scope="host",
+        spec=None,
     )
 
 
@@ -144,8 +150,16 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
                 "computer_use_local_permissions": {
                     "admin": {
                         "allow_execution": True,
-                        "allow_network": True,
                         "filesystem_scope": "host",
+                        "network": {
+                            "mode": "unrestricted",
+                            "allowed_domains": [],
+                            "denied_domains": [],
+                            "allow_private_network": True,
+                            "allow_loopback": True,
+                        },
+                        "filesystem": {"deny_read": [], "deny_write": []},
+                        "unix_sockets": {"mode": "allow_all", "allowed_paths": []},
                     }
                 },
             }
@@ -174,9 +188,7 @@ async def test_local_python_tool_accepts_timeout_alias(tmp_path, monkeypatch):
         timeout_seconds=12,
         silent=False,
         cwd=str((tmp_path / "onebot_GroupMessage_12345").resolve(strict=False)),
-        sandboxed=False,
-        allow_network=True,
-        filesystem_scope="host",
+        spec=None,
     )
 
 
@@ -210,8 +222,16 @@ async def test_local_python_omits_network_policy_notice(tmp_path, monkeypatch):
                 "computer_use_local_permissions": {
                     "admin": {
                         "allow_execution": True,
-                        "allow_network": False,
                         "filesystem_scope": "host",
+                        "network": {
+                            "mode": "off",
+                            "allowed_domains": [],
+                            "denied_domains": [],
+                            "allow_private_network": False,
+                            "allow_loopback": False,
+                        },
+                        "filesystem": {"deny_read": [], "deny_write": []},
+                        "unix_sockets": {"mode": "deny", "allowed_paths": []},
                     }
                 },
             }
@@ -240,3 +260,27 @@ async def test_local_python_omits_network_policy_notice(tmp_path, monkeypatch):
     python_exec.side_effect = RuntimeError("execution failed")
     result = await LocalPythonTool().call(context, code="print('ok')")
     assert result == "Error executing code: execution failed"
+
+
+@pytest.mark.asyncio
+async def test_handle_result_reports_sandbox_denials():
+    event = SimpleNamespace(get_platform_name=lambda: "cli")
+    result = await handle_result(
+        {
+            "data": {
+                "output": {"text": "ok", "images": []},
+                "error": "",
+                "violations": [
+                    {
+                        "kind": "network",
+                        "reason": "denied by policy",
+                        "target": "example.com",
+                    }
+                ],
+            }
+        },
+        event,
+    )
+    text = " ".join(part.text for part in result.content)
+    assert "sandbox denials" in text
+    assert "network: denied by policy (example.com)" in text

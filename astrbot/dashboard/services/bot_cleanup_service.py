@@ -69,10 +69,13 @@ async def delete_bot_data(
             )
         for preference in preferences:
             is_rule = preference.key in AVAILABLE_SESSION_RULE_KEYS
+            is_conversation_pointer = preference.key == "sel_conv_id" or (
+                preference.key.startswith("sel_conv_id:")
+            )
             if (
                 (is_rule and "custom_rules" in targets)
                 or (not is_rule and "preferences" in targets)
-                or (preference.key == "sel_conv_id" and "conversations" in targets)
+                or (is_conversation_pointer and "conversations" in targets)
             ):
                 await prefs.remove_async("umo", preference.scope_id, preference.key)
 

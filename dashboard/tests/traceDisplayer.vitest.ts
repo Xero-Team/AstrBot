@@ -117,6 +117,51 @@ describe('TraceDisplayer', () => {
     expect(row.classes()).toContain('trace-list-row--entering');
   });
 
+  it('keeps a full first page at its page size when live traces arrive', async () => {
+    state.history.mockResolvedValue({
+      data: {
+        status: 'ok',
+        data: {
+          traces: Array.from({ length: 50 }, (_, index) => ({
+            trace_id: `tr-${index}`,
+            name: `trace ${index}`,
+            state: 'ok',
+            start_time_unix_nano: String((index + 1) * 1_000_000_000),
+            updated_time_unix_nano: String((index + 2) * 1_000_000_000),
+            attributes: { 'astrbot.umo': 'qq:GroupMessage:1' },
+          })),
+          total: 50,
+          page: 1,
+          storage: {},
+        },
+      },
+    });
+    const wrapper = mountWithVuetify(TraceDisplayer);
+    await flushPromises();
+    expect(wrapper.findAll('[data-trace-id]')).toHaveLength(50);
+
+    state.sources[0]!.onmessage?.({
+      data: JSON.stringify({
+        type: 'trace',
+        trace: {
+          trace_id: 'tr-new',
+          name: 'new trace',
+          state: 'ok',
+          start_time_unix_nano: '100000000000',
+          updated_time_unix_nano: '101000000000',
+          attributes: { 'astrbot.umo': 'qq:GroupMessage:1' },
+        },
+        spans: [],
+      }),
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-trace-id]')).toHaveLength(50);
+    expect(wrapper.find('[data-trace-id="tr-new"]').exists()).toBe(true);
+    expect(wrapper.find('[data-trace-id="tr-0"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('refreshes history from the toolbar button', async () => {
     const wrapper = mountWithVuetify(TraceDisplayer);
     await flushPromises();

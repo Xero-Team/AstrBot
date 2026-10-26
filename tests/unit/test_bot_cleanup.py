@@ -104,6 +104,7 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
             )
             await preferences.session_put(umo, "session_variables", {"name": platform})
             await preferences.session_put(umo, "sel_conv_id", platform)
+            await preferences.session_put(umo, "sel_conv_id:work", platform)
             await preferences.put_async("global", umo, "dingtalk_staffid", "staff")
             await preferences.put_async(
                 "lark", f"{platform}:app", "private_chat:user", "chat"
@@ -164,6 +165,9 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
                 targets & {"preferences", "conversations"}
             )
             assert (await preferences.session_get(umo, "sel_conv_id")) == (
+                None if pointer_removed else platform
+            )
+            assert (await preferences.session_get(umo, "sel_conv_id:work")) == (
                 None if pointer_removed else platform
             )
             assert (

@@ -795,6 +795,21 @@ function processNewTraces(newTraces) {
   }
 }
 
+function trimLivePage() {
+  if (historyPage.value !== 1 || events.value.length <= pageSize.value) return;
+  const removed = events.value.splice(pageSize.value);
+  for (const entry of removed) {
+    if (entry.span_id === selectedSpanId.value) continue;
+    eventIndex.delete(entry.span_id);
+    enteringTraceIds.delete(entry.span_id);
+    const timer = traceEnterTimers.get(entry.span_id);
+    if (timer) {
+      clearTimeout(timer);
+      traceEnterTimers.delete(entry.span_id);
+    }
+  }
+}
+
 async function fetchTraceHistory(
   reset = true,
   reloadMetadata = false,
@@ -967,6 +982,7 @@ function connectSSE() {
             }, 300);
             traceEnterTimers.set(traceId, timer);
             totalRecords.value += 1;
+            trimLivePage();
             animateTraceListInsertion([traceId]);
           }
         }

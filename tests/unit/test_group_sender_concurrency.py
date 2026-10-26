@@ -316,3 +316,33 @@ async def test_follow_up_registers_per_sender_and_does_not_clobber_umo_slot():
     )
     coordinator.unregister_active_runner("umo-1", sender_runner, sender_id="user-a")
     assert coordinator._active_runners["umo-1"] is native_runner
+
+
+@pytest.mark.asyncio
+async def test_hold_turn_registers_same_event_once_under_concurrency():
+    from contextlib import asynccontextmanager
+
+    class InterleavingLocks:
+        def __init__(self) -> None:
+            self.acquire_count = 0
+
+        @asynccontextmanager
+        async def acquire_lock(self, _key: str):
+            self.acquire_count += 1
+            await asyncio.sleep(0)
+            yield
+
+    gate = GroupOutboundGate()
+    locks = InterleavingLocks()
+    gate._locks = locks
+    event = object()
+    umo = "aiocqhttp:GroupMessage:group-1"
+
+    first = asyncio.create_task(gate.hold_turn(umo, event))
+    second = asyncio.create_task(gate.hold_turn(umo, event))
+    await asyncio.gather(first, second)
+
+    assert locks.acquire_count == 1
+    assert gate._turn_umos == {id(event): umo}
+
+    await gate.release_turn(event)

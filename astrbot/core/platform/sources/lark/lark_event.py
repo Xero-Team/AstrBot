@@ -820,6 +820,8 @@ class LarkMessageEvent(AstrMessageEvent):
         """
         file_path = await file_comp.get_file()
         if not file_path:
+            file_path = file_comp.file_ or ""
+        if not file_path:
             logger.warning("[Lark] File source could not be resolved; skipping upload")
             if not reply_message_id:
                 raise RuntimeError("[Lark] Attachment upload failed")

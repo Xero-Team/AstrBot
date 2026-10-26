@@ -398,6 +398,30 @@ async def test_managed_shell_uses_powershell_exec_on_windows(monkeypatch, tmp_pa
         calls.append((args, kwargs))
         return FakeProcess()
 
+    class FakeTree:
+        has_job = True
+
+        @classmethod
+        def create(cls, **_kwargs):
+            return cls()
+
+        async def arm(self) -> None:
+            return None
+
+        async def spawn(self, *args, require_binding=False, **kwargs):
+            assert require_binding is True
+            kwargs.setdefault("creationflags", 0)
+            return await fake_exec(*args, **kwargs)
+
+        def stop(self, process, *, force: bool) -> None:
+            return None
+
+        def active_processes(self) -> int:
+            return 0
+
+        async def close(self) -> None:
+            return None
+
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
     monkeypatch.setattr(
         local_booter.shutil,
@@ -405,6 +429,7 @@ async def test_managed_shell_uses_powershell_exec_on_windows(monkeypatch, tmp_pa
         lambda name: "pwsh" if name == "pwsh" else None,
     )
     monkeypatch.setattr(local_booter.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(local_booter, "ProcessTree", FakeTree)
 
     result = await LocalShellComponent().exec_managed(
         "Get-ChildItem",
@@ -778,3 +803,222 @@ async def test_poll_session_keeps_a_truncated_tail_until_the_reader_finishes():
 
     assert result["stdout"] == "中"
     assert result["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_windows_shell_spawn_failure_releases_tree_and_output(
+    monkeypatch, tmp_path
+):
+    """A spawn failure closes the armed tree and the output handle."""
+    closed = []
+    outputs = []
+
+    class FakeTree:
+        has_job = True
+
+        @classmethod
+        def create(cls, **_kwargs):
+            return cls()
+
+        async def arm(self) -> None:
+            return None
+
+        async def spawn(self, *args, **kwargs):
+            raise OSError("spawn failed")
+
+        async def close(self) -> None:
+            closed.append(True)
+
+    original_output = local_booter.tempfile.TemporaryFile
+
+    def capture_output(*args, **kwargs):
+        handle = original_output(*args, **kwargs)
+        outputs.append(handle)
+        return handle
+
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter, "resolve_windows_shell", lambda: "pwsh")
+    monkeypatch.setattr(local_booter, "ProcessTree", FakeTree)
+    monkeypatch.setattr(local_booter.tempfile, "TemporaryFile", capture_output)
+    shell = LocalShellComponent()
+
+    with pytest.raises(OSError, match="spawn failed"):
+        await shell.exec_managed(
+            "Write-Output hi",
+            owner_id="spawn-failure",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=0,
+        )
+
+    assert closed == [True]
+    assert outputs and outputs[0].closed
+    assert not shell._sessions
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows job ownership.")
+async def test_windows_managed_shell_cleans_children_after_leader_exits(tmp_path):
+    import psutil
+
+    child = tmp_path / "job_child.py"
+    child.write_text(
+        "import os, pathlib, time\n"
+        f"marker = pathlib.Path({str(tmp_path / 'child.pid')!r})\n"
+        "pending = marker.with_suffix('.tmp')\n"
+        "pending.write_text(str(os.getpid()))\n"
+        "pending.replace(marker)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    launcher = tmp_path / "job_launcher.py"
+    launcher.write_text(
+        f"import subprocess, sys\nsubprocess.Popen([sys.executable, {str(child)!r}])\n",
+        encoding="utf-8",
+    )
+    command = "& " + " ".join(
+        _powershell_quote(item) for item in (sys.executable, str(launcher))
+    )
+    shell = LocalShellComponent()
+    result = await shell.exec_managed(
+        command,
+        owner_id="job-test",
+        cwd=str(tmp_path),
+        allowed_root=str(tmp_path),
+        creator_is_admin=True,
+        permission_check=lambda: True,
+        yield_time_ms=0,
+    )
+    session = shell._sessions[result["session_id"]]
+    child_pid = None
+    try:
+        for _ in range(500):
+            if (
+                tmp_path / "child.pid"
+            ).exists() and session.process.returncode is not None:
+                break
+            await asyncio.sleep(0.01)
+        child_pid = int((tmp_path / "child.pid").read_text())
+        assert session.process.returncode is not None
+        assert psutil.pid_exists(child_pid)
+        child_process = psutil.Process(child_pid)
+        assert not session.reader_task.done()
+        await asyncio.wait_for(shell.shutdown_sessions(), 5)
+        await asyncio.to_thread(child_process.wait, 5)
+        assert session.reader_task.done() and session.output_file.closed
+        assert not shell._sessions
+    finally:
+        if child_pid is not None and psutil.pid_exists(child_pid):
+            psutil.Process(child_pid).kill()
+        await asyncio.wait_for(shell.shutdown_sessions(), 8)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows job ownership.")
+async def test_windows_shell_timeout_cleans_children_after_wait_finishes(
+    monkeypatch, tmp_path
+):
+    """Keep enforcing the deadline after the Shell's wait has completed."""
+    import psutil
+
+    async def wait_for_leader(process):
+        for _ in range(500):
+            if process.returncode is not None:
+                return process.returncode
+            await asyncio.sleep(0.01)
+        raise TimeoutError("Shell leader did not exit")
+
+    monkeypatch.setattr(asyncio.subprocess.Process, "wait", wait_for_leader)
+    marker = tmp_path / "timeout-child.pid"
+    child = tmp_path / "timeout_child.py"
+    child.write_text(
+        "import os, pathlib, time\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        "pending = marker.with_suffix('.tmp')\n"
+        "pending.write_text(str(os.getpid()))\n"
+        "pending.replace(marker)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    launcher = tmp_path / "timeout_launcher.py"
+    launcher.write_text(
+        f"import subprocess, sys\nsubprocess.Popen([sys.executable, {str(child)!r}])\n",
+        encoding="utf-8",
+    )
+    command = "& " + " ".join(
+        _powershell_quote(item) for item in (sys.executable, str(launcher))
+    )
+    shell = LocalShellComponent()
+    try:
+        result = await asyncio.wait_for(
+            shell.exec_managed(
+                command,
+                owner_id="timeout-test",
+                cwd=str(tmp_path),
+                allowed_root=str(tmp_path),
+                creator_is_admin=True,
+                permission_check=lambda: True,
+                timeout=3,
+                yield_time_ms=0,
+            ),
+            6,
+        )
+        session = shell._sessions[result["session_id"]]
+        for _ in range(200):
+            if marker.exists() and session.wait_task.done():
+                break
+            await asyncio.sleep(0.01)
+        child_process = psutil.Process(int(marker.read_text()))
+        assert session.wait_task.done()
+        assert child_process.is_running()
+        assert not session.reader_task.done()
+        result = await asyncio.wait_for(
+            shell.poll_session(
+                owner_id="timeout-test",
+                session_id=session.session_id,
+            ),
+            5,
+        )
+        assert session.timed_out
+        assert result["status"] == "timed_out"
+        assert result["session_closed"]
+        await asyncio.to_thread(child_process.wait, 5)
+        assert session.reader_task.done() and session.output_file.closed
+        assert not shell._sessions
+    finally:
+        await asyncio.wait_for(shell.shutdown_sessions(), 8)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows job ownership.")
+async def test_windows_managed_shell_rejects_an_unbound_child(monkeypatch, tmp_path):
+    """A refused job assignment kills the child instead of registering it."""
+    import astrbot.core.utils.process_tree as process_tree_module
+
+    real_kernel = process_tree_module._KERNEL32
+
+    class UnbindableKernel:
+        def __getattr__(self, name):
+            return getattr(real_kernel, name)
+
+        def OpenProcess(self, *_args):
+            return 0
+
+    monkeypatch.setattr(process_tree_module, "_KERNEL32", UnbindableKernel())
+    shell = LocalShellComponent()
+    marker = tmp_path / "must-not-run"
+    command = _python_command(
+        f"from pathlib import Path; Path({str(marker)!r}).touch()"
+    )
+
+    with pytest.raises(process_tree_module.ProcessTreeBindingError):
+        await shell.exec_managed(
+            command,
+            owner_id="bind-failure",
+            cwd=str(tmp_path),
+            allowed_root=str(tmp_path),
+            yield_time_ms=0,
+        )
+
+    assert not marker.exists()
+    assert not shell._sessions

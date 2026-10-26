@@ -41,6 +41,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_root,
     get_astrbot_system_tmp_path,
 )
+from astrbot.core.utils.process_tree import ProcessTree
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
@@ -518,6 +519,7 @@ class LocalShellComponent(ShellComponent):
                     "Local shell permissions changed; retry the command."
                 )
             output_file: BinaryIO | None = None
+            process_tree: ProcessTree | None = None
             output_lock = threading.Lock()
             try:
                 if spec is not None:
@@ -547,16 +549,22 @@ class LocalShellComponent(ShellComponent):
                     }
                     if sys.platform == "win32":
                         run_env.setdefault("PYTHONIOENCODING", "utf-8")
-                        process_kwargs["creationflags"] = getattr(
-                            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
-                        )
-                        process = await asyncio.create_subprocess_exec(
+                        # Arm the job before spawning so the suspended child is
+                        # bound before it can start descendants.
+                        process_tree = ProcessTree.create(allow_breakaway=False)
+                        if not process_tree.has_job:
+                            raise RuntimeError(
+                                "Could not create a Windows job object for the shell."
+                            )
+                        await process_tree.arm()
+                        process = await process_tree.spawn(
                             resolve_windows_shell(),
                             "-NoLogo",
                             "-NoProfile",
                             "-NonInteractive",
                             "-Command",
                             command,
+                            require_binding=True,
                             **process_kwargs,
                         )
                     else:
@@ -565,6 +573,8 @@ class LocalShellComponent(ShellComponent):
                             command, **process_kwargs
                         )
             except BaseException:
+                if process_tree is not None:
+                    await process_tree.close()
                 if output_file is not None:
                     output_file.close()
                 if proxy is not None and lease is not None:
@@ -625,6 +635,7 @@ class LocalShellComponent(ShellComponent):
                 permission_check=permission_check,
                 proxy=proxy,
                 lease=lease,
+                process_tree=process_tree,
             )
             self._sessions[session_id] = session
             wait_task.add_done_callback(
@@ -865,22 +876,39 @@ class LocalShellComponent(ShellComponent):
         for session in sessions:
             await self._remove_session(session)
 
+    @staticmethod
+    def _active_descendants(session: _LocalShellSession) -> bool:
+        tree = getattr(session, "process_tree", None)
+        if tree is None:
+            return False
+        try:
+            return tree.active_processes() > 0
+        except OSError as exc:
+            logger.debug("Could not read the shell process tree: %s", exc)
+            return False
+
     async def _timeout_session(  # noqa: ASYNC109
         self,
         session: _LocalShellSession,
         timeout: int,  # noqa: ASYNC109
     ) -> None:
         try:
-            while not session.wait_task.done():
+            while not session.wait_task.done() or self._active_descendants(session):
                 remaining = timeout - (time.monotonic() - session.last_activity)
                 if remaining <= 0:
                     session.timed_out = True
                     await self._terminate_process(session)
                     return
-                try:
-                    await asyncio.wait_for(asyncio.shield(session.wait_task), remaining)
-                except TimeoutError:
-                    continue
+                if not session.wait_task.done():
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.shield(session.wait_task), remaining
+                        )
+                    except TimeoutError:
+                        continue
+                else:
+                    # The Shell exited but a descendant still owns the tree.
+                    await asyncio.sleep(min(0.05, remaining))
         except asyncio.CancelledError:
             raise
 
@@ -974,9 +1002,35 @@ class LocalShellComponent(ShellComponent):
                 pass
         with session.output_lock:
             session.output_file.close()
+        tree = getattr(session, "process_tree", None)
+        if tree is not None:
+            await tree.close()
 
     async def _terminate_process(self, session: _LocalShellSession) -> None:
         process = session.process
+        tree = getattr(session, "process_tree", None)
+        if tree is not None:
+            try:
+                tree.stop(process, force=True)
+                try:
+                    await asyncio.wait_for(asyncio.shield(session.wait_task), 5)
+                except TimeoutError:
+                    _signal_asyncio_process(
+                        cast(asyncio.subprocess.Process, process), terminate=False
+                    )
+                deadline = time.monotonic() + 5
+                while self._active_descendants(session):
+                    if time.monotonic() >= deadline:
+                        logger.warning(
+                            "Windows shell descendants did not exit for session %s",
+                            session.session_id,
+                        )
+                        break
+                    await asyncio.sleep(0.01)
+            finally:
+                await tree.close()
+                session.process_tree = None
+            return
         if process.returncode is not None:
             return
         if session.sandboxed:
@@ -1044,6 +1098,7 @@ class _LocalShellSession:
     proxy: Any | None = None
     lease: Any | None = None
     lease_released: bool = False
+    process_tree: ProcessTree | None = None
 
 
 @dataclass

@@ -5,7 +5,7 @@ import asyncio
 from sqlalchemy import func
 from sqlmodel import col, delete, select
 
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.core_runtime import CoreRuntime
 from astrbot.core.db.po import (
     ConversationV2,
     PlatformMessageHistory,
@@ -22,7 +22,7 @@ from astrbot.dashboard.services.session_management_service import (
 
 
 async def delete_bot_data(
-    core: AstrBotCoreLifecycle, bot_id: str, targets: set[BotCleanupTarget]
+    core: CoreRuntime, bot_id: str, targets: set[BotCleanupTarget]
 ) -> None:
     """Remove selected data without deleting shared resources or other adapters.
 
@@ -40,20 +40,21 @@ async def delete_bot_data(
             the adapter configuration so cleanup can be retried.
     """
     prefix = f"{bot_id}:"
+    db = core.services.db
     prefs = core.services.preferences
     await prefs.flush()
 
     if "cron_jobs" in targets:
-        for job in await core.db.list_cron_jobs():
+        for job in await db.list_cron_jobs():
             session = (job.payload or {}).get("session")
             if isinstance(session, str) and session.partition(":")[0] == bot_id:
                 if core.cron_manager:
                     await core.cron_manager.delete_job(job.job_id)
                 else:
-                    await core.db.delete_cron_job(job.job_id)
+                    await db.delete_cron_job(job.job_id)
 
     if targets & {"custom_rules", "preferences", "conversations"}:
-        async with core.db.get_db() as session:
+        async with db.get_db() as session:
             preferences = (
                 (
                     await session.execute(
@@ -84,7 +85,7 @@ async def delete_bot_data(
         await prefs.global_put("session_groups", groups)
 
         # Built-in adapters also keep delivery mappings outside the UMO scope.
-        async with core.db.get_db() as session:
+        async with db.get_db() as session:
             mappings = (
                 (
                     await session.execute(
@@ -121,7 +122,7 @@ async def delete_bot_data(
                 }
             )
 
-    async with core.db.get_db() as session:
+    async with db.get_db() as session:
         async with session.begin():
             if "conversations" in targets:
                 await session.execute(

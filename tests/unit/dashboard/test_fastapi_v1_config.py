@@ -1118,3 +1118,16 @@ async def test_v1_bot_delete_rejects_unknown_cleanup_and_requires_auth(
 
     assert unauthorized.status_code == 401
     assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_bot_delete_reports_missing_bot_as_a_client_error(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.delete(
+        "/api/v1/bots/missing-bot",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["status"] == "error"

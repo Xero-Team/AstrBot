@@ -5,7 +5,7 @@ import os
 import traceback
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, get_args
+from typing import Any, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot import logger
@@ -28,7 +28,7 @@ from astrbot.core.config.default import (
     DEFAULT_VALUE_MAP,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
-from astrbot.core.core_runtime import CoreControl
+from astrbot.core.core_runtime import CoreControl, CoreRuntime
 from astrbot.core.db.protocols import DatabaseSessionStore
 from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.platform.catalog import PlatformCatalog
@@ -56,9 +56,6 @@ from astrbot.dashboard.upload_utils import (
     UploadPathError,
     save_upload_to_path,
 )
-
-if TYPE_CHECKING:
-    pass
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -1572,7 +1569,7 @@ class BotConfigService:
         platform_catalog: PlatformCatalog,
         platform_manager: PlatformManager,
         *,
-        core_lifecycle: Any | None = None,
+        core_lifecycle: CoreRuntime | None = None,
     ) -> None:
         self.config = config
         self.platform_catalog = platform_catalog
@@ -1685,15 +1682,15 @@ class BotConfigService:
             cleanup: Data categories to remove; omitted categories are retained.
 
         Raises:
-            ValueError: The bot or a cleanup category is invalid.
+            DashboardValidationError: The bot or a cleanup category is invalid.
             Exception: Cleanup or configuration persistence fails.
         """
         bot = self._find_bot(bot_id)
         if bot is None:
-            raise ValueError(f"Bot {bot_id} not found")
+            raise DashboardValidationError(f"Bot {bot_id} not found")
         targets = set(cleanup or [])
         if targets - set(get_args(BotCleanupTarget)):
-            raise ValueError("Invalid bot cleanup category")
+            raise DashboardValidationError("Invalid bot cleanup category")
         core = self.core_lifecycle
         event_bus = getattr(core, "event_bus", None) if core else None
         await self.platform_manager.terminate_platform(bot_id)

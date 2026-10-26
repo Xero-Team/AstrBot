@@ -53,12 +53,11 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
     bot_id = "bot_%"
     ids = [bot_id, "BOT_%", "bot_ab", "bot_%-other"]
     core = SimpleNamespace(
-        db=temp_db,
         cron_manager=CronJobManager(temp_db),
         conversation_manager=ConversationManager(temp_db, preferences),
         umop_config_router=UmopConfigRouter(preferences),
         astrbot_config={},
-        services=SimpleNamespace(preferences=preferences),
+        services=SimpleNamespace(db=temp_db, preferences=preferences),
     )
     try:
         records = []

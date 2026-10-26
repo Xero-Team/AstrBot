@@ -940,7 +940,7 @@ async def test_partial_blob_swap_failure_restores_the_previous_source(
 
 
 @pytest.mark.asyncio
-async def test_failed_backup_restore_keeps_source_for_retry(kb_helper, monkeypatch):
+async def test_failed_backup_restore_restores_previous_source(kb_helper, monkeypatch):
     helper, _embedding = kb_helper
     doc_id = "doc-retry"
     live_blob = helper._doc_blob_path(doc_id)
@@ -974,6 +974,6 @@ async def test_failed_backup_restore_keeps_source_for_retry(kb_helper, monkeypat
         bak_blob=bak_blob,
     )
 
+    assert live_blob.read_bytes() == b"previous"
     assert bak_blob.read_bytes() == b"previous"
-    assert live_blob.read_bytes() == b"incoming"
     assert not staging_blob.exists()

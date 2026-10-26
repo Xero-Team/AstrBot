@@ -1349,10 +1349,11 @@ class KBHelper:
                 restored = await self._reembed_from_stored_blob(live_doc_id, bak_blob)
                 if restored is None:
                     logger.warning(
-                        "Keeping previous source for document %s after a failed "
-                        "restore; startup recovery will retry",
+                        "Failed to reindex the previous source for document %s; "
+                        "keeping it for startup recovery",
                         live_doc_id,
                     )
+                    await asyncio.to_thread(shutil.copy2, bak_blob, live_blob)
                     staging_blob.unlink(missing_ok=True)
                     return
                 live_blob.unlink(missing_ok=True)
@@ -1390,10 +1391,11 @@ class KBHelper:
         restored = await self._reembed_from_stored_blob(live_doc_id, bak_blob)
         if restored is None:
             logger.warning(
-                "Keeping previous source for document %s after a failed restore; "
-                "startup recovery will retry",
+                "Failed to reindex the previous source for document %s; "
+                "keeping it for startup recovery",
                 live_doc_id,
             )
+            await asyncio.to_thread(shutil.copy2, bak_blob, live_blob)
             staging_blob.unlink(missing_ok=True)
             return
         live_blob.unlink(missing_ok=True)

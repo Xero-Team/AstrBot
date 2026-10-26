@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import inspect as sa_inspect, text
 
 from astrbot.core.db import create_sqlite_async_engine, dispose_async_engine
 from astrbot.core.db.migrations.main import MIGRATIONS
 from astrbot.core.db.migrations.runner import LEDGER_TABLE, run_migrations
 from astrbot.core.db.po.registry import import_all_models
+from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.dashboard.services.session_management_service import (
+    SessionManagementService,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -80,3 +84,32 @@ async def test_create_all_matches_migration_schema(tmp_path):
     finally:
         await dispose_async_engine(create_engine, None)
         await dispose_async_engine(migration_engine, None)
+
+
+async def test_revision_four_adds_umo_senders_to_an_existing_store(tmp_path):
+    path = tmp_path / "revision-3.db"
+    engine = create_sqlite_async_engine(str(path))
+    try:
+        await run_migrations(engine, "main", MIGRATIONS[:3])
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP TABLE umo_senders"))
+        assert await run_migrations(engine, "main", MIGRATIONS) == 1
+        async with engine.connect() as conn:
+            tables = await conn.run_sync(
+                lambda sync_conn: sa_inspect(sync_conn).get_table_names()
+            )
+        assert "umo_senders" in tables
+    finally:
+        await dispose_async_engine(engine, None)
+
+    db = SQLiteDatabase(str(path))
+    try:
+        await db.initialize()
+        await db.upsert_umo_sender("qq:GroupMessage:1", "1", "Alice")
+        records = await db.get_umo_senders()
+        assert records[0][0].sender_name == "Alice"
+        service = SessionManagementService(db, None, None, None, None, None)
+        known = await service.list_known_umos()
+        assert "qq:GroupMessage:1" in known
+    finally:
+        await db.close()

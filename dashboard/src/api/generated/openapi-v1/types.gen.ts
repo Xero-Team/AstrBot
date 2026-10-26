@@ -6313,7 +6313,12 @@ export type ListSessionsResponse =
 export type ListActiveUmosData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    /**
+     * Exact platform instance ID; omit to list all instances.
+     */
+    platform_id?: string;
+  };
   url: '/api/v1/sessions/active-umos';
 };
 
@@ -6326,6 +6331,31 @@ export type ListActiveUmosResponses = {
 
 export type ListActiveUmosResponse =
   ListActiveUmosResponses[keyof ListActiveUmosResponses];
+
+export type ListSessionSendersData = {
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    /**
+     * Resolve the latest record per exact sender ID instead of returning all source sessions.
+     */
+    sender_ids?: Array<string>;
+    search?: string;
+    limit?: number;
+  };
+  url: '/api/v1/sessions/senders';
+};
+
+export type ListSessionSendersResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListSessionSendersResponse =
+  ListSessionSendersResponses[keyof ListSessionSendersResponses];
 
 export type ListSessionRulesData = {
   body?: never;

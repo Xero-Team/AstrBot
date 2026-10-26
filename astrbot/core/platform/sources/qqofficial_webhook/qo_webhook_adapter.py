@@ -44,6 +44,7 @@ class botClient(Client):
             message,
             MessageType.GROUP_MESSAGE,
             force_group_mention=True,
+            bot=self,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
@@ -56,6 +57,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
+            bot=self,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id

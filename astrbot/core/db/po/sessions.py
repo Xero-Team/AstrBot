@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -56,6 +56,31 @@ class UmoAlias(SQLModel, table=True):
     creator_sender_id: str = Field(nullable=False, max_length=255)
     auto_name: str | None = Field(default=None, max_length=255)
     user_alias: str | None = Field(default=None, max_length=255)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=DateTime,
+        sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)},
+    )
+
+
+class UmoSender(SQLModel, table=True):
+    """Latest sender names observed within each unified message origin."""
+
+    __tablename__ = "umo_senders"  # type: ignore
+    __table_args__ = (UniqueConstraint("umo", "sender_id", name="uix_umo_sender"),)
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    umo: str = Field(nullable=False, max_length=512)
+    sender_id: str = Field(nullable=False, max_length=255)
+    sender_name: str = Field(default="", nullable=False, max_length=255)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime,

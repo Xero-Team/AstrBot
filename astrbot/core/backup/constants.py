@@ -23,6 +23,7 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
@@ -63,6 +64,7 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "command_configs": CommandConfig,
     "command_conflicts": CommandConflict,
     "umo_aliases": UmoAlias,
+    "umo_senders": UmoSender,
     "api_keys": ApiKey,
 }
 

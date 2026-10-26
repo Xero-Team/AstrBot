@@ -1,7 +1,17 @@
 <template>
-  <div class="umo-display" :class="{ 'umo-display--compact': compact }">
+  <div
+    class="umo-display"
+    :class="{
+      'umo-display--compact': compact,
+      'umo-display--two-line': twoLineTitle,
+    }"
+  >
     <div class="umo-display__main">
       <div class="umo-display__line">
+        <PlatformLogo
+          v-if="showPlatform && resolvedPlatform"
+          :platform-type="resolvedPlatform"
+        />
         <span
           class="umo-display__name"
           :class="{ 'umo-display__name--umo': !hasReadableName }"
@@ -62,11 +72,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { getPlatformColor } from '@/utils/platformUtils';
+import PlatformLogo from './PlatformLogo.vue';
 
 const props = withDefaults(
   defineProps<{
     umo: string;
     platform?: string;
+    platformType?: string;
     messageType?: string;
     sessionId?: string;
     autoName?: string;
@@ -77,11 +89,13 @@ const props = withDefaults(
     showInfo?: boolean;
     showMeta?: boolean;
     showRawTitle?: boolean;
+    twoLineTitle?: boolean;
     editable?: boolean;
     editTooltip?: string;
   }>(),
   {
     platform: '',
+    platformType: '',
     messageType: '',
     sessionId: '',
     autoName: '',
@@ -92,6 +106,7 @@ const props = withDefaults(
     showInfo: true,
     showMeta: true,
     showRawTitle: true,
+    twoLineTitle: false,
     editable: false,
     editTooltip: '',
   },
@@ -103,7 +118,7 @@ defineEmits<{
 
 const umoParts = computed(() => props.umo.split(':'));
 const resolvedPlatform = computed(
-  () => props.platform || umoParts.value[0] || '',
+  () => props.platform || props.platformType || umoParts.value[0] || '',
 );
 const aliasName = computed(() => props.userAlias || props.customName || '');
 const hasReadableName = computed(() =>
@@ -162,6 +177,14 @@ const platformColor = computed(() => getPlatformColor(resolvedPlatform.value));
   font-weight: 500;
   font-size: 14px;
   line-height: 1.3;
+}
+
+.umo-display--two-line .umo-display__name {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .umo-display__name--umo {

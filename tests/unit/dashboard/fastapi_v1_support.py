@@ -112,6 +112,8 @@ class FakeDb:
         self.touched_key_ids: list[str] = []
         self.umo_ids = ["webchat:FriendMessage:webchat!user!session-1"]
         self.preferences: list[object] = []
+        self.sender_results: list[object] = []
+        self.last_sender_query: dict[str, object] | None = None
 
     async def get_active_api_key_by_hash(self, key_hash: str) -> FakeApiKey | None:
         return self.api_keys.get(key_hash)
@@ -133,6 +135,21 @@ class FakeDb:
 
     async def get_umo_aliases(self, _umos: list[str] | None = None) -> list[object]:
         return []
+
+    async def get_umo_senders(
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        offset: int = 0,
+    ) -> list[object]:
+        self.last_sender_query = {
+            "search": search,
+            "limit": limit,
+            "sender_ids": sender_ids,
+            "offset": offset,
+        }
+        return self.sender_results
 
     async def get_conversation_platform_ids(self) -> list[str]:
         return ["webchat-main"]

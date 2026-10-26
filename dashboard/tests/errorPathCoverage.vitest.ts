@@ -440,7 +440,7 @@ describe('error-path coverage', () => {
     common.closeEventSource();
   });
 
-  it('covers remaining auth, projects, recording stop errors, and schema hiding', async () => {
+  it('covers remaining auth, projects, recording stop errors, and schema visibility', async () => {
     api.systemConfigApi.get.mockResolvedValue({
       data: { data: { config: { platform: [] } } },
     });
@@ -512,7 +512,16 @@ describe('error-path coverage', () => {
       }),
       configSchema: ref({
         provider: {
-          items: { id: {}, model: {}, custom_extra_body: {} },
+          items: {
+            id: {},
+            model: {},
+            custom_extra_body: {
+              template_schema: {
+                temperature: {},
+                reasoning_effort: {},
+              },
+            },
+          },
         },
       }),
       buildModelProviderConfig: () => ({ id: 'n', model: 'n' }),
@@ -522,10 +531,11 @@ describe('error-path coverage', () => {
       showMessage: vi.fn(),
       requestStepUp: async () => null,
     });
-    expect(
-      dialog.providerModelConfigSchema.value.provider.items.custom_extra_body
-        .invisible,
-    ).toBe(true);
+    const extraBody =
+      dialog.providerModelConfigSchema.value.provider.items.custom_extra_body;
+    expect(extraBody.invisible).toBeUndefined();
+    expect(extraBody.template_schema.temperature).toBeDefined();
+    expect(extraBody.template_schema.reasoning_effort).toBeUndefined();
     dialog.openModelAddDialog('m1');
     api.providerApi.createInSource.mockResolvedValue({
       data: { status: 'ok' },

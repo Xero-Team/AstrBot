@@ -67,8 +67,11 @@ export function useProviderModelConfigDialog(
     const sourceType = selectedProviderSource.value?.type;
     const hiddenKeys = ['id', 'model'];
 
+    const geminiExtraBody = schema.provider?.items?.custom_extra_body as
+      { template_schema?: Record<string, unknown> } | undefined;
     if (sourceType === 'googlegenai_chat_completion') {
-      hiddenKeys.push('custom_extra_body');
+      // Gemini rejects this OpenAI-only preset; keep the field usable.
+      delete geminiExtraBody?.template_schema?.reasoning_effort;
     }
 
     for (const key of hiddenKeys) {

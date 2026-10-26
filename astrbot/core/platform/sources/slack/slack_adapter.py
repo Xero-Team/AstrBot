@@ -96,6 +96,28 @@ class SlackAdapter(Platform):
         self.webhook_client = None
 
         self.bot_self_id = None
+        self._seen_event_keys: dict[tuple[str, str], float] = {}
+
+    def _is_duplicate_event(self, event: dict) -> bool:
+        """Return True for a repeated (channel, ts) delivery within five minutes."""
+        channel = str(event.get("channel") or "")
+        timestamp = str(event.get("ts") or "")
+        if not channel or not timestamp:
+            return False
+
+        now = time.monotonic()
+        cutoff = now - 300
+        for key, seen_at in list(self._seen_event_keys.items()):
+            if seen_at < cutoff:
+                self._seen_event_keys.pop(key, None)
+
+        key = (channel, timestamp)
+        if key in self._seen_event_keys:
+            return True
+        self._seen_event_keys[key] = now
+        while len(self._seen_event_keys) > 2048:
+            self._seen_event_keys.pop(next(iter(self._seen_event_keys)))
+        return False
 
     async def send_by_session(
         self,
@@ -146,6 +168,18 @@ class SlackAdapter(Platform):
             message_id=message_id,
         )
 
+    def _parse_text_components(self, message_text: str) -> list:
+        components = []
+        if "<@" in message_text:
+            mentions = re.findall(r"<@([^>]+)>", message_text)
+            for mention in mentions:
+                components.append(Mention(target=mention, name=""))
+            if clean_text := re.sub(r"<@[^>]+>", "", message_text).strip():
+                components.append(Plain(text=clean_text))
+        elif message_text:
+            components.append(Plain(text=message_text))
+        return components
+
     async def convert_message(self, event: dict) -> AstrBotMessage:
         logger.debug(f"[slack] RawMessage {event}")
 
@@ -184,18 +218,16 @@ class SlackAdapter(Platform):
             for component in abm.message:
                 if isinstance(component, Plain):
                     abm.message_str += component.text
+            if not abm.message_str.strip() and message_text:
+                abm.message.extend(self._parse_text_components(message_text))
+                abm.message_str = "".join(
+                    component.text
+                    for component in abm.message
+                    if isinstance(component, Plain)
+                )
         elif message_text:
             # 处理传统的文本消息
-            if "<@" in message_text:
-                mentions = re.findall(r"<@([^>]+)>", message_text)
-                for mention in mentions:
-                    abm.message.append(Mention(target=mention, name=""))
-
-                # 清理消息文本中的@标记
-                if clean_text := re.sub(r"<@[^>]+>", "", message_text).strip():
-                    abm.message.append(Plain(text=clean_text))
-            else:
-                abm.message.append(Plain(text=message_text))
+            abm.message = self._parse_text_components(message_text)
 
         # 处理文件附件
         if "files" in event:
@@ -395,7 +427,7 @@ class SlackAdapter(Platform):
                 # 处理段落块
                 if "text" in block:
                     text_obj = block["text"]
-                    if text_obj.get("type") == "mrkdwn":
+                    if text_obj.get("type") in {"mrkdwn", "plain_text"}:
                         text_content = text_obj.get("text", "")
                         message_components.append(Plain(text=text_content))
 
@@ -419,6 +451,8 @@ class SlackAdapter(Platform):
                 return
 
             if event.get("type") in ["message", "app_mention"]:
+                if self._is_duplicate_event(event):
+                    return
                 abm = await self.convert_message(event)
                 if abm:
                     await self.handle_msg(abm)
@@ -537,6 +571,8 @@ class SlackAdapter(Platform):
             return
 
         if event.get("type") in ["message", "app_mention"]:
+            if self._is_duplicate_event(event):
+                return
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)

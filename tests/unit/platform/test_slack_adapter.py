@@ -1168,3 +1168,41 @@ async def test_slack_get_file_base64_streams_chunked_success(monkeypatch):
     encoded = await adapter.get_file_base64("https://files.example.com/file")
 
     assert base64.b64decode(encoded) == b"1234567890"
+
+
+@pytest.mark.asyncio
+async def test_slack_blocks_without_text_falls_back_to_top_level_text():
+    adapter = _build_adapter()
+    adapter.bot_self_id = "B1"
+
+    result = await adapter.convert_message(
+        {
+            "user": "U1",
+            "channel": "C1",
+            "text": "fallback text",
+            "ts": "1700000000.000001",
+            "blocks": [{"type": "divider"}],
+        }
+    )
+
+    assert result.message_str == "fallback text"
+    assert [component.text for component in result.message] == ["fallback text"]
+
+
+def test_slack_plain_text_section_is_parsed():
+    adapter = _build_adapter()
+
+    components = adapter._parse_blocks(
+        [{"type": "section", "text": {"type": "plain_text", "text": "plain"}}]
+    )
+
+    assert [component.text for component in components] == ["plain"]
+
+
+def test_slack_duplicate_delivery_is_ignored():
+    adapter = _build_adapter()
+    event = {"channel": "C1", "ts": "1700000000.000001"}
+
+    assert adapter._is_duplicate_event(event) is False
+    assert adapter._is_duplicate_event(dict(event)) is True
+    assert adapter._is_duplicate_event({**event, "ts": "1700000000.000002"}) is False

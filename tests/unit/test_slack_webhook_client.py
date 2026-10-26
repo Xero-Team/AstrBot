@@ -79,3 +79,41 @@ async def test_slack_webhook_accepts_fresh_valid_signature(
 
     assert response.status_code == 200
     handler.assert_awaited_once_with({"type": "event_callback"})
+
+
+@pytest.mark.asyncio
+async def test_slack_webhook_ignores_retry_deliveries(monkeypatch):
+    body = json.dumps(
+        {"type": "event_callback", "event": {"type": "message"}}
+    ).encode("utf-8")
+    handler = AsyncMock()
+    client = SlackWebhookClient(
+        web_client=SimpleNamespace(),
+        signing_secret="secret",
+        event_handler=handler,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.slack.client.time.time",
+        lambda: 2_000_000_000,
+    )
+    signature = (
+        "v0="
+        + hmac.new(
+            b"secret",
+            b'v0:2000000000:{"type": "event_callback", "event": {"type": "message"}}',
+            hashlib.sha256,
+        ).hexdigest()
+    )
+    request = _FakeRequest(
+        body,
+        {
+            "X-Slack-Request-Timestamp": str(2_000_000_000),
+            "X-Slack-Signature": signature,
+            "X-Slack-Retry-Num": "1",
+        },
+    )
+
+    response = await client.handle_callback(request)
+
+    assert response.status_code == 200
+    handler.assert_not_called()

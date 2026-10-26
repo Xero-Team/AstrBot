@@ -97,6 +97,10 @@ class SlackWebhookClient:
                 return Response("Invalid signature", status_code=400)
             logger.info("Received Slack event type=%s", event_data.get("type"))
 
+            if req.headers.get("X-Slack-Retry-Num"):
+                logger.debug("Ignoring Slack retry delivery")
+                return Response("", status_code=200)
+
             # 处理 URL 验证事件
             if event_data.get("type") == "url_verification":
                 return {"challenge": event_data.get("challenge")}

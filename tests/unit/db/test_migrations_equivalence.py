@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import inspect as sa_inspect, text
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import text
 
 from astrbot.core.db import create_sqlite_async_engine, dispose_async_engine
 from astrbot.core.db.migrations.main import MIGRATIONS

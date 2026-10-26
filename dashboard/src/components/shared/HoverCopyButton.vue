@@ -46,7 +46,9 @@ async function copy(event) {
   }, 1500);
 }
 
-onBeforeUnmount(() => clearTimeout(resetTimer));
+onBeforeUnmount(() => {
+  clearTimeout(resetTimer);
+});
 </script>
 
 <style scoped>

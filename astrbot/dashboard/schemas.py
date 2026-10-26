@@ -53,6 +53,7 @@ def reject_forbidden_keys(
     if present:
         raise error(f"{label}: {', '.join(sorted(present))}")
 
+
 BotCleanupTarget = Literal[
     "custom_rules",
     "preferences",

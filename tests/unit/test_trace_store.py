@@ -369,9 +369,13 @@ def test_trace_cleanup_matches_exact_adapter(persisted, capture):
     assert all(persisted.get_trace(trace.trace_id) for trace in traces[1:])
     with sqlite3.connect(persisted.path) as connection:
         for table in ("spans", "events"):
-            assert connection.execute(
-                f"SELECT COUNT(*) FROM {table} WHERE trace_id = ?", (traces[0].trace_id,)
-            ).fetchone()[0] == 0
+            assert (
+                connection.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE trace_id = ?",
+                    (traces[0].trace_id,),
+                ).fetchone()[0]
+                == 0
+            )
 
 
 def test_database_pages_filters_details_and_restart(persisted, capture):

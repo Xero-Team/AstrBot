@@ -80,7 +80,10 @@
 
 .config-form :deep(.config-divider) {
   margin: 0;
-  border-color: var(--config-form-divider, rgba(var(--v-theme-on-surface), 0.09));
+  border-color: var(
+    --config-form-divider,
+    rgba(var(--v-theme-on-surface), 0.09)
+  );
 }
 
 @media (max-width: 720px) {

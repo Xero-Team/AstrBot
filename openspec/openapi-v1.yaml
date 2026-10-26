@@ -4149,8 +4149,8 @@ paths:
           schema:
             type: string
       responses:
-        "200":
-          $ref: "#/components/responses/Ok"
+        '200':
+          $ref: '#/components/responses/Ok'
 
   /api/v1/sessions/senders:
     get:
@@ -4163,7 +4163,7 @@ paths:
       operationId: listSessionSenders
       x-astrbot-scope: data
       parameters:
-        - $ref: "#/components/parameters/Page"
+        - $ref: '#/components/parameters/Page'
         - name: sender_ids
           in: query
           description: Resolve the latest record per exact sender ID instead of returning all source sessions.
@@ -5463,7 +5463,7 @@ components:
       schema:
         type: array
         items:
-          $ref: "#/components/schemas/BotCleanupTarget"
+          $ref: '#/components/schemas/BotCleanupTarget'
     AttachmentId:
       name: attachment_id
       in: path
@@ -5655,7 +5655,17 @@ components:
   schemas:
     BotCleanupTarget:
       type: string
-      enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]
+      enum:
+        [
+          custom_rules,
+          preferences,
+          routing,
+          cron_jobs,
+          conversations,
+          message_history,
+          traces,
+          stats,
+        ]
     RuntimeInfo:
       type: object
       description: The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.

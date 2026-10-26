@@ -232,6 +232,7 @@ const lastEventId = ref<string | null>(null);
 const searchInput = ref('');
 const searchKeyword = ref('');
 const searchTimer = ref<ReturnType<typeof window.setTimeout> | null>(null);
+let unmounted = false;
 
 const hasActiveFilters = computed(
   () =>
@@ -583,6 +584,9 @@ async function fetchPluginDisplayNames(): Promise<void> {
 }
 
 function connectSSE(): void {
+  if (unmounted) {
+    return;
+  }
   closeEventSource();
 
   console.log(`正在连接日志流... (尝试次数: ${retryAttempts.value})`);
@@ -646,6 +650,10 @@ function connectSSE(): void {
 
       if (!lastEventId.value) {
         await fetchLogHistory();
+      }
+
+      if (unmounted) {
+        return;
       }
 
       connectSSE();
@@ -713,14 +721,22 @@ watch(searchInput, (value) => {
 
 onMounted(async () => {
   await fetchLogHistory();
+  if (unmounted) {
+    return;
+  }
   if (props.workspaceMode) {
     await fetchPluginDisplayNames();
+    if (unmounted) {
+      return;
+    }
   }
   connectSSE();
   document.addEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 onBeforeUnmount(() => {
+  // Pending initialization and reconnect requests may finish after teardown.
+  unmounted = true;
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   closeEventSource();
   clearRetryTimer();

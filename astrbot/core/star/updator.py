@@ -1,5 +1,7 @@
 import os
 import re
+import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -97,7 +99,25 @@ class PluginUpdator(RepoZipUpdator):
         proxy="",
         download_url: str = "",
         repo_url: str = "",
+        *,
+        target_dir: Path | None = None,
     ) -> str:
+        """Download and extract a plugin update without discarding the old copy.
+
+        Args:
+            plugin: Installed plugin metadata.
+            proxy: Optional proxy prefix for repository downloads.
+            download_url: Optional archive URL to use instead of the repository.
+            repo_url: Optional explicit repository URL.
+            target_dir: Staging destination. When omitted, the update is applied
+                atomically in place with a temporary backup.
+
+        Returns:
+            Path containing the extracted update.
+
+        Raises:
+            Exception: If downloading, validation, or extraction fails.
+        """
         repo_url = str(repo_url or "").strip() or str(plugin.repo or "").strip()
 
         if not repo_url and not download_url:
@@ -112,6 +132,27 @@ class PluginUpdator(RepoZipUpdator):
 
         plugin_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
 
+        if target_dir is not None:
+            staged_path = os.path.normpath(str(target_dir))
+            store_root = os.path.normpath(self.plugin_store_path)
+            staging_root = os.path.normpath(get_astrbot_system_tmp_path())
+            allowed_root = (
+                store_root
+                if staged_path.startswith(store_root)
+                else staging_root
+                if staged_path.startswith(staging_root)
+                else None
+            )
+            if allowed_root is None or (
+                staged_path != allowed_root
+                and not staged_path.startswith(allowed_root + os.sep)
+            ):
+                raise Exception("更新失败：目标目录不合法。")
+            archive_path = staged_path + ".zip"
+        else:
+            staged_path = ""
+            archive_path = plugin_path + ".zip"
+
         logger.info(
             f"Updating plugin at path: {plugin_path}, repository URL: {repo_url}",
         )
@@ -119,23 +160,51 @@ class PluginUpdator(RepoZipUpdator):
             logger.info("Downloading plugin update archive for %s", plugin.name)
             await self._download_file(
                 download_url,
-                plugin_path + ".zip",
+                archive_path,
                 policy=PLUGIN_DOWNLOAD_URL,
             )
         elif repo_url:
-            await self.download_from_repo_url(plugin_path, repo_url, proxy=proxy)
-
-        self.validate_plugin_archive(plugin_path + ".zip")
-        try:
-            remove_dir(plugin_path)
-        except Exception as e:
-            logger.error(
-                f"Failed to remove old plugin directory {plugin_path}: {e!s}; using overwrite installation.",
+            await self.download_from_repo_url(
+                staged_path or plugin_path, repo_url, proxy=proxy
             )
 
-        self.unzip_file(plugin_path + ".zip", plugin_path)
+        try:
+            self.validate_plugin_archive(archive_path)
 
-        return plugin_path
+            if target_dir is not None:
+                self.unzip_file(archive_path, staged_path)
+                return staged_path
+
+            staging_root = tempfile.mkdtemp(
+                dir=self.plugin_store_path,
+                prefix=".plugin-update-",
+            )
+            try:
+                extracted_path = os.path.join(
+                    staging_root, os.path.basename(plugin_path)
+                )
+                self.unzip_file(archive_path, extracted_path)
+                backup_path = os.path.join(staging_root, ".previous")
+                if os.path.exists(plugin_path):
+                    os.replace(plugin_path, backup_path)
+                try:
+                    os.replace(extracted_path, plugin_path)
+                except Exception:
+                    if os.path.exists(backup_path) and not os.path.exists(
+                        plugin_path
+                    ):
+                        os.replace(backup_path, plugin_path)
+                    raise
+                if os.path.exists(backup_path):
+                    remove_dir(backup_path)
+            finally:
+                shutil.rmtree(staging_root, ignore_errors=True)
+            return plugin_path
+        finally:
+            try:
+                os.remove(archive_path)
+            except OSError:
+                pass
 
     @classmethod
     def find_plugin_metadata_entry(cls, entries: list[str]) -> str | None:

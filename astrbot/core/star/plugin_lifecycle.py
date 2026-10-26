@@ -844,7 +844,9 @@ class PluginLifecycle:
                 download_url=download_url,
                 repo_url=repo_url,
                 loader=self._loader,
+                load_plugin=self._load_unlocked,
                 reload_plugin=self._reload_unlocked,
+                terminate_plugin=self.terminate_plugin,
             )
 
     async def uninstall_plugin(

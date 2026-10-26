@@ -115,6 +115,41 @@ class TestLogComputerConfigChanges:
         assert "allowed_domains" in logged
         assert "deny_read" in logged
 
+    @patch("astrbot.dashboard.services.config_service.logger")
+    def test_logging_sanitizes_untrusted_policy_values(self, mock_logger) -> None:
+        old = {"provider_settings": {}}
+        new = {
+            "provider_settings": {
+                "computer_use_runtime": "local\nforged",
+                "computer_use_local_permissions": {
+                    "member": {
+                        "allow_execution": "yes",
+                        "filesystem_scope": "workspace\nforged",
+                        "network": {
+                            "mode": "off\nforged",
+                            "allowed_domains": 5,
+                            "allow_loopback": "yes",
+                        },
+                        "filesystem": {"deny_read": "not-a-list"},
+                        "unix_sockets": {
+                            "mode": "deny\nforged",
+                            "allowed_paths": {},
+                        },
+                    }
+                },
+            }
+        }
+
+        _log_computer_config_changes(old, new)
+
+        logged = str(mock_logger.info.call_args_list)
+        assert "forged" not in logged
+        for call in mock_logger.info.call_args_list:
+            for value in call.args[1:]:
+                assert (
+                    value is None or isinstance(value, (bool, int)) or "\n" not in value
+                )
+
     def test_validation_normalizes_nested_policy(self) -> None:
         data = {
             "provider_settings": {

@@ -666,8 +666,47 @@ def _validate_local_permissions(
     errors.extend(role_errors[:MAX_VALIDATION_ERRORS])
 
 
+_LOCAL_SCOPE_LOG_VALUES = {
+    "none": "none",
+    "workspace": "workspace",
+    "host": "host",
+}
+_LOCAL_NETWORK_MODE_LOG_VALUES = {
+    "off": "off",
+    "allowlist": "allowlist",
+    "unrestricted": "unrestricted",
+}
+_LOCAL_SOCKET_MODE_LOG_VALUES = {
+    "deny": "deny",
+    "allow_all": "allow_all",
+}
+_COMPUTER_RUNTIME_LOG_VALUES = {
+    "none": "none",
+    "local": "local",
+}
+
+
+def _safe_log_choice(value: object, allowed: dict[str, str]) -> str:
+    """Return a fixed label for a configured choice, never the raw value."""
+    if isinstance(value, str):
+        label = allowed.get(value)
+        if label is not None:
+            return label
+    return "<invalid>"
+
+
+def _safe_log_bool(value: object) -> object:
+    """Return a boolean or a fixed invalid marker."""
+    return value if isinstance(value, bool) else "<invalid>"
+
+
+def _safe_log_count(value: object) -> int:
+    """Return a list length without trusting arbitrary sequence types."""
+    return len(value) if isinstance(value, (list, tuple)) else -1
+
+
 def _local_policy_log_signature(role_policy: object) -> dict[str, object]:
-    """Return mode/count/boolean fields that are safe to log."""
+    """Return a redacted signature that is safe for log interpolation."""
     if not isinstance(role_policy, dict):
         return {"configured": False}
     network = role_policy.get("network")
@@ -678,17 +717,23 @@ def _local_policy_log_signature(role_policy: object) -> dict[str, object]:
     unix_sockets = unix_sockets if isinstance(unix_sockets, dict) else {}
     return {
         "configured": True,
-        "allow_execution": role_policy.get("allow_execution"),
-        "filesystem_scope": role_policy.get("filesystem_scope"),
-        "network_mode": network.get("mode"),
-        "allow_private_network": network.get("allow_private_network"),
-        "allow_loopback": network.get("allow_loopback"),
-        "allowed_domains": len(network.get("allowed_domains") or []),
-        "denied_domains": len(network.get("denied_domains") or []),
-        "deny_read": len(filesystem.get("deny_read") or []),
-        "deny_write": len(filesystem.get("deny_write") or []),
-        "unix_socket_mode": unix_sockets.get("mode"),
-        "allowed_socket_paths": len(unix_sockets.get("allowed_paths") or []),
+        "allow_execution": _safe_log_bool(role_policy.get("allow_execution")),
+        "filesystem_scope": _safe_log_choice(
+            role_policy.get("filesystem_scope"), _LOCAL_SCOPE_LOG_VALUES
+        ),
+        "network_mode": _safe_log_choice(
+            network.get("mode"), _LOCAL_NETWORK_MODE_LOG_VALUES
+        ),
+        "allow_private_network": _safe_log_bool(network.get("allow_private_network")),
+        "allow_loopback": _safe_log_bool(network.get("allow_loopback")),
+        "allowed_domains": _safe_log_count(network.get("allowed_domains")),
+        "denied_domains": _safe_log_count(network.get("denied_domains")),
+        "deny_read": _safe_log_count(filesystem.get("deny_read")),
+        "deny_write": _safe_log_count(filesystem.get("deny_write")),
+        "unix_socket_mode": _safe_log_choice(
+            unix_sockets.get("mode"), _LOCAL_SOCKET_MODE_LOG_VALUES
+        ),
+        "allowed_socket_paths": _safe_log_count(unix_sockets.get("allowed_paths")),
     }
 
 
@@ -701,9 +746,15 @@ def _log_computer_config_changes(
     log_info = log_info or logger.info
     old_ps = old_config.get("provider_settings", {})
     new_ps = new_config.get("provider_settings", {})
+    old_ps = old_ps if isinstance(old_ps, dict) else {}
+    new_ps = new_ps if isinstance(new_ps, dict) else {}
 
-    old_runtime = old_ps.get("computer_use_runtime", "none")
-    new_runtime = new_ps.get("computer_use_runtime", "none")
+    old_runtime = _safe_log_choice(
+        old_ps.get("computer_use_runtime", "none"), _COMPUTER_RUNTIME_LOG_VALUES
+    )
+    new_runtime = _safe_log_choice(
+        new_ps.get("computer_use_runtime", "none"), _COMPUTER_RUNTIME_LOG_VALUES
+    )
     if old_runtime != new_runtime:
         log_info(
             "[Computer] Config changed: computer_use_runtime %s -> %s",

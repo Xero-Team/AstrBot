@@ -383,15 +383,17 @@ function toggleInlinePlugin(plugin: PluginListItem) {
   } else {
     selected.add(plugin.name);
   }
-  const nextSelection = pluginList.value
-    .map((item) => item.name)
-    .filter((name) => selected.has(name));
+  const nextSelection = Array.from(selected);
+  const loadedNames = new Set(pluginList.value.map((item) => item.name));
+  const allLoadedSelected =
+    pluginList.value.length > 0 &&
+    pluginList.value.every((item) => selected.has(item.name));
+  const hasUnloadedSelection = nextSelection.some(
+    (name) => !loadedNames.has(name),
+  );
   emit(
     'update:modelValue',
-    nextSelection.length === pluginList.value.length &&
-      pluginList.value.length > 0
-      ? ['*']
-      : nextSelection,
+    allLoadedSelected && !hasUnloadedSelection ? ['*'] : nextSelection,
   );
 }
 

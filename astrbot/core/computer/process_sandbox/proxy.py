@@ -63,6 +63,16 @@ _HOP_BY_HOP_HEADERS = frozenset(
         b"upgrade",
     }
 )
+_SAFE_NAME_CHARACTERS = (
+    "!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+)
+_SAFE_NAME_BYTES = frozenset(_SAFE_NAME_CHARACTERS.encode("ascii"))
+# A Connection token makes the proxy drop that header before forwarding. The
+# request framing headers must never be droppable, or the origin would receive
+# a body without the framing that explains it.
+_UNSAFE_CONNECTION_TOKENS = frozenset(
+    {b"content-length", b"host", b"transfer-encoding"}
+)
 _SOCKS_VERSION = 5
 _SOCKS_AUTH_VERSION = 1
 _SOCKS_CMD_CONNECT = 1
@@ -181,9 +191,14 @@ def parse_http_request_head(head: bytes) -> HttpRequestHead:
     if len(parts) != 3:
         raise ProxyProtocolError("Malformed proxy request line.")
     method, target, version = parts
-    if not method or not target or version not in {"HTTP/1.0", "HTTP/1.1"}:
+    if (
+        not method
+        or not target
+        or version not in {"HTTP/1.0", "HTTP/1.1"}
+        or any(character not in _SAFE_NAME_CHARACTERS for character in method)
+    ):
         raise ProxyProtocolError("Unsupported proxy request line.")
-    if any(character in target for character in ("\x00", "\r", "\n")):
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in target):
         raise ProxyProtocolError("Malformed proxy request target.")
     if len(lines) - 1 > MAX_HEADERS:
         raise ProxyProtocolError("The proxy request has too many headers.")
@@ -200,7 +215,7 @@ def parse_http_request_head(head: bytes) -> HttpRequestHead:
         if b"\x00" in line or b"\r" in line or b"\n" in line:
             raise ProxyProtocolError("Malformed proxy header.")
         name, value = line.split(b":", 1)
-        if not name or b" " in name or b"\x00" in name:
+        if not name or any(byte not in _SAFE_NAME_BYTES for byte in name):
             raise ProxyProtocolError("Malformed proxy header name.")
         lowered = name.lower()
         if lowered == b"content-length":
@@ -232,13 +247,14 @@ def parse_http_request_head(head: bytes) -> HttpRequestHead:
         version=version,
         headers=tuple(headers),
     )
-    connection_tokens = parsed.header(b"connection")
-    if connection_tokens:
-        for token in connection_tokens.split(b","):
+    for name, value in headers:
+        if name.lower() != b"connection":
+            continue
+        for token in value.split(b","):
             normalized = token.strip().lower()
             if normalized in {b"proxy-authorization", b"proxy-connection"}:
                 continue
-            if normalized in {b"content-length", b"host"}:
+            if normalized in _UNSAFE_CONNECTION_TOKENS:
                 raise ProxyProtocolError("Unsafe Connection header token.")
     return parsed
 
@@ -761,11 +777,15 @@ class LocalProxyServer:
     def _lookup_lease(self, token: str | None) -> ProxyLease | None:
         if not token:
             return None
+        # Leases always use ASCII tokens. Encode both sides so a malformed
+        # non-ASCII credential is a normal authentication failure instead of
+        # a TypeError from compare_digest.
+        candidate = token.encode("utf-8")
         with self._leases_lock:
             leases = list(self._leases.values())
         matched: ProxyLease | None = None
         for lease in leases:
-            if hmac.compare_digest(lease.token, token):
+            if hmac.compare_digest(lease.token.encode("utf-8"), candidate):
                 matched = lease
         if matched is None or matched.revoked:
             return None

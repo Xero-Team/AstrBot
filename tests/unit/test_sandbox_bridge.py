@@ -18,6 +18,7 @@ from astrbot.core.computer.process_sandbox.seccomp import (
     build_socket_filter,
     current_audit_arch,
 )
+from astrbot.core.computer.process_sandbox.unix import _wait_for_bridge_ready
 
 
 def test_bridge_ports_and_argument_contract() -> None:
@@ -51,6 +52,17 @@ def test_bridge_ports_and_argument_contract() -> None:
 def test_bridge_rejects_missing_workload() -> None:
     with pytest.raises(SystemExit):
         bridge._parse_arguments(["bridge.py", "--http-port", "1"])  # noqa: SLF001
+
+
+def test_bridge_readiness_fails_fast_when_the_launcher_exits(tmp_path: Path) -> None:
+    process = subprocess.Popen([sys.executable, "-c", "raise SystemExit(3)"])
+    try:
+        started = time.monotonic()
+        with pytest.raises(RuntimeError, match="exited before"):
+            _wait_for_bridge_ready(process, tmp_path / "ready", timeout=10)
+        assert time.monotonic() - started < 5
+    finally:
+        process.wait(timeout=10)
 
 
 def test_filter_only_runner_source_has_no_package_imports() -> None:

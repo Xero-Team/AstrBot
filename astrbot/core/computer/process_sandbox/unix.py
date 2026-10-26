@@ -320,7 +320,11 @@ def _wait_for_bridge_ready(
     while time.monotonic() < deadline:
         if ready_path.is_file():
             return
-        if process.returncode is not None:
+        returncode = process.returncode
+        if returncode is None and isinstance(process, subprocess.Popen):
+            # Popen only refreshes returncode when polled or waited.
+            returncode = process.poll()
+        if returncode is not None:
             raise RuntimeError("The Local sandbox bridge exited before becoming ready.")
         time.sleep(0.02)
     raise TimeoutError("The Local sandbox bridge did not become ready.")

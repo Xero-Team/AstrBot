@@ -140,6 +140,20 @@ def test_parse_authorization_and_protocol_helpers() -> None:
         )
     with pytest.raises(ProxyProtocolError):
         parse_http_request_head(b"POST / HTTP/1.1\r\nContent-Length: 1\xff2\r\n\r\n")
+    for malformed in (
+        b"GE\rT http://example.com/ HTTP/1.1\r\n\r\n",
+        b"GE\tT http://example.com/ HTTP/1.1\r\n\r\n",
+        b"G\x01ET http://example.com/ HTTP/1.1\r\n\r\n",
+        b"GET http://example.com/\x01 HTTP/1.1\r\n\r\n",
+        b"GET http://example.com/ HTTP/1.1\r\nHo\tst: example.com\r\n\r\n",
+        b"POST http://example.com/ HTTP/1.1\r\n"
+        b"Connection: transfer-encoding\r\nTransfer-Encoding: chunked\r\n\r\n",
+        b"POST http://example.com/ HTTP/1.1\r\n"
+        b"Connection: keep-alive\r\nConnection: transfer-encoding\r\n"
+        b"Transfer-Encoding: chunked\r\n\r\n",
+    ):
+        with pytest.raises(ProxyProtocolError):
+            parse_http_request_head(malformed)
     unsupported_te = parse_http_request_head(
         b"POST http://example.com/ HTTP/1.1\r\nTransfer-Encoding: identity\r\n\r\n"
     )
@@ -185,6 +199,22 @@ async def test_http_proxy_auth_forwarding_and_loopback_policy() -> None:
             server.drop_lease(lease)
     finally:
         await origin.stop()
+
+
+@pytest.mark.asyncio
+async def test_non_ascii_proxy_credentials_are_an_auth_failure() -> None:
+    async with _proxy() as server:
+        lease = server.create_lease(_policy())
+        assert server._lookup_lease("é") is None  # noqa: SLF001
+        credential = base64.b64encode("é:x".encode()).decode()
+        request = (
+            "GET http://example.com/ HTTP/1.1\r\n"
+            "Host: example.com\r\n"
+            f"Proxy-Authorization: Basic {credential}\r\n\r\n"
+        ).encode()
+        response = await _http_request(str(server.http_socket), request)
+        assert b"407" in response
+        server.drop_lease(lease)
 
 
 @pytest.mark.asyncio

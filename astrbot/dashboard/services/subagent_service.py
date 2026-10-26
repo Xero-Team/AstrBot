@@ -36,7 +36,13 @@ class SubAgentService:
             if not isinstance(data, dict):
                 raise SubAgentServiceError("配置必须为 JSON 对象")
 
-            next_config = copy.deepcopy(data)
+            current_config = self.config.get("subagent_orchestrator")
+            next_config = (
+                copy.deepcopy(current_config)
+                if isinstance(current_config, dict)
+                else {}
+            )
+            next_config.update(copy.deepcopy(data))
             committed = await self.config.save_config_async(
                 {"subagent_orchestrator": next_config},
             )

@@ -369,3 +369,32 @@ async def test_provider_source_deletion_persists_before_runtime_deletion(
 
     assert config["provider_sources"] == []
     assert events == ["persist", ("delete", "source-a")]
+
+
+@pytest.mark.asyncio
+async def test_subagent_partial_update_preserves_unsubmitted_fields() -> None:
+    events: list[object] = []
+    config = TrackedConfig(
+        {
+            "subagent_orchestrator": {
+                "main_enable": False,
+                "router_system_prompt": "route carefully",
+                "agents": [{"name": "old"}],
+            }
+        },
+        events,
+    )
+    reload_from_config = AsyncMock()
+
+    await SubAgentService(
+        config,
+        SimpleNamespace(reload_from_config=reload_from_config),
+        SimpleNamespace(),
+    ).update_config({"main_enable": True})
+
+    assert config["subagent_orchestrator"] == {
+        "main_enable": True,
+        "router_system_prompt": "route carefully",
+        "agents": [{"name": "old"}],
+    }
+    reload_from_config.assert_awaited_once_with(config["subagent_orchestrator"])

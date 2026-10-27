@@ -196,7 +196,12 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
 async def test_delete_bot_keeps_config_on_cleanup_failure(monkeypatch):
     """Report cleanup failure without losing the adapter needed for a retry."""
     bot = {"id": "bot", "enable": True}
-    bus = SimpleNamespace(stopped_platforms={"bot"}, stop_platform=AsyncMock())
+    bus = SimpleNamespace(stopped_platforms=set())
+
+    async def stop_platform(platform_id):
+        bus.stopped_platforms.add(platform_id)
+
+    bus.stop_platform = stop_platform
     core = SimpleNamespace(
         astrbot_config={"platform": [bot]},
         event_bus=bus,
@@ -234,9 +239,35 @@ async def test_delete_bot_keeps_config_on_cleanup_failure(monkeypatch):
     cleanup.side_effect = None
     await service.delete_bot("bot")
     assert core.astrbot_config["platform"] == []
-    assert "bot" not in bus.stopped_platforms
+    # A deleted adapter stays blocked so an event that was already waiting on
+    # the concurrency semaphore cannot run a pipeline after cleanup.
+    assert bus.stopped_platforms == {"bot"}
     assert cleanup.await_count == 1
     save.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_bot_unblocks_a_reused_adapter_id(monkeypatch):
+    """Recreating a deleted adapter ID must let that adapter accept events again."""
+    bus = SimpleNamespace(stopped_platforms={"bot"}, stop_platform=AsyncMock())
+    core = SimpleNamespace(
+        astrbot_config={"platform": []},
+        event_bus=bus,
+        platform_manager=SimpleNamespace(load_platform=AsyncMock()),
+    )
+    save = AsyncMock(return_value=True)
+    monkeypatch.setattr(config_service, "save_config_async", save)
+    service = config_service.BotConfigService(
+        core.astrbot_config,
+        MagicMock(),
+        core.platform_manager,
+        core_lifecycle=core,
+    )
+
+    await service.create_bot({"id": "bot", "type": "webchat", "enable": True})
+
+    assert "bot" not in bus.stopped_platforms
+    core.platform_manager.load_platform.assert_awaited_once()
 
 
 @pytest.mark.asyncio

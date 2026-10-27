@@ -1713,8 +1713,9 @@ class BotConfigService:
                 is_core=True,
             )
             _require_config_save_commit(committed)
-            if event_bus:
-                event_bus.stopped_platforms.discard(bot_id)
+            # Keep the adapter blocked until an adapter with this ID is loaded
+            # again. Clearing it here would let a dispatch already waiting on
+            # the concurrency semaphore run a pipeline after the data cleanup.
         except Exception:
             # Keep the adapter available for inspection or retry after a failure.
             if event_bus:

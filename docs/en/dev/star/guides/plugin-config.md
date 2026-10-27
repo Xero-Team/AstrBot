@@ -104,7 +104,7 @@ For example:
 }
 ```
 
-Only users recorded when a message wakes the bot are searchable; historical messages are not backfilled. Session sources are ordered by the latest conversation, alias, or sender update. Both pickers support `readonly` and allow entering an unrecorded ID manually. The `umo` picker supports `platformId` on the bot page but plugin schemas do not expose that filter.
+Only users recorded when a message wakes the bot are searchable; historical messages are not backfilled. Session sources are ordered by the latest conversation, alias, or sender update. Both pickers support `readonly` and allow entering an unrecorded ID manually. The `umo` picker accepts an optional platform-instance filter from its host component, but plugin schemas do not expose that filter.
 
 Core configuration uses additional `_special` values that are not a plugin SDK contract. Do not copy them from core metadata.
 

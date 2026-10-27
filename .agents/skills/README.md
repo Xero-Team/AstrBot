@@ -47,6 +47,7 @@ Shared locks live under `.agents/shared/`:
 | `create-astrbot-plugin`  | Create or repair a plugin (Star) package                              |
 | `archify`                | Checkout-only diagram renderer; not shipped in sdist, wheel, or image |
 | `audit-product`          | Baseline or module product audit; Chinese Markdown report + diagrams  |
+| `security-audit`         | Source-grounded vulnerability hunt with independent validation        |
 | `plan-issue`             | Issue or pasted request → research, clarify, file-path plan           |
 | `simplifier`             | Smallest current change; YAGNI ladder; over-engineering delete-list   |
 | `dashboard-ui`           | Build or modify the Dashboard (Vue 3 + Vuetify 4) UI                  |
@@ -90,6 +91,21 @@ Official-standard URLs live in `audit-product/references/standards.md`; cite
 them, do not paste the specs. Independent disprove, variant sweeps, and GHA
 bars live in `audit-product/references/verification.md`. Do not vendor
 third-party audit skill trees into `.agents/skills/`.
+
+`security-audit` is an AstrBot overlay of the MIT
+[cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill)
+(consumed through the `Xero-Team/security-audit-skill` fork at the commit pinned
+in `security-audit/REFERENCE.md`). It hunts source-grounded trust-boundary
+failures, validates every candidate with an agent that did not hunt it, and
+writes runs under `.tmp/security-audit/run-<N>/` (gitignored). Coverage comes
+from `coverage-ledger.json`, never from agent count. Findings go through
+`SECURITY.md`; the skill never files a public Issue or PR and never writes
+exploit chains. Mechanical bars live in
+`security-audit/scripts/security_audit.py`, tested by
+`tests/unit/test_security_audit_ledger.py`; methodology and the AstrBot-specific
+false-positive traps live in `security-audit/references/`. Do not vendor the
+upstream tree, and do not merge this workflow into `audit-product`, whose lab is
+a product-quality surface rather than an attack target.
 
 `plan-issue` writes working state under `.tmp/issue-plan/` (gitignored). Direct
 planning is the default; use `init --skip-probe` and record the reason without

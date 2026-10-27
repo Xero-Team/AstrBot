@@ -119,6 +119,10 @@ Load only the file that the current step needs:
 - Independent disprove, variants, GHA/skill bars: `references/verification.md`
   before `score`
 - Chinese report outline: `references/report-template.md` in synthesis mode
+- Deep vulnerability hunting on a named surface:
+  `.agents/skills/security-audit/SKILL.md` — use it when the request is to
+  confirm exploitability rather than score product quality. This skill's lab is
+  a product-quality surface, not an attack target.
 - Diagram renderer: `.agents/skills/archify/SKILL.md`
 - Commit shape: `.agents/shared/conventional-commit/REFERENCE.md` only if
   committing the skill or a requested report promotion

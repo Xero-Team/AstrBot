@@ -1726,7 +1726,7 @@ class BotConfigService:
                 except Exception:  # noqa: BLE001 - keep the cleanup failure
                     logger.error(
                         "Failed to restore adapter %s after cleanup failed.",
-                        bot_id,
+                        bot_id.replace("\r", "").replace("\n", ""),
                         exc_info=True,
                     )
             raise

@@ -111,11 +111,24 @@ async def delete_bot_data(
 
     if "preferences" in targets:
         groups = await prefs.global_get("session_groups", {})
-        for group in groups.values():
-            group["umos"] = [
-                umo for umo in group.get("umos", []) if umo.partition(":")[0] != bot_id
-            ]
-        await prefs.global_put("session_groups", groups)
+        if isinstance(groups, dict):
+            changed = False
+            for group in groups.values():
+                if not isinstance(group, dict):
+                    continue
+                umos = group.get("umos")
+                if not isinstance(umos, list):
+                    continue
+                retained = [
+                    umo
+                    for umo in umos
+                    if isinstance(umo, str) and umo.partition(":")[0] != bot_id
+                ]
+                if retained != umos:
+                    group["umos"] = retained
+                    changed = True
+            if changed:
+                await prefs.global_put("session_groups", groups)
 
         # Built-in adapters also keep delivery mappings outside the UMO scope.
         async with db.get_db() as session:

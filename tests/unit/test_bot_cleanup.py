@@ -323,3 +323,30 @@ async def test_delete_scheduled_job_drains_active_run(temp_db, run_once):
     assert finished.is_set()
     assert await temp_db.get_cron_job(job.job_id) is None
     assert manager._running_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_cleanup_tolerates_malformed_session_groups(temp_db):
+    """Skip malformed session-group preferences instead of failing cleanup."""
+    preferences = SharedPreferences(temp_db)
+    core = SimpleNamespace(
+        cron_manager=None,
+        conversation_manager=None,
+        umop_config_router=None,
+        astrbot_config={},
+        services=SimpleNamespace(db=temp_db, preferences=preferences),
+    )
+    groups = {
+        "broken": "not-a-group",
+        "invalid": {"umos": "not-a-list"},
+        "valid": {"umos": ["bot:GroupMessage:1", "other:GroupMessage:2"]},
+    }
+    try:
+        await preferences.global_put("session_groups", groups)
+        await delete_bot_data(core, "bot", {"preferences"})
+        saved = await preferences.global_get("session_groups", {})
+        assert saved["broken"] == "not-a-group"
+        assert saved["invalid"]["umos"] == "not-a-list"
+        assert saved["valid"]["umos"] == ["other:GroupMessage:2"]
+    finally:
+        await preferences.terminate()

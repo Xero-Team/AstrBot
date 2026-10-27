@@ -159,6 +159,30 @@ describe('TraceDisplayer', () => {
     expect(wrapper.findAll('[data-trace-id]')).toHaveLength(50);
     expect(wrapper.find('[data-trace-id="tr-new"]').exists()).toBe(true);
     expect(wrapper.find('[data-trace-id="tr-0"]').exists()).toBe(false);
+    const table = wrapper.findComponent({ name: 'VDataTableServer' });
+    expect(table.props('itemsLength')).toBe(51);
+
+    // Updates for a trace that was pushed to a later page must not grow the
+    // total again after it is re-inserted and trimmed.
+    state.sources[0]!.onmessage?.({
+      data: JSON.stringify({
+        type: 'trace',
+        trace: {
+          trace_id: 'tr-0',
+          name: 'trace 0',
+          state: 'running',
+          start_time_unix_nano: '1000000000',
+          updated_time_unix_nano: '90000000000',
+          attributes: { 'astrbot.umo': 'qq:GroupMessage:1' },
+        },
+        spans: [],
+      }),
+    });
+    await flushPromises();
+
+    expect(wrapper.find('[data-trace-id="tr-0"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-trace-id]')).toHaveLength(50);
+    expect(table.props('itemsLength')).toBe(51);
     wrapper.unmount();
   });
 

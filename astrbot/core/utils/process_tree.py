@@ -363,11 +363,11 @@ class ProcessTree:
         try:
             process.kill()
         except ProcessLookupError:
-            pass
+            logger.debug("The unbound child exited before it could be killed.")
         try:
             await asyncio.wait_for(process.wait(), 5)
         except TimeoutError:
-            pass
+            logger.warning("The unbound child did not exit after binding failed.")
         raise ProcessTreeBindingError("Could not bind the child process to its job.")
 
     def _bind_blocking(self, pid: int) -> bool:

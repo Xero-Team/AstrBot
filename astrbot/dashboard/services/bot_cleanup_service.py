@@ -2,7 +2,7 @@
 
 import asyncio
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlmodel import col, delete, select
 
 from astrbot.core.core_runtime import CoreRuntime
@@ -40,6 +40,10 @@ async def delete_bot_data(
             the adapter configuration so cleanup can be retried.
     """
     prefix = f"{bot_id}:"
+    # Session rules are also mirrored under canonical ``session:`` and
+    # sender-scoped ``im:`` keys, which do not carry the raw UMO prefix.
+    session_prefix = f"session:{bot_id}:"
+    sender_prefix = f"im:{bot_id}:"
     db = core.services.db
     prefs = core.services.preferences
     await prefs.flush()
@@ -59,8 +63,32 @@ async def delete_bot_data(
                 (
                     await session.execute(
                         select(Preference).where(
-                            Preference.scope == "umo",
-                            func.substr(Preference.scope_id, 1, len(prefix)) == prefix,
+                            or_(
+                                and_(
+                                    col(Preference.scope) == "umo",
+                                    or_(
+                                        func.substr(
+                                            col(Preference.scope_id), 1, len(prefix)
+                                        )
+                                        == prefix,
+                                        func.substr(
+                                            col(Preference.scope_id),
+                                            1,
+                                            len(session_prefix),
+                                        )
+                                        == session_prefix,
+                                    ),
+                                ),
+                                and_(
+                                    col(Preference.scope) == "sender",
+                                    func.substr(
+                                        col(Preference.scope_id),
+                                        1,
+                                        len(sender_prefix),
+                                    )
+                                    == sender_prefix,
+                                ),
+                            )
                         )
                     )
                 )
@@ -77,7 +105,9 @@ async def delete_bot_data(
                 or (not is_rule and "preferences" in targets)
                 or (is_conversation_pointer and "conversations" in targets)
             ):
-                await prefs.remove_async("umo", preference.scope_id, preference.key)
+                await prefs.remove_async(
+                    preference.scope, preference.scope_id, preference.key
+                )
 
     if "preferences" in targets:
         groups = await prefs.global_get("session_groups", {})

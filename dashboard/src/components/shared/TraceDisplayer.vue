@@ -975,15 +975,19 @@ function connectSSE() {
         if (wasKnown || canInsertLive) {
           processNewTraces([payload]);
           if (!wasKnown && eventIndex.has(traceId)) {
-            enteringTraceIds.add(traceId);
-            const timer = setTimeout(() => {
-              enteringTraceIds.delete(traceId);
-              traceEnterTimers.delete(traceId);
-            }, 300);
-            traceEnterTimers.set(traceId, timer);
-            totalRecords.value += 1;
+            // Trim first: an update for a trace that belongs to a later page
+            // must not inflate the total or animate a row that was removed.
             trimLivePage();
-            animateTraceListInsertion([traceId]);
+            if (events.value.some((entry) => entry.span_id === traceId)) {
+              enteringTraceIds.add(traceId);
+              const timer = setTimeout(() => {
+                enteringTraceIds.delete(traceId);
+                traceEnterTimers.delete(traceId);
+              }, 300);
+              traceEnterTimers.set(traceId, timer);
+              totalRecords.value += 1;
+              animateTraceListInsertion([traceId]);
+            }
           }
         }
         if (payload.storage_accepted === false) storageWarning.value = true;

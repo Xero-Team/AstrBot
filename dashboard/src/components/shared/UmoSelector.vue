@@ -5,7 +5,7 @@
         :model-value="selectionText"
         :label="label || t('core.common.umoSelector.title')"
         :title="selectedValues.join('\n')"
-        :disabled="disabled"
+        :disabled="disabled || readonly"
         readonly
         hide-details
         variant="outlined"

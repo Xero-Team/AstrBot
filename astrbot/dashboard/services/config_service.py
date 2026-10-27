@@ -1721,7 +1721,14 @@ class BotConfigService:
             if event_bus:
                 event_bus.stopped_platforms.discard(bot_id)
             if bot.get("enable"):
-                await self.platform_manager.load_platform(bot)
+                try:
+                    await self.platform_manager.load_platform(bot)
+                except Exception:  # noqa: BLE001 - keep the cleanup failure
+                    logger.error(
+                        "Failed to restore adapter %s after cleanup failed.",
+                        bot_id,
+                        exc_info=True,
+                    )
             raise
 
     def _find_bot(self, bot_id: str) -> dict | None:

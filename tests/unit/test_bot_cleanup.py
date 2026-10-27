@@ -105,6 +105,16 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
             await preferences.session_put(umo, "session_variables", {"name": platform})
             await preferences.session_put(umo, "sel_conv_id", platform)
             await preferences.session_put(umo, "sel_conv_id:work", platform)
+            await preferences.session_put(
+                f"session:{platform}:group:room",
+                "session_service_config",
+                {"llm_enabled": False},
+            )
+            await preferences.sender_put(
+                f"im:{platform}:account:sender",
+                "session_service_config",
+                {"llm_enabled": False},
+            )
             await preferences.put_async("global", umo, "dingtalk_staffid", "staff")
             await preferences.put_async(
                 "lark", f"{platform}:app", "private_chat:user", "chat"
@@ -152,6 +162,18 @@ async def test_cleanup_is_selective_and_matches_exact_platform(
             assert await preferences.session_get(umo, "session_service_config") == (
                 None if rules_removed else {"llm_enabled": False}
             )
+            for scope_id in (
+                f"session:{platform}:group:room",
+                f"im:{platform}:account:sender",
+            ):
+                stored = (
+                    await preferences.sender_get(scope_id, "session_service_config")
+                    if scope_id.startswith("im:")
+                    else await preferences.session_get(
+                        scope_id, "session_service_config"
+                    )
+                )
+                assert stored == (None if rules_removed else {"llm_enabled": False})
             assert await preferences.session_get(umo, "session_variables") == (
                 None if prefs_removed else {"name": platform}
             )

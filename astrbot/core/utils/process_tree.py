@@ -53,8 +53,10 @@ _CREATE_SUSPENDED = 0x00000004
 _TH32CS_SNAPTHREAD = 0x00000004
 _THREAD_SUSPEND_RESUME = 0x0002
 # PROCESS_SUSPEND_RESUME | PROCESS_SET_QUOTA | PROCESS_TERMINATE, the access a
-# job binding needs, plus SYNCHRONIZE, which is what lets the child be watched.
-_PROCESS_ASSIGN_ACCESS = 0x00000002 | 0x0800 | 0x0100 | 0x0001 | 0x00100000
+# job binding needs, plus SYNCHRONIZE to watch the child and
+# PROCESS_QUERY_LIMITED_INFORMATION, which IsProcessInJob requires to verify
+# the binding.
+_PROCESS_ASSIGN_ACCESS = 0x00000002 | 0x0800 | 0x0100 | 0x0001 | 0x00100000 | 0x00001000
 _INVALID_HANDLE_VALUE = -1
 _ERROR_INSUFFICIENT_BUFFER = 122
 # Terminating a job is a kill; there is no polite Windows form of it.

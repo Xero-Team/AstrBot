@@ -12,6 +12,11 @@ def test_bind_blocking_is_a_noop_without_a_windows_job(monkeypatch) -> None:
     assert pt.ProcessTree()._bind_blocking(1) is True
 
 
+def test_assignment_handle_can_verify_job_membership() -> None:
+    """IsProcessInJob needs query access, which assignment alone does not grant."""
+    assert pt._PROCESS_ASSIGN_ACCESS & 0x00001000
+
+
 @pytest.mark.asyncio
 async def test_assigner_waits_for_a_pid_across_a_slow_arm_to_spawn_gap(
     monkeypatch,

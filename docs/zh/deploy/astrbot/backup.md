@@ -16,7 +16,7 @@
 
 打开 Dashboard 的 **设置 → 维护**，再点 **数据备份与恢复** / **备份管理**。导出器把主库表写成 JSON，并打包：
 
-- 主数据库表（`data/astrbot.db` 的导出，而不是复制正在打开的文件），包括对话、提示词、定时任务、会话别名（UMO）、模型用量统计、OpenAPI 访问密钥和 MCP 服务配置等
+- 主数据库表（`data/astrbot.db` 的导出，而不是复制正在打开的文件），包括对话、提示词、定时任务、会话别名（UMO）、发送者名称、模型用量统计、OpenAPI 访问密钥和 MCP 服务配置等
 - 知识库元数据、向量文档与多媒体文件
 - `cmd_config.json`、`config/`、插件与插件数据、Skills、WebChat、Dashboard 外观素材、附件
 - `t2i_templates/` 与 `temp/`

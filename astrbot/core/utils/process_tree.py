@@ -33,9 +33,10 @@ from typing import Any
 
 from astrbot import logger
 
-__all__ = ["ProcessTree", "ThreadAssigner"]
+__all__ = ["ProcessTree", "ProcessTreeBindingError", "ThreadAssigner"]
 
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+_JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION = 1
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 _JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x0800
 # An assignment the kernel guarantees to make before the thread beside it runs.
@@ -52,8 +53,10 @@ _CREATE_SUSPENDED = 0x00000004
 _TH32CS_SNAPTHREAD = 0x00000004
 _THREAD_SUSPEND_RESUME = 0x0002
 # PROCESS_SUSPEND_RESUME | PROCESS_SET_QUOTA | PROCESS_TERMINATE, the access a
-# job binding needs, plus SYNCHRONIZE, which is what lets the child be watched.
-_PROCESS_ASSIGN_ACCESS = 0x00000002 | 0x0800 | 0x0100 | 0x0001 | 0x00100000
+# job binding needs, plus SYNCHRONIZE to watch the child and
+# PROCESS_QUERY_LIMITED_INFORMATION, which IsProcessInJob requires to verify
+# the binding.
+_PROCESS_ASSIGN_ACCESS = 0x00000002 | 0x0800 | 0x0100 | 0x0001 | 0x00100000 | 0x00001000
 _INVALID_HANDLE_VALUE = -1
 _ERROR_INSUFFICIENT_BUFFER = 122
 # Terminating a job is a kill; there is no polite Windows form of it.
@@ -111,6 +114,19 @@ class _ExtendedLimitInformation(ctypes.Structure):
     )
 
 
+class _JobAccounting(ctypes.Structure):
+    _fields_ = (
+        ("TotalUserTime", ctypes.c_longlong),
+        ("TotalKernelTime", ctypes.c_longlong),
+        ("ThisPeriodTotalUserTime", ctypes.c_longlong),
+        ("ThisPeriodTotalKernelTime", ctypes.c_longlong),
+        ("TotalPageFaultCount", ctypes.wintypes.DWORD),
+        ("TotalProcesses", ctypes.wintypes.DWORD),
+        ("ActiveProcesses", ctypes.wintypes.DWORD),
+        ("TotalTerminatedProcesses", ctypes.wintypes.DWORD),
+    )
+
+
 def _kernel32() -> Any:
     """Return the Windows kernel library, or ``None`` off Windows."""
     if sys.platform != "win32":
@@ -158,6 +174,14 @@ if _KERNEL32 is not None:  # pragma: no cover - Windows only
         ctypes.wintypes.HANDLE,
         ctypes.wintypes.UINT,
     )
+    _KERNEL32.QueryInformationJobObject.restype = ctypes.wintypes.BOOL
+    _KERNEL32.QueryInformationJobObject.argtypes = (
+        ctypes.wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.wintypes.DWORD,
+        ctypes.c_void_p,
+    )
     _KERNEL32.IsProcessInJob.restype = ctypes.wintypes.BOOL
     _KERNEL32.IsProcessInJob.argtypes = (
         ctypes.wintypes.HANDLE,
@@ -185,6 +209,10 @@ if _KERNEL32 is not None:  # pragma: no cover - Windows only
     _KERNEL32.CloseHandle.argtypes = (ctypes.wintypes.HANDLE,)
 
 
+class ProcessTreeBindingError(RuntimeError):
+    """A child could not be bound to its Windows job."""
+
+
 class ProcessTree:
     """The group or job that owns one child process and everything it starts.
 
@@ -200,8 +228,17 @@ class ProcessTree:
         self._assigner: ThreadAssigner | None = None
 
     @classmethod
-    def create(cls) -> ProcessTree:
-        """Return a tree whose child can be bound before the child is spawned."""
+    def create(cls, *, allow_breakaway: bool = True) -> ProcessTree:
+        """Return a tree whose child can be bound before the child is spawned.
+
+        Args:
+            allow_breakaway: Whether a child may leave the job. Callers that
+                need the job to be the only cleanup boundary must pass false.
+
+        Returns:
+            A tree that owns a job when Windows permits it, otherwise an
+            unarmed tree.
+        """
         if _KERNEL32 is None:
             return cls()
         job = _KERNEL32.CreateJobObjectW(None, None)
@@ -209,9 +246,10 @@ class ProcessTree:
             logger.debug("Could not create a job object; the child is not bound.")
             return cls()
         limits = _ExtendedLimitInformation()
-        limits.BasicLimitInformation.LimitFlags = (
-            _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | _JOB_OBJECT_LIMIT_BREAKAWAY_OK
-        )
+        flags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if allow_breakaway:
+            flags |= _JOB_OBJECT_LIMIT_BREAKAWAY_OK
+        limits.BasicLimitInformation.LimitFlags = flags
         if not _KERNEL32.SetInformationJobObject(
             job,
             _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
@@ -251,6 +289,11 @@ class ProcessTree:
             return
         self._assigner = assigner
 
+    @property
+    def has_job(self) -> bool:
+        """Whether this tree owns a Windows job object."""
+        return self._job is not None
+
     def spawn_kwargs(self) -> dict[str, Any]:
         """Return the spawn flags that put the child in a group of its own.
 
@@ -262,13 +305,18 @@ class ProcessTree:
         a later stop signal its whole group.
         """
         if sys.platform == "win32":
-            flags = subprocess.CREATE_NEW_PROCESS_GROUP
+            flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
             if self._assigner is not None:
                 flags |= _CREATE_SUSPENDED
             return {"creationflags": flags}
         return {"start_new_session": True}
 
-    async def spawn(self, *argv: str, **kwargs: Any) -> asyncio.subprocess.Process:
+    async def spawn(
+        self,
+        *argv: str,
+        require_binding: bool = False,
+        **kwargs: Any,
+    ) -> asyncio.subprocess.Process:
         """Start a child that belongs to this tree from its first instruction.
 
         The child is spawned, bound, and only then released.  Binding after a
@@ -281,52 +329,73 @@ class ProcessTree:
 
         Args:
             *argv: The program and its arguments.
+            require_binding: Raise instead of returning an unbound child. Use
+                this when the caller's cleanup guarantee depends on the job.
             **kwargs: Anything else ``create_subprocess_exec`` accepts.
 
         Returns:
             The running child.
+
+        Raises:
+            ProcessTreeBindingError: The child could not be bound while
+                ``require_binding`` is true. The child has been killed and
+                reaped before this is raised.
         """
+        if require_binding and self._assigner is None:
+            raise ProcessTreeBindingError(
+                "Could not arm the job before spawning the child."
+            )
         kwargs.update(self.spawn_kwargs())
         process = await asyncio.create_subprocess_exec(*argv, **kwargs)
         assigner = self._assigner
-        if assigner is None:
+        if assigner is not None:
+            bound = await assigner.assign(
+                process.pid,
+                resume_on_failure=not require_binding,
+            )
+        elif self._job is not None and _KERNEL32 is not None:
             # Unarmed Windows: the child is already running, so the best that
-            # is left is binding it from a thread that can wait on it. POSIX
-            # uses a session and has no job to bind.
-            self._bind(process.pid)
+            # is left is binding it from a thread that can wait on it.
+            bound = await asyncio.to_thread(self._bind_blocking, process.pid)
         else:
-            await assigner.assign(process.pid)
-        return process
+            # POSIX uses a session and has no job to bind.
+            bound = True
+        if bound or not require_binding:
+            return process
+        try:
+            process.kill()
+        except ProcessLookupError:
+            logger.debug("The unbound child exited before it could be killed.")
+        try:
+            await asyncio.wait_for(process.wait(), 5)
+        except TimeoutError:
+            logger.warning("The unbound child did not exit after binding failed.")
+        raise ProcessTreeBindingError("Could not bind the child process to its job.")
 
-    def _bind(self, pid: int) -> None:
-        """Assign one running child to this tree's job.
+    def _bind_blocking(self, pid: int) -> bool:
+        """Assign one child to this tree's job.
 
-        The assignment itself runs off the event loop: a child that has already
-        started cannot be bound from the thread that spawned it, but a thread
-        that merely waits on that child can. Off Windows there is no job.
+        Returns:
+            Whether the job owns the child after the call.
         """
-        if self._job is None or _KERNEL32 is None:
-            return
-        threading.Thread(target=self._bind_blocking, args=(pid,), daemon=True).start()
-
-    def _bind_blocking(self, pid: int) -> None:
-        """Assign one child to this tree's job, best effort."""
-        if _KERNEL32 is None:
-            return
+        if _KERNEL32 is None or self._job is None:
+            return True
         # PROCESS_SET_QUOTA | PROCESS_TERMINATE, the access a job needs.
         handle = _KERNEL32.OpenProcess(_PROCESS_ASSIGN_ACCESS, False, pid)
         if not handle:
             logger.debug(
-                "Could not open the coding agent to bind it to its job: err=%s",
+                "Could not open the child process to bind it to its job: err=%s",
                 _last_error(),
             )
-            return
+            return False
         try:
             if not _KERNEL32.AssignProcessToJobObject(self._job, handle):
                 logger.debug(
-                    "Could not bind the coding agent to its job: err=%s",
+                    "Could not bind the child process to its job: err=%s",
                     _last_error(),
                 )
+                return False
+            return True
         finally:
             _KERNEL32.CloseHandle(handle)
 
@@ -364,6 +433,31 @@ class ProcessTree:
         except (OSError, subprocess.SubprocessError) as exc:
             logger.debug("Could not stop the coding agent's tree: %s", exc)
 
+    def active_processes(self) -> int:
+        """Return how many processes the Windows job still owns.
+
+        Returns:
+            The job's current active process count, or zero off Windows or when
+            the tree has no job.
+
+        Raises:
+            OSError: If Windows cannot read the job's accounting information.
+        """
+        if self._job is None or _KERNEL32 is None:
+            return 0
+        accounting = _JobAccounting()
+        if not _KERNEL32.QueryInformationJobObject(
+            self._job,
+            _JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION,
+            ctypes.byref(accounting),
+            ctypes.sizeof(accounting),
+            None,
+        ):
+            raise OSError(
+                f"Could not query the job object: err={_last_error()}"
+            ) from None
+        return int(accounting.ActiveProcesses)
+
     def _stop_posix(self, process: object, *, force: bool) -> None:
         import os
         import signal
@@ -397,11 +491,17 @@ class ProcessTree:
         """
         assigner = self._assigner
         self._assigner = None
-        if assigner is not None:
-            await assigner.close()
-        if self._job is not None and _KERNEL32 is not None:
-            _KERNEL32.CloseHandle(self._job)
+        # Claim the job before awaiting the listener: cleanup paths can call
+        # close concurrently, and a second CloseHandle on a reused handle value
+        # would close an unrelated kernel object.
+        job = self._job
         self._job = None
+        try:
+            if assigner is not None:
+                await assigner.close()
+        finally:
+            if job is not None and _KERNEL32 is not None:
+                _KERNEL32.CloseHandle(job)
 
 
 class ThreadAssigner:
@@ -422,7 +522,16 @@ class ThreadAssigner:
     resumed and its tree falls back to killing the process directly.
     """
 
-    __slots__ = ("_args", "_assigned", "_event", "_job", "_ready", "_thread")
+    __slots__ = (
+        "_args",
+        "_assigned",
+        "_event",
+        "_job",
+        "_ready",
+        "_result",
+        "_resume_on_failure",
+        "_thread",
+    )
 
     def __init__(self, tree: ProcessTree) -> None:
         self._job = tree._job
@@ -430,6 +539,8 @@ class ThreadAssigner:
         self._event = threading.Event()
         self._ready = threading.Event()
         self._assigned = threading.Event()
+        self._result = False
+        self._resume_on_failure = True
         self._thread = threading.Thread(
             target=self._listener, name="process-tree-assigner", daemon=True
         )
@@ -442,24 +553,40 @@ class ThreadAssigner:
         """Wait for the listener to be parked, so a spawn cannot outrun it."""
         return await asyncio.to_thread(self._ready.wait, _ASSIGNER_START_TIMEOUT)
 
-    async def assign(self, pid: int) -> bool:
+    async def assign(
+        self,
+        pid: int,
+        *,
+        resume_on_failure: bool = True,
+    ) -> bool:
         """Hand one suspended child to the listener and wait for the binding.
 
         The child stays suspended until the listener resumes it, so returning
         from here means the job already knows about the child and about
         everything the child goes on to start.
+
+        Args:
+            pid: The suspended child to bind.
+            resume_on_failure: Resume the child when the job refuses it. Pass
+                false when the caller must kill the child before it runs.
+
+        Returns:
+            Whether the job owns the child.
         """
         if not self._thread.is_alive():  # pragma: no cover - listener crashed
-            _resume(pid)
+            if resume_on_failure:
+                _resume(pid)
             return False
         job = self._job
         if job is None:  # pragma: no cover - an unarmed tree never gets here
-            _resume(pid)
+            if resume_on_failure:
+                _resume(pid)
             return False
+        self._resume_on_failure = resume_on_failure
         self._args = (job, pid)
         self._event.set()
         await asyncio.to_thread(self._assigned.wait, _ASSIGNER_ASSIGN_TIMEOUT)
-        return True
+        return self._result
 
     async def close(self) -> None:
         """Stop the listener and let it go, whether or not it was ever used."""
@@ -476,7 +603,10 @@ class ThreadAssigner:
             self._event.wait()
             if self._args is None:
                 return  # Closing a tree that was never handed a child.
-            self._assign(*self._args)
+            self._result = self._assign(
+                *self._args,
+                resume_on_failure=self._resume_on_failure,
+            )
         except Exception:  # noqa: BLE001 - a broken listener must not crash the run
             logger.debug(
                 "The job-binding thread stopped before reporting a result.",
@@ -485,16 +615,32 @@ class ThreadAssigner:
         finally:
             self._assigned.set()
 
-    def _assign(self, job: int, pid: int) -> None:
-        """Bind one suspended process and let it go.
+    def _assign(
+        self,
+        job: int,
+        pid: int,
+        *,
+        resume_on_failure: bool,
+    ) -> bool:
+        """Bind one suspended process and release it when appropriate.
 
-        The child is released whatever the assignment decides: it was created
-        suspended, so nothing else is coming to start it.
+        The child is created suspended, so nothing else is coming to start it.
+        A refused assignment leaves it suspended when the caller needs to kill
+        it before it can run.
+
+        Args:
+            job: The job handle that should own the child.
+            pid: The suspended child.
+            resume_on_failure: Resume the child after a refused assignment.
+
+        Returns:
+            Whether the job owns the child after the call.
         """
+        done = False
         handle = _KERNEL32.OpenProcess(_PROCESS_ASSIGN_ACCESS, False, pid)
         if not handle:
             logger.debug(
-                "Could not open the coding agent to bind it to its job: err=%s",
+                "Could not open the child process to bind it to its job: err=%s",
                 _last_error(),
             )
         else:
@@ -504,12 +650,14 @@ class ThreadAssigner:
                     done = _wait_until_in_job(handle, job)
                 if not done:
                     logger.debug(
-                        "Could not bind the coding agent to its job: err=%s",
+                        "Could not bind the child process to its job: err=%s",
                         _last_error(),
                     )
             finally:
                 _KERNEL32.CloseHandle(handle)
-        _resume(pid)
+        if done or resume_on_failure:
+            _resume(pid)
+        return done
 
 
 def _wait_until_in_job(handle: int, job: int) -> bool:

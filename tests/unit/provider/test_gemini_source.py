@@ -1182,12 +1182,11 @@ async def test_gemini_prepare_query_config_downgrades_stream_image_and_sets_tool
     provider.get_model = lambda: "gemini-2.5-flash"
 
     config = await provider._prepare_query_config(
-        {"model": "gemini-2.5-flash", "max_tokens": 128},
+        {"model": "gemini-2.5-flash", "max_tokens": 128, "temperature": 1.2},
         tools=FakeToolSet(),
         tool_choice="required",
         system_instruction="system",
         modalities=["TEXT", "IMAGE"],
-        temperature=1.2,
     )
 
     assert config.system_instruction == "system"
@@ -1202,6 +1201,61 @@ async def test_gemini_prepare_query_config_downgrades_stream_image_and_sets_tool
     )
     assert config.thinking_config.thinking_budget == 32
     assert config.automatic_function_calling.disable is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_query_config_reads_custom_extra_body_aliases():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {
+        "custom_extra_body": {
+            "temperature": 0.3,
+            "maxOutputTokens": 256,
+            "topP": 0.9,
+            "stop": ["END"],
+        }
+    }
+    provider.provider_settings = {}
+    provider.safety_settings = []
+    provider.get_model = lambda: "gemini-test"
+
+    config = await provider._prepare_query_config({"model": "gemini-test"})
+
+    assert config.temperature == 0.3
+    assert config.max_output_tokens == 256
+    assert config.top_p == 0.9
+    assert config.stop_sequences == ["END"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_query_config_prefers_request_over_custom_extra_body():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"custom_extra_body": {"temperature": 0.3, "seed": 7}}
+    provider.provider_settings = {}
+    provider.safety_settings = []
+    provider.get_model = lambda: "gemini-test"
+
+    config = await provider._prepare_query_config(
+        {"model": "gemini-test", "temperature": 1.1}
+    )
+
+    assert config.temperature == 1.1
+    assert config.seed == 7
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_query_config_rejects_unsupported_custom_extra_body():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"custom_extra_body": {"reasoning_effort": "high"}}
+    provider.provider_settings = {}
+    provider.safety_settings = []
+    provider.get_model = lambda: "gemini-test"
+
+    with pytest.raises(ValueError, match="Unsupported Gemini custom_extra_body"):
+        await provider._prepare_query_config({"model": "gemini-test"})
+
+    provider.provider_config = {"custom_extra_body": []}
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        await provider._prepare_query_config({"model": "gemini-test"})
 
 
 @pytest.mark.asyncio
@@ -1569,7 +1623,7 @@ async def test_gemini_query_reraises_unrecognized_api_error(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gemini_query_recitation_retries_with_higher_temperature(monkeypatch):
+async def test_gemini_query_recitation_retries_with_unchanged_parameters(monkeypatch):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = {}
     provider.provider_settings = {}
@@ -1623,16 +1677,14 @@ async def test_gemini_query_recitation_retries_with_higher_temperature(monkeypat
     assert response.id == "resp-ok"
     assert response.completion_text == "done"
     assert provider._prepare_query_config.await_count == 2
-    assert provider._prepare_query_config.await_args_list[0].args[5] == pytest.approx(
-        0.7
-    )
-    assert provider._prepare_query_config.await_args_list[1].args[5] == pytest.approx(
-        0.9
-    )
+    first_payloads = provider._prepare_query_config.await_args_list[0].args[0]
+    second_payloads = provider._prepare_query_config.await_args_list[1].args[0]
+    assert first_payloads is second_payloads
+    assert "temperature" not in first_payloads
 
 
 @pytest.mark.asyncio
-async def test_gemini_query_recitation_raises_after_temperature_exceeds_limit(
+async def test_gemini_query_recitation_raises_after_two_retries(
     monkeypatch,
 ):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
@@ -1667,13 +1719,12 @@ async def test_gemini_query_recitation_raises_after_temperature_exceeds_limit(
 
     with pytest.raises(
         Exception,
-        match="Temperature exceeded the maximum value of 2",
+        match="Gemini recitation still occurred after 2 retries",
     ):
         await provider._query(
             {
                 "messages": [{"role": "user", "content": "hello"}],
                 "model": "gemini-test",
-                "temperature": 2.1,
             },
             tools=None,
         )

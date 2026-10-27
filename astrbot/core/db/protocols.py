@@ -38,6 +38,7 @@ if TYPE_CHECKING:
         SessionBridgeRule,
         SessionProjectRelation,
         UmoAlias,
+        UmoSender,
         WebChatThread,
     )
 
@@ -863,6 +864,18 @@ class UmoAliasStore(Protocol):
     async def get_umo_aliases(
         self, umos: list[str] | None = None
     ) -> list[UmoAlias]: ...
+
+    async def upsert_umo_sender(
+        self, umo: str, sender_id: str, sender_name: str
+    ) -> None: ...
+
+    async def get_umo_senders(
+        self,
+        search: str = "",
+        limit: int = 50,
+        sender_ids: list[str] | None = None,
+        offset: int = 0,
+    ) -> list[tuple[UmoSender, UmoAlias | None]]: ...
 
 
 @runtime_checkable

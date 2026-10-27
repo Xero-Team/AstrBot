@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from astrbot.core.auth.models import Resource
 from astrbot.dashboard.responses import ApiError, ok
-from astrbot.dashboard.schemas import BotActionRequest, BotConfigRequest, EnabledPatch
+from astrbot.dashboard.schemas import (
+    BotActionRequest,
+    BotCleanupTarget,
+    BotConfigRequest,
+    EnabledPatch,
+)
 from astrbot.dashboard.services.config_service import BotConfigService
 from astrbot.dashboard.services.platform_service import (
     PlatformService,
@@ -157,8 +162,9 @@ async def update_bot(
 @router.delete("/bots/{bot_id:path}")
 async def delete_bot(
     bot_id: str,
+    cleanup: list[BotCleanupTarget] | None = Query(default=None),
     _auth: AuthContext = Depends(require_bot_scope),
     service: BotConfigService = Depends(get_service),
 ):
-    await service.delete_bot(bot_id)
+    await service.delete_bot(bot_id, cleanup=cleanup)
     return ok(message="删除平台配置成功~")

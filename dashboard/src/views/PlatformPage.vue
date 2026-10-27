@@ -73,7 +73,7 @@
                   variant="text"
                   :aria-label="tm('workspace.delete')"
                   :title="tm('workspace.delete')"
-                  @click="deletePlatform(selectedPlatform)"
+                  @click="platformToDelete = selectedPlatform"
                 />
               </div>
 
@@ -124,7 +124,7 @@
                       variant="text"
                       :aria-label="tm('workspace.delete')"
                       :title="tm('workspace.delete')"
-                      @click="deletePlatform(platform)"
+                      @click="platformToDelete = platform"
                     />
                   </div>
                 </div>
@@ -185,6 +185,12 @@
       :request-step-up="requestStepUp"
       @show-toast="showToast"
       @refresh-config="handlePlatformCreated"
+    />
+
+    <DeletePlatformDialog
+      v-model:platform="platformToDelete"
+      :request-step-up="requestStepUp"
+      @deleted="handlePlatformDeleted"
     />
 
     <v-dialog
@@ -366,6 +372,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { botApi, fileApi, systemConfigApi } from '@/api/v1';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
+import DeletePlatformDialog from '@/components/platform/DeletePlatformDialog.vue';
 import PlatformEditor from '@/components/platform/PlatformEditor.vue';
 import PlatformQuickActionsDialog from '@/components/platform/PlatformQuickActionsDialog.vue';
 import DashboardStepUpDialog from '@/components/shared/DashboardStepUpDialog.vue';
@@ -377,16 +384,9 @@ import {
 import { useDashboardStepUp } from '@/composables/useDashboardStepUp';
 import { mergeDynamicTranslations, useModuleI18n } from '@/i18n/composables';
 import { copyToClipboard } from '@/utils/clipboard';
-import { resolveErrorMessage } from '@/utils/errorUtils';
-import { runBotMutationWithStepUp } from '@/utils/stepUp';
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from '@/utils/confirmDialog';
 import { getPlatformIcon } from '@/utils/platformUtils';
 
 const { tm } = useModuleI18n('features/platform');
-const confirmDialog = useConfirmDialog();
 const {
   dialogOpen: stepUpDialogOpen,
   loading: stepUpLoading,
@@ -464,6 +464,7 @@ const metadata = ref<PlatformMetadataState>({});
 const loadingPlatforms = ref(true);
 const selectedPlatformId = ref<string | null>(null);
 const showAddPlatformDialog = ref(false);
+const platformToDelete = ref<PlatformItem | null>(null);
 const platformStats = ref<Record<string, PlatformStat>>({});
 const showWebhookDialog = ref(false);
 const currentWebhookUuid = ref('');
@@ -616,28 +617,12 @@ function openQuickActionDialog(platform: PlatformItem): void {
   showQuickActionDialog.value = true;
 }
 
-async function deletePlatform(platform: PlatformItem): Promise<void> {
-  const message = `${tm('messages.deleteConfirm')} ${platform.id}?`;
-  if (!(await askForConfirmationDialog(message, confirmDialog))) return;
-
-  try {
-    const response = await runBotMutationWithStepUp(
-      (stepUp) =>
-        stepUp
-          ? botApi.delete(platform.id, stepUp)
-          : botApi.delete(platform.id),
-      platform.id,
-      requestStepUp,
-    );
-    if (!response) return;
-    if (selectedPlatformId.value === platform.id) {
-      selectedPlatformId.value = null;
-    }
-    await getConfig();
-    showSuccess(response.data.message || tm('messages.deleteSuccess'));
-  } catch (error) {
-    showError(resolveErrorMessage(error, tm('messages.platformUpdateFailed')));
+async function handlePlatformDeleted(platformId: string): Promise<void> {
+  if (selectedPlatformId.value === platformId) {
+    selectedPlatformId.value = null;
   }
+  await getConfig();
+  showSuccess(tm('messages.deleteSuccess'));
 }
 
 function handlePlatformCreated(platformId?: string) {

@@ -1175,3 +1175,69 @@ async def test_v1_conversation_patch_rejects_body_cid(
 
     assert response.status_code == 422
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_v1_session_senders_requires_authentication(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get("/api/v1/sessions/senders")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_v1_session_senders_validates_paging(asgi_client: httpx.AsyncClient):
+    headers = _jwt_headers()
+
+    assert (
+        await asgi_client.get(
+            "/api/v1/sessions/senders", params={"limit": 0}, headers=headers
+        )
+    ).status_code == 422
+    assert (
+        await asgi_client.get(
+            "/api/v1/sessions/senders", params={"page": 0}, headers=headers
+        )
+    ).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_v1_session_senders_trims_search_and_forwards_ids(
+    asgi_client: httpx.AsyncClient, fake_db
+):
+    fake_db.sender_results = [
+        (
+            SimpleNamespace(
+                umo="qq:GroupMessage:1", sender_id="1", sender_name="Alice"
+            ),
+            None,
+        ),
+        (
+            SimpleNamespace(umo="qq:GroupMessage:1", sender_id="2", sender_name="Bob"),
+            None,
+        ),
+    ]
+
+    response = await asgi_client.get(
+        "/api/v1/sessions/senders",
+        params=[
+            ("search", " Alice "),
+            ("limit", "1"),
+            ("sender_ids", "1"),
+            ("sender_ids", "2"),
+        ],
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["page"] == 1
+    assert data["has_more"] is True
+    assert [sender["sender_id"] for sender in data["senders"]] == ["1"]
+    assert fake_db.last_sender_query == {
+        "search": "Alice",
+        "limit": 2,
+        "sender_ids": ["1", "2"],
+        "offset": 0,
+    }

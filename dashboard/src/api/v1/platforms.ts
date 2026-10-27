@@ -1,5 +1,6 @@
 import { botConfig, generatedQuery, openApiV1, typed } from './shared';
 import type {
+  BotCleanupTarget,
   BotActionRequest,
   BotRegistrationRequest,
   EnabledPatch,
@@ -66,10 +67,11 @@ export const botApi = {
       }),
     );
   },
-  delete(botId: string, stepUp?: string) {
+  delete(botId: string, cleanup?: BotCleanupTarget[], stepUp?: string) {
     return typed<OpenConfig>(
       openApiV1.deleteBot({
         path: { bot_id: botId },
+        query: cleanup?.length ? { cleanup } : undefined,
         headers: stepUp ? { 'X-AstrBot-Step-Up': stepUp } : undefined,
       }),
     );

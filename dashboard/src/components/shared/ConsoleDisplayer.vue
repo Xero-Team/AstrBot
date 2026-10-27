@@ -137,12 +137,15 @@
             item-title="title"
             item-value="value"
             :disabled="selectedSource === 'core' || pluginOptions.length === 0"
-            :placeholder="tm('filters.allPlugins')"
+            :placeholder="tm('filters.pluginsInLogs')"
           >
             <template #item="{ props: itemProps, item }">
               <v-list-item v-bind="itemProps" :subtitle="item.subtitle" />
             </template>
           </v-select>
+          <div class="console-filter-hint">
+            {{ tm('filters.pluginsInLogsHint') }}
+          </div>
         </div>
 
         <div class="console-filter-block console-filter-block--last">
@@ -232,6 +235,7 @@ const lastEventId = ref<string | null>(null);
 const searchInput = ref('');
 const searchKeyword = ref('');
 const searchTimer = ref<ReturnType<typeof window.setTimeout> | null>(null);
+let unmounted = false;
 
 const hasActiveFilters = computed(
   () =>
@@ -583,6 +587,9 @@ async function fetchPluginDisplayNames(): Promise<void> {
 }
 
 function connectSSE(): void {
+  if (unmounted) {
+    return;
+  }
   closeEventSource();
 
   console.log(`正在连接日志流... (尝试次数: ${retryAttempts.value})`);
@@ -646,6 +653,10 @@ function connectSSE(): void {
 
       if (!lastEventId.value) {
         await fetchLogHistory();
+      }
+
+      if (unmounted) {
+        return;
       }
 
       connectSSE();
@@ -713,14 +724,22 @@ watch(searchInput, (value) => {
 
 onMounted(async () => {
   await fetchLogHistory();
+  if (unmounted) {
+    return;
+  }
   if (props.workspaceMode) {
     await fetchPluginDisplayNames();
+    if (unmounted) {
+      return;
+    }
   }
   connectSSE();
   document.addEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 onBeforeUnmount(() => {
+  // Pending initialization and reconnect requests may finish after teardown.
+  unmounted = true;
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   closeEventSource();
   clearRetryTimer();
@@ -836,6 +855,13 @@ onBeforeUnmount(() => {
   font-size: var(--astrbot-meta-size);
   font-weight: 600;
   margin-bottom: 4px;
+}
+
+.console-filter-hint {
+  color: rgba(var(--v-theme-on-surface), 0.52);
+  font-size: var(--astrbot-meta-size);
+  line-height: 1.45;
+  margin-top: 6px;
 }
 
 .console-filter-option {

@@ -39,6 +39,7 @@ venv/
 /logs/
 /chroma/
 /.astrbot/
+/.astrbot-tmp
 /astrbot.lock
 /.make/
 /configs/session/

@@ -1,0 +1,203 @@
+"""Selective cleanup of data owned by one platform adapter instance."""
+
+import asyncio
+
+from sqlalchemy import and_, func, or_
+from sqlmodel import col, delete, select
+
+from astrbot.core.core_runtime import CoreRuntime
+from astrbot.core.db.po import (
+    ConversationV2,
+    PlatformMessageHistory,
+    Preference,
+    ProviderStat,
+    UmoAlias,
+    UmoSender,
+)
+from astrbot.core.utils.trace_store import get_trace_store
+from astrbot.dashboard.schemas import BotCleanupTarget
+from astrbot.dashboard.services.session_management_service import (
+    AVAILABLE_SESSION_RULE_KEYS,
+)
+
+
+async def delete_bot_data(
+    core: CoreRuntime, bot_id: str, targets: set[BotCleanupTarget]
+) -> None:
+    """Remove selected data without deleting shared resources or other adapters.
+
+    Preference mutations go through their writer to keep the cache coherent.
+    History tables are deleted in one transaction, while traces use their own
+    writer queue. The caller stops incoming and active messages before cleanup.
+
+    Args:
+        core: Running core and its data managers.
+        bot_id: Exact adapter instance ID, matched case-sensitively.
+        targets: Explicitly selected cleanup categories.
+
+    Raises:
+        Exception: A storage or scheduler operation fails; the caller retains
+            the adapter configuration so cleanup can be retried.
+    """
+    prefix = f"{bot_id}:"
+    # Session rules are also mirrored under canonical ``session:`` and
+    # sender-scoped ``im:`` keys, which do not carry the raw UMO prefix.
+    session_prefix = f"session:{bot_id}:"
+    sender_prefix = f"im:{bot_id}:"
+    db = core.services.db
+    prefs = core.services.preferences
+    await prefs.flush()
+
+    if "cron_jobs" in targets:
+        for job in await db.list_cron_jobs():
+            payload = job.payload if isinstance(job.payload, dict) else {}
+            session = payload.get("session")
+            if isinstance(session, str) and session.partition(":")[0] == bot_id:
+                if core.cron_manager:
+                    await core.cron_manager.delete_job(job.job_id)
+                else:
+                    await db.delete_cron_job(job.job_id)
+
+    if targets & {"custom_rules", "preferences", "conversations"}:
+        async with db.get_db() as session:
+            preferences = (
+                (
+                    await session.execute(
+                        select(Preference).where(
+                            or_(
+                                and_(
+                                    col(Preference.scope) == "umo",
+                                    or_(
+                                        func.substr(
+                                            col(Preference.scope_id), 1, len(prefix)
+                                        )
+                                        == prefix,
+                                        func.substr(
+                                            col(Preference.scope_id),
+                                            1,
+                                            len(session_prefix),
+                                        )
+                                        == session_prefix,
+                                    ),
+                                ),
+                                and_(
+                                    col(Preference.scope) == "sender",
+                                    func.substr(
+                                        col(Preference.scope_id),
+                                        1,
+                                        len(sender_prefix),
+                                    )
+                                    == sender_prefix,
+                                ),
+                            )
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        for preference in preferences:
+            is_rule = preference.key in AVAILABLE_SESSION_RULE_KEYS
+            is_conversation_pointer = preference.key == "sel_conv_id" or (
+                preference.key.startswith("sel_conv_id:")
+            )
+            if (
+                (is_rule and "custom_rules" in targets)
+                or (not is_rule and "preferences" in targets)
+                or (is_conversation_pointer and "conversations" in targets)
+            ):
+                await prefs.remove_async(
+                    preference.scope, preference.scope_id, preference.key
+                )
+
+    if "preferences" in targets:
+        groups = await prefs.global_get("session_groups", {})
+        if isinstance(groups, dict):
+            changed = False
+            for group in groups.values():
+                if not isinstance(group, dict):
+                    continue
+                umos = group.get("umos")
+                if not isinstance(umos, list):
+                    continue
+                retained = [
+                    umo
+                    for umo in umos
+                    if not isinstance(umo, str) or umo.partition(":")[0] != bot_id
+                ]
+                if retained != umos:
+                    group["umos"] = retained
+                    changed = True
+            if changed:
+                await prefs.global_put("session_groups", groups)
+
+        # Built-in adapters also keep delivery mappings outside the UMO scope.
+        async with db.get_db() as session:
+            mappings = (
+                (
+                    await session.execute(
+                        select(Preference).where(
+                            func.substr(Preference.scope_id, 1, len(prefix)) == prefix,
+                            col(Preference.scope).in_(["global", "lark"]),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        for preference in mappings:
+            if preference.scope == "lark" or preference.key == "dingtalk_staffid":
+                await prefs.remove_async(
+                    preference.scope, preference.scope_id, preference.key
+                )
+
+    if targets & {"preferences", "conversations"}:
+        manager = core.conversation_manager
+        if manager is not None:
+            for umo in list(manager.session_conversations):
+                if umo.partition(":")[0] == bot_id:
+                    manager.session_conversations.pop(umo, None)
+
+    if "routing" in targets:
+        router = core.umop_config_router
+        if router is not None:
+            await router.update_routing_data(
+                {
+                    pattern: config_id
+                    for pattern, config_id in router.umop_to_conf_id.items()
+                    if pattern.partition(":")[0] != bot_id
+                }
+            )
+
+    async with db.get_db() as session:
+        async with session.begin():
+            if "conversations" in targets:
+                await session.execute(
+                    delete(ConversationV2).where(
+                        col(ConversationV2.platform_id) == bot_id
+                    )
+                )
+            if "message_history" in targets:
+                await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.platform_id) == bot_id
+                    )
+                )
+                for model in (UmoAlias, UmoSender):
+                    await session.execute(
+                        delete(model).where(
+                            func.substr(model.umo, 1, len(prefix)) == prefix
+                        )
+                    )
+            if "stats" in targets:
+                # PlatformStat aggregates adapter types, so it is shared by bots.
+                await session.execute(
+                    delete(ProviderStat).where(
+                        func.substr(ProviderStat.umo, 1, len(prefix)) == prefix
+                    )
+                )
+
+    if "traces" in targets:
+        await asyncio.to_thread(
+            get_trace_store(core.astrbot_config).clear_history, platform_id=bot_id
+        )

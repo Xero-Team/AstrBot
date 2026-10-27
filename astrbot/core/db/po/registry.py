@@ -33,7 +33,7 @@ from astrbot.core.db.po.session_bridge import (
     SessionBridgeDelivery,
     SessionBridgeRule,
 )
-from astrbot.core.db.po.sessions import PlatformSession, UmoAlias
+from astrbot.core.db.po.sessions import PlatformSession, UmoAlias, UmoSender
 from astrbot.core.db.po.shares import ConversationShare
 from astrbot.core.db.po.statistics import PlatformStat, ProviderStat
 from astrbot.core.db.po.webchat import WebChatThread
@@ -74,6 +74,7 @@ TABLE_MODELS: tuple[type, ...] = (
     SessionBridgeRule,
     SessionProjectRelation,
     UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 

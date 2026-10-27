@@ -82,11 +82,11 @@ AnySearch 除通用网页搜索外，还可通过服务商支持的领域标签�
 
 ## SerpApi
 
-前往 [SerpApi 控制台](https://serpapi.com/manage-api-key) 获取 API Key，然后填写在相应的配置项。SerpApi 提供 Google 网页搜索，以及 Google Images Light、Google Finance 和 Google Scholar 专用工具。只要配置了 Key 并启用网页搜索，这些专用工具就会可用，无需加入网页搜索来源列表。
+API Key、配置、`websearch_route` 条目以及 Google 网页、图片、财经和学术搜索工具请参阅[网页搜索 → SerpApi](./websearch/serpapi.md)。只要配置了 Key 并启用网页搜索，这些专用工具就会可用，无需加入网页搜索来源列表。
 
 ## DeepSeek
 
-前往 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) 获取 API Key，然后填写在相应的配置项。DeepSeek 搜索与对话模型独立配置：即使对话模型已使用 DeepSeek，也需要单独填写搜索 Key。搜索和正文提取接口各按账号限制 5 QPS，配置多个同账号 Key 不会增加限额。
+API Key、配置、`websearch_route` 条目、通过 `web_fetch` 抽取正文、搜索运算符和限流说明请参阅[网页搜索 → DeepSeek Search API](./websearch/deepseek.md)。DeepSeek 搜索与对话模型独立配置：即使对话模型已使用 DeepSeek，也需要单独填写搜索 Key。
 
 ## 正文抽取
 

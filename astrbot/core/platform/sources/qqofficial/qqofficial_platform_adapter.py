@@ -42,6 +42,7 @@ from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
 from .provisioning import provision_qqofficial_registration
+from .qqofficial_group_info import get_qq_group
 from .qqofficial_message_event import QQOfficialMessageEvent
 
 logging.getLogger("botpy").setLevel(logging.ERROR)
@@ -235,6 +236,7 @@ class botClient(Client):
             message,
             MessageType.GROUP_MESSAGE,
             force_group_mention=True,
+            bot=self,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
@@ -247,6 +249,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
+            bot=self,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
@@ -851,7 +854,20 @@ class QQOfficialPlatformAdapter(Platform):
         | botpy.message.C2CMessage,
         message_type: MessageType,
         force_group_mention: bool = False,
+        *,
+        bot: Client | None = None,
     ) -> AstrBotMessage:
+        """Parse a QQ message and optionally enrich its group before event creation.
+
+        Args:
+            message: Incoming QQ message with preserved raw payload fields.
+            message_type: AstrBot message type for this event.
+            force_group_mention: Treat a legacy group-at event as mentioning the bot.
+            bot: Authenticated client used for cached QQ group metadata lookups.
+
+        Returns:
+            Parsed message with available sender, group and message components.
+        """
         abm = AstrBotMessage()
         abm.type = message_type
         abm.timestamp = int(time.time())
@@ -924,6 +940,8 @@ class QQOfficialPlatformAdapter(Platform):
                     group_id=cast(str, message.group_openid),
                     group_name=str(group_name) if group_name else None,
                 )
+                if bot is not None:
+                    await get_qq_group(bot, abm.group)
                 bot_mentions = [
                     mention
                     for mention in (getattr(message, "mentions", None) or [])

@@ -183,7 +183,15 @@ export default defineConfig({
               { text: 'SubAgent 编排', link: '/subagent' },
               { text: '主动型 Agent 能力', link: '/proactive-agent' },
               { text: 'MCP', link: '/mcp' },
-              { text: '网页搜索', link: '/websearch' },
+              {
+                text: '网页搜索',
+                link: '/websearch',
+                collapsed: true,
+                items: [
+                  { text: 'SerpApi', link: '/websearch/serpapi' },
+                  { text: 'DeepSeek Search API', link: '/websearch/deepseek' },
+                ],
+              },
               { text: '知识库', link: '/knowledge-base' },
               { text: '自定义规则', link: '/custom-rules' },
               { text: 'Agent 执行器', link: '/agent-runner' },
@@ -445,7 +453,15 @@ export default defineConfig({
               { text: 'SubAgent Orchestration', link: '/subagent' },
               { text: 'Proactive Tasks', link: '/proactive-agent' },
               { text: 'MCP', link: '/mcp' },
-              { text: 'Web Search', link: '/websearch' },
+              {
+                text: 'Web Search',
+                link: '/websearch',
+                collapsed: true,
+                items: [
+                  { text: 'SerpApi', link: '/websearch/serpapi' },
+                  { text: 'DeepSeek Search API', link: '/websearch/deepseek' },
+                ],
+              },
               { text: 'Knowledge Base', link: '/knowledge-base' },
               { text: 'Custom Rules', link: '/custom-rules' },
               { text: 'Agent Runner', link: '/agent-runner' },

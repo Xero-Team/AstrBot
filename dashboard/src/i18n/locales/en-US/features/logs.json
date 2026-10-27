@@ -33,7 +33,8 @@
     "core": "System",
     "plugins": "Plugins",
     "plugin": "Plugin",
-    "allPlugins": "All plugins",
+    "pluginsInLogs": "Plugins in current logs",
+    "pluginsInLogsHint": "This list comes from the current logs, not the installed plugins",
     "platform": "Bot platform",
     "allPlatforms": "All platforms",
     "unscopedPlatform": "System / Unscoped"

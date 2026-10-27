@@ -40,6 +40,7 @@ from astrbot.core.db.po import (
     DashboardTrustedDevice,
     ProviderStat,
     UmoAlias,
+    UmoSender,
 )
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.dashboard.services.backup_service import (
@@ -1112,6 +1113,14 @@ class TestBackupIntegration:
                 },
             ),
             (
+                UmoSender,
+                {
+                    "umo": "qq:GroupMessage:123",
+                    "sender_id": "456",
+                    "sender_name": "Alice",
+                },
+            ),
+            (
                 ProviderStat,
                 {
                     "umo": "qq:GroupMessage:123",
@@ -1153,7 +1162,7 @@ class TestBackupIntegration:
                 },
             ),
         ],
-        ids=["umo-alias", "provider-stats", "api-key", "revoked-api-key"],
+        ids=["umo-alias", "umo-sender", "provider-stats", "api-key", "revoked-api-key"],
     )
     async def test_persistent_models_roundtrip(
         self, tmp_path, monkeypatch, model, data

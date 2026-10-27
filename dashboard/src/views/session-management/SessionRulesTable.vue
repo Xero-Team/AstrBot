@@ -1,6 +1,7 @@
 <template>
   <v-data-table-server
     v-model:items-per-page="tableItemsPerPage"
+    :items-per-page-options="itemsPerPageOptions"
     v-model:page="tablePage"
     v-model="tableSelectedItems"
     :headers="headers"
@@ -176,6 +177,7 @@ const props = defineProps<{
   selectedItems: SessionRuleItem[];
   itemValue: string;
   isSenderTarget: boolean;
+  itemsPerPageOptions?: number[];
 }>();
 
 const emit = defineEmits<{

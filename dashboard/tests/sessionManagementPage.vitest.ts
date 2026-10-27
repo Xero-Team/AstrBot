@@ -115,6 +115,21 @@ describe('SessionManagementPage', () => {
     api.upsertRule.mockResolvedValue(response({}));
   });
 
+  it('limits custom-rule page sizes to supported options', async () => {
+    const wrapper = mountWithVuetify(SessionManagementPage, {
+      global: {
+        stubs: { VDataTableServer: dataTableStub },
+      },
+    });
+    await flushPromises();
+
+    expect(
+      wrapper.find('.session-table-stub').attributes('items-per-page-options'),
+    ).toContain('10,25,50,100');
+
+    wrapper.unmount();
+  });
+
   it('does not expose a sensitive transport failure while loading session rules', async () => {
     api.listRules.mockRejectedValue(
       new Error('Bearer session-secret at http://internal.example/sessions'),

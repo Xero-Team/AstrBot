@@ -117,7 +117,7 @@ Mixin 通过带类型的 `store_session(self)` 助手获取会话，不直接持
 | `CommandStore`         | `command_configs`、`command_conflicts`                                                                                                                                           | `stores/commands.py`              |
 | `CronStore`            | `cron_jobs`                                                                                                                                                                      | `stores/cron.py`                  |
 | `PlatformSessionStore` | `platform_sessions`                                                                                                                                                              | `stores/sessions.py`              |
-| `UmoAliasStore`        | `umo_aliases`                                                                                                                                                                    | `stores/aliases.py`               |
+| `UmoAliasStore`        | `umo_aliases`, `umo_senders`                                                                                                                                                     | `stores/aliases.py`               |
 | `ChatProjectStore`     | `chatui_projects`、`session_project_relations`                                                                                                                                   | `stores/projects.py`              |
 | （无 SQLite 方法）     | `dashboard_accounts`、`auth_role_bindings`、`auth_platform_membership_facts`、`auth_step_up_credentials`、`auth_policy_overrides`、`auth_audit_log`、`dashboard_trusted_devices` | `po/auth.py` 仅建表；授权服务操作 |
 

@@ -76,7 +76,30 @@ Schema 文件必须是**严格 JSON**，不能包含注释、尾随逗号或 Pyt
 
 - `select_provider`、`select_provider_tts`、`select_provider_stt`：返回 Provider ID 字符串；
 - `select_prompt`：返回 Prompt ID 字符串；
-- `select_knowledgebase`：返回知识库 ID 列表，对应字段应为 `list`。
+- `select_knowledgebase`：返回知识库 ID 列表，对应字段应为 `list`；
+- `sender_id`：打开可搜索的用户选择器并返回用户 ID，使用 `type: list`、`default: []`；
+- `umo`：打开可搜索的会话来源选择器，单个 UMO 使用 `type: string`，多个使用 `type: list`。
+
+例如：
+
+```json
+{
+  "users": {
+    "description": "选中的用户",
+    "type": "list",
+    "default": [],
+    "_special": "sender_id"
+  },
+  "sources": {
+    "description": "会话来源",
+    "type": "list",
+    "default": [],
+    "_special": "umo"
+  }
+}
+```
+
+只有唤醒机器人时记录过的用户可被搜索，历史消息不会回填。会话来源按最近一次对话、别名或发送者更新时间排序。两个选择器都支持 `readonly`，并允许手动填写未记录的 ID。`umo` 选择器接受宿主组件传入的可选平台实例过滤，但插件配置暂不开放该过滤。
 
 Core 内部还使用其他 `_special` 值，但它们不是插件 SDK 契约，不要从核心配置复制。
 

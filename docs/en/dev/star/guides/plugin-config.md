@@ -81,7 +81,30 @@ Common stable `_special` values for plugins include:
 
 - `select_provider`, `select_provider_tts`, and `select_provider_stt`, returning a Provider ID string;
 - `select_prompt`, returning a Prompt ID string;
-- `select_knowledgebase`, returning a list of knowledge-base IDs, so the field should be `list`.
+- `select_knowledgebase`, returning a list of knowledge-base IDs, so the field should be `list`;
+- `sender_id`, opening a searchable user picker and returning user IDs; use `type: list` with `default: []`;
+- `umo`, opening a searchable session-source picker; use `type: string` for one UMO or `type: list` for several.
+
+For example:
+
+```json
+{
+  "users": {
+    "description": "Selected users",
+    "type": "list",
+    "default": [],
+    "_special": "sender_id"
+  },
+  "sources": {
+    "description": "Session sources",
+    "type": "list",
+    "default": [],
+    "_special": "umo"
+  }
+}
+```
+
+Only users recorded when a message wakes the bot are searchable; historical messages are not backfilled. Session sources are ordered by the latest conversation, alias, or sender update. Both pickers support `readonly` and allow entering an unrecorded ID manually. The `umo` picker accepts an optional platform-instance filter from its host component, but plugin schemas do not expose that filter.
 
 Core configuration uses additional `_special` values that are not a plugin SDK contract. Do not copy them from core metadata.
 

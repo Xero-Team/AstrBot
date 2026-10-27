@@ -6,26 +6,15 @@ import pytest
 from astrbot.core.utils import process_tree as pt
 
 
-def test_bind_is_a_noop_without_a_windows_job(monkeypatch) -> None:
+def test_bind_blocking_is_a_noop_without_a_windows_job(monkeypatch) -> None:
     monkeypatch.setattr(pt, "_KERNEL32", None)
-    started: list[object] = []
-
-    class FakeThread:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        def start(self) -> None:
-            started.append(self)
-
-    monkeypatch.setattr(pt.threading, "Thread", FakeThread)
-    pt.ProcessTree.create()._bind(1)
-    pt.ProcessTree()._bind(1)
-    assert started == []
+    assert pt.ProcessTree.create()._bind_blocking(1) is True
+    assert pt.ProcessTree()._bind_blocking(1) is True
 
 
-def test_bind_blocking_is_a_noop_without_kernel32(monkeypatch) -> None:
-    monkeypatch.setattr(pt, "_KERNEL32", None)
-    pt.ProcessTree()._bind_blocking(1)
+def test_assignment_handle_can_verify_job_membership() -> None:
+    """IsProcessInJob needs query access, which assignment alone does not grant."""
+    assert pt._PROCESS_ASSIGN_ACCESS & 0x00001000
 
 
 @pytest.mark.asyncio
@@ -38,7 +27,7 @@ async def test_assigner_waits_for_a_pid_across_a_slow_arm_to_spawn_gap(
     monkeypatch.setattr(
         pt.ThreadAssigner,
         "_assign",
-        lambda _self, job, pid: assigned.append((job, pid)),
+        lambda _self, job, pid, **_kwargs: assigned.append((job, pid)) or True,
     )
     assigner.start()
     try:
@@ -97,3 +86,107 @@ async def test_arm_closes_the_assigner_when_cancelled(monkeypatch) -> None:
 
     assert closed.is_set()
     assert tree._assigner is None
+
+
+@pytest.mark.asyncio
+async def test_spawn_fails_closed_when_binding_is_required(monkeypatch) -> None:
+    killed: list[bool] = []
+    waited: list[bool] = []
+
+    class FakeProcess:
+        pid = 123
+
+        def kill(self) -> None:
+            killed.append(True)
+
+        async def wait(self) -> int:
+            waited.append(True)
+            return 0
+
+    async def fake_exec(*_argv, **_kwargs):
+        return FakeProcess()
+
+    async def fake_assign(_pid: int, **_kwargs) -> bool:
+        return False
+
+    monkeypatch.setattr(pt.asyncio, "create_subprocess_exec", fake_exec)
+    tree = pt.ProcessTree()
+    tree._assigner = SimpleNamespace(assign=fake_assign)
+
+    with pytest.raises(pt.ProcessTreeBindingError):
+        await tree.spawn("cmd", require_binding=True)
+
+    assert killed == [True]
+    assert waited == [True]
+
+
+@pytest.mark.asyncio
+async def test_spawn_keeps_best_effort_binding_by_default(monkeypatch) -> None:
+    class FakeProcess:
+        pid = 123
+
+    async def fake_exec(*_argv, **_kwargs):
+        return FakeProcess()
+
+    async def fake_assign(_pid: int, **_kwargs) -> bool:
+        return False
+
+    monkeypatch.setattr(pt.asyncio, "create_subprocess_exec", fake_exec)
+    tree = pt.ProcessTree()
+    tree._assigner = SimpleNamespace(assign=fake_assign)
+
+    process = await tree.spawn("cmd")
+
+    assert isinstance(process, FakeProcess)
+
+
+@pytest.mark.asyncio
+async def test_spawn_requires_an_armed_job_before_starting(monkeypatch) -> None:
+    started: list[bool] = []
+
+    async def fake_exec(*_argv, **_kwargs):
+        started.append(True)
+
+    monkeypatch.setattr(pt.asyncio, "create_subprocess_exec", fake_exec)
+    tree = pt.ProcessTree(1)
+
+    with pytest.raises(pt.ProcessTreeBindingError):
+        await tree.spawn("cmd", require_binding=True)
+
+    assert started == []
+
+
+@pytest.mark.asyncio
+async def test_assigner_keeps_the_child_suspended_for_required_binding(
+    monkeypatch,
+) -> None:
+    resumed: list[int] = []
+    monkeypatch.setattr(pt, "_resume", lambda pid: resumed.append(pid))
+    assigner = pt.ThreadAssigner(SimpleNamespace(_job=1))
+    assigner.start()
+    assert await assigner.ready() is True
+    await assigner.close()
+
+    assert await assigner.assign(77, resume_on_failure=False) is False
+    assert resumed == []
+
+
+@pytest.mark.asyncio
+async def test_close_claims_the_job_once(monkeypatch) -> None:
+    """Concurrent cleanup paths must not close the same handle twice."""
+    closed: list[int] = []
+
+    class FakeKernel32:
+        @staticmethod
+        def CloseHandle(handle: int) -> None:
+            closed.append(handle)
+
+    monkeypatch.setattr(pt, "_KERNEL32", FakeKernel32)
+    tree = pt.ProcessTree(123)
+    assert tree.has_job is True
+
+    await tree.close()
+    await tree.close()
+
+    assert closed == [123]
+    assert tree.has_job is False

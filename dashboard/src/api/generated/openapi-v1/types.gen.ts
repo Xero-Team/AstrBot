@@ -4,6 +4,16 @@ export type ClientOptions = {
   baseURL: 'http://localhost:6185' | (string & {});
 };
 
+export type BotCleanupTarget =
+  | 'custom_rules'
+  | 'preferences'
+  | 'routing'
+  | 'cron_jobs'
+  | 'conversations'
+  | 'message_history'
+  | 'traces'
+  | 'stats';
+
 /**
  * The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
  */
@@ -1297,6 +1307,11 @@ export type PluginPageId = string;
 
 export type PluginActionId = string;
 
+/**
+ * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+ */
+export type BotCleanup = Array<BotCleanupTarget>;
+
 export type AttachmentId = string;
 
 export type AttachmentIdQuery = string;
@@ -2439,7 +2454,12 @@ export type DeleteBotData = {
   path: {
     bot_id: string;
   };
-  query?: never;
+  query?: {
+    /**
+     * Data categories to permanently remove for this adapter. Omit to retain all associated data. Shared resources and cross-platform routing rules are preserved.
+     */
+    cleanup?: Array<BotCleanupTarget>;
+  };
   url: '/api/v1/bots/{bot_id}';
 };
 
@@ -6313,7 +6333,12 @@ export type ListSessionsResponse =
 export type ListActiveUmosData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    /**
+     * Exact platform instance ID; omit to list all instances.
+     */
+    platform_id?: string;
+  };
   url: '/api/v1/sessions/active-umos';
 };
 
@@ -6326,6 +6351,31 @@ export type ListActiveUmosResponses = {
 
 export type ListActiveUmosResponse =
   ListActiveUmosResponses[keyof ListActiveUmosResponses];
+
+export type ListSessionSendersData = {
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    /**
+     * Resolve the latest record per exact sender ID instead of returning all source sessions.
+     */
+    sender_ids?: Array<string>;
+    search?: string;
+    limit?: number;
+  };
+  url: '/api/v1/sessions/senders';
+};
+
+export type ListSessionSendersResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type ListSessionSendersResponse =
+  ListSessionSendersResponses[keyof ListSessionSendersResponses];
 
 export type ListSessionRulesData = {
   body?: never;

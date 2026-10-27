@@ -7,7 +7,7 @@
     @update:model-value="emit('update:modelValue', $event)"
   >
     <v-card class="app-dialog provider-form-dialog__card" :title="title">
-      <v-card-text class="py-4 provider-form-dialog__content">
+      <v-card-text class="py-4 provider-form-dialog__content config-form">
         <AstrBotConfig
           v-if="providerEditData"
           :iterable="providerEditData"
@@ -96,3 +96,5 @@ const isSaving = computed(() =>
   flex-shrink: 0;
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

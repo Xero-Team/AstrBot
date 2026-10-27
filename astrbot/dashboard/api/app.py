@@ -336,6 +336,7 @@ def create_dashboard_asgi_app(
             runtime.astrbot_config,
             runtime.catalogs.platforms,
             runtime.platform_manager,
+            core_lifecycle=runtime,
         ),
         platforms=PlatformService(runtime.platform_manager, runtime.catalogs.platforms),
         providers=ProviderConfigService(

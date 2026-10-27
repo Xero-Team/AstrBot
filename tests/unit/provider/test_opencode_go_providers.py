@@ -411,6 +411,7 @@ def test_opencode_go_messages_defaults_and_user_agent(monkeypatch):
     assert provider.client.kwargs["base_url"] == "https://opencode.ai/zen/go"
     assert provider.client.kwargs["default_headers"] == {
         "User-Agent": OPENCODE_GO_USER_AGENT,
+        "X-Api-Key": "test-key",
     }
 
 
@@ -421,6 +422,7 @@ def test_opencode_go_messages_user_agent_preserved(monkeypatch):
     )
     assert provider.client.kwargs["default_headers"] == {
         "User-Agent": "custom-agent/1.0",
+        "X-Api-Key": "test-key",
     }
 
 

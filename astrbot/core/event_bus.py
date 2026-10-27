@@ -74,12 +74,16 @@ class EventBus:
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
         # 持有正在执行的 pipeline 任务的强引用, 防止 task 在 pending 状态被 GC 回收
-        self._pending_tasks: set[asyncio.Task] = set()
+        self._pending_tasks: dict[asyncio.Task, AstrMessageEvent] = {}
+        self.stopped_platforms: set[str] = set()
         self._semaphore = asyncio.Semaphore(max(1, max_concurrency))
 
     async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
+            if event.get_platform_id() in self.stopped_platforms:
+                event.trace.record("pipeline_end", status="cancelled")
+                continue
             get_observability().record_event(event.get_platform_name())
             try:
                 routing_umo = self._routing_umo(event)
@@ -96,16 +100,54 @@ class EventBus:
                     continue
                 self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
                 await self._semaphore.acquire()
+                if event.get_platform_id() in self.stopped_platforms:
+                    self._semaphore.release()
+                    event.trace.record("pipeline_end", status="cancelled")
+                    continue
                 task = asyncio.create_task(
                     self._execute_scheduler(scheduler, event),
                     name=f"pipeline:{conf_id}",
                 )
-                self._pending_tasks.add(task)
+                self._pending_tasks[task] = event
                 task.add_done_callback(self._on_task_done)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.error("事件总线分发异常", exc_info=True)
+
+    async def stop_platform(self, platform_id: str) -> None:
+        """Block queued messages and drain an adapter's active executions.
+
+        Args:
+            platform_id: Exact adapter instance being deleted.
+        """
+        self.stopped_platforms.add(platform_id)
+        retained = []
+        while not self.event_queue.empty():
+            event = self.event_queue.get_nowait()
+            if event.get_platform_id() == platform_id:
+                event.trace.record("pipeline_end", status="cancelled")
+            else:
+                retained.append(event)
+        for event in retained:
+            self.event_queue.put_nowait(event)
+        tasks = [
+            task
+            for task, event in self._pending_tasks.items()
+            if event.get_platform_id() == platform_id
+        ]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        registries = {
+            id(scheduler.ctx.execution_context.active_event_registry): (
+                scheduler.ctx.execution_context.active_event_registry
+            )
+            for scheduler in self.pipeline_scheduler_mapping.values()
+        }
+        for registry in registries.values():
+            await registry.stop_platform(platform_id)
 
     @staticmethod
     def _apply_session_isolation(
@@ -167,12 +209,14 @@ class EventBus:
             with span:
                 await scheduler.execute(event)
         finally:
-            self._semaphore.release()
             observability.record_event_processed()
 
     def _on_task_done(self, task: asyncio.Task) -> None:
-        """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""
-        self._pending_tasks.discard(task)
+        """pipeline 任务结束回调: 释放并发额度并暴露未捕获的异常"""
+        self._pending_tasks.pop(task, None)
+        # Release here, not in the coroutine: a task cancelled before its first
+        # step never runs its finally block.
+        self._semaphore.release()
         if task.cancelled():
             return
         exc = task.exception()

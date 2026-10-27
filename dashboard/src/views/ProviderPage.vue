@@ -170,7 +170,7 @@
                 <v-divider></v-divider>
 
                 <div class="provider-config-body">
-                  <section class="provider-section">
+                  <section class="provider-section config-form">
                     <div class="provider-section-head">
                       <div class="provider-section-title">
                         {{ tm('providers.settings') }}
@@ -803,3 +803,5 @@ async function testSingleProvider(provider: LegacyProvider) {
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

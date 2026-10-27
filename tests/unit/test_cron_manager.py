@@ -363,6 +363,44 @@ class TestDeleteJob:
         mock_db.delete_cron_job.assert_called_once_with("test-job-id")
         assert "test-job-id" not in cron_manager._basic_handlers
 
+    @pytest.mark.asyncio
+    async def test_run_started_during_delete_does_not_execute(
+        self, cron_manager, mock_db
+    ):
+        """A run that begins while deletion is in flight must not execute."""
+        job = CronJob(
+            job_id="deleting-job",
+            name="Deleting",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
+        )
+        mock_db.get_cron_job.return_value = job
+        run = AsyncMock()
+        cron_manager._run_active_agent_job = run
+        deleting = asyncio.Event()
+        release = asyncio.Event()
+        deleted: list[str] = []
+
+        async def slow_delete(job_id: str) -> None:
+            deleting.set()
+            await release.wait()
+            deleted.append(job_id)
+
+        mock_db.delete_cron_job.side_effect = slow_delete
+        delete_task = asyncio.create_task(cron_manager.delete_job(job.job_id))
+        await deleting.wait()
+
+        await asyncio.wait_for(cron_manager._run_job(job.job_id), 1)
+
+        run.assert_not_awaited()
+        assert cron_manager._running_tasks == {}
+        release.set()
+        await asyncio.wait_for(delete_task, 1)
+        assert deleted == [job.job_id]
+        assert cron_manager._deleting_jobs == {}
+
 
 class TestListJobs:
     """Tests for list_jobs method."""

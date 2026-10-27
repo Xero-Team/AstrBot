@@ -433,6 +433,8 @@ import type {
   ListSessionRulesData,
   ListSessionRulesResponses,
   ListSessionsData,
+  ListSessionSendersData,
+  ListSessionSendersResponses,
   ListSessionsResponses,
   ListSkillFilesData,
   ListSkillFilesResponses,
@@ -5540,6 +5542,25 @@ export const listActiveUmos = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/sessions/active-umos',
+    ...options,
+  });
+
+/**
+ * Search known senders with source session names
+ *
+ * Search recorded senders, deduplicate by platform instance and sender ID, then paginate in descending update order. Returns senders, page and has_more in the data object. Historical messages are not backfilled.
+ */
+export const listSessionSenders = <ThrowOnError extends boolean = false>(
+  options?: Options<ListSessionSendersData, ThrowOnError>,
+): RequestResult<ListSessionSendersResponses, unknown, ThrowOnError> =>
+  (options?.client ?? client).get<
+    ListSessionSendersResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/sessions/senders',
     ...options,
   });
 

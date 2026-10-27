@@ -1,7 +1,22 @@
 <template>
   <div class="w-100">
     <!-- Special handling for specific metadata types -->
-    <template v-if="itemMeta?._special === 'select_provider'">
+    <template v-if="itemMeta?._special === 'umo'">
+      <UmoSelector
+        :model-value="modelValue"
+        :multiple="itemMeta?.type === 'list'"
+        :readonly="Boolean(itemMeta?.readonly)"
+        @update:model-value="emitUpdate"
+      />
+    </template>
+    <template v-else-if="itemMeta?._special === 'sender_id'">
+      <SenderSelector
+        :model-value="modelValue"
+        :readonly="Boolean(itemMeta?.readonly)"
+        @update:model-value="emitUpdate"
+      />
+    </template>
+    <template v-else-if="itemMeta?._special === 'select_provider'">
       <ProviderSelector
         :model-value="modelValue as ProviderSelectorValue"
         @update:model-value="emitUpdate"
@@ -363,6 +378,8 @@ import ListConfigItem from './ListConfigItem.vue';
 import FileConfigItem from './FileConfigItem.vue';
 import ObjectEditor from './ObjectEditor.vue';
 import ProviderSelector from './ProviderSelector.vue';
+import SenderSelector from './SenderSelector.vue';
+import UmoSelector from './UmoSelector.vue';
 import PromptSelector from './PromptSelector.vue';
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue';
 import PluginSetSelector from './PluginSetSelector.vue';

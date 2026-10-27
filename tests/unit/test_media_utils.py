@@ -1445,3 +1445,38 @@ def test_describe_media_ref_omits_url_userinfo():
     assert "example.com" in described
     assert "user" not in described
     assert "pass" not in described
+
+
+@pytest.mark.parametrize("prefix", [b"", b"\x02", b"\x03"])
+def test_audio_magic_type_recognizes_tencent_silk_prefixes(tmp_path, prefix):
+    path = tmp_path / "voice.silk"
+    path.write_bytes(prefix + b"#!SILK_V3" + b"\x00" * 8)
+
+    assert media_utils._get_audio_magic_type(str(path)) == "silk"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", [b"\x02", b"\x03"])
+async def test_tencent_silk_to_wav_strips_the_marker(monkeypatch, tmp_path, prefix):
+    import sys
+    import types
+
+    from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+    captured: dict[str, bytes] = {}
+    module = types.ModuleType("pysilk")
+
+    def decode(input_io, output_io, _rate):
+        captured["data"] = input_io.read()
+        output_io.write(b"\x00\x00" * 4)
+
+    module.decode = decode
+    monkeypatch.setitem(sys.modules, "pysilk", module)
+    silk_path = tmp_path / "voice.silk"
+    silk_path.write_bytes(prefix + b"#!SILK_V3payload")
+    wav_path = tmp_path / "voice.wav"
+
+    await tencent_silk_to_wav(str(silk_path), str(wav_path))
+
+    assert captured["data"] == b"#!SILK_V3payload"
+    assert wav_path.exists()

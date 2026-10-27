@@ -5,28 +5,28 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e
-  synced_at_utc: 2026-10-22T17:07:10Z
+  commit: c5c08a22901d361d2a5d5d6bbe91a96c9ffe96eb
+  synced_at_utc: 2026-10-26T21:30:00Z
   sync_method: adapt
   source_pr: >-
-    10418, 10659, 10660, 10644, 10661, 10664, 10663, 10635, 10670, 10666
+    10694, 10719, 10691, 10729, 10731, 10732, 10744, 10747, 10748, 10753,
+    10755, 10757, 10761, 10784, 10787
   note: >-
-    Reviewed f2404c191716a64daaa422be7f3c567cace50d39..0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e
-    (10 commits, all adapted). #10418 added redacted diagnostic ZIP export
-    (log and trace files, in-memory entries, redaction, disk/concurrency guards,
-    Dashboard controls, OpenAPI client and bilingual docs); #10659 added time
-    range filtering for disk logs, cached logs and traces, renamed the in-memory
-    archive entries, recorded webui_version, and moved the entry to Settings ->
-    Maintenance -> Diagnostics; #10660 made the fixture newline explicit;
-    #10644 included scheduled tasks in backups; #10661 added provider stats,
-    UMO aliases, API keys and MCP configuration while excluding and clearing
-    trusted devices; #10664 replaced json_extract with portable SQLAlchemy JSON
-    expressions in the fork conversation store; #10663 restored the default chat
-    model option and cleared stale per-session selections; #10635 stopped sending
-    non-string enums to Gemini; #10670 moved pip to 26.2.2 (certifi>=2026.10.19
-    was already required by the fork CA-bundle fix); #10666 flushes log SSE
-    headers before waiting. Fork adaptations keep grouped log.*/trace.* config,
-    the features/logs catalog, the fork staged backup importer and SQLite stores,
-    tests/unit/dashboard route tests, en-US/zh-CN only, and in-app /help docs.
-    A shared follow-up declares the runtime application/zip response and clears
-    the pyright findings. No upstream version bump was included.
+    Reviewed and adapted c5c08a22901d361d2a5d5d6bbe91a96c9ffe96eb from
+    0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e (21 commits). Absorbed console
+    teardown guards, Gemini generation parameters, log-filter scope, the
+    SerpApi/DeepSeek guides, Windows managed-shell Job Object cleanup through the
+    fork's ProcessTree, NVIDIA rerank paths, Tencent SILK 0x03, sender/UMO
+    selectors with UmoSender storage and migration revision 4, trace live
+    updates, simplified compression settings, shared config-form styling,
+    custom-rule page sizes, selective bot cleanup, the .astrbot temp-dir
+    fallback, and Anthropic X-Api-Key headers. Kept the fork's split db/store
+    layout, dict EventBus with semaphore and per-scheduler registries, runtime
+    preferences service instead of the removed global sp, existing platform and
+    session pages, en-US/zh-CN only, in-app /help docs, and regenerated the
+    OpenAPI client/public JSON. Skipped upstream 4.29.2/4.29.3 version bumps and
+    the Dockerfile pip bootstrap, the self-update dependency-lock bypass, the
+    removed Shipyard/Boxlite runtime fix, the upstream-only QQ group listing, and
+    the contributors-image update. Fork changes are recorded in
+    changelogs/v4.30.0.md; no version bump was made because the fork tracks its
+    next release as 4.30.0.

@@ -16,7 +16,7 @@ Runtime data defaults to `data/` under the process working directory. With `ASTR
 
 Open **Settings → Maintenance** in the Dashboard, then **Backup & Restore** / **Backup Manager**. The exporter writes main-database tables as JSON and packs:
 
-- main-database tables (export of `data/astrbot.db`, not a copy of an open file), including conversations, prompts, scheduled tasks, UMO aliases, model usage statistics, OpenAPI access keys, and MCP server configuration
+- main-database tables (export of `data/astrbot.db`, not a copy of an open file), including conversations, prompts, scheduled tasks, UMO aliases, sender names, model usage statistics, OpenAPI access keys, and MCP server configuration
 - knowledge-base metadata, vector documents, and media files
 - `cmd_config.json`, `config/`, plugins and plugin data, Skills, WebChat, Dashboard appearance assets, attachments
 - `t2i_templates/` and `temp/`

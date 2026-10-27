@@ -1,11 +1,11 @@
 <template>
   <div class="d-flex align-center ga-3">
     <div class="d-flex flex-wrap ga-1 flex-grow-1 sender-chips">
-      <span v-if="!modelValue.length" class="text-medium-emphasis text-body-2">
+      <span v-if="!selectedIds.length" class="text-medium-emphasis text-body-2">
         {{ t('core.common.list.noItems') }}
       </span>
       <v-chip
-        v-for="id in modelValue.slice(0, 3)"
+        v-for="id in selectedIds.slice(0, 3)"
         :key="id"
         :title="id"
         size="small"
@@ -15,8 +15,8 @@
       >
         <span class="text-truncate">{{ known[id]?.sender_name || id }}</span>
       </v-chip>
-      <v-chip v-if="modelValue.length > 3" size="small" variant="tonal">
-        +{{ modelValue.length - 3 }}
+      <v-chip v-if="selectedIds.length > 3" size="small" variant="tonal">
+        +{{ selectedIds.length - 3 }}
       </v-chip>
     </div>
     <v-btn
@@ -271,6 +271,13 @@ const botTypes = ref({});
 const page = ref(1);
 const hasMore = ref(false);
 
+// Plugin configuration is untyped JSON, so a field may hold a scalar or null.
+const selectedIds = computed(() => {
+  const value = props.modelValue;
+  if (!Array.isArray(value)) return [];
+  return value.map((id) => String(id ?? '').trim()).filter((id) => Boolean(id));
+});
+
 watch(
   [search, refreshVersion],
   () => {
@@ -310,13 +317,13 @@ const canAddSearch = computed(
 
 // Resolve saved IDs in batches; manually entered or unknown IDs remain usable.
 watch(
-  () => props.modelValue,
+  selectedIds,
   async (ids, _previous, onCleanup) => {
     let active = true;
     onCleanup(() => {
       active = false;
     });
-    const uniqueIds = [...new Set(ids.map(String))];
+    const uniqueIds = [...new Set(ids)];
     for (let offset = 0; offset < uniqueIds.length; offset += 100) {
       try {
         const response = await sessionApi.senders({
@@ -375,11 +382,7 @@ watch(
 
 function openDialog() {
   if (props.readonly) return;
-  draft.value = [
-    ...new Set(
-      props.modelValue.map((id) => String(id ?? '').trim()).filter(Boolean),
-    ),
-  ];
+  draft.value = [...new Set(selectedIds.value)];
   search.value = '';
   page.value = 1;
   dialog.value = true;

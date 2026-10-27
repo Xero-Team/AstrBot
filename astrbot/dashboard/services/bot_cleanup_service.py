@@ -50,7 +50,8 @@ async def delete_bot_data(
 
     if "cron_jobs" in targets:
         for job in await db.list_cron_jobs():
-            session = (job.payload or {}).get("session")
+            payload = job.payload if isinstance(job.payload, dict) else {}
+            session = payload.get("session")
             if isinstance(session, str) and session.partition(":")[0] == bot_id:
                 if core.cron_manager:
                     await core.cron_manager.delete_job(job.job_id)

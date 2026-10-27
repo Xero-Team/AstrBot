@@ -350,3 +350,34 @@ async def test_cleanup_tolerates_malformed_session_groups(temp_db):
         assert saved["valid"]["umos"] == ["other:GroupMessage:2"]
     finally:
         await preferences.terminate()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_tolerates_a_malformed_cron_payload(temp_db):
+    """Skip a non-object cron payload instead of failing bot cleanup."""
+    preferences = SharedPreferences(temp_db)
+    core = SimpleNamespace(
+        cron_manager=None,
+        conversation_manager=None,
+        umop_config_router=None,
+        astrbot_config={},
+        services=SimpleNamespace(db=temp_db, preferences=preferences),
+    )
+    malformed = await temp_db.create_cron_job(
+        name="malformed",
+        job_type="basic",
+        cron_expression=None,
+        payload=["not", "an", "object"],
+    )
+    owned = await temp_db.create_cron_job(
+        name="owned",
+        job_type="basic",
+        cron_expression=None,
+        payload={"session": "bot:FriendMessage:1"},
+    )
+    try:
+        await delete_bot_data(core, "bot", {"cron_jobs"})
+        assert await temp_db.get_cron_job(malformed.job_id) is not None
+        assert await temp_db.get_cron_job(owned.job_id) is None
+    finally:
+        await preferences.terminate()

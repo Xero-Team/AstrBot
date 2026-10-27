@@ -123,7 +123,7 @@ async def delete_bot_data(
                 retained = [
                     umo
                     for umo in umos
-                    if isinstance(umo, str) and umo.partition(":")[0] != bot_id
+                    if not isinstance(umo, str) or umo.partition(":")[0] != bot_id
                 ]
                 if retained != umos:
                     group["umos"] = retained

@@ -169,3 +169,24 @@ async def test_assigner_keeps_the_child_suspended_for_required_binding(
 
     assert await assigner.assign(77, resume_on_failure=False) is False
     assert resumed == []
+
+
+@pytest.mark.asyncio
+async def test_close_claims_the_job_once(monkeypatch) -> None:
+    """Concurrent cleanup paths must not close the same handle twice."""
+    closed: list[int] = []
+
+    class FakeKernel32:
+        @staticmethod
+        def CloseHandle(handle: int) -> None:
+            closed.append(handle)
+
+    monkeypatch.setattr(pt, "_KERNEL32", FakeKernel32)
+    tree = pt.ProcessTree(123)
+    assert tree.has_job is True
+
+    await tree.close()
+    await tree.close()
+
+    assert closed == [123]
+    assert tree.has_job is False

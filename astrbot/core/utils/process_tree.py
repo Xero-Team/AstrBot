@@ -491,11 +491,17 @@ class ProcessTree:
         """
         assigner = self._assigner
         self._assigner = None
-        if assigner is not None:
-            await assigner.close()
-        if self._job is not None and _KERNEL32 is not None:
-            _KERNEL32.CloseHandle(self._job)
+        # Claim the job before awaiting the listener: cleanup paths can call
+        # close concurrently, and a second CloseHandle on a reused handle value
+        # would close an unrelated kernel object.
+        job = self._job
         self._job = None
+        try:
+            if assigner is not None:
+                await assigner.close()
+        finally:
+            if job is not None and _KERNEL32 is not None:
+                _KERNEL32.CloseHandle(job)
 
 
 class ThreadAssigner:

@@ -340,6 +340,7 @@ async def test_cleanup_tolerates_malformed_session_groups(temp_db):
         "broken": "not-a-group",
         "invalid": {"umos": "not-a-list"},
         "valid": {"umos": ["bot:GroupMessage:1", "other:GroupMessage:2"]},
+        "mixed": {"umos": ["bot:GroupMessage:1", 42, None]},
     }
     try:
         await preferences.global_put("session_groups", groups)
@@ -348,6 +349,8 @@ async def test_cleanup_tolerates_malformed_session_groups(temp_db):
         assert saved["broken"] == "not-a-group"
         assert saved["invalid"]["umos"] == "not-a-list"
         assert saved["valid"]["umos"] == ["other:GroupMessage:2"]
+        # Malformed entries belong to no adapter, so cleanup must keep them.
+        assert saved["mixed"]["umos"] == [42, None]
     finally:
         await preferences.terminate()
 

@@ -573,12 +573,19 @@ class LocalShellComponent(ShellComponent):
                             command, **process_kwargs
                         )
             except BaseException:
-                if process_tree is not None:
-                    await process_tree.close()
-                if output_file is not None:
-                    output_file.close()
-                if proxy is not None and lease is not None:
-                    proxy.drop_lease(lease)
+                try:
+                    if process_tree is not None:
+                        await process_tree.close()
+                except Exception as close_error:  # noqa: BLE001 - keep the spawn error
+                    logger.warning(
+                        "Failed to close the Windows shell process tree: %s",
+                        close_error,
+                    )
+                finally:
+                    if output_file is not None:
+                        output_file.close()
+                    if proxy is not None and lease is not None:
+                        proxy.drop_lease(lease)
                 raise
 
             assert output_file is not None

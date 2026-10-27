@@ -857,6 +857,60 @@ async def test_windows_shell_spawn_failure_releases_tree_and_output(
 
 
 @pytest.mark.asyncio
+async def test_windows_shell_spawn_failure_closes_output_when_tree_close_fails(
+    monkeypatch, tmp_path, caplog
+):
+    """A failing tree close must not skip output and lease cleanup."""
+    closed = []
+    outputs = []
+
+    class FakeTree:
+        has_job = True
+
+        @classmethod
+        def create(cls, **_kwargs):
+            return cls()
+
+        async def arm(self) -> None:
+            return None
+
+        async def spawn(self, *args, **kwargs):
+            raise OSError("spawn failed")
+
+        async def close(self) -> None:
+            closed.append(True)
+            raise RuntimeError("close failed")
+
+    original_output = local_booter.tempfile.TemporaryFile
+
+    def capture_output(*args, **kwargs):
+        handle = original_output(*args, **kwargs)
+        outputs.append(handle)
+        return handle
+
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+    monkeypatch.setattr(local_booter, "resolve_windows_shell", lambda: "pwsh")
+    monkeypatch.setattr(local_booter, "ProcessTree", FakeTree)
+    monkeypatch.setattr(local_booter.tempfile, "TemporaryFile", capture_output)
+    shell = LocalShellComponent()
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(OSError, match="spawn failed"):
+            await shell.exec_managed(
+                "Write-Output hi",
+                owner_id="spawn-close-failure",
+                cwd=str(tmp_path),
+                allowed_root=str(tmp_path),
+                yield_time_ms=0,
+            )
+
+    assert closed == [True]
+    assert outputs and outputs[0].closed
+    assert not shell._sessions
+    assert "Failed to close the Windows shell process tree" in caplog.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows job ownership.")
 async def test_windows_managed_shell_cleans_children_after_leader_exits(tmp_path):
     import psutil

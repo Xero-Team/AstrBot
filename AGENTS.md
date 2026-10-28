@@ -76,9 +76,11 @@ Use the globally installed `npm` and `pnpm` commands. Workflows may instead use 
 commit-pinned package-manager setup action and invoke its installed binary
 directly. A toolchain upgrade must update every matching declaration,
 workflow, image build, and lockfile in the same change. CI installs
-`shellcheck` from the distro plus pinned `shfmt`/`hadolint` downloads, while the
-image pins its own `SHFMT_VERSION`/`HADOLINT_VERSION`; keep those native-tool
-pins aligned.
+`shellcheck` from the distro plus pinned `shfmt`/`hadolint` downloads
+(`shfmt` 3.13.1, `hadolint` 2.14.0), while the image pins its own
+`SHFMT_VERSION` 3.14.1 / `HADOLINT_VERSION` 2.15.1. Those two native-tool pins
+are independent by design; check both when either is upgraded and do not
+describe them as already aligned.
 
 Start a fresh checkout with:
 
@@ -475,6 +477,10 @@ Treat these as design constraints, not optional hardening:
 - Dashboard authentication rate limiting is enabled by default and its
   per-client registry is bounded. Do not bypass the login/TOTP checks or
   reintroduce attacker-controlled, unbounded limiter state.
+- Authorization runs through the single fail-closed `authorize()` path in
+  `astrbot/core/auth/service.py`: an unknown action, missing context, or
+  evaluation error denies instead of allowing. Do not reintroduce
+  `event.is_admin()`/`admins_id` checks or a second, weaker decision path.
 - Download/update HTTP clients must verify certificates and hostnames. Do not
   restore `CERT_NONE`, `ssl=False`, `verify=False`, or an automatic insecure TLS
   retry after certificate failure.
@@ -686,10 +692,12 @@ repository root; never rewrite or delete recorded entries.
 
 Release preparation is a source-management workflow, not proof that versioned
 assets will be published. The nightly workflow may push `runtime` images for
-linux/amd64 to GHCR (tags `nightly`, `nightly-<date>` or
-`nightly-manual-<sha7>`, and `sha-<sha7>`) and open GitHub prereleases for those
-nightlies. It does not publish PyPI packages or a versioned release image
-channel. The documentation workflow only builds and uploads a CI artifact.
+linux/amd64 to GHCR. Its image tags are `nightly`, `nightly-<date>`, and
+`sha-<sha7>` (`<date>` is UTC `YYYYMMDD`). The matching GitHub prerelease is
+tagged separately with `release_tag`: `nightly-<date>` for a scheduled run and
+`nightly-manual-<sha7>` for a manual dispatch. It does not publish PyPI packages
+or a versioned release image channel. The documentation workflow only builds and
+uploads a CI artifact.
 
 `scripts/prepare_release.py` uses the newest reachable tag that looks like a
 version as its changelog lower bound; non-version tags such as `nightly-*` are

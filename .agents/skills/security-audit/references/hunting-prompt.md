@@ -55,11 +55,13 @@ conditions and impact independently. Do not investigate peer-owned units; return
 a different boundary under `uncovered`.
 
 USE THE NARROWEST LOCAL CHECK THAT SETTLES THE CLAIM. Target-controlled code may
-run only under the execution boundary in SKILL.md: existing tests or a minimal
-harness, a temporary ASTRBOT_ROOT, no dependency sync or install, no external
-network, scratch-only writes, and a timeout. Prefer an existing unit test, a
-function harness, a dummy-account service call, a small fixture, or a
-deterministic schedule. If any control is unavailable, do not execute: return
+run only inside the OS sandbox required by the execution boundary in SKILL.md:
+an empty allowlisted environment with a scratch-local HOME/caches/temp, existing
+tests or a minimal harness, a temporary ASTRBOT_ROOT, no dependency sync or
+install, no external network, scratch-only writes, and hard resource and
+wall-clock limits. Prefer an existing unit test, a function harness, a
+dummy-account service call, a small fixture, or a deterministic schedule. If the
+sandbox or any other control is unavailable, do not execute: return
 needs_validation with that exact blocker.
 
 Record the exact input, command, limits, and minimum result. Record only
@@ -187,7 +189,7 @@ current candidate fingerprints and states, and prior gaps. Require exactly:
       "subsystem": "...",
       "attack_class": "...",
       "starting_paths": ["repo/relative/path"],
-      "selected_blocks": ["FILE.md#section"],
+      "selected_attack_class_blocks": ["FILE.md#section"],
       "excluded_blocks": [{ "block": "FILE.md#section", "reason": "..." }],
       "reason": "source-backed coverage gap"
     }
@@ -198,8 +200,10 @@ current candidate fingerprints and states, and prior gaps. Require exactly:
 }
 ```
 
-The critic looks for unmapped entry points, unchecked parallel paths, missing
-lifecycle modes, selected classes without a unit, unjustified exclusions, units
-closed without paths or checks, and prior needs-validation or changed-source
-gaps that no unit addresses. It proposes coverage, not findings. `stop` is
-advisory; the parent's loop condition decides.
+`selected_attack_class_blocks` and `excluded_blocks[].block` are the same
+`FILE.md#section` tokens the ledger stores, and a block may not be both selected
+and excluded. The critic looks for unmapped entry points, unchecked parallel
+paths, missing lifecycle modes, selected classes without a unit, unjustified
+exclusions, units closed without paths or checks, and prior needs-validation or
+changed-source gaps that no unit addresses. It proposes coverage, not findings.
+`stop` is advisory; the parent's loop condition decides.

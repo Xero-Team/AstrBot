@@ -13,6 +13,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,7 @@ UNIT_STATUSES = (
     "out_of_scope",
 )
 UNOWNED_STATUSES = ("planned", "deferred", "not_applicable", "out_of_scope")
+ATTEMPT_STATUSES = ("blocked", "covered", "candidate")
 PRIOR_STATUSES = (
     "new",
     "none",
@@ -105,6 +107,8 @@ REJECTED_FIELDS = frozenset(
     }
 )
 
+REF_FIELDS = ("surface", "boundary", "subsystem", "attack_class")
+CANONICAL_REF_FIELDS = frozenset({*REF_FIELDS, "lifecycle"})
 UNIT_REQUIRED = (
     "coverage_id",
     "canonical_refs",
@@ -120,8 +124,13 @@ UNIT_REQUIRED = (
     "result_fingerprints",
     "unresolved",
 )
+ATTEMPT_REQUIRED = (*UNIT_REQUIRED, "wave", "reassignment_reason")
+LEGACY_UNIT_FIELDS = ("selected_companion_blocks", "ordinary_attack_class_block")
 CHECK_FIELDS = frozenset(
     {"agent_id", "reviewed_paths", "invariant", "method", "result", "artifact"}
+)
+SOURCE_REF_FIELDS = frozenset(
+    {"sha", "dirty", "modified_paths", "modified_paths_omitted"}
 )
 TRACE_FIELDS = frozenset({"kind", "file", "line", "scope", "description"})
 EVIDENCE_FIELDS = frozenset({"file", "line", "description"})
@@ -135,18 +144,31 @@ SEVERITY_FIELDS = frozenset({"likelihood", "impact", "overall_severity"})
 SEVERITY_SCORE_FIELDS = frozenset({"score", "reason"})
 CONFIDENCE_FIELDS = frozenset({"score", "reason"})
 PLAN_FIELDS = frozenset({"local", "deployment"})
+EXCLUDED_BLOCK_FIELDS = frozenset({"block", "reason"})
 
 FINGERPRINT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$")
 AGENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
-DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
+BLOCK_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+\.md#[A-Za-z0-9._-]+$")
+WINDOWS_RESERVED_NAME_RE = re.compile(
+    r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$",
+    re.IGNORECASE,
+)
+WINDOWS_RESERVED_COMPONENT_RE = re.compile(
+    r"^(?:con|prn|aux|nul|clock\$|conin\$|conout\$|com[1-9\u00b9\u00b2\u00b3]"
+    r"|lpt[1-9\u00b9\u00b2\u00b3])(?:\.|$)",
+    re.IGNORECASE,
+)
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u2028\u2029]")
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_UNITS = 10_000
 MAX_FINDINGS = 1_000
+MAX_LIST_ITEMS = 256
+MAX_ATTEMPTS = 64
+MAX_MODIFIED_PATHS = 256
 MAX_DEPTH = 64
 MAX_ERRORS = 100
 
@@ -167,17 +189,18 @@ def repo_root() -> Path:
     raise SecurityAuditError("could not locate the AstrBot checkout root")
 
 
-def run_git(root: Path, *arguments: str) -> str:
+def run_git(root: Path, *arguments: str, strip: bool = True) -> str:
     try:
-        return subprocess.run(
+        output = subprocess.run(
             ["git", "-C", str(root), *arguments],
             check=True,
             capture_output=True,
             text=True,
-        ).stdout.strip()
+        ).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
         detail = getattr(exc, "stderr", "") or "git command failed"
         raise SecurityAuditError(str(detail).strip()) from exc
+    return output.strip() if strip else output
 
 
 def runs_root(root: Path) -> Path:
@@ -190,29 +213,62 @@ def load_json(path: Path) -> Any:
     if path.stat().st_size > MAX_FILE_BYTES:
         raise SecurityAuditError(f"{path.name} exceeds {MAX_FILE_BYTES} bytes")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise SecurityAuditError(f"{path.name}: invalid JSON") from exc
+    if json_depth(value) > MAX_DEPTH:
+        raise SecurityAuditError(f"{path.name} exceeds {MAX_DEPTH} nesting levels")
+    return value
 
 
 def json_depth(value: Any) -> int:
-    if isinstance(value, dict):
-        return 1 + max((json_depth(item) for item in value.values()), default=0)
-    if isinstance(value, list):
-        return 1 + max((json_depth(item) for item in value), default=0)
-    return 0
+    """Return the nesting depth without recursing, so deep input cannot crash."""
+    deepest = 0
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, dict):
+            children: Any = item.values()
+        elif isinstance(item, list):
+            children = item
+        else:
+            continue
+        if depth > deepest:
+            deepest = depth
+        if deepest > MAX_DEPTH:
+            return deepest
+        stack.extend((child, depth + 1) for child in children)
+    return deepest
+
+
+def safe_run_name(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and RUN_ID_RE.fullmatch(value) is not None
+        and WINDOWS_RESERVED_NAME_RE.fullmatch(value) is None
+        and value.rstrip(". ") == value
+    )
 
 
 def resolve_run_dir(root: Path, explicit: str | None) -> Path:
+    base = runs_root(root).resolve()
     if explicit:
-        path = Path(explicit).expanduser()
-        return path if path.is_absolute() else root / path
-    base = runs_root(root)
+        candidate = Path(explicit).expanduser()
+        resolved = (
+            candidate if candidate.is_absolute() else base / candidate
+        ).resolve()
+        if not resolved.is_relative_to(base):
+            raise SecurityAuditError(
+                "--run-dir must resolve inside .tmp/security-audit"
+            )
+        if not resolved.is_dir():
+            raise SecurityAuditError(f"run directory does not exist: {resolved}")
+        return resolved
     pointer = base / "LATEST"
     if pointer.is_file():
-        candidate = base / pointer.read_text(encoding="utf-8").strip()
-        if candidate.is_dir():
-            return candidate
+        name = pointer.read_text(encoding="utf-8").strip()
+        if safe_run_name(name) and (base / name).is_dir():
+            return (base / name).resolve()
     candidates = sorted(
         (path for path in base.glob("run-*") if path.is_dir()),
         key=lambda path: path.stat().st_mtime,
@@ -221,7 +277,7 @@ def resolve_run_dir(root: Path, explicit: str | None) -> Path:
         raise SecurityAuditError(
             "no security-audit run found under .tmp/security-audit"
         )
-    return candidates[-1]
+    return candidates[-1].resolve()
 
 
 def next_run_id(base: Path) -> str:
@@ -242,6 +298,30 @@ def is_visible(value: str) -> bool:
     return (
         bool(value.strip()) and CONTROL_RE.search(value) is None and "\x00" not in value
     )
+
+
+def path_problem(value: Any) -> str | None:
+    """Explain why a value is not a safe repository-relative path, else None."""
+    if not isinstance(value, str):
+        return "must be a string"
+    if not value.strip():
+        return "must be a nonempty repository-relative path"
+    if value != value.strip():
+        return f"must not start or end with whitespace: {value!r}"
+    if "\\" in value or ":" in value:
+        return f"must be repository-relative, not a Windows path: {value!r}"
+    if value.startswith(("/", "~")):
+        return f"must be repository-relative: {value!r}"
+    if CONTROL_RE.search(value):
+        return f"must not contain control characters: {value!r}"
+    for segment in value.split("/"):
+        if segment in {"", ".", ".."}:
+            return f"has an unsafe path segment: {value!r}"
+        if segment.rstrip(". ") != segment:
+            return f"has a segment with a trailing dot or space: {value!r}"
+        if WINDOWS_RESERVED_COMPONENT_RE.match(segment):
+            return f"has a Windows reserved device name: {value!r}"
+    return None
 
 
 def check_string(
@@ -267,16 +347,15 @@ def check_int(value: Any, where: str, errors: list[str], *, minimum: int = 1) ->
     return True
 
 
+def check_list_bound(value: list[Any], where: str, errors: list[str]) -> None:
+    if len(value) > MAX_LIST_ITEMS:
+        add_error(errors, f"{where} exceeds {MAX_LIST_ITEMS} entries")
+
+
 def check_rel_path(value: Any, where: str, errors: list[str]) -> bool:
-    if not isinstance(value, str) or not value.strip():
-        add_error(errors, f"{where} must be a nonempty repository-relative path")
-        return False
-    if value.startswith("/") or DRIVE_RE.match(value) or "\\" in value:
-        add_error(errors, f"{where} must be repository-relative: {value!r}")
-        return False
-    parts = value.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        add_error(errors, f"{where} has an unsafe path segment: {value!r}")
+    problem = path_problem(value)
+    if problem is not None:
+        add_error(errors, f"{where} {problem}")
         return False
     return True
 
@@ -293,6 +372,7 @@ def check_paths(
         return None
     if nonempty and not value:
         add_error(errors, f"{where} must not be empty")
+    check_list_bound(value, where, errors)
     seen: set[str] = set()
     for index, item in enumerate(value):
         if not check_rel_path(item, f"{where}[{index}]", errors):
@@ -325,6 +405,9 @@ def check_agent_id(value: Any, where: str, errors: list[str]) -> bool:
     if not isinstance(value, str) or not AGENT_ID_RE.fullmatch(value):
         add_error(errors, f"{where} must be a lowercase canonical agent id")
         return False
+    if WINDOWS_RESERVED_NAME_RE.fullmatch(value):
+        add_error(errors, f"{where} must not be a Windows reserved device name")
+        return False
     return True
 
 
@@ -335,28 +418,61 @@ def check_fingerprint(value: Any, where: str, errors: list[str]) -> bool:
     return True
 
 
+def check_block_ref(value: Any, where: str, errors: list[str]) -> bool:
+    if not isinstance(value, str) or not BLOCK_REF_RE.fullmatch(value):
+        add_error(errors, f"{where} must name a reference block as FILE.md#section")
+        return False
+    return True
+
+
+def validate_source_ref(source_ref: Any, errors: list[str]) -> None:
+    if not check_exact_fields(source_ref, SOURCE_REF_FIELDS, "source_ref", errors):
+        return
+    if not isinstance(source_ref["sha"], str) or not SHA_RE.fullmatch(
+        source_ref["sha"]
+    ):
+        add_error(errors, "source_ref.sha must be a git object name")
+    dirty = source_ref["dirty"]
+    if not isinstance(dirty, bool):
+        add_error(errors, "source_ref.dirty must be a boolean")
+        dirty = None
+    paths = source_ref["modified_paths"]
+    recorded: list[str] | None = None
+    if not isinstance(paths, list):
+        add_error(errors, "source_ref.modified_paths must be a list")
+    else:
+        recorded = [item for item in paths if isinstance(item, str)]
+        if len(paths) > MAX_MODIFIED_PATHS:
+            add_error(
+                errors, f"source_ref.modified_paths exceeds {MAX_MODIFIED_PATHS} paths"
+            )
+        for index, item in enumerate(paths):
+            check_rel_path(item, f"source_ref.modified_paths[{index}]", errors)
+        if recorded != sorted(recorded):
+            add_error(errors, "source_ref.modified_paths must be sorted")
+        if len(recorded) != len(set(recorded)):
+            add_error(errors, "source_ref.modified_paths must not repeat a path")
+    omitted = source_ref["modified_paths_omitted"]
+    if not check_int(omitted, "source_ref.modified_paths_omitted", errors, minimum=0):
+        omitted = None
+    if recorded is not None and dirty is True and not recorded and not omitted:
+        add_error(errors, "a dirty source_ref must record its modified paths")
+    if dirty is False and (recorded or omitted):
+        add_error(errors, "a clean source_ref must not record modified paths")
+
+
 def validate_metadata(meta: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(meta, dict):
         return ["run-metadata.json must be an object"]
     if meta.get("schema_version") != SCHEMA_VERSION:
         add_error(errors, "run-metadata.json has unsupported schema_version")
-    if not isinstance(meta.get("run_id"), str) or not RUN_ID_RE.fullmatch(
-        meta["run_id"]
-    ):
+    run_id = meta.get("run_id")
+    if not isinstance(run_id, str) or not safe_run_name(run_id):
         add_error(errors, "run_id must match a safe run directory name")
     check_string(meta.get("repo"), "repo", errors)
     check_string(meta.get("target"), "target", errors)
-    source_ref = meta.get("source_ref")
-    if not isinstance(source_ref, dict):
-        add_error(errors, "source_ref must be an object")
-    else:
-        if not isinstance(source_ref.get("sha"), str) or not SHA_RE.fullmatch(
-            source_ref["sha"]
-        ):
-            add_error(errors, "source_ref.sha must be a git object name")
-        if not isinstance(source_ref.get("dirty"), bool):
-            add_error(errors, "source_ref.dirty must be a boolean")
+    validate_source_ref(meta.get("source_ref"), errors)
     if meta.get("profile") not in PROFILES:
         add_error(errors, f"profile must be one of {', '.join(PROFILES)}")
     check_paths(meta.get("scope_paths"), "scope_paths", errors, nonempty=False)
@@ -382,6 +498,68 @@ def validate_metadata(meta: Any) -> list[str]:
     if not isinstance(created, str) or not ISO_RE.fullmatch(created):
         add_error(errors, "created_at_utc must be a UTC ISO timestamp")
     return errors
+
+
+def check_artifact_exists(
+    artifacts: list[str], run_dir: Path | None, where: str, errors: list[str]
+) -> None:
+    if run_dir is None:
+        return
+    for artifact in artifacts:
+        if not (run_dir / artifact).is_file():
+            add_error(errors, f"{where} artifact does not exist: {artifact}")
+
+
+def collect_artifacts(payload: Any) -> list[str]:
+    artifacts: list[str] = []
+    if not isinstance(payload, dict):
+        return artifacts
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        return artifacts
+    for check in checks:
+        if isinstance(check, dict) and isinstance(check.get("artifact"), str):
+            artifacts.append(check["artifact"])
+    return artifacts
+
+
+def ref_signature(payload: Any) -> tuple[Any, ...] | None:
+    if not isinstance(payload, dict):
+        return None
+    refs = payload.get("canonical_refs")
+    if not isinstance(refs, dict):
+        return None
+    return tuple(refs.get(key) for key in (*REF_FIELDS, "lifecycle"))
+
+
+def validate_refs_and_labels(
+    payload: dict[str, Any], where: str, errors: list[str]
+) -> None:
+    """canonical_refs is the single source of truth; labels must copy it."""
+    refs = payload.get("canonical_refs")
+    if not isinstance(refs, dict):
+        add_error(errors, f"{where}.canonical_refs must be an object")
+        return
+    unexpected = sorted(set(refs) - CANONICAL_REF_FIELDS)
+    if unexpected:
+        add_error(
+            errors, f"{where}.canonical_refs has unexpected {', '.join(unexpected)}"
+        )
+    for field in REF_FIELDS:
+        if field not in refs:
+            add_error(errors, f"{where}.canonical_refs is missing {field}")
+    for field in ("lifecycle",):
+        if (field in refs) != (field in payload):
+            add_error(
+                errors,
+                f"{where}.{field} and canonical_refs.{field} must appear together",
+            )
+    for field in CANONICAL_REF_FIELDS & set(refs):
+        check_string(refs[field], f"{where}.canonical_refs.{field}", errors)
+        if field not in payload:
+            add_error(errors, f"{where}.{field} must copy canonical_refs.{field}")
+        elif payload[field] != refs[field]:
+            add_error(errors, f"{where}.{field} must equal canonical_refs.{field}")
 
 
 def validate_check(check: Any, where: str, errors: list[str]) -> None:
@@ -415,36 +593,8 @@ def validate_check(check: Any, where: str, errors: list[str]) -> None:
         add_error(errors, f"{where}.artifact must name a file")
 
 
-def validate_attempt(
-    attempt: Any, where: str, live_wave: Any, errors: list[str]
-) -> None:
-    if not isinstance(attempt, dict):
-        add_error(errors, f"{where} must be an object")
-        return
-    for key in UNIT_REQUIRED:
-        if key not in attempt:
-            add_error(errors, f"{where} is missing {key}")
-    status = attempt.get("status")
-    if status not in {"blocked", "covered", "candidate"}:
-        add_error(errors, f"{where}.status must be blocked, covered, or candidate")
-    wave = attempt.get("wave")
-    if check_int(wave, f"{where}.wave", errors):
-        if isinstance(live_wave, int) and wave >= live_wave:
-            add_error(errors, f"{where}.wave must be below the live wave")
-    check_string(
-        attempt.get("reassignment_reason"), f"{where}.reassignment_reason", errors
-    )
-    if "attempts" in attempt:
-        add_error(errors, f"{where} must not nest attempts")
-    validate_evidence_state(attempt, where, errors, require_owner=True)
-
-
 def validate_evidence_state(
-    unit: dict[str, Any],
-    where: str,
-    errors: list[str],
-    *,
-    require_owner: bool,
+    unit: dict[str, Any], where: str, errors: list[str]
 ) -> None:
     status = unit.get("status")
     agent_id = unit.get("agent_id")
@@ -461,6 +611,7 @@ def validate_evidence_state(
         if not isinstance(value, list):
             add_error(errors, f"{where}.{key} must be a list")
             return
+        check_list_bound(value, f"{where}.{key}", errors)
 
     if status in UNOWNED_STATUSES:
         if agent_id is not None:
@@ -475,9 +626,9 @@ def validate_evidence_state(
             add_error(errors, f"{where}.unresolved needs a reason for {status}")
         return
 
-    if not require_owner and agent_id is None:
+    if agent_id is None:
         add_error(errors, f"{where}.agent_id is required for {status}")
-    if require_owner or status != "in_progress":
+    else:
         check_agent_id(agent_id, f"{where}.agent_id", errors)
 
     if status == "in_progress":
@@ -524,6 +675,149 @@ def validate_evidence_state(
         )
 
 
+def validate_attempts(
+    attempts: Any, unit: dict[str, Any], where: str, errors: list[str]
+) -> None:
+    """Archived attempts must be independent re-work, not recycled evidence."""
+    if attempts is None:
+        return
+    if not isinstance(attempts, list):
+        add_error(errors, f"{where}.attempts must be a list")
+        return
+    if len(attempts) > MAX_ATTEMPTS:
+        add_error(errors, f"{where}.attempts exceeds {MAX_ATTEMPTS} entries")
+    live_wave = unit.get("wave")
+    live_owner = unit.get("agent_id")
+    live_signature = ref_signature(unit)
+    live_paths = unit.get("starting_paths")
+    live_artifacts = collect_artifacts(unit)
+    prior_owners: set[str] = set()
+    prior_artifacts: set[str] = set()
+    previous_wave = 0
+    for index, attempt in enumerate(attempts):
+        attempt_where = f"{where}.attempts[{index}]"
+        if not isinstance(attempt, dict):
+            add_error(errors, f"{attempt_where} must be an object")
+            continue
+        for key in ATTEMPT_REQUIRED:
+            if key not in attempt:
+                add_error(errors, f"{attempt_where} is missing {key}")
+        if "attempts" in attempt:
+            add_error(errors, f"{attempt_where} must not nest attempts")
+        status = attempt.get("status")
+        if status not in ATTEMPT_STATUSES:
+            add_error(
+                errors, f"{attempt_where}.status must be blocked, covered, or candidate"
+            )
+        wave = attempt.get("wave")
+        if check_int(wave, f"{attempt_where}.wave", errors):
+            if wave <= previous_wave:
+                add_error(
+                    errors,
+                    f"{attempt_where}.wave must be strictly increasing across attempts",
+                )
+            if isinstance(live_wave, int) and wave >= live_wave:
+                add_error(errors, f"{attempt_where}.wave must be below the live wave")
+            previous_wave = max(previous_wave, wave)
+        check_string(
+            attempt.get("reassignment_reason"),
+            f"{attempt_where}.reassignment_reason",
+            errors,
+        )
+        owner = attempt.get("agent_id")
+        if check_agent_id(owner, f"{attempt_where}.agent_id", errors):
+            if owner in prior_owners:
+                add_error(
+                    errors, f"{attempt_where}.agent_id must be fresh for each attempt"
+                )
+        validate_refs_and_labels(attempt, attempt_where, errors)
+        if live_signature is not None and ref_signature(attempt) != live_signature:
+            add_error(
+                errors, f"{attempt_where}.canonical_refs must match the live unit"
+            )
+        if isinstance(live_paths, list) and attempt.get("starting_paths") != live_paths:
+            add_error(
+                errors, f"{attempt_where}.starting_paths must match the live unit"
+            )
+        validate_evidence_state(attempt, attempt_where, errors)
+        checks = attempt.get("checks")
+        if isinstance(checks, list):
+            for check_index, check in enumerate(checks):
+                if not isinstance(check, dict):
+                    continue
+                check_owner = check.get("agent_id")
+                if check_owner in prior_owners:
+                    add_error(
+                        errors,
+                        f"{attempt_where}.checks[{check_index}].agent_id must keep "
+                        "earlier evidence with its earlier attempt",
+                    )
+        for artifact in collect_artifacts(attempt):
+            if artifact in prior_artifacts:
+                add_error(
+                    errors,
+                    f"{attempt_where} reuses an earlier archived artifact: {artifact}",
+                )
+            elif artifact in live_artifacts:
+                add_error(errors, f"{attempt_where} reuses a live artifact: {artifact}")
+            prior_artifacts.add(artifact)
+        if isinstance(owner, str):
+            prior_owners.add(owner)
+    if isinstance(live_owner, str) and live_owner in prior_owners:
+        add_error(errors, f"{where}.agent_id must be fresh after a reassignment")
+    live_checks = unit.get("checks")
+    if isinstance(live_checks, list):
+        for check_index, check in enumerate(live_checks):
+            if not isinstance(check, dict):
+                continue
+            if check.get("agent_id") in prior_owners:
+                add_error(
+                    errors,
+                    f"{where}.checks[{check_index}].agent_id must keep earlier "
+                    "evidence with its archived attempt",
+                )
+    for artifact in live_artifacts:
+        if artifact in prior_artifacts:
+            add_error(errors, f"{where} reuses an archived artifact: {artifact}")
+
+
+def validate_blocks(unit: dict[str, Any], where: str, errors: list[str]) -> None:
+    excluded = unit.get("excluded_blocks")
+    excluded_blocks: set[str] = set()
+    if excluded is not None:
+        if not isinstance(excluded, list):
+            add_error(errors, f"{where}.excluded_blocks must be a list")
+        else:
+            check_list_bound(excluded, f"{where}.excluded_blocks", errors)
+            for index, block in enumerate(excluded):
+                block_where = f"{where}.excluded_blocks[{index}]"
+                if not check_exact_fields(
+                    block, EXCLUDED_BLOCK_FIELDS, block_where, errors
+                ):
+                    continue
+                if check_block_ref(block["block"], f"{block_where}.block", errors):
+                    if block["block"] in excluded_blocks:
+                        add_error(errors, f"{block_where}.block is listed twice")
+                    excluded_blocks.add(block["block"])
+                check_string(block["reason"], f"{block_where}.reason", errors)
+    selected = unit.get("selected_attack_class_blocks")
+    if selected is not None:
+        if not isinstance(selected, list):
+            add_error(errors, f"{where}.selected_attack_class_blocks must be a list")
+        else:
+            check_list_bound(selected, f"{where}.selected_attack_class_blocks", errors)
+            for index, block in enumerate(selected):
+                block_where = f"{where}.selected_attack_class_blocks[{index}]"
+                if not check_block_ref(block, block_where, errors):
+                    continue
+                if block in excluded_blocks:
+                    add_error(errors, f"{block_where} is also excluded")
+            if len(set(selected)) != len(selected):
+                add_error(
+                    errors, f"{where}.selected_attack_class_blocks repeats a block"
+                )
+
+
 def validate_unit(unit: Any, where: str, errors: list[str]) -> None:
     if not isinstance(unit, dict):
         add_error(errors, f"{where} must be an object")
@@ -534,17 +828,7 @@ def validate_unit(unit: Any, where: str, errors: list[str]) -> None:
     coverage_id = unit.get("coverage_id")
     if not isinstance(coverage_id, str) or not FINGERPRINT_RE.fullmatch(coverage_id):
         add_error(errors, f"{where}.coverage_id must be a stable identifier")
-    refs = unit.get("canonical_refs")
-    if not isinstance(refs, dict):
-        add_error(errors, f"{where}.canonical_refs must be an object")
-    else:
-        for key in ("surface", "boundary", "subsystem", "attack_class"):
-            check_string(refs.get(key), f"{where}.canonical_refs.{key}", errors)
-        if "lifecycle" in refs:
-            check_string(refs["lifecycle"], f"{where}.canonical_refs.lifecycle", errors)
-    for key in ("surface", "boundary", "subsystem", "attack_class", "lifecycle"):
-        if key in unit:
-            check_string(unit[key], f"{where}.{key}", errors)
+    validate_refs_and_labels(unit, where, errors)
     check_paths(
         unit.get("starting_paths"), f"{where}.starting_paths", errors, nonempty=True
     )
@@ -556,48 +840,24 @@ def validate_unit(unit: Any, where: str, errors: list[str]) -> None:
         check_int(unit["wave"], f"{where}.wave", errors)
     if "prior_status" in unit and unit["prior_status"] not in PRIOR_STATUSES:
         add_error(errors, f"{where}.prior_status is invalid")
-    blocks = unit.get("excluded_blocks")
-    if blocks is not None:
-        if not isinstance(blocks, list):
-            add_error(errors, f"{where}.excluded_blocks must be a list")
-        else:
-            for index, block in enumerate(blocks):
-                if not check_exact_fields(
-                    block,
-                    frozenset({"block", "reason"}),
-                    f"{where}.excluded_blocks[{index}]",
-                    errors,
-                ):
-                    continue
-                check_string(
-                    block["block"], f"{where}.excluded_blocks[{index}].block", errors
-                )
-                check_string(
-                    block["reason"], f"{where}.excluded_blocks[{index}].reason", errors
-                )
-    selected = unit.get("selected_companion_blocks")
-    if selected is not None:
-        if not isinstance(selected, list):
-            add_error(errors, f"{where}.selected_companion_blocks must be a list")
-        else:
-            for index, block in enumerate(selected):
-                check_string(
-                    block, f"{where}.selected_companion_blocks[{index}]", errors
-                )
-    validate_evidence_state(unit, where, errors, require_owner=False)
-    attempts = unit.get("attempts")
-    if attempts is not None:
-        if not isinstance(attempts, list):
-            add_error(errors, f"{where}.attempts must be a list")
-        else:
-            for index, attempt in enumerate(attempts):
-                validate_attempt(
-                    attempt, f"{where}.attempts[{index}]", unit.get("wave"), errors
-                )
+    for legacy in LEGACY_UNIT_FIELDS:
+        if legacy in unit:
+            add_error(
+                errors,
+                f"{where}.{legacy} is not part of the ledger contract; "
+                "use selected_attack_class_blocks",
+            )
+    validate_blocks(unit, where, errors)
+    validate_evidence_state(unit, where, errors)
+    validate_attempts(unit.get("attempts"), unit, where, errors)
 
 
 def validate_ledger(
-    units: Any, *, root: Path | None = None, check_paths_exist: bool = False
+    units: Any,
+    *,
+    root: Path | None = None,
+    run_dir: Path | None = None,
+    check_paths_exist: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     if not isinstance(units, list):
@@ -618,15 +878,16 @@ def validate_ledger(
             if coverage_id in identifiers:
                 add_error(errors, f"duplicate coverage_id {coverage_id!r}")
             identifiers.add(coverage_id)
-        refs = unit.get("canonical_refs")
-        if isinstance(refs, dict):
-            keys = ("surface", "boundary", "subsystem", "attack_class", "lifecycle")
-            values = tuple(str(refs.get(key, "")) for key in keys)
-            if all(values[:4]) and values in tuples:
+        signature = ref_signature(unit)
+        if signature is not None and all(
+            isinstance(value, str) for value in signature[:4]
+        ):
+            key = tuple(str(value) for value in signature)
+            if key in tuples:
                 add_error(
                     errors, f"semantic tuple is represented twice: {coverage_id!r}"
                 )
-            tuples.add(values)
+            tuples.add(key)
         if check_paths_exist and root is not None:
             for key in ("starting_paths", "reviewed_paths"):
                 values = unit.get(key)
@@ -636,6 +897,19 @@ def validate_ledger(
                     if isinstance(path, str) and check_rel_path(path, where, errors):
                         if not (root / path).exists():
                             add_error(errors, f"{where}.{key} does not exist: {path}")
+        if check_paths_exist and run_dir is not None:
+            check_artifact_exists(
+                collect_artifacts(unit), run_dir, f"{where}.checks", errors
+            )
+            attempts = unit.get("attempts")
+            if isinstance(attempts, list):
+                for attempt_index, attempt in enumerate(attempts):
+                    check_artifact_exists(
+                        collect_artifacts(attempt),
+                        run_dir,
+                        f"{where}.attempts[{attempt_index}].checks",
+                        errors,
+                    )
     return errors
 
 
@@ -945,12 +1219,18 @@ def validate_run(
     records: Any,
     *,
     root: Path | None = None,
+    run_dir: Path | None = None,
     check_paths_exist: bool = False,
 ) -> list[str]:
     errors = []
     errors.extend(validate_metadata(meta))
     errors.extend(
-        validate_ledger(units, root=root, check_paths_exist=check_paths_exist)
+        validate_ledger(
+            units,
+            root=root,
+            run_dir=run_dir,
+            check_paths_exist=check_paths_exist,
+        )
     )
     errors.extend(
         validate_findings(records, root=root, check_paths_exist=check_paths_exist)
@@ -959,13 +1239,50 @@ def validate_run(
     return errors[:MAX_ERRORS]
 
 
+def collect_modified_paths(root: Path) -> tuple[list[str], int]:
+    """Return sorted, safe worktree paths plus a count of unrecorded ones."""
+    raw = run_git(
+        root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        strip=False,
+    )
+    entries: list[str] = []
+    tokens = raw.split("\x00")
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if not token:
+            continue
+        code = token[:2]
+        if "R" in code or "C" in code:
+            index += 1  # the rename or copy source follows and is not a live path
+        entry = token[3:] if len(token) > 3 else ""
+        if entry:
+            entries.append(entry)
+    kept: set[str] = set()
+    for entry in entries:
+        candidate = entry.replace("\\", "/")
+        if candidate.startswith("./"):
+            candidate = candidate[2:]
+        if path_problem(candidate) is None:
+            kept.add(candidate)
+    recorded = sorted(kept)[:MAX_MODIFIED_PATHS]
+    return recorded, len(entries) - len(recorded)
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     root = repo_root()
     base = runs_root(root)
     base.mkdir(parents=True, exist_ok=True)
     run_id = args.run_id or next_run_id(base)
-    if not RUN_ID_RE.fullmatch(run_id):
+    if not safe_run_name(run_id):
         raise SecurityAuditError("--run-id must be a safe lowercase directory name")
+    if args.budget is not None and args.budget < 1:
+        raise SecurityAuditError("--budget must be a positive integer")
     run_dir = base / run_id
     if run_dir.exists():
         raise SecurityAuditError(f"run directory already exists: {run_dir}")
@@ -977,10 +1294,10 @@ def cmd_init(args: argparse.Namespace) -> int:
         raise SecurityAuditError("target must be inside this checkout")
     scopes: list[str] = []
     for scope in args.scope:
-        candidate = Path(scope)
+        candidate = Path(scope).expanduser()
         resolved = (
-            (root / candidate).resolve() if not candidate.is_absolute() else candidate
-        )
+            candidate if candidate.is_absolute() else root / candidate
+        ).resolve()
         if not resolved.exists():
             raise SecurityAuditError(f"scope path does not exist: {scope}")
         try:
@@ -995,6 +1312,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         for path in base.glob("run-*")
         if path.is_dir() and path.name != run_id
     )
+    modified, omitted = collect_modified_paths(root)
     metadata = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
@@ -1002,7 +1320,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         "target": target.relative_to(root).as_posix() if target != root else ".",
         "source_ref": {
             "sha": run_git(root, "rev-parse", "HEAD"),
-            "dirty": bool(run_git(root, "status", "--porcelain")),
+            "dirty": bool(modified or omitted),
+            "modified_paths": modified,
+            "modified_paths_omitted": omitted,
         },
         "profile": args.profile,
         "scope_paths": scopes,
@@ -1039,6 +1359,13 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"profile\t{meta.get('profile')}\tstatus={meta.get('run_status')}")
     source = meta.get("source_ref") if isinstance(meta.get("source_ref"), dict) else {}
     print(f"source\t{source.get('sha')}\tdirty={source.get('dirty')}")
+    modified = source.get("modified_paths")
+    if source.get("dirty") and isinstance(modified, list):
+        print(
+            "modified"
+            f"\t{len(modified)} recorded"
+            f"\tomitted={source.get('modified_paths_omitted')}"
+        )
     if isinstance(units, list):
         counts: dict[str, int] = {}
         for unit in units:
@@ -1067,7 +1394,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
     units = load_json(run_dir / "coverage-ledger.json")
     records = load_json(run_dir / "findings.json")
     errors = validate_run(
-        meta, units, records, root=root, check_paths_exist=args.check_paths
+        meta,
+        units,
+        records,
+        root=root,
+        run_dir=run_dir,
+        check_paths_exist=args.check_paths,
     )
     if args.strict and isinstance(meta, dict) and meta.get("run_status") != "complete":
         errors.append("--strict requires run_status=complete")
@@ -1081,7 +1413,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-dir", help="explicit run directory")
+    parser.add_argument(
+        "--run-dir",
+        help="explicit run directory, absolute or relative to .tmp/security-audit",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     init = sub.add_parser("init", help="create a new security-audit run")
@@ -1097,7 +1432,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = sub.add_parser("validate", help="validate a run")
     validate.add_argument(
-        "--check-paths", action="store_true", help="require cited paths to exist"
+        "--check-paths",
+        action="store_true",
+        help="require cited paths and local artifacts to exist",
     )
     validate.add_argument(
         "--strict", action="store_true", help="require run_status=complete"
@@ -1112,7 +1449,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return int(args.func(args))
     except SecurityAuditError as exc:
-        print(f"security-audit: {exc}", file=__import__("sys").stderr)
+        print(f"security-audit: {exc}", file=sys.stderr)
+        return 2
+    except RecursionError:
+        print("security-audit: input is nested too deeply", file=sys.stderr)
         return 2
 
 

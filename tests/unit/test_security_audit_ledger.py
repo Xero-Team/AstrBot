@@ -30,7 +30,12 @@ def _metadata(**overrides: object) -> dict:
         "run_id": "run-1",
         "repo": "Xero-Team/AstrBot",
         "target": ".",
-        "source_ref": {"sha": "a" * 40, "dirty": False},
+        "source_ref": {
+            "sha": "a" * 40,
+            "dirty": False,
+            "modified_paths": [],
+            "modified_paths_omitted": 0,
+        },
         "profile": "standard",
         "scope_paths": [],
         "budget": None,
@@ -76,6 +81,33 @@ def _unit(**overrides: object) -> dict:
         "checks": [_check()],
         "result_fingerprints": [],
         "unresolved": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _attempt(**overrides: object) -> dict:
+    payload: dict = {
+        "coverage_id": "web.auth.session",
+        "canonical_refs": {
+            "surface": "dashboard-http",
+            "boundary": "anonymous-to-account",
+            "subsystem": "auth",
+            "attack_class": "session-forgery",
+        },
+        "surface": "dashboard-http",
+        "boundary": "anonymous-to-account",
+        "subsystem": "auth",
+        "attack_class": "session-forgery",
+        "starting_paths": [PATH],
+        "status": "covered",
+        "agent_id": "hunter-b",
+        "reviewed_paths": [PATH],
+        "checks": [_check(agent_id="hunter-b")],
+        "result_fingerprints": [],
+        "unresolved": [],
+        "wave": 1,
+        "reassignment_reason": "reopened by the coverage critic",
     }
     payload.update(overrides)
     return payload
@@ -209,7 +241,10 @@ def test_duplicate_coverage_ids_rejected():
             "boundary": "guest-to-account",
             "subsystem": "webchat",
             "attack_class": "session-forgery",
-        }
+        },
+        surface="dashboard-ws",
+        boundary="guest-to-account",
+        subsystem="webchat",
     )
     errors = script.validate_run(_metadata(), [_unit(), second], [])
     assert any("duplicate coverage_id" in error for error in errors)
@@ -222,11 +257,59 @@ def test_duplicate_semantic_tuple_rejected():
     assert any("semantic tuple" in error for error in errors)
 
 
+def test_labels_must_copy_canonical_refs():
+    script = _load_script()
+    errors = script.validate_run(_metadata(), [_unit(attack_class="xss")], [])
+    assert any("must equal canonical_refs.attack_class" in error for error in errors)
+
+
+def test_canonical_refs_reject_unknown_fields():
+    script = _load_script()
+    refs = dict(_unit()["canonical_refs"], lifecycle_mode="stale")
+    errors = script.validate_run(_metadata(), [_unit(canonical_refs=refs)], [])
+    assert any(
+        "canonical_refs has unexpected lifecycle_mode" in error for error in errors
+    )
+
+
+def test_lifecycle_must_appear_on_the_unit_and_in_canonical_refs():
+    script = _load_script()
+    refs = dict(_unit()["canonical_refs"], lifecycle="revoked-token")
+    errors = script.validate_run(_metadata(), [_unit(canonical_refs=refs)], [])
+    assert any("must appear together" in error for error in errors)
+
+    unit = _unit(canonical_refs=refs, lifecycle="revoked-token")
+    assert script.validate_run(_metadata(), [unit], []) == []
+
+
 def test_covered_unit_requires_owner_and_checks():
     script = _load_script()
     errors = script.validate_run(_metadata(), [_unit(agent_id=None, checks=[])], [])
     assert any("agent_id is required" in error for error in errors)
     assert any("checks must not be empty" in error for error in errors)
+
+
+def test_in_progress_owner_must_be_a_canonical_agent_id():
+    script = _load_script()
+    unit = _unit(
+        status="in_progress",
+        agent_id="BAD",
+        reviewed_paths=[],
+        checks=[],
+        result_fingerprints=[],
+        unresolved=[],
+    )
+    errors = script.validate_run(_metadata(), [unit], [])
+    assert any("must be a lowercase canonical agent id" in error for error in errors)
+
+
+def test_reserved_windows_device_names_are_rejected():
+    script = _load_script()
+    assert script.check_agent_id("con", "agent_id", []) is False
+    errors = script.validate_run(
+        _metadata(), [_unit(starting_paths=["con/keys.py"], reviewed_paths=[PATH])], []
+    )
+    assert any("Windows reserved device name" in error for error in errors)
 
 
 def test_reviewed_paths_must_equal_check_union():
@@ -294,6 +377,53 @@ def test_absolute_and_parent_paths_rejected():
         [],
     )
     assert any("unsafe path segment" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "C:foo/bar.py",
+        "astrbot/foo:bar.py",
+        "astrbot/dashboard/api/aux.py",
+        "astrbot/com1/handler.py",
+        "astrbot/dashboard/con.txt",
+        "astrbot/dashboard/auth.py.",
+        " astrbot/dashboard/auth.py",
+        "astrbot/dashboard/... ",
+        "astrbot\\\\dashboard\\\\auth.py",
+    ],
+)
+def test_windows_and_ambiguous_paths_rejected(path):
+    script = _load_script()
+    errors: list[str] = []
+    assert script.check_rel_path(path, "starting_paths[0]", errors) is False
+    assert errors
+
+
+def test_selected_attack_class_blocks_are_validated():
+    script = _load_script()
+    unit = _unit(selected_attack_class_blocks=["references/web-and-dashboard.md#csrf"])
+    assert script.validate_run(_metadata(), [unit], []) == []
+
+    bad = _unit(selected_attack_class_blocks=["ATTACK-CLASSES"])
+    errors = script.validate_run(_metadata(), [bad], [])
+    assert any("FILE.md#section" in error for error in errors)
+
+    conflicting = _unit(
+        selected_attack_class_blocks=["references/web-and-dashboard.md#csrf"],
+        excluded_blocks=[
+            {"block": "references/web-and-dashboard.md#csrf", "reason": "no route"}
+        ],
+    )
+    errors = script.validate_run(_metadata(), [conflicting], [])
+    assert any("is also excluded" in error for error in errors)
+
+
+def test_legacy_block_fields_are_rejected():
+    script = _load_script()
+    unit = _unit(selected_companion_blocks=["WEB.md"])
+    errors = script.validate_run(_metadata(), [unit], [])
+    assert any("selected_attack_class_blocks" in error for error in errors)
 
 
 def test_needs_validation_carries_no_severity():
@@ -445,20 +575,76 @@ def test_candidate_may_omit_reason_but_blocked_may_not():
 
 def test_attempt_wave_must_trail_the_live_wave():
     script = _load_script()
-    attempt = _unit(
-        status="covered",
-        wave=2,
-        reassignment_reason="reopened by the coverage critic",
-    )
-    unit = _unit(wave=2, attempts=[attempt])
-    errors = script.validate_run(_metadata(), [unit], [])
+    attempt = _attempt(wave=2)
+    errors = script.validate_run(_metadata(), [_unit(wave=2, attempts=[attempt])], [])
     assert any("must be below the live wave" in error for error in errors)
 
-    attempt["wave"] = 1
-    script = _load_script()
+    attempt = _attempt(wave=1)
     assert (
         script.validate_run(_metadata(), [_unit(wave=2, attempts=[attempt])], []) == []
     )
+
+
+def test_attempt_waves_must_strictly_increase():
+    script = _load_script()
+    first = _attempt(wave=1, agent_id="hunter-b", checks=[_check(agent_id="hunter-b")])
+    second = _attempt(wave=1, agent_id="hunter-c", checks=[_check(agent_id="hunter-c")])
+    unit = _unit(wave=3, attempts=[first, second])
+    errors = script.validate_run(_metadata(), [unit], [])
+    assert any("strictly increasing" in error for error in errors)
+
+
+def test_attempt_owner_must_be_fresh():
+    script = _load_script()
+    attempt = _attempt(agent_id="hunter-a", checks=[_check(agent_id="hunter-a")])
+    unit = _unit(wave=2, attempts=[attempt])
+    errors = script.validate_run(_metadata(), [unit], [])
+    assert any("must be fresh after a reassignment" in error for error in errors)
+
+
+def test_attempt_cannot_reuse_an_archived_artifact():
+    script = _load_script()
+    first = _attempt(
+        wave=1,
+        status="covered",
+        agent_id="hunter-b",
+        reviewed_paths=[PATH],
+        checks=[
+            _check(
+                agent_id="hunter-b",
+                method="local",
+                artifact="agents/hunter-b/artifacts/out.txt",
+            )
+        ],
+    )
+    second = _attempt(
+        wave=2,
+        status="covered",
+        agent_id="hunter-c",
+        reviewed_paths=[PATH],
+        checks=[
+            _check(
+                agent_id="hunter-c",
+                method="local",
+                artifact="agents/hunter-b/artifacts/out.txt",
+            )
+        ],
+    )
+    unit = _unit(wave=3, attempts=[first, second])
+    errors = script.validate_run(_metadata(), [unit], [])
+    assert any("reuses an earlier archived artifact" in error for error in errors)
+
+
+def test_attempt_must_match_the_live_unit_refs_and_paths():
+    script = _load_script()
+    refs = dict(_attempt()["canonical_refs"], attack_class="ssrf")
+    attempt = _attempt(wave=1, canonical_refs=refs, attack_class="ssrf")
+    errors = script.validate_run(_metadata(), [_unit(wave=2, attempts=[attempt])], [])
+    assert any("canonical_refs must match the live unit" in error for error in errors)
+
+    attempt = _attempt(wave=1, starting_paths=["astrbot/dashboard/server.py"])
+    errors = script.validate_run(_metadata(), [_unit(wave=2, attempts=[attempt])], [])
+    assert any("starting_paths must match the live unit" in error for error in errors)
 
 
 def test_bad_metadata_rejected():
@@ -470,11 +656,82 @@ def test_bad_metadata_rejected():
     assert any("execution_policy must be" in error for error in errors)
 
 
+def test_dirty_source_ref_must_record_sorted_safe_paths():
+    script = _load_script()
+    ref = {
+        "sha": "a" * 40,
+        "dirty": True,
+        "modified_paths": [],
+        "modified_paths_omitted": 0,
+    }
+    errors = script.validate_run(_metadata(source_ref=ref), [_unit()], [])
+    assert any("must record its modified paths" in error for error in errors)
+
+    ref["modified_paths"] = ["astrbot/b.py", "astrbot/a.py"]
+    errors = script.validate_run(_metadata(source_ref=ref), [_unit()], [])
+    assert any("must be sorted" in error for error in errors)
+
+    ref["modified_paths"] = ["astrbot/a.py", "C:/windows/system32/x.dll"]
+    errors = script.validate_run(_metadata(source_ref=ref), [_unit()], [])
+    assert any("must be repository-relative" in error for error in errors)
+
+    ref["modified_paths"] = ["astrbot/a.py"]
+    assert script.validate_run(_metadata(source_ref=ref), [_unit()], []) == []
+
+
+def test_clean_source_ref_cannot_record_modified_paths():
+    script = _load_script()
+    ref = {
+        "sha": "a" * 40,
+        "dirty": False,
+        "modified_paths": ["astrbot/a.py"],
+        "modified_paths_omitted": 0,
+    }
+    errors = script.validate_run(_metadata(source_ref=ref), [_unit()], [])
+    assert any("clean source_ref" in error for error in errors)
+
+
 def test_check_paths_flag_rejects_missing_files(tmp_path):
     script = _load_script()
     unit = _unit(starting_paths=["astrbot/does-not-exist.py"])
     errors = script.validate_ledger([unit], root=tmp_path, check_paths_exist=True)
     assert any("does not exist" in error for error in errors)
+
+
+def test_check_paths_flag_rejects_missing_artifacts(tmp_path):
+    script = _load_script()
+    unit = _unit(
+        checks=[
+            _check(
+                method="local",
+                artifact="agents/hunter-a/artifacts/out.txt",
+            )
+        ]
+    )
+    errors = script.validate_ledger([unit], run_dir=tmp_path, check_paths_exist=True)
+    assert any("artifact does not exist" in error for error in errors)
+
+    artifact = tmp_path / "agents" / "hunter-a" / "artifacts" / "out.txt"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("evidence", encoding="utf-8")
+    assert (
+        script.validate_ledger([unit], run_dir=tmp_path, check_paths_exist=True) == []
+    )
+
+
+def test_deep_json_is_rejected_without_recursing():
+    script = _load_script()
+    deep: list = []
+    node = deep
+    for _ in range(500):
+        child: list = []
+        node.append(child)
+        node = child
+    assert script.json_depth(deep) > script.MAX_DEPTH
+    unit = _unit()
+    unit["notes_of_extra_depth"] = deep
+    errors = script.validate_ledger([unit])
+    assert any("nesting levels" in error for error in errors)
 
 
 def test_load_json_rejects_missing_and_invalid_files(tmp_path):
@@ -487,14 +744,26 @@ def test_load_json_rejects_missing_and_invalid_files(tmp_path):
     with pytest.raises(script.SecurityAuditError, match="invalid JSON"):
         script.load_json(path)
 
+    path.write_text("[" * 5000 + "]" * 5000, encoding="utf-8")
+    with pytest.raises(script.SecurityAuditError, match="nesting levels"):
+        script.load_json(path)
+
 
 def test_cli_init_status_validate(tmp_path, monkeypatch, capsys):
     script = _load_script()
     monkeypatch.setattr(script, "repo_root", lambda: tmp_path)
 
-    def fake_git(root, *arguments):
+    status = (
+        " M astrbot/dashboard/api/auth.py\x00"
+        "R  astrbot/new_name.py\x00astrbot/old_name.py\x00"
+        "?? con\x00"
+    )
+
+    def fake_git(root, *arguments, strip=True):
         if arguments and arguments[0] == "rev-parse":
             return "a" * 40
+        if arguments and arguments[0] == "status":
+            return status
         return ""
 
     monkeypatch.setattr(script, "run_git", fake_git)
@@ -511,6 +780,12 @@ def test_cli_init_status_validate(tmp_path, monkeypatch, capsys):
     assert metadata["profile"] == "quick"
     assert metadata["scope_paths"] == ["astrbot/dashboard/api"]
     assert metadata["source_ref"]["sha"] == "a" * 40
+    assert metadata["source_ref"]["dirty"] is True
+    assert metadata["source_ref"]["modified_paths"] == [
+        "astrbot/dashboard/api/auth.py",
+        "astrbot/new_name.py",
+    ]
+    assert metadata["source_ref"]["modified_paths_omitted"] == 1
 
     capsys.readouterr()
     assert script.main(["status"]) == 0
@@ -529,8 +804,42 @@ def test_cli_init_status_validate(tmp_path, monkeypatch, capsys):
 def test_cli_rejects_scope_outside_checkout(tmp_path, monkeypatch):
     script = _load_script()
     monkeypatch.setattr(script, "repo_root", lambda: tmp_path)
-    monkeypatch.setattr(script, "run_git", lambda root, *arguments: "a" * 40)
+    monkeypatch.setattr(script, "run_git", lambda root, *arguments, **kwargs: "a" * 40)
     outside = tmp_path.parent / "outside-scope"
     outside.mkdir(exist_ok=True)
     assert script.main(["init", "--scope", str(outside)]) == 2
     assert not (tmp_path / ".tmp" / "security-audit" / "run-1").exists()
+
+
+def test_cli_rejects_non_positive_budget(tmp_path, monkeypatch):
+    script = _load_script()
+    monkeypatch.setattr(script, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(script, "run_git", lambda root, *arguments, **kwargs: "a" * 40)
+    assert script.main(["init", "--budget", "0"]) == 2
+    assert script.main(["init", "--budget", "-5"]) == 2
+    assert not (tmp_path / ".tmp" / "security-audit" / "run-1").exists()
+    assert script.main(["init", "--budget", "4"]) == 0
+
+
+def test_run_dir_must_stay_inside_the_runs_root(tmp_path, monkeypatch):
+    script = _load_script()
+    monkeypatch.setattr(script, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(script, "run_git", lambda root, *arguments, **kwargs: "a" * 40)
+    outside = tmp_path.parent / "outside-run"
+    (outside / "run-metadata.json").parent.mkdir(parents=True, exist_ok=True)
+    assert script.main(["--run-dir", str(outside), "status"]) == 2
+
+    run_dir = tmp_path / ".tmp" / "security-audit" / "run-1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run-metadata.json").write_text('{"run_id": "run-1"}', encoding="utf-8")
+    (run_dir / "coverage-ledger.json").write_text("[]", encoding="utf-8")
+    (run_dir / "findings.json").write_text("[]", encoding="utf-8")
+    assert script.main(["--run-dir", "run-1", "status"]) == 0
+
+
+def test_latest_pointer_must_name_a_safe_run(tmp_path, monkeypatch):
+    script = _load_script()
+    base = tmp_path / ".tmp" / "security-audit"
+    (base / "run-1").mkdir(parents=True)
+    (base / "LATEST").write_text("../escape\n", encoding="utf-8")
+    assert script.resolve_run_dir(tmp_path, None) == (base / "run-1").resolve()

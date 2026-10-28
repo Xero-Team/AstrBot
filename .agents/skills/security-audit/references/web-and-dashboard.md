@@ -4,10 +4,11 @@
 
 The target speaks HTTP or WebSocket: Dashboard API routes, login/session/TOTP,
 step-up, API keys, CSRF origin checks, rate limiting, proxy trust, the unified
-chat socket, raw file/SSE routes, or the Open API socket. Use it with
-`ATTACK-CLASSES` guidance in `hunting-prompt.md`; access control asks whether a
-principal may perform an operation, this file asks whether HTTP or identity
-plumbing confuses which principal, request, assurance level, or token owns it.
+chat socket, raw file/SSE routes, or the Open API socket. Use it with the
+hunting method and candidate gate in `hunting-prompt.md`; access control asks
+whether a principal may perform an operation, this file asks whether HTTP or
+identity plumbing confuses which principal, request, assurance level, or token
+owns it.
 
 Source map: `astrbot/dashboard/api/` (`router.py`, `auth.py`,
 `authorization.py`, `webchat.py`, `open_api.py`, `files.py`, `logs.py`,

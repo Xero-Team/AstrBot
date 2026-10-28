@@ -98,14 +98,19 @@ third-party audit skill trees into `.agents/skills/`.
 in `security-audit/REFERENCE.md`). It hunts source-grounded trust-boundary
 failures, validates every candidate with an agent that did not hunt it, and
 writes runs under `.tmp/security-audit/run-<N>/` (gitignored). Coverage comes
-from `coverage-ledger.json`, never from agent count. Findings go through
-`SECURITY.md`; the skill never files a public Issue or PR and never writes
-exploit chains. Mechanical bars live in
+from `coverage-ledger.json`, never from agent count. Every local check runs
+target-controlled code in an OS sandbox (`bwrap`/`sandbox-exec`) with an empty
+allowlisted environment; without one, the candidate stays `needs_validation`.
+Findings go through `SECURITY.md`; the skill never files a public Issue or PR
+and never writes exploit chains. Mechanical bars live in
 `security-audit/scripts/security_audit.py`, tested by
 `tests/unit/test_security_audit_ledger.py`; methodology and the AstrBot-specific
-false-positive traps live in `security-audit/references/`. Do not vendor the
-upstream tree, and do not merge this workflow into `audit-product`, whose lab is
-a product-quality surface rather than an attack target.
+false-positive traps live in `security-audit/references/`. The overlay license
+note is in `security-audit/SKILL.md`, the MIT notice in
+`security-audit/THIRD_PARTY_NOTICES.md`, and the pin in
+`security-audit/VENDOR.json`. Do not vendor the upstream tree, and do not merge
+this workflow into `audit-product`, whose lab is a product-quality surface
+rather than an attack target.
 
 `plan-issue` writes working state under `.tmp/issue-plan/` (gitignored). Direct
 planning is the default; use `init --skip-probe` and record the reason without

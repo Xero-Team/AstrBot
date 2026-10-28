@@ -7,15 +7,19 @@ description: >
   or pen-test of a named surface. Not for product-quality scoring, scanner
   triage, dependency CVE review, or plugin creation.
 license: AGPL-3.0-or-later
+license_note: AGPL-3.0-or-later AstrBot overlay with MIT-derived portions (THIRD_PARTY_NOTICES.md)
 compatibility: >
-  Requires the Xero-Team/AstrBot checkout, Python 3.15+, git, and a client that
-  can delegate subagents. Local execution uses only the already-synced
-  environment and a temporary ASTRBOT_ROOT under .tmp/.
+  Requires the Xero-Team/AstrBot checkout, Python 3.15+, git, an OS sandbox
+  (`bwrap` on Linux, `sandbox-exec` on macOS) for every local check, and a
+  client that can delegate subagents. Local execution uses only the
+  already-synced environment and a temporary ASTRBOT_ROOT under .tmp/.
 metadata:
   author: Xero-Team
   checkout: Xero-Team/AstrBot
   based_on: cloudflare/security-audit-skill (MIT), via Xero-Team fork
   upstream_commit: c1c8a8c1471069fb0e188eeaff69b8e8db6564a8
+  upstream_license: MIT
+  overlay_license: AGPL-3.0-or-later
 ---
 
 # Security audit this AstrBot checkout
@@ -55,12 +59,13 @@ not a product-quality audit.
 - Do not probe a live deployment, the audit lab, external providers, IM
   platforms, MCP servers, or any shared service. Do not send traffic to
   `127.0.0.1:6185`; that is `audit-product`'s product lab, not an attack target.
-- Run target code only under the execution boundary below. If a required
-  control is unavailable, keep the candidate as `needs_validation`; do not
-  substitute a live check or a harder guess.
+- Run target code only under the execution boundary below. If any required
+  control — including the OS sandbox — is unavailable, keep the candidate as
+  `needs_validation`; do not substitute a live check or a harder guess.
 - Only the parent writes shared run files. Delegated agents write only under
-  their own `agents/<id>/scratch/`. Never let target code write `.tmp/` outside
-  its scratch, `data/`, the repository, or another agent's directory.
+  their own `agents/<id>/scratch/`. Target-controlled code writes only inside
+  the `<scratch>/` it was given; never point it at `data/`, the repository, or
+  another agent's directory.
 - Do not edit product source while auditing. This skill reports; a separate
   authorized change implements fixes.
 - Do not vendor, copy, or re-host the upstream skill tree. Cite
@@ -85,7 +90,8 @@ not a product-quality audit.
 
 Run `uv run python .agents/skills/security-audit/scripts/security_audit.py init`
 with the chosen profile and scope. It creates `.tmp/security-audit/run-<N>/`
-(gitignored), records the full HEAD SHA and worktree dirtiness, and writes:
+(gitignored), records the full HEAD SHA, the worktree dirtiness, and the
+modified paths, and writes:
 
 ```text
 run-metadata.json   # run identity, profile, scope, source ref, status
@@ -99,29 +105,40 @@ Phase 4 adds `REPORT.md`, `FINDINGS-DETAIL.md`, `NEEDS-VALIDATION.md`, and
 `SENSITIVE.md` (only when critical/high detail is kept out of `REPORT.md`).
 
 Use `security_audit.py status` to resume and `validate` after every ledger or
-findings change. For a dirty worktree, review the current files but record that
-the source ref is dirty and which files were modified; never treat generated or
-locally modified code as a clean commit.
+findings change. For a dirty worktree, `source_ref.modified_paths` records the
+sorted paths that were modified (bounded, and omitting any path that is not a
+safe repository-relative name); review the current files but never treat
+generated or locally modified code as a clean commit.
 
 ## Execution boundary
 
-Source inspection is read-only. A local check is allowed only when all of these
-hold:
+Source inspection is read-only. Any local check — first-party or plugin code —
+runs target-controlled code only inside an OS-enforced sandbox (`bwrap` on
+Linux, `sandbox-exec` on macOS) that provides all of these controls:
 
-- it uses the already-synced environment (`uv run --no-sync` or an existing
+- an empty environment filled from an explicit allowlist with dummy values:
+  scratch-local `HOME`, `XDG_*`, `UV_*`, caches, and temp dirs (`TMPDIR`,
+  `TMP`, `TEMP` on Windows); never the developer's home, proxy settings,
+  provider keys, or ambient credentials;
+- the already-synced environment (`uv run --no-sync` or an existing
   virtualenv); no dependency install, sync, fetch, or update;
-- it uses a temporary runtime root: `ASTRBOT_ROOT=<scratch>/root` and
-  `TMPDIR=<scratch>/tmp`, never the developer's `data/`;
-- it has no external network; mock provider, MCP, IM, and webhook calls;
-- it is bounded: a single test, a minimal harness, a small fixture, or one
-  deterministic race/sequence, with a timeout;
-- its writes stay in `<scratch>/`; the parent may copy a predeclared, regular,
-  size-bounded scratch file into `agents/<id>/artifacts/` after the process
-  exits. Never promote a symlink, directory, FIFO, socket, or executable.
+- a read-only target and toolchain, with writes confined to the assigned
+  `<scratch>/`; `ASTRBOT_ROOT=<scratch>/root` instead of the developer's
+  `data/`;
+- no external network; when the check needs a local client and server, use an
+  isolated loopback namespace and an ephemeral port, never the default `6185`
+  that `audit-product` uses;
+- explicit low CPU, memory, process, file-size, and wall-clock limits.
 
-Executing untrusted plugin code needs an OS sandbox. If `bwrap` (Linux) or
-`sandbox-exec` (macOS) is unavailable, or the check would escape the boundary,
-do not run it: record the exact blocker in `needs_validation`.
+Installed plugin code runs in-process with host authority, so it always needs
+the sandbox; never run it unsandboxed because it looks harmless. If the
+sandbox or any control above is unavailable, or the check would escape the
+boundary, do not run it: record the exact blocker in `needs_validation`.
+
+The parent may copy a predeclared, regular, size-bounded scratch file into
+`agents/<id>/artifacts/` after the sandbox and all its processes exit. Never
+promote a symlink, directory, FIFO, socket, device, hard link, changing file,
+or executable, and never glob a scratch tree or extract an archive.
 
 ## Core principles
 
@@ -178,11 +195,12 @@ advice. The audit describes fixes; it does not apply them.
 ### Hardening is not a finding
 
 If another layer already prevents the attack, the missing layer is a hardening
-note, not a vulnerability. Fork invariants in `AGENTS.md` (bind address, TLS
-verification, MCP private-network deny, fail-closed `authorize()`, DOMPurify,
-`defusedxml`, command identity, config revisions) are different: they are
-product claims, so breaking one stays a candidate finding even when another
-layer blocks the attack today. Demonstrated impact still decides whether it is
+note, not a vulnerability. Fork invariants — the bind address, TLS verification,
+the MCP private-network deny, a fail-closed `authorize()` in
+`astrbot/core/auth/service.py`, DOMPurify, `defusedxml`, command identity, and
+config revisions — are different: they are product claims recorded in
+`AGENTS.md`, so breaking one stays a candidate finding even when another layer
+blocks the attack today. Demonstrated impact still decides whether it is
 `confirmed` or `needs_validation`.
 
 ## Workflow
@@ -214,11 +232,12 @@ confirmed finding as an exemplar that anchors the hunt.
 
 Assign `planned` units to fresh general-purpose agents (the `general` agent in
 OpenCode). Give each hunter, in this order: role; `architecture.md` verbatim;
-assigned units and starting paths; the selected attack-class blocks from the
-domain references copied verbatim (not names alone); excluded blocks with
-reasons; the hunting method and candidate gate from
-`references/hunting-prompt.md`; prior same-source exclusions by fingerprint
-only; and the scratch paths plus the structured-result contract.
+assigned units and starting paths; the attack-class blocks named by the unit's
+`selected_attack_class_blocks` and copied verbatim from the domain references
+(not names alone); the unit's `excluded_blocks` with reasons; the hunting method
+and candidate gate from `references/hunting-prompt.md`; prior same-source
+exclusions by fingerprint only; and the scratch paths plus the structured-result
+contract.
 
 Hunters read source, may run one bounded local check, and return exactly one
 JSON object:
@@ -255,10 +274,11 @@ each wave, spend one fresh read-only coverage critic (`explore` in OpenCode)
 that proposes missing units, reopened units, and resolved prior leads; it
 proposes coverage, not findings. Accept only in-scope, source-backed units,
 deduplicate by `coverage_id`, archive reopened terminal evidence under
-`attempts`, and increment the wave. In `standard` and `deep`, another distinct
-final-clean critic must also return no accepted work before stopping. A unit the
-budget or profile cannot reach is `deferred` with a reason; agent count is not
-coverage.
+`attempts` with a fresh owner, that unit's own `canonical_refs` and
+`starting_paths`, and a wave strictly below the live one, and increment the
+wave. In `standard` and `deep`, another distinct final-clean critic must also
+return no accepted work before stopping. A unit the budget or profile cannot
+reach is `deferred` with a reason; agent count is not coverage.
 
 ### Phase 3 — Independent validation
 
@@ -310,7 +330,8 @@ repository-relative trace/evidence. Only `confirmed` may carry severity.
 Load only what the current step needs:
 
 - Run contract, profiles, state table, severity anchors, provenance:
-  `REFERENCE.md`
+  `REFERENCE.md`; upstream attribution and licenses: `THIRD_PARTY_NOTICES.md`
+  and `VENDOR.json`
 - Hunting prompt, candidate gate, local-check rules: `references/hunting-prompt.md`
 - Attack classes and validation rules per domain:
   `references/web-and-dashboard.md`, `references/agent-and-llm.md`,
@@ -344,10 +365,12 @@ Load only what the current step needs:
 ```bash
 uv run python .agents/skills/security-audit/scripts/security_audit.py status
 uv run python .agents/skills/security-audit/scripts/security_audit.py validate
+uv run python .agents/skills/security-audit/scripts/security_audit.py validate --check-paths
 uv run pytest tests/unit/test_security_audit_ledger.py
 ```
 
 A finished `standard` run has every unit in a terminal state, every retained
 record past final record verification, `validate` green, and every
-deferred/out-of-scope gap disclosed in `REPORT.md`. `validate --strict` fails
+deferred/out-of-scope gap disclosed in `REPORT.md`. `validate --check-paths`
+also requires every referenced artifact to exist. `validate --strict` fails
 unless `run_status` is `complete`.

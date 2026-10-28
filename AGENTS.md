@@ -39,9 +39,11 @@ forward-looking instead of extending compatibility indefinitely.
 - This fork does not publish a PyPI package. It may publish an optional GHCR
   nightly (`ghcr.io/xero-team/astrbot:nightly`) from `master`. Never present
   upstream artifacts as fork artifacts.
-- `compose.yml` and `compose-with-napcat.yml` intentionally build this checkout
-  with `build:` and tag it `astrbot:local`. Preserve that source-build contract;
-  do not replace it with an upstream prebuilt image or with the fork nightly.
+- `compose.yml`, `compose-with-napcat.yml`, and `compose-with-searxng.yml`
+  intentionally build this checkout with `build:` and tag it `astrbot:local`.
+  Preserve that source-build contract; do not replace it with an upstream
+  prebuilt image or with the fork nightly. Sidecar images such as
+  `mlikiowa/napcat-docker` and `searxng/searxng` stay pulled, not built.
   Documentation is served from the Dashboard at `/help/`; do not restore a
   separate docs container or `docs.astrbot.app` links.
 - Agents may maintain this repository. They may commit, push feature branches,
@@ -65,7 +67,7 @@ The reproducible development/CI baseline is:
 | Tool                | Baseline and source of truth                                                 |
 | ------------------- | ---------------------------------------------------------------------------- |
 | Python              | 3.15.0 in `.python-version`, CI, and `Dockerfile`; project floor is `>=3.15` |
-| Node.js             | 26.11.1 in CI and `Dockerfile`                                               |
+| Node.js             | 26.11.1 in `.nvmrc`, CI, and `Dockerfile`                                    |
 | root npm            | 12.2.0 in the root `package.json` `packageManager` field                     |
 | Dashboard/docs pnpm | 12.11.2 in their `package.json` `packageManager` fields                      |
 | Python manager      | `uv` (required, currently not patch-pinned)                                  |
@@ -73,7 +75,12 @@ The reproducible development/CI baseline is:
 Use the globally installed `npm` and `pnpm` commands. Workflows may instead use a
 commit-pinned package-manager setup action and invoke its installed binary
 directly. A toolchain upgrade must update every matching declaration,
-workflow, image build, and lockfile in the same change.
+workflow, image build, and lockfile in the same change. CI installs
+`shellcheck` from the distro plus pinned `shfmt`/`hadolint` downloads
+(`shfmt` 3.13.1, `hadolint` 2.14.0), while the image pins its own
+`SHFMT_VERSION` 3.14.1 / `HADOLINT_VERSION` 2.15.1. Those two native-tool pins
+are independent by design; check both when either is upgraded and do not
+describe them as already aligned.
 
 Start a fresh checkout with:
 
@@ -105,16 +112,25 @@ live in `.make/`, with backend logs in `backend_run*.log` and Dashboard logs in
 Dashboard or documentation build. `make perf` is a Linux-only sidecar: it
 attaches to the already-running backend (`MODE=cpu|idle|mem`, default 30s) and
 writes under `.tmp/perf/`; it does not start or wrap `make dev` / `make run`.
-`DURATION=0` starts a background sampler until `make stop-perf` / `make stop`.
-`RATE` is samples/sec for cpu/idle (`DURATION=0` defaults to 10 and `--nonblocking`; otherwise py-spy 100).
-`MODE=mem` needs `uv sync --group perf --locked` once; that group is not part
-of bootstrap.
-`make run` first syncs the locked runtime
-environment, builds the Dashboard and documentation, and copies `dashboard/dist`
-(including `help/`) into `data/dist`; it does not build a Python wheel or sdist.
-`make build-docs` is the focused documentation target. `make docs` starts a
-standalone VitePress preview with base `/`. The Vite command uses `--host`, so
-treat port 3000 as a development-only surface rather than a production endpoint.
+`DURATION=0` starts a background cpu/idle sampler until `make stop-perf` /
+`make stop`; `MODE=mem` stays in the foreground and is stopped from another
+shell. `RATE` is samples/sec for cpu/idle (`DURATION=0` defaults to 10 with
+`--nonblocking`; otherwise py-spy samples at 100). `MODE=mem` needs
+`uv sync --group perf --locked` once; that group is not part of bootstrap.
+`make run` syncs the locked runtime environment, builds the Dashboard and
+documentation, copies `dashboard/dist` (including `help/`) into `data/dist`,
+then starts both servers; it does not build a Python wheel or sdist.
+`make build-docs` builds the Dashboard first and then the docs, so it is not a
+docs-only target. `make docs` starts a standalone VitePress preview with base
+`/`. The Vite command uses `--host`, so treat port 3000 as a development-only
+surface rather than a production endpoint.
+`make pr-test-full` runs `scripts/pr_test_env.sh` (POSIX) or
+`scripts/pr_test_env.ps1` (Windows) for a CI-shaped local pass;
+`make pr-test-full-fast` skips the environment sync and Dashboard build but
+still runs lint, the full pytest suite with coverage, and the startup smoke
+test. `make worktree-add <branch> [base]` and `make worktree-rm <branch>` manage
+sibling worktrees under `WORKTREE_DIR` (default `../astrbot_worktree`);
+`worktree-add` branches from the current `HEAD` unless a base is supplied.
 
 For focused work, use the component directly:
 
@@ -173,19 +189,25 @@ make test-blocking
 
 Python function coverage for the `astrbot` package is gated at 99% via
 `scripts/check_function_coverage.py` in the coverage CI job. Typing-only
-`@overload` signatures are excluded from that denominator. Dashboard
-Vitest gates `src/**/*.ts` (excluding generated OpenAPI, `main.ts`, and
-page-orchestration modules) in `dashboard/vitest.config.ts`. Vue SFC
-smoke tests stay under `dashboard/tests/` but are not in that 95%
-denominator because v8 counts template closures.
+`@overload` signatures and stub bodies are excluded from that denominator.
+Dashboard Vitest gates `src/**/*.ts` in `dashboard/vitest.config.ts` at 95%
+functions, 93% lines, and 92% statements, excluding generated OpenAPI,
+`main.ts`, `views/`, router/plugin wiring, the Monaco and Shiki loaders, and the
+listed chat composables. Vue SFC smoke tests stay under `dashboard/tests/` but
+are not in that denominator because v8 counts template closures.
 
-Tests use `pytest-asyncio`; mark async tests explicitly. `tests/conftest.py`
-sets test-mode environment flags and classifies tests into `--test-profile`
-tiers. The `blocking` profile excludes `slow`, `integration`, and `live`.
-`platform` and `provider` are domain tags and do not remove tests from the
-blocking gate. Put a regression test next to the nearest existing coverage
+Tests use `pytest-asyncio` in `strict` mode; mark async tests explicitly.
+`testpaths` covers `tests/` and `docs/tests/`. `tests/conftest.py` sets test-mode
+environment flags and classifies tests into the `all` and `blocking`
+`--test-profile` tiers; `tests/integration/` and `tests/e2e/` are auto-marked
+`integration`, while `tests/unit/`, `tests/agent/`, and `docs/tests/` are
+auto-marked `unit`. The `blocking` profile excludes `slow`, `integration`, and
+`live`. `platform` and `provider` are domain tags and do not remove tests from
+the blocking gate. Put a regression test next to the nearest existing coverage
 (`tests/unit/`, `tests/agent/`, or a specialist directory).
-Dashboard Vitest files live under `dashboard/tests/` as `*.vitest.ts`.
+Dashboard Vitest files live under `dashboard/tests/` as `*.vitest.ts`; `pnpm
+test` also runs node test scripts and a collection check, and `pnpm test:smoke`
+aliases the full Dashboard test run.
 Browser-level Dashboard tests live under `dashboard/tests/e2e/` and use
 `dashboard/playwright.config.ts`; the plugin UI suite starts its isolated
 backend through `tests/e2e/plugin_ui_test_server.py`. Install the required
@@ -209,18 +231,24 @@ make quality-report        # broader report; not currently a required CI gate
 - On Windows it checks Python, Dashboard, data, Markdown, TOML, YAML, and
   PowerShell.
 - On POSIX it checks Python, Dashboard, data, Markdown, TOML, YAML, shell, and
-  the Dockerfile.
+  the Dockerfile. The Dashboard surface covers eslint, knip, jscpd duplication,
+  Vitest smoke tests, i18n, and a production build.
 - On POSIX, `make check-all-platforms` adds `check-ps`. On Windows,
   `make check` already includes `check-ps`, so the target repeats that check and
   still does not emulate the POSIX shell/Docker surfaces. CI runs those
   surfaces, tests, quality, docs, and security jobs separately.
 
 `make check` does not invoke writing formatters, but it is not filesystem
-read-only: the Dashboard build writes `dashboard/dist/` and may regenerate the
-tracked MDI subset assets. `make quality-report` is not a required CI gate at
-present, but its commands still propagate non-zero exit codes.
+read-only: the Dashboard build writes `dashboard/dist/` and `data/dist/` and may
+regenerate the tracked MDI subset assets. `make quality-report` is not a
+required CI gate at present, but its commands still propagate non-zero exit
+codes.
 `quality-web-audit` runs Dashboard `pnpm audit --audit-level=low` with
 `--ignore-registry-errors`, so a registry timeout does not fail `make quality`.
+`quality-pyright` uses `pyrightconfig.quality.json`; `quality-report-pyright`
+runs the full checkout configuration. `quality-complexity` rejects only new
+extreme-complexity functions with an incremental `C901` ceiling of 35, while
+`quality-radon-cc` / `quality-radon-mi` emit advisory reports for `astrbot`.
 
 The native POSIX linters (`shellcheck`, `shfmt`, and `hadolint`) are required,
 not optional. PowerShell checks require PowerShell 7 and PSScriptAnalyzer.
@@ -241,42 +269,64 @@ adapter.
 ### Startup and ownership
 
 - `main.py` imports root-level `runtime_bootstrap` and calls
-  `initialize_runtime_bootstrap()` before importing AstrBot core modules. This
-  installs the certifi-backed verified aiohttp CA context. Keep imports above
-  that call minimal.
-- The `astrbot` console entry point has its own CLI initialization and
-  Dashboard checks. `astrbot/cli/__main__.py` and `astrbot run` both call
-  `runtime_bootstrap.initialize_runtime_bootstrap()`. They still differ from
-  `main.py`: the CLI requires the `.astrbot` marker, uses a separate Dashboard
-  asset path, and has no `--webui-dir`. When changing startup behavior, inspect
-  and test both entry points instead of assuming they are identical.
-- Startup-only environment flags are applied before core imports. Runtime paths
-  and Dashboard assets are resolved before `create_runtime_services()` builds
-  the runtime-owned configuration, SQLite database, preferences, Playwright
-  renderer, file-token service, pip installer, and demo state.
+  `initialize_runtime_bootstrap()` before importing AstrBot core modules. That
+  call installs the certifi-backed verified SSL context from
+  `astrbot/utils/http_ssl_common.py` and patches aiohttp's verified context.
+  Keep imports above that call minimal.
+- `astrbot/application.py` is the single process startup path for `main.py` and
+  the `astrbot` console entry point. Both callers apply startup-only environment
+  flags before core imports, then hand off to `run_application()`, which takes
+  the cross-process `astrbot/runtime_instance_lock.py` lock on the data
+  directory, calls `prepare_runtime_environment()`, resolves Dashboard assets
+  through one `resolve_dashboard_assets()` helper, installs log routing, calls
+  `create_runtime_services()`, and then starts `InitialLoader`. The CLI
+  (`astrbot/cli/__main__.py`, `astrbot run`) still requires the `.astrbot`
+  marker and `main.py` alone accepts `--webui-dir`; do not give the CLI a second
+  Dashboard asset path. When changing startup behavior, change the shared
+  runner and test both entry points.
+- Dashboard assets resolve in this order: explicit `--webui-dir`,
+  `dashboard/dist`, `data/dist`, then the bundled `astrbot/dashboard/dist`, with
+  version-compatibility checks. `scripts/sync_dashboard_dist.py` embeds
+  `docs/.vitepress/dist` as `help/` and copies the result to `data/dist`.
+- `create_runtime_services()` builds the runtime-owned `RuntimeServices`:
+  configuration, `RuntimeCatalogs`, SQLite database, preferences, Playwright
+  renderer, file-token service, pip installer, authorization service, WebChat
+  queue manager and run coordinator, follow-up coordinator, LLM metadata
+  catalog, metrics runtime, computer runtime, tool image cache, TOTP runtime
+  state, and demo mode.
 - Importing `astrbot.core` or `astrbot.core.runtime_services` must stay inert:
   no user-data access, directory creation, logger configuration, scheduler
   startup, or service construction at import time. Construction belongs in the
   explicit factory after bootstrap; `tests/unit/test_core_import_smoke.py`
   protects this boundary.
 - `InitialLoader` runs `AstrBotCoreLifecycle` and `AstrBotDashboard`.
-  `AstrBotCoreLifecycle` owns manager initialization, bounded event queues,
+  `AstrBotCoreLifecycle` owns manager initialization, the bounded event queue,
   pipeline schedulers, plugins, cron, memory runtime, knowledge bases,
-  sub-agents, background tasks, and shutdown order.
+  sub-agents, background tasks, and LIFO shutdown order. It publishes the
+  aggregate `CoreRuntime` that `AstrBotDashboard` receives.
+- In this fork, exercise the console entry point from the source checkout with
+  `uv run astrbot ...`; installing the PyPI package named `astrbot` installs the
+  upstream distribution.
 
 ### Message flow
 
 1. Adapters under `astrbot/core/platform/sources/` normalize inbound traffic to
-   `AstrMessageEvent` and enqueue it.
+   `AstrMessageEvent` and enqueue it through `Platform.commit_event()`, which
+   drops with a warning when the bounded queue is full.
 2. `EventBus` chooses the `PipelineScheduler` for the event's config id and
-   dispatches it under bounded concurrency while retaining task references.
+   dispatches it under bounded concurrency (`max_concurrency=128`, queue
+   `maxsize=1024`) while retaining strong task references.
 3. `astrbot/core/pipeline/bootstrap.py` defines the fixed sequence from
    `WakingCheck` through `AdmissionCheck`, `SessionStatusCheck`,
    `TurnCoalesce`, `RateLimit`, `ContentSafetyCheck`, `PreProcess`,
    `GroupMessageHistory`, `Process`, `ResultDecorate`, and finally `Respond`.
 
 The scheduler supports async stages and async-generator onion middleware.
-Preserve stage ordering, stop-propagation, and cancellation semantics.
+Preserve stage ordering, stop-propagation, and cancellation semantics. The
+former `pipeline/stage_order.py` and `pipeline/whitelist_check/` are gone; turn
+routing lives in `pipeline/turn_router.py` (`route_turn`) and coalescing in
+`pipeline/turn_window.py` (`TurnWindowManager`). Detached work replays through
+`ResultDecorateStage` with the same ordering.
 
 Group wake behavior is explicit. `llm_access.group`, `llm_access.reply_to_bot`,
 and continuation state control group LLM admission. Mentions are message-chain
@@ -292,47 +342,75 @@ aliases stay as declared unless the row has `resolution_strategy=manual_rename`.
 Unmatched command_config rows are deleted. Startup does not patch leftover
 columns onto an existing main database. The pre-rename `data/data_v4.db` is
 imported once into `data/astrbot.db`, and later schema changes are forward
-migration revisions; never edit an applied step, because its checksum fails
-startup.
+migration revisions recorded in the `_schema_migrations` ledger
+(`astrbot/core/db/migrations/`); never edit an applied step, because its
+checksum fails startup.
 
 ### Agents, providers, and runners
 
-- `astrbot/core/agent/` contains the local LLM agent runtime, tool execution,
-  MCP, context management, handoffs, and runner interfaces. Main-agent assembly
-  is in `astr_main_agent.py`; `subagent_orchestrator.py` owns configured
-  sub-agents.
-- Provider primitives cover chat completion, STT, TTS, embeddings, and rerank.
-  Concrete types register through the static type-to-module map in
+- `astrbot/core/agent/` contains the local LLM agent runtime. The tool loop is
+  `runners/tool_loop_agent_runner.py`; `conversation_loop.py` only handles
+  opt-in BTW conversation admission, and `tool_executor.py` declares the
+  abstract executor protocol implemented by `astrbot/core/astr_agent_tool_exec.py`.
+  Context management (`context/`), MCP (`mcp_client.py`), and handoffs
+  (`handoff.py`) live here as well.
+- `astrbot/core/agent/btw/` is a second, opt-in agent runtime for `/work`:
+  classifier routing, `work_loop.py`, coding agents/runners, and work sessions.
+  It is reachable through the `astrbot.api` BTW helpers and must stay out of
+  default-path module imports.
+- Main-agent assembly lives in `astrbot/core/astr_main_agent.py` with prompts in
+  `astrbot/core/astr_main_agent_resources.py`; `astrbot/core/subagent_orchestrator.py`
+  owns configured sub-agents and registers handoff tools only.
+- `astrbot/core/execution_context.py` (`CoreExecutionContext`) replaced the
+  removed `astrbot/core/star/context.py`, and `astrbot/core/tool_catalog.py`
+  assembles the per-surface tool catalog from built-in, MCP, and skill tools.
+- Provider primitives cover chat completion, classifier, STT, TTS, embeddings,
+  and rerank. Concrete types self-declare through `@register_provider_adapter`
+  descriptors and register through the static type-to-module map in
   `astrbot/core/provider/provider_modules.py`; `ProviderManager` imports the
-  selected module lazily. Add new built-in provider modules to that map instead
-  of importing every source eagerly.
+  selected module lazily, and catalogs are runtime-owned rather than global.
+  Add new built-in provider modules to that map instead of importing every
+  source eagerly.
 - Dify, Coze, DashScope applications, and DeerFlow are **third-party Agent
   runners** under `astrbot/core/agent/runners/`, not chat-provider source
   implementations. Keep their lifecycle and response mapping in the runner
   path even when their configuration records are provider-like.
 - The tool-loop runner emits an `agent_stats` event after every completed model
   call, including intermediate calls before tools. WebChat consumes those
-  events as request-scoped protocol messages. Preserve their ordering and do
-  not collapse them back into a final-only summary.
+  events as request-scoped protocol messages; other platforms drop them while
+  observability still counts the call. Preserve their ordering and do not
+  collapse them back into a final-only summary.
 
 ### Stars and supporting subsystems
 
 - The plugin system is under `astrbot/core/star/`; built-in Stars live in
   `astrbot/builtin_stars/`, and user Stars load from `data/plugins/`.
   Plugin-facing code imports the supported SDK from `astrbot.api`.
+  `PluginManager` is a composition root over the catalog, runtime loader,
+  lifecycle, extension coordinator, and package installer; the pre-split
+  `star_manager` monolith and `star/star_tools.py` are gone.
 - Dashboard Extension Protocol v1 is owned by
   `astrbot/core/star/dashboard_extension.py` and exposed to plugins only through
-  `astrbot.api.dashboard`. Extensions declare `requires.dashboard_extension: 1`,
-  content-addressed `assets.v1.json` manifests, and structured Actions during
-  plugin `initialize()`. Keep the sandboxed iframe and host-managed Action
-  boundary; do not add arbitrary Dashboard HTTP proxies, legacy page metadata,
-  or direct access to Dashboard authentication state.
+  `astrbot.api.dashboard`, with a sibling `dashboard:` metadata section.
+  Extensions declare `requires.dashboard_extension: 1`, content-addressed
+  `assets.v1.json` manifests, and structured Actions registered during
+  plugin `initialize()`. Keep the sandboxed iframe
+  (`sandbox="allow-scripts"`) and host-managed Action boundary; do not add
+  arbitrary Dashboard HTTP proxies, legacy page metadata, or direct access to
+  Dashboard authentication state.
 - Long-lived resources must be owned by the lifecycle that creates them and
   have explicit termination. Re-raise `asyncio.CancelledError` when broad
-  exception handling is unavoidable.
-- Other major subsystems are `knowledge_base/`, `conversation_mgr.py`,
-  `memory/`, `cron/`, `skills/`, `computer/`, `db/`, and
-  `backup/`.
+  exception handling is unavoidable; the documented exception is awaiting a
+  just-cancelled child during shutdown.
+- Other major subsystems are `pipeline/`, `platform/` (adapters plus the
+  `session_bridge*` transport), `provider/`, `config/`, `message/`,
+  `knowledge_base/`, `conversation_mgr.py`, `memory/`, `cron/`, `skills/`,
+  `computer/` (with `process_sandbox/` for bubblewrap/Seatbelt/seccomp plus
+  `fs_policy.py`, `network.py`, and an in-process egress `proxy.py`), `tools/`,
+  `webchat/` (request-scoped chat runs), `observability/` (metrics and trace
+  runtime), `auth/` (unified `AuthorizationService` for admission and
+  preflight), `command/` (command binder and engine, exported through
+  `astrbot.api.command`), `db/`, `backup/`, and `astrbot/utils/`.
 
 ### Dashboard protocol
 
@@ -341,14 +419,20 @@ startup.
   `astrbot/dashboard/services/`. Shared request models belong in
   `astrbot/dashboard/schemas.py`.
 - Ordinary JSON endpoints use the structured `status` / `message` / `data`
-  envelope from `dashboard/responses.py` (including `"status": "warning"` where
-  explicitly supported). Do not wrap protocol responses that must remain raw:
-  file/export downloads, SSE streams, WebSockets, third-party webhook
-  callbacks, and static/public responses.
-- The contract source is `openspec/openapi-v1.yaml`. Runtime routes, the source
-  spec, generated clients/docs, frontend call sites, and backend/frontend tests
-  must change together.
-- Unified Chat WebSockets multiplex concurrent chat runs by unique `message_id`.
+  envelope from `astrbot/dashboard/responses.py`, whose helpers are `ok()` and
+  `error()`. `"status": "warning"` is protocol-legal and is currently emitted
+  inline only by the plugin route (`api/plugins.py`); add a helper instead of
+  hand-rolling the envelope elsewhere. Do not wrap protocol responses that must
+  remain raw: file/export downloads, SSE streams, WebSockets, third-party
+  webhook callbacks, and static/public responses.
+- The contract source is `openspec/openapi-v1.yaml`, enforced for HTTP paths by
+  `tests/unit/test_openapi_contract.py`. Runtime routes, the source spec,
+  generated clients/docs, frontend call sites, and backend/frontend tests must
+  change together. The unified-chat WebSocket payload is not described in the
+  spec, so keep `astrbot/core/webchat/` and its Dashboard consumers in sync
+  manually and test them.
+- Unified Chat WebSockets multiplex concurrent chat runs by unique `message_id`
+  on `/api/v1/unified-chat/ws`; a duplicate active `message_id` is rejected.
   Request tasks, interrupts, follow-up capture, `run_started`, and streamed
   `agent_stats` metadata are request-scoped. Do not reintroduce a session-wide
   busy flag or emit a response without the originating request identity.
@@ -361,14 +445,24 @@ startup.
   temporary-file replacement and use this API for async save paths instead of
   ad-hoc `to_thread(save_config)` calls.
 - Knowledge-base uploads span parsed media, metadata storage, document storage,
-  and FAISS vectors. Validate vector shape before local writes and keep
-  compensating cleanup for every store when an upload fails before metadata
-  commit. A partial document must never remain queryable after a reported
-  upload failure.
-
-The `astrbot` console entry point is in `astrbot/cli/__main__.py`. In this fork,
-exercise it from the source checkout with `uv run astrbot ...`; installing the
-PyPI package named `astrbot` installs the upstream distribution.
+  and vector stores. Validate vector shape in `astrbot/core/db/vec_db/`
+  (`faiss.py`, `exact.py`) before local writes and keep compensating cleanup
+  (`kb_helper.py`) for every store when an upload fails before metadata commit.
+  A partial document must never remain queryable after a reported upload
+  failure.
+- Configuration documents carry a monotonic `schema_revision`
+  (`astrbot/core/config/migrations/`, currently 6). A configuration-shape change
+  adds a forward migration step; never edit an applied step, and never accept a
+  document whose revision is newer than the build. Unlike the SQLite ledger,
+  config migrations are keyed only by revision integer, so immutability is a
+  convention rather than a load-time checksum. Revision 6 removed the flat
+  sandbox `allow_network` key in favour of nested per-role policies.
+- Message traces persist to `data/logs/traces.db` behind the nested `trace.*`
+  config keys (`trace.db_path`, `trace.db_max_mb` 80, `trace.retention_days` 7)
+  and feed the Dashboard trace explorer plus the log-broker diagnostics export.
+  Storage cleanup (`astrbot/core/utils/storage_cleaner.py`) covers logs, cache,
+  and traces, and must know every new log/trace store that can grow unbounded.
+  A changed `trace.db_path` needs a restart before cleanup will touch it.
 
 ## Security invariants
 
@@ -383,6 +477,10 @@ Treat these as design constraints, not optional hardening:
 - Dashboard authentication rate limiting is enabled by default and its
   per-client registry is bounded. Do not bypass the login/TOTP checks or
   reintroduce attacker-controlled, unbounded limiter state.
+- Authorization runs through the single fail-closed `authorize()` path in
+  `astrbot/core/auth/service.py`: an unknown action, missing context, or
+  evaluation error denies instead of allowing. Do not reintroduce
+  `event.is_admin()`/`admins_id` checks or a second, weaker decision path.
 - Download/update HTTP clients must verify certificates and hostnames. Do not
   restore `CERT_NONE`, `ssl=False`, `verify=False`, or an automatic insecure TLS
   retry after certificate failure.
@@ -390,6 +488,16 @@ Treat these as design constraints, not optional hardening:
   default and HTTP clients do not follow redirects. Private-network access is
   allowed only through the explicit per-server `allow_private_network` opt-in;
   preserve DNS/IP validation and redirect blocking.
+- Build outbound HTTP through the named `OutboundRequestPolicy` values in
+  `astrbot/core/utils/outbound_http.py` (`MCP_REMOTE`, `JSON_FETCH`,
+  `PLUGIN_REGISTRY`, and domain-specific builders). They own scheme, host, port,
+  redirect, response-size, and DNS re-validation limits; do not hand-roll
+  aiohttp/httpx clients for new download, update, or plugin paths.
+- Restricted Local computer file access goes through
+  `astrbot/core/computer/local_file_security.py` and
+  `local_file_security_windows.py`. A dedicated Windows CI job hard-gates
+  `tests/unit/test_local_file_security.py`; do not weaken the shared helper to
+  make a platform-specific test pass.
 - Sanitize all untrusted rendered HTML with DOMPurify before `v-html`. Do not
   weaken the existing README, changelog, code-rendering, or config-hint
   sanitization paths to fix display issues.
@@ -442,35 +550,41 @@ cd ..
 make check-md
 ```
 
-`make check-md` enumerates tracked Markdown with `git ls-files`; run Prettier
-and markdownlint explicitly on new untracked pages before they are added to the
-index. During an uncommitted deletion, its wrapper may also pass the removed
-tracked path to Prettier, so use an existing-file-filtered invocation for the
-local check and still verify the post-commit target in CI.
+`make check-md` enumerates tracked Markdown with `git ls-files` through
+`scripts/run_tracked_node_tool.py`, which skips paths that no longer exist on
+disk. Run Prettier and markdownlint explicitly on new untracked pages before
+they are added to the index.
 
-The production Dashboard serves the VitePress build at `/help/`. `make run`,
-`make build-docs`, and the runtime image copy `docs/.vitepress/dist` into the
-WebUI `help/` directory with `ASTRBOT_DOCS_BASE=/help/`. Do not commit that
-generated tree, and do not create ad-hoc summary/report Markdown files. Do not
-point Dashboard, API errors, changelogs, plugin READMEs, or config hints at
-`docs.astrbot.app`. Do not restore `Dockerfile.docs` or a separate docs
-Compose service.
+The production Dashboard serves the VitePress build at `/help/`
+(`astrbot/dashboard/docs_href.py`). `docs:dev` serves at `/` and passes
+`--host`; a plain `docs:build` already defaults to the `/help/` base. `make run`
+and `make build-docs` copy `docs/.vitepress/dist` into `dashboard/dist/help` and
+then `data/dist` through `scripts/sync_dashboard_dist.py`, while the runtime
+image copies it into `astrbot/dashboard/dist/help` and `dashboard/dist/help`.
+`make build-docs` first builds the Dashboard, so it is not docs-only. Do not
+commit that generated tree, and do not create ad-hoc summary/report Markdown
+files. Do not point Dashboard, API errors, changelogs, plugin READMEs, or
+config hints at `docs.astrbot.app`. Do not restore `Dockerfile.docs` or a
+separate docs Compose service.
 
 ### NapCat generated models
 
 `astrbot/core/platform/sources/napcat/generated/ob11_events.py` is generated
-from NapCat's OneBot v11 TypeScript definitions. Never edit it by hand. Refresh
-the source checkout under `.tmp/NapCatQQ` intentionally when consuming a new
-NapCat revision, then run:
+from NapCat's OneBot v11 TypeScript definitions at the revision pinned in
+`scripts/napcat/napcat-revision.txt`. Never edit it by hand. The generator
+checks that revision out under `.tmp/NapCatQQ`, so refresh it intentionally when
+consuming a new NapCat revision, then run:
 
 ```bash
 make napcat-check
 ```
 
-This regenerates the schema/model, Ruff-formats the checked-in model, and runs
-the focused NapCat adapter/codegen tests. Intermediate schema files under
-`.tmp/napcat-schema` are not committed; review and commit the generated Python
-diff with its runtime/test changes.
+The generator Ruff-formats the checked-in model itself; `make napcat-check`
+then regenerates from the pinned schema, runs the focused NapCat
+adapter/codegen tests, and fails on a dirty generated file.
+`linux-development.yml` runs it on every push and pull request. Intermediate
+schema files under `.tmp/napcat-schema` are not committed; review and commit the
+generated Python diff with its runtime/test changes.
 
 ## Conventions
 
@@ -488,9 +602,11 @@ diff with its runtime/test changes.
   relocate mutable state; most state belongs under `<root>/data/`. Tests must
   use temporary roots, never a developer's real `data/`.
 - **Import boundaries:** `astrbot/api/` must not import Dashboard or concrete
-  provider/platform sources. Shared core modules and built-in Stars must not
-  depend on concrete sources except in the registration/discovery owners.
-  `tests/unit/test_import_boundaries.py` guards key absolute-import paths;
+  provider/platform sources, `astrbot/core/` must not import `astrbot.api`, and
+  the agent runtime must not import `astrbot.core.provider`. Shared core modules
+  and built-in Stars must not depend on concrete sources except in the
+  registration/discovery owners. `tests/unit/test_import_boundaries.py` guards
+  these paths and also pins both entry points to the shared application runner;
   still review relative imports and ownership explicitly.
 - **Docstrings:** use Google style (`Args:`, `Returns:`, `Raises:`). Write new
   comments in English; match surrounding Chinese only where consistency is
@@ -507,7 +623,10 @@ diff with its runtime/test changes.
   (`SKILL.md` vs `REFERENCE.md` / shared files). Catalog:
   `.agents/skills/README.md`. Cite those files; do not paste them.
   `archify` is a checkout-only maintainer renderer; hatch sdist excludes
-  `/.agents`, and the runtime image must not copy it.
+  `/.agents`, and the runtime image must not copy it. Verify the two
+  vendored/overlaid skills with `make check-archify` and
+  `make check-dashboard-ui` after editing them; neither target is part of
+  `make check`.
 - **Commits/PRs:** follow
   `.agents/shared/conventional-commit/REFERENCE.md` when generating,
   reviewing, or classifying commit messages. Use English Conventional
@@ -566,20 +685,25 @@ branch, the full last-processed upstream object name, UTC timestamp, method,
 `source_pr` provenance, and an honest note about included/skipped commits and
 conflicts. `FETCH_HEAD`, abbreviated hashes, and git notes are not shared sync
 state. Use `git rev-parse upstream/master` when recording the fetched upstream
-head.
+head. The append-only decision ledger lives at `upstream-decisions.jsonl` in the
+repository root; never rewrite or delete recorded entries.
 
 ## Releases
 
 Release preparation is a source-management workflow, not proof that versioned
-assets will be published. The nightly workflow may push `runtime` images to
-GHCR and open GitHub prereleases for those nightlies. It does not publish PyPI
-packages or a versioned release image channel. The documentation workflow only
-builds and uploads a short-lived CI artifact.
+assets will be published. The nightly workflow may push `runtime` images for
+linux/amd64 to GHCR. Its image tags are `nightly`, `nightly-<date>`, and
+`sha-<sha7>` (`<date>` is UTC `YYYYMMDD`). The matching GitHub prerelease is
+tagged separately with `release_tag`: `nightly-<date>` for a scheduled run and
+`nightly-manual-<sha7>` for a manual dispatch. It does not publish PyPI packages
+or a versioned release image channel. The documentation workflow only builds and
+uploads a CI artifact.
 
-`scripts/prepare_release.py` uses the latest tag reachable from the selected
-base branch as its changelog lower bound. This fork currently has no
-established local/origin tag baseline. After fetching and fast-forwarding the
-selected base, always re-check the exact reachable baseline before a release:
+`scripts/prepare_release.py` uses the newest reachable tag that looks like a
+version as its changelog lower bound; non-version tags such as `nightly-*` are
+ignored. This fork currently has no established local/origin tag baseline.
+After fetching and fast-forwarding the selected base, always re-check the exact
+reachable baseline before a release:
 
 ```bash
 git fetch --prune --tags <remote>
@@ -606,8 +730,10 @@ Pass the version without the leading `v`.
 The script checks out and fast-forwards the base branch, fetches tags from the
 selected `--remote`, creates `release/<version>`, bumps both version files, writes
 `changelogs/v<version>.md`, and runs Ruff unless `--skip-checks` is supplied.
-It does not replace the appropriate `make check`, `make test`, `make quality`,
-Dashboard, or docs validation for the release's actual changes.
+`--base-branch` defaults to `master`, `--remote` defaults to `origin`, and
+`--push` requires `--commit`. It does not replace the appropriate `make check`,
+`make test`, `make quality`, Dashboard, or docs validation for the release's
+actual changes.
 `--generate-api-client` assumes Dashboard dependencies are already installed
 and regenerates only the Dashboard client; an OpenAPI change still requires the
 public docs JSON command documented above.

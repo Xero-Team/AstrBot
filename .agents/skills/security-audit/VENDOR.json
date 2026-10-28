@@ -1,0 +1,19 @@
+{
+  "source": "https://github.com/cloudflare/security-audit-skill",
+  "fork": "https://github.com/Xero-Team/security-audit-skill",
+  "path": "skills/security-audit",
+  "commit": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
+  "license": "MIT",
+  "skill_license": "AGPL-3.0-or-later",
+  "purpose": "checkout-only AstrBot overlay of the upstream workflow; not a copy of the upstream skill tree",
+  "notices": "THIRD_PARTY_NOTICES.md",
+  "local_patches": [
+    "SKILL.md and REFERENCE.md are AstrBot overlays, not upstream prompts",
+    "Five AstrBot-oriented references replace the ten domain companions",
+    "One Python validator with unit tests replaces the Node schema/ledger validators",
+    "Runs live under the gitignored .tmp/security-audit/ inside the checkout",
+    "Findings route through SECURITY.md; the skill never files a public Issue or PR",
+    "Coverage IDs are plain stable identifiers, not percent-encoded paths",
+    "Execution safety stays universal: every local check runs in an OS sandbox"
+  ]
+}

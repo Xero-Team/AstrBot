@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Security Audit AstrBot'
+  short_description: 'Hunt and independently validate real AstrBot boundary failures'
+  default_prompt: 'Use $security-audit to audit the requested AstrBot surface, validate every candidate independently, and report only source-grounded confirmed or needs_validation records with exact coverage.'

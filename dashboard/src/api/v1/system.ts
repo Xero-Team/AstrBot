@@ -17,6 +17,7 @@ import type {
   BackupUploadSessionRequest,
   GhproxyTestRequest,
   PipInstallRequest,
+  PypiIndexTestRequest,
   TraceSettingsRequest,
 } from './shared';
 import type { AxiosRequestConfig } from './shared';
@@ -170,6 +171,16 @@ export const statsApi = {
   testGhproxy(payload: GhproxyTestRequest) {
     return typed<{ latency?: number }>(
       openApiV1.testGhproxyConnection({ body: payload }),
+    );
+  },
+  testPypiIndex(payload: PypiIndexTestRequest) {
+    return typed<{ latency?: number }>(
+      openApiV1.testPypiIndexConnection({ body: payload }),
+    );
+  },
+  measurePypiIndexSpeed(payload: PypiIndexTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measurePypiIndexSpeed({ body: payload }),
     );
   },
   startTime(requestConfig?: AxiosRequestConfig) {

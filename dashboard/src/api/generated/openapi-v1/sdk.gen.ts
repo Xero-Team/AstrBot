@@ -453,6 +453,8 @@ import type {
   LoginResponses,
   LogoutData,
   LogoutResponses,
+  MeasurePypiIndexSpeedData,
+  MeasurePypiIndexSpeedResponses,
   MoveDataFileEntryData,
   MoveDataFileEntryResponses,
   MovePromptItemData,
@@ -574,6 +576,8 @@ import type {
   TestMcpServerResponses,
   TestProviderData,
   TestProviderResponses,
+  TestPypiIndexConnectionData,
+  TestPypiIndexConnectionResponses,
   UninstallFailedPluginData,
   UninstallFailedPluginResponses,
   UninstallPluginData,
@@ -5995,6 +5999,48 @@ export const testGhproxyConnection = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/stats/ghproxy/test',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Test a PyPI index (mirror) endpoint
+ */
+export const testPypiIndexConnection = <ThrowOnError extends boolean = false>(
+  options: Options<TestPypiIndexConnectionData, ThrowOnError>,
+): RequestResult<TestPypiIndexConnectionResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    TestPypiIndexConnectionResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/stats/pypi-index/test',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Download a wheel from a PyPI index and measure the throughput
+ */
+export const measurePypiIndexSpeed = <ThrowOnError extends boolean = false>(
+  options: Options<MeasurePypiIndexSpeedData, ThrowOnError>,
+): RequestResult<MeasurePypiIndexSpeedResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).post<
+    MeasurePypiIndexSpeedResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/stats/pypi-index/speed',
     ...options,
     headers: {
       'Content-Type': 'application/json',

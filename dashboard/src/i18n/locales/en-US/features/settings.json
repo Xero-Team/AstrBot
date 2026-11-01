@@ -66,6 +66,27 @@
       "subtitle": "No GitHub mirrors are provided by default. Plugin installs and updates use official GitHub or validated public HTTPS origins.",
       "label": "Select GitHub Proxy Address"
     },
+    "pypiMirror": {
+      "title": "PyPI Package Index",
+      "subtitle": "PyPI index used by pip when installing AstrBot's Python dependencies. Pick a mirror or a custom URL. Restart AstrBot for changes to take effect.",
+      "label": "Select PyPI Source",
+      "custom": "Custom",
+      "customPlaceholder": "https://example.com/pypi/simple",
+      "testConnection": "Test Connectivity",
+      "testTip": {
+        "serial": "Click: test one source at a time, starting from the selected one",
+        "single": "Ctrl / ⌘ + Click: test only the selected source",
+        "parallel": "Shift + Click: test all sources in parallel"
+      },
+      "unavailable": "Unavailable",
+      "presets": {
+        "official": "Official",
+        "aliyun": "Aliyun",
+        "ustc": "USTC",
+        "tsinghua": "Tsinghua",
+        "tencent": "Tencent Cloud"
+      }
+    },
     "proxySelector": {
       "title": "GitHub Proxy",
       "noProxy": "Don't use GitHub Proxy",

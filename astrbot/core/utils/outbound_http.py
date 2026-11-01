@@ -26,6 +26,9 @@ ProgressCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 _DEFAULT_MAX_URL_LENGTH = 2048
 _PLUGIN_ARCHIVE_MAX_BYTES = 50 * 1024 * 1024
 _MIRROR_TEST_MAX_BYTES = 64 * 1024
+# A simple index page lists every release of one package and a speed sample
+# pulls a whole wheel, so this class needs a larger budget than a probe.
+_PYPI_INDEX_MAX_BYTES = 8 * 1024 * 1024
 _JSON_MAX_BYTES = 8 * 1024 * 1024
 _DEFAULT_HTTPS_PORTS = frozenset({443})
 _JSON_REQUEST_HEADERS = {
@@ -185,6 +188,20 @@ PLUGIN_REGISTRY = OutboundRequestPolicy(
     max_url_length=_DEFAULT_MAX_URL_LENGTH,
     max_response_bytes=_JSON_MAX_BYTES,
     timeout_seconds=30.0,
+    allowed_content_types=None,
+)
+PYPI_INDEX_PROBE = OutboundRequestPolicy(
+    # Mirrors are operator-configured and some only serve plain HTTP, but the
+    # targets stay public: private, loopback, and metadata addresses are still
+    # rejected by validate_outbound_url().
+    allowed_schemes=frozenset({"http", "https"}),
+    allowed_hosts=None,
+    allowed_ports=None,
+    allow_private_network=False,
+    max_redirects=5,
+    max_url_length=_DEFAULT_MAX_URL_LENGTH,
+    max_response_bytes=_PYPI_INDEX_MAX_BYTES,
+    timeout_seconds=15.0,
     allowed_content_types=None,
 )
 MCP_REMOTE = OutboundRequestPolicy(
@@ -848,6 +865,7 @@ async def download_to_path(
     | None = None,
     trust_env: bool = False,
     proxy: str | None = None,
+    request_headers: Mapping[str, str] | None = None,
 ) -> None:
     """Stream a URL to disk with size limits and temporary-file cleanup.
 
@@ -859,6 +877,8 @@ async def download_to_path(
         resolve_addresses: Optional resolver used by tests.
         trust_env: Must stay false so process proxy env is ignored.
         proxy: Optional explicit forward proxy URL.
+        request_headers: Optional request headers for servers that only serve
+            their package files to a specific client such as pip.
 
     Raises:
         OutboundRequestError: If validation, size, type, or HTTP status fails.
@@ -896,6 +916,7 @@ async def download_to_path(
                 resolve_addresses=resolve_addresses,
                 allow_redirects=policy.max_redirects > 0,
                 proxy=forward_proxy,
+                headers=request_headers,
             )
             async with response:
                 if response.status != 200:
@@ -968,6 +989,7 @@ async def fetch_text(
         [str, int], Sequence[ipaddress.IPv4Address | ipaddress.IPv6Address]
     ]
     | None = None,
+    request_headers: Mapping[str, str] | None = None,
 ) -> tuple[int, str, Mapping[str, str]]:
     """Fetch a small text response after validating every hop.
 
@@ -975,6 +997,8 @@ async def fetch_text(
         url: Destination URL.
         policy: Validation and size policy.
         resolve_addresses: Optional resolver used by tests.
+        request_headers: Optional headers merged over the JSON defaults, for
+            endpoints that need their own Accept or User-Agent values.
 
     Returns:
         Status code, decoded body, and response headers.
@@ -983,6 +1007,9 @@ async def fetch_text(
         OutboundRequestError: If validation or the size limit fails.
     """
 
+    headers = dict(_JSON_REQUEST_HEADERS)
+    if request_headers:
+        headers.update(request_headers)
     validate_outbound_url(url, policy, resolve_addresses=resolve_addresses)
     forward_proxy = _proxy_for_url(url)
     connector, resolver = _open_connector(
@@ -1003,7 +1030,7 @@ async def fetch_text(
                 resolve_addresses=resolve_addresses,
                 allow_redirects=policy.max_redirects > 0,
                 proxy=forward_proxy,
-                headers=_JSON_REQUEST_HEADERS,
+                headers=headers,
             )
             async with response:
                 limit = (

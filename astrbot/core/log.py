@@ -26,6 +26,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
 )
+from astrbot.core.utils.console_sink import BoundedConsoleSink
 from astrbot.core.utils.error_redaction import redact_sensitive_text
 from astrbot.core.utils.telemetry import bounded_attributes, bounded_text
 
@@ -375,6 +376,21 @@ class _SafeConsoleStream:
             return bool(self._stream.isatty())
         return False
 
+    @property
+    def encoding(self) -> str | None:
+        return getattr(self._stream, "encoding", None)
+
+    @property
+    def raw_stream(self):
+        return self._stream
+
+    @property
+    def closed(self) -> bool:
+        return bool(getattr(self._stream, "closed", False))
+
+    def fileno(self) -> int:
+        return self._stream.fileno()
+
 
 class _LoguruInterceptHandler(logging.Handler):
     """将 logging 记录转发到 loguru。"""
@@ -570,6 +586,7 @@ class LogManager:
 
     _configured = False
     _console_sink_id: int | None = None
+    _console_output: BoundedConsoleSink | None = None
     _file_sink_id: int | None = None
     _plugin_logger_names: set[str] = set()
     _plugin_level_overrides: dict[str, str] | None = None
@@ -602,10 +619,12 @@ class LogManager:
             return
 
         _loguru.remove()
+        if cls._console_output is None:
+            cls._console_output = BoundedConsoleSink(_SafeConsoleStream(sys.stdout))
         cls._console_sink_id = _loguru.add(
-            _SafeConsoleStream(sys.stdout),
+            cls._console_output,
             level="DEBUG",
-            colorize=True,
+            colorize=cls._console_output.isatty(),
             diagnose=False,
             backtrace=False,
             filter=_non_trace_sink_filter,
@@ -616,6 +635,17 @@ class LogManager:
             ),
         )
         cls._configured = True
+
+    @classmethod
+    def get_console_status(cls) -> dict | None:
+        """Read console counters for diagnostics without logging to the console.
+
+        Returns:
+            Current console status, or None before console setup.
+        """
+        if cls._console_output is None:
+            return None
+        return cls._console_output.get_status()
 
     @classmethod
     def _setup_root_bridge(cls) -> None:
@@ -854,10 +884,14 @@ class LogManager:
             configured_level = logging.getLevelName(logger.level)
             if cls._console_sink_id is not None and isinstance(configured_level, str):
                 try:
+                    if cls._console_output is None:
+                        cls._console_output = BoundedConsoleSink(
+                            _SafeConsoleStream(sys.stdout)
+                        )
                     new_sink_id = _loguru.add(
-                        _SafeConsoleStream(sys.stdout),
+                        cls._console_output,
                         level=configured_level,
-                        colorize=True,
+                        colorize=cls._console_output.isatty(),
                         diagnose=False,
                         backtrace=False,
                         filter=_non_trace_sink_filter,

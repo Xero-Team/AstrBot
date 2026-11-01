@@ -1114,11 +1114,125 @@ async def test_serpapi_tools_require_key():
     context = _context_with_provider_settings({})
     for tool in (
         tools.SerpApiWebSearchTool(),
+        tools.SerpApiNewsSearchTool(),
         tools.SerpApiImageSearchTool(),
         tools.SerpApiFinanceSearchTool(),
         tools.SerpApiScholarSearchTool(),
     ):
         assert "not configured" in await tool.call(context, query="AstrBot")
+
+
+@pytest.mark.asyncio
+async def test_serpapi_news_search_maps_articles_and_metadata(monkeypatch):
+    session = _SerpApiSession(
+        [
+            _SerpApiResponse(
+                json_data={
+                    "news_results": [
+                        {
+                            "title": "AstrBot adds a news search tool",
+                            "link": "https://example.com/astrbot-news",
+                            "snippet": "The project added Google News support.",
+                            "source": {
+                                "name": "Example News",
+                                "icon": "https://example.com/favicon.ico",
+                                "authors": ["A. Reporter"],
+                            },
+                            "iso_date": "2026-10-24T08:00:00Z",
+                            "thumbnail": "https://example.com/news.jpg",
+                        },
+                        {"title": "Group without a direct article", "stories": []},
+                    ]
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(tools, "_client_session", lambda: session)
+
+    context = _context_with_provider_settings({"websearch_serpapi_key": ["test-key"]})
+    result = json.loads(
+        await tools.SerpApiNewsSearchTool().call(
+            context,
+            query="AstrBot",
+            country="us",
+            search_lang="en",
+        )
+    )["results"]
+
+    assert session.calls[0]["params"] == {
+        "engine": "google_news",
+        "api_key": "test-key",
+        "q": "AstrBot",
+        "gl": "us",
+        "hl": "en",
+    }
+    assert len(result) == 1
+    assert result[0]["title"] == "AstrBot adds a news search tool"
+    assert result[0]["url"] == "https://example.com/astrbot-news"
+    assert result[0]["snippet"] == "The project added Google News support."
+    assert result[0]["source"] == "Example News"
+    assert result[0]["authors"] == ["A. Reporter"]
+    assert result[0]["published_at"] == "2026-10-24T08:00:00Z"
+    assert result[0]["thumbnail_url"] == "https://example.com/news.jpg"
+    assert result[0]["index"].endswith(".1")
+
+
+@pytest.mark.asyncio
+async def test_serpapi_news_search_flattens_groups_and_deduplicates(monkeypatch):
+    session = _SerpApiSession(
+        [
+            _SerpApiResponse(
+                json_data={
+                    "news_results": [
+                        {
+                            "highlight": {
+                                "title": "Highlighted article",
+                                "link": "https://example.com/highlight",
+                            },
+                            "stories": [
+                                {
+                                    "title": "Duplicate article",
+                                    "link": "https://example.com/highlight",
+                                },
+                                {
+                                    "title": "Related article",
+                                    "link": "https://example.com/related",
+                                    "date": "Oct 24, 2026",
+                                },
+                            ],
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+    monkeypatch.setattr(tools, "_client_session", lambda: session)
+
+    context = _context_with_provider_settings({"websearch_serpapi_key": ["test-key"]})
+    result = json.loads(
+        await tools.SerpApiNewsSearchTool().call(
+            context, query="AstrBot", max_results=2
+        )
+    )["results"]
+
+    assert [item["url"] for item in result] == [
+        "https://example.com/highlight",
+        "https://example.com/related",
+    ]
+    assert result[1]["published_at"] == "Oct 24, 2026"
+
+
+@pytest.mark.asyncio
+async def test_serpapi_news_search_validates_query_before_request(monkeypatch):
+    def fail_session():
+        raise AssertionError("the news tool must not issue a request")
+
+    monkeypatch.setattr(tools, "_client_session", fail_session)
+
+    context = _context_with_provider_settings({"websearch_serpapi_key": ["test-key"]})
+    result = await tools.SerpApiNewsSearchTool().call(context, query="  ")
+
+    assert result == "Error: query must not be empty."
 
 
 @pytest.mark.asyncio

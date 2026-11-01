@@ -343,7 +343,7 @@
           "subtitles": [
             "",
             "",
-            "Google web, image, scholar, and finance search",
+            "Google web, news, image, scholar, and finance search",
             "DeepSeek official search API",
             "",
             "",
@@ -388,7 +388,7 @@
         },
         "websearch_serpapi_key": {
           "description": "SerpApi API Key",
-          "hint": "Supports Google web, image, scholar, and finance search. Multiple keys rotate. Get a key at https://serpapi.com/manage-api-key"
+          "hint": "Supports Google web, news, image, scholar, and finance search. Multiple keys rotate. Get a key at https://serpapi.com/manage-api-key"
         },
         "websearch_firecrawl_key": {
           "description": "Firecrawl API Key",

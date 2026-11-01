@@ -21,6 +21,7 @@ WEB_SEARCH_TOOL_NAMES = [
     "web_search",
     "web_fetch",
     "web_search_serpapi",
+    "news_search_serpapi",
     "image_search_serpapi",
     "finance_search_serpapi",
     "scholar_search_serpapi",
@@ -1131,6 +1132,106 @@ class SerpApiWebSearchTool(FunctionTool[AstrAgentContext]):
 
 @builtin_tool(config=_WEB_SEARCH_ENABLED_CONFIG, required_actions=("tool.web_search",))
 @pydantic_dataclass
+class SerpApiNewsSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "news_search_serpapi"
+    description: str = (
+        "Search current news using the SerpApi Google News API. Returns article "
+        "titles, source URLs, publishers, authors, snippets, and publication times."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Required. News search query. Google News operators such as "
+                        "site: and when: are supported."
+                    ),
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": (
+                        "Maximum articles to return, 1-10. Default is 5; fewer may "
+                        "be available."
+                    ),
+                },
+                "country": {
+                    "type": "string",
+                    "description": "Optional. Google News country code, such as us, uk, or cn.",
+                },
+                "search_lang": {
+                    "type": "string",
+                    "description": (
+                        "Optional. Google News language code, such as en or zh-cn."
+                    ),
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_serpapi_key", []):
+            return "Error: SerpApi API key is not configured in AstrBot."
+
+        query = str(kwargs["query"]).strip()
+        if not query:
+            return "Error: query must not be empty."
+        try:
+            max_results = max(1, min(int(kwargs.get("max_results", 5)), 10))
+        except TypeError, ValueError:
+            max_results = 5
+        payload = {"q": query}
+        for name, parameter in (("country", "gl"), ("search_lang", "hl")):
+            if kwargs.get(name):
+                payload[parameter] = kwargs[name]
+        data = await _serpapi_request(provider_settings, payload, engine="google_news")
+
+        ref_uuid = str(uuid.uuid4())[:4]
+        results = []
+        seen_urls = set()
+        for group in data.get("news_results", []):
+            articles = []
+            if group.get("link"):
+                articles.append(group)
+            if isinstance(group.get("highlight"), dict):
+                articles.append(group["highlight"])
+            articles.extend(
+                story for story in group.get("stories", []) if isinstance(story, dict)
+            )
+            for article in articles:
+                source_url = article.get("link")
+                if not source_url or source_url in seen_urls:
+                    continue
+                seen_urls.add(source_url)
+                source = article.get("source") or {}
+                results.append(
+                    {
+                        "title": article.get("title") or "",
+                        "url": source_url,
+                        "snippet": article.get("snippet") or "",
+                        "source": source.get("name") or source.get("title") or "",
+                        "authors": source.get("authors") or [],
+                        "published_at": article.get("iso_date")
+                        or article.get("date")
+                        or "",
+                        "thumbnail_url": article.get("thumbnail")
+                        or article.get("thumbnail_small")
+                        or "",
+                        "index": f"{ref_uuid}.{len(results) + 1}",
+                    }
+                )
+                if len(results) >= max_results:
+                    break
+            if len(results) >= max_results:
+                break
+        return json.dumps({"results": results}, ensure_ascii=False)
+
+
+@builtin_tool(config=_WEB_SEARCH_ENABLED_CONFIG, required_actions=("tool.web_search",))
+@pydantic_dataclass
 class SerpApiImageSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "image_search_serpapi"
     description: str = (
@@ -1500,6 +1601,7 @@ async def _anysearch_search(
 __all__ = [
     "SerpApiFinanceSearchTool",
     "SerpApiImageSearchTool",
+    "SerpApiNewsSearchTool",
     "SerpApiScholarSearchTool",
     "SerpApiWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",

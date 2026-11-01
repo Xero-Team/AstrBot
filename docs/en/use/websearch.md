@@ -82,7 +82,7 @@ In addition to general web search, AnySearch can accept a provider-supported dom
 
 ## SerpApi
 
-See [Web Search → SerpApi](./websearch/serpapi.md) for API keys, configuration, the `websearch_route` entry, and the Google web, image, finance, and academic search tools. The specialist tools are available whenever the key is configured and web search is enabled; they do not need to be listed in the web search source route.
+See [Web Search → SerpApi](./websearch/serpapi.md) for API keys, configuration, the `websearch_route` entry, and the Google web, news, image, finance, and academic search tools. The specialist tools are available whenever the key is configured and web search is enabled; they do not need to be listed in the web search source route.
 
 ## DeepSeek
 
@@ -92,4 +92,4 @@ See [Web Search → DeepSeek Search API](./websearch/deepseek.md) for API keys, 
 
 When web search is enabled and the source list contains a configured `Tavily`, `Firecrawl`, `Exa`, or `DeepSeek` source, AstrBot exposes a single `web_fetch` tool that accepts only `url`. It tries those configured sources sequentially in `websearch_route` order, moving to the next source when one fails or times out, and returns `URL`, an optional `Title`, and `Content`. If every source fails, it returns one generic error without exposing upstream error text.
 
-Extraction parameters use each provider's fixed defaults: Tavily basic extraction, Firecrawl Markdown main content, Exa with at most 3000 characters, and the unchanged DeepSeek request. The model does not choose a provider and cannot pass advanced extraction parameters. Unconfigured sources and sources without extraction support, such as SearXNG and DuckDuckGo, are skipped. SerpApi additionally provides `image_search_serpapi`, `finance_search_serpapi`, and `scholar_search_serpapi` whenever its key is configured.
+Extraction parameters use each provider's fixed defaults: Tavily basic extraction, Firecrawl Markdown main content, Exa with at most 3000 characters, and the unchanged DeepSeek request. The model does not choose a provider and cannot pass advanced extraction parameters. Unconfigured sources and sources without extraction support, such as SearXNG and DuckDuckGo, are skipped. SerpApi additionally provides `news_search_serpapi`, `image_search_serpapi`, `finance_search_serpapi`, and `scholar_search_serpapi` whenever its key is configured.

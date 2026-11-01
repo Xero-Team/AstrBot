@@ -104,6 +104,7 @@ WEB_FETCH_TOOL_NAME = "web_fetch"
 WEB_SEARCH_CONFIGURED_TOOLS: Mapping[str, tuple[str, ...]] = {
     "serpapi": (
         "web_search_serpapi",
+        "news_search_serpapi",
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",

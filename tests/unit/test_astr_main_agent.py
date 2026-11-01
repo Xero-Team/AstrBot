@@ -1598,6 +1598,7 @@ class TestBuiltinToolInjection:
     def test_catalog_includes_configured_serpapi_tools(self, mock_event, mock_context):
         serpapi_tools = [
             _named_tool("web_search_serpapi"),
+            _named_tool("news_search_serpapi"),
             _named_tool("image_search_serpapi"),
             _named_tool("finance_search_serpapi"),
             _named_tool("scholar_search_serpapi"),

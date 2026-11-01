@@ -4013,7 +4013,7 @@ CONFIG_METADATA_3 = {
                         "subtitles": [
                             "",
                             "",
-                            "Google 网页、图片、学术和财经搜索",
+                            "Google 网页、新闻、图片、学术和财经搜索",
                             "DeepSeek 官方搜索接口",
                             "",
                             "",
@@ -4119,7 +4119,7 @@ CONFIG_METADATA_3 = {
                         "description": "SerpApi API Key",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：https://serpapi.com/manage-api-key",
+                        "hint": "支持 Google 网页、新闻、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：https://serpapi.com/manage-api-key",
                         "secret": True,
                         "condition": {
                             "provider_settings.web_search": True,

@@ -743,7 +743,7 @@ async def test_plugin_config_does_not_reload_when_save_is_superseded(
         schema={},
         save_config_async=AsyncMock(return_value=False),
     )
-    plugin_lifecycle = SimpleNamespace(reload=AsyncMock())
+    plugin_lifecycle = SimpleNamespace(reload=AsyncMock(return_value=(True, None)))
     service = config_service.ConfigFileService(
         SimpleNamespace(
             get_by_name=lambda _name: SimpleNamespace(config=plugin_config)
@@ -1197,7 +1197,7 @@ async def test_save_plugin_configs_restores_redacted_values(
 
     plugin_config = PluginConfig({"api_key": "stored-secret", "plain": "old"})
     metadata = SimpleNamespace(config=plugin_config, schema={})
-    plugin_lifecycle = SimpleNamespace(reload=AsyncMock())
+    plugin_lifecycle = SimpleNamespace(reload=AsyncMock(return_value=(True, None)))
     service = config_service.ConfigFileService(
         SimpleNamespace(get_by_name=lambda _name: metadata),
         plugin_lifecycle,
@@ -1219,3 +1219,142 @@ async def test_save_plugin_configs_restores_redacted_values(
     assert plugin_config.saved["api_key"] == "stored-secret"
     assert plugin_config.saved["plain"] == "new"
     plugin_lifecycle.reload.assert_awaited_once_with("example-plugin")
+
+
+class _RecordingPluginConfig(dict):
+    schema = {}
+
+    def __init__(self, values):
+        super().__init__(values)
+        self.saved: list[dict] = []
+
+    async def save_config_async(self, posted):
+        self.saved.append(copy.deepcopy(posted))
+        return True
+
+
+def _plugin_config_service(plugin_config, reload):
+    metadata = SimpleNamespace(config=plugin_config, schema={})
+    return config_service.ConfigFileService(
+        SimpleNamespace(get_by_name=lambda _name: metadata),
+        SimpleNamespace(reload=reload),
+    )
+
+
+@pytest.mark.asyncio
+async def test_save_plugin_configs_reports_failed_reload_and_rolls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_config = _RecordingPluginConfig({"plain": "old"})
+    reload = AsyncMock(side_effect=[(False, "Initialization failed"), (True, None)])
+    service = _plugin_config_service(plugin_config, reload)
+    monkeypatch.setattr(
+        config_service,
+        "validate_config",
+        lambda posted, _schema, **_kwargs: ([], posted),
+    )
+
+    with pytest.raises(DashboardValidationError) as exc_info:
+        await service.save_plugin_configs({"plain": "new"}, "example-plugin")
+
+    message = str(exc_info.value)
+    assert "example-plugin" in message
+    assert "配置重载失败" in message
+    assert "Initialization failed" in message
+    assert "已回滚到上一次配置" in message
+    assert plugin_config.saved == [{"plain": "new"}, {"plain": "old"}]
+    assert reload.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_save_plugin_configs_reports_reload_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_config = _RecordingPluginConfig({"plain": "old"})
+    reload = AsyncMock(side_effect=[RuntimeError("loader crashed"), (True, None)])
+    service = _plugin_config_service(plugin_config, reload)
+    monkeypatch.setattr(
+        config_service,
+        "validate_config",
+        lambda posted, _schema, **_kwargs: ([], posted),
+    )
+
+    with pytest.raises(DashboardValidationError) as exc_info:
+        await service.save_plugin_configs({"plain": "new"}, "example-plugin")
+
+    message = str(exc_info.value)
+    assert "loader crashed" in message
+    assert "已回滚到上一次配置" in message
+    assert plugin_config.saved == [{"plain": "new"}, {"plain": "old"}]
+
+
+@pytest.mark.asyncio
+async def test_save_plugin_configs_redacts_reload_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_config = _RecordingPluginConfig({"plain": "old"})
+    reload = AsyncMock(
+        side_effect=[
+            (False, "failed at /home/operator/secret/plugin.py"),
+            (True, None),
+        ]
+    )
+    service = _plugin_config_service(plugin_config, reload)
+    monkeypatch.setattr(
+        config_service,
+        "validate_config",
+        lambda posted, _schema, **_kwargs: ([], posted),
+    )
+
+    with pytest.raises(DashboardValidationError) as exc_info:
+        await service.save_plugin_configs({"plain": "new"}, "example-plugin")
+
+    message = str(exc_info.value)
+    assert "/home/operator" not in message
+    assert "[REDACTED_PATH]" in message
+
+
+@pytest.mark.asyncio
+async def test_save_plugin_configs_reports_failed_reload_without_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_config = _RecordingPluginConfig({"plain": "old"})
+    reload = AsyncMock(side_effect=[(False, None), (True, None)])
+    service = _plugin_config_service(plugin_config, reload)
+    monkeypatch.setattr(
+        config_service,
+        "validate_config",
+        lambda posted, _schema, **_kwargs: ([], posted),
+    )
+
+    with pytest.raises(DashboardValidationError) as exc_info:
+        await service.save_plugin_configs({"plain": "new"}, "example-plugin")
+
+    message = str(exc_info.value)
+    assert "配置重载失败" in message
+    assert "未知错误，请查看日志" in message
+    assert "已回滚到上一次配置" in message
+    assert plugin_config.saved == [{"plain": "new"}, {"plain": "old"}]
+    assert reload.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_save_plugin_configs_does_not_claim_rollback_when_restore_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_config = _RecordingPluginConfig({"plain": "old"})
+    reload = AsyncMock(side_effect=[(False, "bad config"), (False, "still bad")])
+    service = _plugin_config_service(plugin_config, reload)
+    monkeypatch.setattr(
+        config_service,
+        "validate_config",
+        lambda posted, _schema, **_kwargs: ([], posted),
+    )
+
+    with pytest.raises(DashboardValidationError) as exc_info:
+        await service.save_plugin_configs({"plain": "new"}, "example-plugin")
+
+    message = str(exc_info.value)
+    assert "配置重载失败" in message
+    assert "已回滚到上一次配置" not in message
+    assert plugin_config.saved == [{"plain": "new"}, {"plain": "old"}]

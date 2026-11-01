@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-import pytest
+import json
+from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+from fastapi import FastAPI
+
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from tests.unit.dashboard.fastapi_v1_support import *  # noqa: F403
 
 
@@ -1101,3 +1107,86 @@ async def test_v1_plugin_source_mutations_reject_demo_mode_with_envelope(
         data = response.json()
         assert data["status"] == "error"
         assert "demo" in data["message"].lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reload_result", "expected_status", "expected_message"),
+    [
+        ((True, None), 200, "保存插件 astrbot_plugin_demo 成功"),
+        ((False, "Invalid endpoint"), 400, "Invalid endpoint"),
+        ((False, None), 400, "未知错误，请查看日志"),
+        (RuntimeError("Initialization failed"), 400, "Initialization failed"),
+        (TimeoutError(), 400, "未知错误，请查看日志"),
+        ((False, "failed at /home/operator/plugin.py"), 400, "[REDACTED_PATH]"),
+    ],
+)
+async def test_v1_plugin_config_save_reports_reload_failure(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reload_result,
+    expected_status: int,
+    expected_message: str,
+):
+    config_path = tmp_path / "plugin.json"
+    plugin_config = AstrBotConfig(
+        str(config_path),
+        schema={"endpoint": {"type": "string", "default": "old"}},
+    )
+    service = asgi_app.state.services.config_files
+    monkeypatch.setattr(
+        service,
+        "plugin_catalog",
+        SimpleNamespace(
+            get_by_name=lambda _name: SimpleNamespace(
+                config=plugin_config,
+                schema={},
+            )
+        ),
+    )
+    reload_calls: list[str] = []
+
+    async def reload_plugin(plugin_name: str):
+        reload_calls.append(plugin_name)
+        assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+            "endpoint": "new" if len(reload_calls) == 1 else "old"
+        }
+        if len(reload_calls) > 1:
+            return True, None
+        if isinstance(reload_result, Exception):
+            raise reload_result
+        return reload_result
+
+    monkeypatch.setattr(
+        service,
+        "plugin_lifecycle",
+        SimpleNamespace(reload=reload_plugin),
+    )
+
+    response = await asgi_client.put(
+        "/api/v1/plugins/astrbot_plugin_demo/config",
+        json={"config": {"endpoint": "new"}},
+        headers=_jwt_headers(),
+    )
+
+    payload = response.json()
+    assert response.status_code == expected_status
+    if expected_status == 200:
+        assert payload["status"] == "ok"
+        assert expected_message in payload["message"]
+        assert len(reload_calls) == 1
+        assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+            "endpoint": "new"
+        }
+        return
+    assert payload["status"] == "error"
+    assert expected_message in payload["message"]
+    assert "astrbot_plugin_demo" in payload["message"]
+    assert "配置重载失败" in payload["message"]
+    assert "/home/operator" not in payload["message"]
+    assert len(reload_calls) == 2
+    assert json.loads(config_path.read_text(encoding="utf-8-sig")) == {
+        "endpoint": "old"
+    }

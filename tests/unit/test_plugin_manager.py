@@ -3,6 +3,7 @@ import functools
 import hashlib
 import importlib
 import json
+import logging
 import os
 import shutil
 import sys
@@ -20,6 +21,7 @@ from pydantic import BaseModel, ConfigDict
 
 from astrbot.core.agent.handoff import FunctionTool
 from astrbot.core.command import CommandEngine, CommandResolutionKind
+from astrbot.core.log import _RecordEnricherFilter
 from astrbot.core.platform.catalog import PlatformAdapterDescriptor
 from astrbot.core.provider.catalog import ProviderAdapterDescriptor
 from astrbot.core.provider.entities import ProviderType
@@ -355,6 +357,92 @@ def test_load_plugin_metadata_rejects_description_alias(tmp_path: Path):
 
     with pytest.raises(Exception, match="插件元数据信息不完整"):
         PluginRuntimeLoader.load_metadata(str(plugin_path))
+
+
+def _bare_runtime_loader(plugin_root: Path) -> PluginRuntimeLoader:
+    loader = object.__new__(PluginRuntimeLoader)
+    loader._plugin_store_path = str(plugin_root)
+    loader._reserved_plugin_path = str(plugin_root / "reserved")
+    loader._plugin_config_path = str(plugin_root / "config")
+    loader._catalog = cast(
+        Any,
+        SimpleNamespace(plugins=SimpleNamespace(get_by_module=lambda _path: None)),
+    )
+    loader._failed_plugins = {}
+    loader._failed_plugin_info = ""
+    loader._preferences = cast(Any, SimpleNamespace(global_put=AsyncMock()))
+    loader.cleanup_failed_package = cast(Any, MagicMock())
+    loader._build_failed_plugin_record = cast(
+        Any, MagicMock(return_value={"error": "unsupported"})
+    )
+    loader._rebuild_failed_plugin_info = cast(Any, MagicMock())
+    loader._after_module_materialized = None
+    return loader
+
+
+@pytest.mark.asyncio
+async def test_load_failure_logs_metadata_name_before_version_validation(
+    tmp_path: Path,
+):
+    plugin_dir = tmp_path / "dir-name"
+    plugin_dir.mkdir()
+    (plugin_dir / "metadata.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "real-plugin",
+                "author": "tester",
+                "desc": "demo plugin",
+                "version": "1.0.0",
+                "astrbot_version": ">=999.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    module = ModuleType("data.plugins.dir-name.main")
+    star_cls = type("DemoStar", (), {"__module__": module.__name__})
+    star_cls.__astrbot_star_declaration__ = StarDeclaration(
+        star_cls_type=star_cls,
+        module_path=module.__name__,
+    )
+    module.DemoStar = star_cls
+
+    loader = _bare_runtime_loader(tmp_path)
+
+    async def fake_import(**_kwargs: Any) -> ModuleType:
+        return module
+
+    loader.import_with_dependency_recovery = cast(Any, fake_import)
+
+    records: list[logging.LogRecord] = []
+
+    class _Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    collector = _Collector()
+    collector.addFilter(_RecordEnricherFilter())
+    loader_module.logger.addHandler(collector)
+    root_handlers = logging.root.handlers[:]
+    try:
+        await loader._load_modules(
+            cast(Any, [{"pname": "dir-name", "module": "main"}]),
+            [],
+            [],
+            {},
+            specified_module_path=None,
+            specified_dir_name=None,
+            ignore_version_check=False,
+            sync_command_configs_after_load=False,
+        )
+    finally:
+        loader_module.logger.removeHandler(collector)
+        logging.root.handlers[:] = root_handlers
+
+    failure_records = [record for record in records if record.levelno == logging.ERROR]
+    assert failure_records
+    assert {record.plugin_name for record in failure_records} == {"real-plugin"}
+    assert {record.source for record in failure_records} == {"plugin"}
+    assert any("dir-name" in record.getMessage() for record in failure_records)
 
 
 @pytest.mark.asyncio

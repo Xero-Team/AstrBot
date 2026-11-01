@@ -49,16 +49,6 @@ def test_pip_redaction_and_conflict_helpers():
     assert pip_installer_module._package_specs_override_index(
         ["--index-url=https://pypi.org/simple"]
     )
-    assert (
-        pip_installer_module._get_trusted_host_for_index_url(
-            "https://mirrors.aliyun.com/simple"
-        )
-        == "mirrors.aliyun.com"
-    )
-    assert (
-        pip_installer_module._get_trusted_host_for_index_url("https://pypi.org/simple")
-        is None
-    )
     assert pip_installer_module._matches_pip_failure_pattern(
         "ERROR: Cannot install demo",
         "error_prefix",

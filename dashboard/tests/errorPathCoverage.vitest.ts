@@ -518,6 +518,8 @@ describe('error-path coverage', () => {
             custom_extra_body: {
               template_schema: {
                 temperature: {},
+                top_p: {},
+                max_tokens: {},
                 reasoning_effort: {},
               },
             },
@@ -534,8 +536,11 @@ describe('error-path coverage', () => {
     const extraBody =
       dialog.providerModelConfigSchema.value.provider.items.custom_extra_body;
     expect(extraBody.invisible).toBeUndefined();
-    expect(extraBody.template_schema.temperature).toBeDefined();
-    expect(extraBody.template_schema.reasoning_effort).toBeUndefined();
+    expect(Object.keys(extraBody.template_schema).sort()).toEqual([
+      'max_output_tokens',
+      'temperature',
+      'top_p',
+    ]);
     dialog.openModelAddDialog('m1');
     api.providerApi.createInSource.mockResolvedValue({
       data: { status: 'ok' },

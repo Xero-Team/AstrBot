@@ -123,6 +123,10 @@ ACTION_ROLE_GRANTS: dict[str, frozenset[Role]] = {
     "tool.session_history": _SESSION_AND_ABOVE,
     "tool.memory_read": _SESSION_AND_ABOVE,
     "tool.memory_write": _SESSION_OWNER_AND_ABOVE,
+    # Reading scheduled tasks is a member-level capability: group members must
+    # be able to list the tasks of their own chat. Changing them stays at
+    # ``tool.schedule_write``.
+    "tool.schedule_read": _SESSION_AND_ABOVE,
     "tool.schedule_write": _SESSION_OWNER_AND_ABOVE,
     "skill.read": _SESSION_AND_ABOVE,
     "dashboard.account.manage": _ROOT_ONLY,

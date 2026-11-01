@@ -9,6 +9,7 @@ from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.auth.models import Resource
 from astrbot.core.cron.manager import CronJobSchedulingError
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.registry import builtin_tool
@@ -16,6 +17,13 @@ from astrbot.core.tools.registry import builtin_tool
 _CRON_TOOL_CONFIG = {
     "provider_settings.proactive_capability.add_cron_tools": True,
 }
+
+# The whole tool is admitted by ``tool.schedule_read``; this message is the
+# answer when create fails the narrower ``tool.schedule_write`` check.
+_SCHEDULE_WRITE_DENIED = (
+    "error: Permission denied. Only the session owner or an AstrBot admin can "
+    "create scheduled tasks in this chat."
+)
 
 
 def _extract_job_session(job: Any) -> str | None:
@@ -41,6 +49,71 @@ def _job_belongs_to_current_sender(
         _extract_job_session(job) == current_umo
         and _extract_job_sender(job) == current_sender_id
     )
+
+
+async def _manages_current_session(context: ContextWrapper[AstrAgentContext]) -> bool:
+    """Return whether the event's actor may manage the current session.
+
+    ``session.manage`` requires session administrator or above, which is the
+    single authorization path for "AstrBot admin" checks. Any missing context
+    denies instead of falling back to a platform role field.
+
+    Args:
+        context: Agent context whose event carries the actor and session.
+
+    Returns:
+        True when the actor may manage the current session.
+    """
+    event = context.context.event
+    authorization = getattr(context.context.context, "authorization", None)
+    if (
+        authorization is None
+        or event.subject is None
+        or event.resource is None
+        or event.auth_context is None
+    ):
+        return False
+    return (
+        await authorization.authorize(
+            event.subject,
+            "session.manage",
+            event.resource,
+            event.auth_context,
+        )
+    ).allowed
+
+
+async def _authorize_tool_action(
+    context: ContextWrapper[AstrAgentContext], tool_name: str, action: str
+) -> bool:
+    """Authorize one action of this multi-action tool.
+
+    The tool as a whole is admitted by ``tool.schedule_read`` so group members
+    can list their group's tasks. Actions that change scheduled state
+    re-authorize here against the same named tool resource the execution
+    boundary uses. Any missing context denies instead of allowing.
+
+    Args:
+        context: Agent context whose event carries the actor and session.
+        tool_name: Registered tool name used as the resource identity.
+        action: Authorization action to evaluate.
+
+    Returns:
+        True when the actor may perform ``action`` on this tool.
+    """
+    event = context.context.event
+    authorization = getattr(context.context.context, "authorization", None)
+    if authorization is None or event.subject is None or event.auth_context is None:
+        return False
+    config_id = getattr(event.resource, "config_id", None)
+    return (
+        await authorization.authorize(
+            event.subject,
+            action,
+            Resource.named("tool", tool_name, config_id=config_id),
+            event.auth_context,
+        )
+    ).allowed
 
 
 def _parse_run_at(run_at: Any) -> datetime | None:
@@ -77,7 +150,7 @@ def _display_next_run_time(value: datetime | None, tzinfo) -> datetime | None:
     return value.astimezone(tzinfo) if tzinfo else value.astimezone()
 
 
-@builtin_tool(config=_CRON_TOOL_CONFIG, required_actions=("tool.schedule_write",))
+@builtin_tool(config=_CRON_TOOL_CONFIG, required_actions=("tool.schedule_read",))
 @dataclass
 class FutureTaskTool(FunctionTool[AstrAgentContext]):
     name: str = "future_task"
@@ -86,7 +159,10 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         "Use action='create' to schedule a recurring cron task or one-time run_at task. "
         "Use action='edit' to update an existing task. "
         "Use action='list' to inspect existing tasks. "
-        "Use action='delete' to remove a task by job_id."
+        "Use action='delete' to remove a task by job_id. "
+        "Group members can list all tasks in the current group, including their creators. "
+        "Only task creators can edit tasks. Group members can delete only their own tasks, "
+        "while AstrBot admins can also delete other members' tasks in the current group."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -201,8 +277,15 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         job = await cron_mgr.db.get_cron_job(str(job_id))
         if not job:
             return f"error: cron job {job_id} not found."
-        if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-            same_session = _extract_job_session(job) == current_umo
+        same_session = _extract_job_session(job) == current_umo
+        can_delete = _job_belongs_to_current_sender(
+            job, current_umo, current_sender_id
+        ) or (
+            same_session
+            and context.context.event.get_message_type() == MessageType.GROUP_MESSAGE
+            and await _manages_current_session(context)
+        )
+        if not can_delete:
             if same_session and not _extract_job_sender(job):
                 return (
                     f"error: cron job {job_id} has no chat member as its creator "
@@ -217,7 +300,8 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 return (
                     f"error: cron job {job_id} was created by another member of "
                     "this group chat, so you cannot delete it. Only the member who "
-                    "created it can delete it; tell the user to ask that member."
+                    "created it or an AstrBot admin can delete it; tell the user "
+                    "to ask that member."
                 )
             return (
                 f"error: cron job {job_id} was not created by you, so you cannot "
@@ -234,35 +318,41 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         current_sender_id: str,
     ) -> ToolExecResult:
         all_jobs = await cron_mgr.list_jobs()
+        is_group = context.context.event.get_message_type() == MessageType.GROUP_MESSAGE
         jobs = [
             job
             for job in all_jobs
             if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
+            or (is_group and _extract_job_session(job) == current_umo)
         ]
+        # Private chats retain sender isolation. Explain hidden tasks so the
+        # agent does not mistake a filtered list for a missing task.
         hidden_note = ""
-        for job in all_jobs:
-            if _extract_job_session(job) != current_umo:
-                continue
-            if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                continue
-            hidden_note = (
-                "\n\nNote: tasks in this chat that were not created by you "
-                "are not listed here, and can only be edited or deleted by "
-                "whoever created them."
-            )
-            break
+        if not is_group:
+            for job in all_jobs:
+                if _extract_job_session(job) != current_umo:
+                    continue
+                if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                    continue
+                hidden_note = (
+                    "\n\nNote: tasks in this chat that were not created by you "
+                    "are not listed here. Only their creators can edit or delete them."
+                )
+                break
         if not jobs:
             return "No cron jobs found." + hidden_note
         _, timezone_info = _get_configured_timezone(context)
-        return (
-            "\n".join(
+        lines = []
+        for job in jobs:
+            line = (
                 f"{job.job_id} | {job.name} | {job.job_type} | "
                 f"run_once={getattr(job, 'run_once', False)} | enabled={job.enabled} | "
                 f"next={_display_next_run_time(job.next_run_time, timezone_info)}"
-                for job in jobs
             )
-            + hidden_note
-        )
+            if is_group:
+                line += f" | creator={_extract_job_sender(job) or 'unknown'}"
+            lines.append(line)
+        return "\n".join(lines) + hidden_note
 
     async def _edit_future_task(
         self,
@@ -368,6 +458,10 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
 
         action = str(kwargs.get("action") or "").strip().lower()
         if action == "create":
+            if not await _authorize_tool_action(
+                context, self.name, "tool.schedule_write"
+            ):
+                return _SCHEDULE_WRITE_DENIED
             return await self._create_future_task(
                 context, cron_mgr, context.context.event, kwargs
             )
@@ -375,6 +469,10 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         current_umo = context.context.event.unified_msg_origin
         current_sender_id = str(context.context.event.get_sender_id())
         if action == "edit":
+            # Editing is gated per task, not by tool-level permission: only the
+            # task's creator may change it, which ``_edit_future_task`` enforces
+            # before any update. That matches the documented rule that regular
+            # members can still edit the tasks they created.
             return await self._edit_future_task(
                 context, cron_mgr, kwargs, current_umo, current_sender_id
             )

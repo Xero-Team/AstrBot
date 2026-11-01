@@ -27,6 +27,10 @@ The QQ groups, Discord, Astrbook, and Jiupamiao links below are **upstream AstrB
 - Group 12: 916228568 (full)
 - Group 13: 1092185289
 - Group 14: 1103419483
+- Group 15: 258637629
+- Group 16: 1044542496
+- Group 17: 201300335
+- Group 18: 167034393
 - Upstream core development group: 975206796
 
 ### Discord (upstream)

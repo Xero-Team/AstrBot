@@ -680,3 +680,47 @@ async def test_fetch_text_stops_after_size_limit(
     )
     with pytest.raises(OutboundSizeLimitError):
         await outbound.fetch_text("https://cdn.example/plugins", policy)
+
+
+@pytest.mark.asyncio
+async def test_fetch_text_merges_custom_request_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot.core.utils import outbound_http as outbound
+
+    response = _ChunkedFakeResponse((b"<html></html>",))
+    _patch_fetch_text_session(monkeypatch, outbound, response)
+    captured: dict[str, object] = {}
+
+    async def capture_request(session, method, url, policy, **kwargs):
+        del session, method, url, policy
+        captured.update(kwargs)
+        return response
+
+    monkeypatch.setattr(outbound, "_request_with_manual_redirects", capture_request)
+    policy = outbound.OutboundRequestPolicy(
+        allowed_schemes=frozenset({"http", "https"}),
+        allowed_hosts=None,
+        allowed_ports=None,
+        allow_private_network=False,
+        max_redirects=0,
+        max_url_length=2048,
+        max_response_bytes=64,
+        timeout_seconds=5,
+    )
+
+    await outbound.fetch_text(
+        "https://mirror.example/simple/",
+        policy,
+        request_headers={
+            "User-Agent": "pip/24.3.1",
+            "Accept": "text/html",
+        },
+    )
+
+    headers = captured["headers"]
+    assert isinstance(headers, dict)
+    assert headers["User-Agent"] == "pip/24.3.1"
+    assert headers["Accept"] == "text/html"
+    # Defaults that were not overridden are still applied.
+    assert headers["Accept-Encoding"] == "identity"

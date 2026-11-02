@@ -173,6 +173,9 @@ def test_conversation_loop_does_not_delegate_or_run_work():
         ("unknown_tool", (), "work", True, True),
         ("unknown_tool", (), "work", False, False),
         ("mcp_write_tool", ("tool.mcp_write",), "conversation", True, False),
+        # future_task admits members through tool.schedule_read but create and
+        # edit still change AstrBot state, so a read-only work loop drops it.
+        ("future_task", ("tool.schedule_read",), "work", True, True),
     ],
 )
 def test_loop_policy_decides_each_tool(name, actions, loop_mode, read_only, blocked):

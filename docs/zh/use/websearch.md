@@ -82,7 +82,7 @@ AnySearch 除通用网页搜索外，还可通过服务商支持的领域标签�
 
 ## SerpApi
 
-API Key、配置、`websearch_route` 条目以及 Google 网页、图片、财经和学术搜索工具请参阅[网页搜索 → SerpApi](./websearch/serpapi.md)。只要配置了 Key 并启用网页搜索，这些专用工具就会可用，无需加入网页搜索来源列表。
+API Key、配置、`websearch_route` 条目以及 Google 网页、新闻、图片、财经和学术搜索工具请参阅[网页搜索 → SerpApi](./websearch/serpapi.md)。只要配置了 Key 并启用网页搜索，这些专用工具就会可用，无需加入网页搜索来源列表。
 
 ## DeepSeek
 
@@ -92,4 +92,4 @@ API Key、配置、`websearch_route` 条目、通过 `web_fetch` 抽取正文、
 
 当网页搜索已启用，且来源列表中存在已配置的 `Tavily`、`Firecrawl`、`Exa` 或 `DeepSeek` 时，AstrBot 会提供单一的 `web_fetch` 工具，只接受 `url` 参数。它会按 `websearch_route` 的顺序依次尝试这些已配置来源，某个来源失败或超时后自动切换到下一个，成功后返回 `URL`、可选的 `Title` 和 `Content`。全部失败时只返回通用错误，不会暴露上游错误内容。
 
-抽取参数固定使用各来源的默认值：Tavily 基础抽取、Firecrawl 输出 Markdown 正文、Exa 最多 3000 字符、DeepSeek 保持原请求。模型不需要选择来源，也不能传入高级抽取参数。未配置的来源，以及不支持正文抽取的来源（如 SearXNG、DuckDuckGo），不会参与。配置 SerpApi Key 后，还会提供 `image_search_serpapi`、`finance_search_serpapi` 和 `scholar_search_serpapi`。
+抽取参数固定使用各来源的默认值：Tavily 基础抽取、Firecrawl 输出 Markdown 正文、Exa 最多 3000 字符、DeepSeek 保持原请求。模型不需要选择来源，也不能传入高级抽取参数。未配置的来源，以及不支持正文抽取的来源（如 SearXNG、DuckDuckGo），不会参与。配置 SerpApi Key 后，还会提供 `news_search_serpapi`、`image_search_serpapi`、`finance_search_serpapi` 和 `scholar_search_serpapi`。

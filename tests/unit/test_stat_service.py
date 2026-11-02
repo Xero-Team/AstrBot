@@ -1,6 +1,7 @@
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -335,3 +336,160 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
             "tokens": 3,
         },
     ]
+
+
+_PYPI_INDEX_HTML = """
+<html><body>
+<a href='../../packages/pip-24.0-py3-none-any.whl#sha256=aa'>pip-24.0</a>
+<A HREF="../../packages/pip-25.2-py3-none-any.whl#sha256=bb">pip-25.2</A>
+<a href="../../packages/pip-25.2.tar.gz">sdist</a>
+</body></html>
+"""
+
+
+@pytest.mark.asyncio
+async def test_pypi_index_connection_probes_with_policy_and_pip_headers(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: dict[str, object] = {}
+
+    async def fake_fetch_text(url, policy, **kwargs):
+        calls["url"] = url
+        calls["policy"] = policy
+        calls["headers"] = kwargs.get("request_headers")
+        return 200, "<html></html>", {}
+
+    monkeypatch.setattr(stat_service, "fetch_text", fake_fetch_text)
+    service = object.__new__(StatService)
+
+    result = await service.test_pypi_index_connection("https://mirror.example/simple/")
+
+    assert calls["url"] == "https://mirror.example/simple/"
+    assert calls["policy"] is stat_service.PYPI_INDEX_PROBE
+    headers = calls["headers"]
+    assert isinstance(headers, dict)
+    assert str(headers["User-Agent"]).startswith("pip/")
+    assert headers["Accept"].startswith("text/html")
+    assert result["latency"] >= 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "index_url",
+    ["", "   ", "ftp://mirror.example/simple", "mirror.example/simple"],
+)
+async def test_pypi_index_endpoints_reject_invalid_urls(index_url: str):
+    service = object.__new__(StatService)
+
+    with pytest.raises(stat_service.StatServiceError):
+        await service.test_pypi_index_connection(index_url)
+    with pytest.raises(stat_service.StatServiceError):
+        await service.measure_pypi_index_speed(index_url)
+
+
+@pytest.mark.asyncio
+async def test_pypi_index_connection_maps_status_and_outbound_failures(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = object.__new__(StatService)
+
+    async def status_503(url, policy, **kwargs):
+        del url, policy, kwargs
+        return 503, "", {}
+
+    monkeypatch.setattr(stat_service, "fetch_text", status_503)
+    with pytest.raises(stat_service.StatServiceError) as status_error:
+        await service.test_pypi_index_connection("https://mirror.example/simple")
+    assert "503" in str(status_error.value)
+
+    async def blocked(url, policy, **kwargs):
+        del url, policy, kwargs
+        raise stat_service.OutboundRequestError("private address")
+
+    monkeypatch.setattr(stat_service, "fetch_text", blocked)
+    with pytest.raises(stat_service.StatServiceError):
+        await service.test_pypi_index_connection("https://mirror.example/simple")
+
+
+@pytest.mark.asyncio
+async def test_pypi_index_speed_downloads_newest_wheel_and_cleans_up(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_text(url, policy, **kwargs):
+        del policy, kwargs
+        captured["page_url"] = url
+        return 200, _PYPI_INDEX_HTML, {}
+
+    async def fake_download(url, path, policy, **kwargs):
+        del policy
+        captured["wheel_url"] = url
+        captured["headers"] = kwargs.get("request_headers")
+        tmp_file = Path(path)
+        captured["path"] = tmp_file
+        tmp_file.write_bytes(b"x" * (2 << 20))
+
+    monkeypatch.setattr(stat_service, "fetch_text", fake_fetch_text)
+    monkeypatch.setattr(stat_service, "download_to_path", fake_download)
+    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    service = object.__new__(StatService)
+
+    result = await service.measure_pypi_index_speed("https://mirror.example/simple/")
+
+    assert captured["page_url"] == "https://mirror.example/simple/pip/"
+    # The #sha256 fragment is stripped and the newest release wins.
+    assert (
+        captured["wheel_url"]
+        == "https://mirror.example/packages/pip-25.2-py3-none-any.whl"
+    )
+    headers = captured["headers"]
+    assert isinstance(headers, dict)
+    assert str(headers["User-Agent"]).startswith("pip/")
+    assert result["bytes"] == 2 << 20
+    assert result["speed"] > 0
+    assert result["duration"] >= 0
+    # The sampled wheel never stays on disk.
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_pypi_index_speed_rejects_page_without_a_pip_wheel(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fake_fetch_text(url, policy, **kwargs):
+        del url, policy, kwargs
+        return 200, "<html><a href='other-1.0-py3-none-any.whl'>x</a></html>", {}
+
+    monkeypatch.setattr(stat_service, "fetch_text", fake_fetch_text)
+    service = object.__new__(StatService)
+
+    with pytest.raises(stat_service.StatServiceError):
+        await service.measure_pypi_index_speed("https://mirror.example/simple")
+
+
+@pytest.mark.asyncio
+async def test_pypi_index_speed_removes_the_sample_when_the_download_fails(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fake_fetch_text(url, policy, **kwargs):
+        del url, policy, kwargs
+        return 200, _PYPI_INDEX_HTML, {}
+
+    async def failing_download(url, path, policy, **kwargs):
+        del url, policy, kwargs
+        target = Path(path)
+        target.write_bytes(b"partial")
+        raise stat_service.OutboundRequestError("download failed")
+
+    monkeypatch.setattr(stat_service, "fetch_text", fake_fetch_text)
+    monkeypatch.setattr(stat_service, "download_to_path", failing_download)
+    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    service = object.__new__(StatService)
+
+    with pytest.raises(stat_service.StatServiceError):
+        await service.measure_pypi_index_speed("https://mirror.example/simple")
+
+    assert list(tmp_path.iterdir()) == []

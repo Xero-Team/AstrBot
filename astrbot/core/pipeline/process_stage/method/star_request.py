@@ -91,9 +91,15 @@ class StarRequestSubStage(Stage):
             except Exception as e:
                 traceback_text = redact_sensitive_text(traceback.format_exc())
                 error_text = safe_error("", e)
-                logger.error(traceback_text)
+                plugin_name = md.name or handler.handler_module_path
+                # Keep handler failures on the plugin's side of the log filter.
                 logger.error(
-                    f"Star {handler.handler_full_name} handle error: {error_text}"
+                    traceback_text,
+                    extra={"plugin_name": plugin_name},
+                )
+                logger.error(
+                    f"Star {handler.handler_full_name} handle error: {error_text}",
+                    extra={"plugin_name": plugin_name},
                 )
                 event.trace.record(
                     "handler_end",

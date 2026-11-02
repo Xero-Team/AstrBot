@@ -1156,6 +1156,10 @@ export type GhproxyTestRequest = {
   proxy_url: string;
 };
 
+export type PypiIndexTestRequest = {
+  index_url: string;
+};
+
 export type StorageCleanupRequest = {
   target?: 'logs' | 'cache' | 'traces' | 'all';
 };
@@ -6840,6 +6844,40 @@ export type TestGhproxyConnectionResponses = {
 
 export type TestGhproxyConnectionResponse =
   TestGhproxyConnectionResponses[keyof TestGhproxyConnectionResponses];
+
+export type TestPypiIndexConnectionData = {
+  body: PypiIndexTestRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/stats/pypi-index/test';
+};
+
+export type TestPypiIndexConnectionResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type TestPypiIndexConnectionResponse =
+  TestPypiIndexConnectionResponses[keyof TestPypiIndexConnectionResponses];
+
+export type MeasurePypiIndexSpeedData = {
+  body: PypiIndexTestRequest;
+  path?: never;
+  query?: never;
+  url: '/api/v1/stats/pypi-index/speed';
+};
+
+export type MeasurePypiIndexSpeedResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type MeasurePypiIndexSpeedResponse =
+  MeasurePypiIndexSpeedResponses[keyof MeasurePypiIndexSpeedResponses];
 
 export type ListChangelogVersionsData = {
   body?: never;

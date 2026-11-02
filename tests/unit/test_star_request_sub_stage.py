@@ -1,4 +1,5 @@
 import importlib
+import logging
 import sys
 import types
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import astrbot.core.pipeline.process_stage as process_stage_pkg
+from astrbot.core.log import _RecordEnricherFilter
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.star import StarMetadata
@@ -177,6 +179,45 @@ async def test_star_request_process_reports_handler_errors_and_stops(monkeypatch
     )
     assert event.clear_result_calls == 1
     assert event.is_stopped() is True
+
+
+@pytest.mark.asyncio
+async def test_star_request_attributes_handler_error_logs_to_plugin(monkeypatch):
+    stage, catalogs = _stage_with_runtime()
+    handler = _handler_meta("boom")
+    event = FakeEvent(
+        {"activated_handlers": [handler], "handlers_parsed_params": {}},
+        at_or_wake=True,
+    )
+    _publish_plugin(catalogs, "plugin.module")
+
+    async def fake_call_handler(event_arg, handler_obj, **params):
+        if False:
+            yield None
+        raise RuntimeError("broken handler")
+
+    records: list[logging.LogRecord] = []
+
+    class _Collector(logging.Handler):
+        def emit(self, log_record: logging.LogRecord) -> None:
+            records.append(log_record)
+
+    collector = _Collector()
+    collector.addFilter(_RecordEnricherFilter())
+    star_request.logger.addHandler(collector)
+    monkeypatch.setattr(star_request, "call_handler", fake_call_handler)
+    monkeypatch.setattr(star_request, "call_event_hook", AsyncMock(return_value=False))
+    try:
+        _ = [item async for item in stage.process(event)]
+    finally:
+        star_request.logger.removeHandler(collector)
+
+    error_records = [
+        log_record for log_record in records if log_record.levelno == logging.ERROR
+    ]
+    assert error_records
+    assert {log_record.plugin_name for log_record in error_records} == {"demo-plugin"}
+    assert {log_record.source for log_record in error_records} == {"plugin"}
 
 
 @pytest.mark.asyncio

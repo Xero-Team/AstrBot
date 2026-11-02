@@ -1,12 +1,12 @@
 # SerpApi
 
-[SerpApi](https://serpapi.com/) 提供来自 Google、Bing、百度等搜索引擎的结构化实时搜索数据，让 AI Agent 无需自行维护网页抓取设施即可获取实时信息。
+[SerpApi](https://serpapi.com/astrbot-github) 提供来自 Google、Bing、百度等搜索引擎的结构化实时搜索数据，让 AI Agent 无需自行维护网页抓取设施即可获取实时信息。
 
 本页介绍 SerpApi 的配置与使用。多来源检索、提供商对比和通用检查请参阅[网页搜索](../websearch.md)。
 
 ## 获取 API Key
 
-1. 打开 [SerpApi](https://serpapi.com/) 并注册或登录。
+1. 打开 [SerpApi](https://serpapi.com/astrbot-github) 并注册或登录。
 2. 打开 [API Key 页面](https://serpapi.com/manage-api-key) 并复制 Key。
 3. 确认账号仍有搜索额度。当前额度、计费和服务可用性以 SerpApi 网站及账号信息为准。
 
@@ -27,13 +27,14 @@
 | 能力     | SerpApi 接口                                                           | AstrBot 返回内容                                                                    |
 | -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | 网页搜索 | [Google Search API](https://serpapi.com/search-api)                    | 首页结果的标题、来源链接和摘要；默认最多 5 条，可请求最多 10 条                     |
+| 新闻搜索 | [Google News API](https://serpapi.com/google-news-api)                 | 文章标题、来源链接、发布媒体、作者、摘要和发布时间；默认最多 5 条，可请求最多 10 条 |
 | 图片搜索 | [Google Images Light API](https://serpapi.com/google-images-light-api) | 图片直链、缩略图、来源页面和可用尺寸；默认最多 5 张，可请求最多 10 张               |
 | 财经查询 | [Google Finance API](https://serpapi.com/google-finance-api)           | 可用的报价、货币、时间戳、财务数据和新闻；请求时间区间时返回报价摘要和可用价格序列  |
 | 学术搜索 | [Google Scholar API](https://serpapi.com/google-scholar-api)           | 论文标题、摘要、出版信息、引用次数和可用的全文链接；默认最多 5 篇，可请求最多 20 篇 |
 
-实际结果数量和可用字段取决于搜索响应，可能少于请求值。网页和图片搜索支持国家与界面语言设置；网页搜索还支持搜索位置，学术搜索支持出版年份筛选。请在消息中说明这些要求，以便模型传给工具。
+实际结果数量和可用字段取决于搜索响应，可能少于请求值。网页、新闻和图片搜索支持国家与界面语言设置；网页搜索还支持搜索位置，学术搜索支持出版年份筛选。请在消息中说明这些要求，以便模型传给工具。
 
-配置 Key 并启用网页搜索后，图片、财经和学术专用工具会自动挂载，无需加入 `websearch_route`。
+配置 Key 并启用网页搜索后，新闻、图片、财经和学术专用工具会自动挂载，无需加入 `websearch_route`。
 
 ## 在对话中使用 SerpApi
 
@@ -46,6 +47,14 @@
 ```
 
 网页搜索返回标题、链接和摘要，不会自动读取完整网页。AstrBot 的 SerpApi 集成不提供正文抽取工具。若经常需要总结某个链接，请在[网页搜索](../websearch.md#正文抽取)中配置支持正文抽取的来源。
+
+### 新闻搜索
+
+```text
+搜索 AstrBot 最近的新闻，并列出每篇文章的发布媒体和发布时间。
+```
+
+新闻搜索会把分组结果展开为单篇文章，并按链接去重。查询中可以使用 `site:`、`when:` 等 Google News 运算符。需要其他地区版本时，请指定国家或语言。
 
 ### 图片搜索
 
@@ -83,6 +92,6 @@
 
 确认已填写 SerpApi Key，并检查账号剩余额度。在 `数据与日志 → 日志` 中查看错误。若为超时，请检查 AstrBot 所在环境能否访问 SerpApi API。通用的多来源检查请参阅[网页搜索](../websearch.md)。
 
-### 模型不使用图片、财经或学术搜索
+### 模型不使用新闻、图片、财经或学术搜索
 
-确认当前配置文件已启用网页搜索、SerpApi Key 已保存，并明确要求图片搜索、Google Finance 或 Google Scholar。四个工具共用同一配置，无需额外开关；是否调用仍由模型决定。
+确认当前配置文件已启用网页搜索、SerpApi Key 已保存，并明确要求新闻搜索、图片搜索、Google Finance 或 Google Scholar。五个工具共用同一配置，无需额外开关；是否调用仍由模型决定。

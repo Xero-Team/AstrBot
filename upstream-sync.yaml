@@ -5,28 +5,28 @@ upstream:
   branch: master
 
 last_synced:
-  commit: c5c08a22901d361d2a5d5d6bbe91a96c9ffe96eb
-  synced_at_utc: 2026-10-26T21:30:00Z
+  commit: a6c2b31db16343467c22db6069c24454aaca8f83
+  synced_at_utc: 2026-11-02T00:38:24Z
   sync_method: adapt
   source_pr: >-
-    10694, 10719, 10691, 10729, 10731, 10732, 10744, 10747, 10748, 10753,
-    10755, 10757, 10761, 10784, 10787
+    10785, 10767, 10788, 10790, 10685, 10657, 10773, 10771, 10896, 10875,
+    10902, 10877, 10904
   note: >-
-    Reviewed and adapted c5c08a22901d361d2a5d5d6bbe91a96c9ffe96eb from
-    0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e (21 commits). Absorbed console
-    teardown guards, Gemini generation parameters, log-filter scope, the
-    SerpApi/DeepSeek guides, Windows managed-shell Job Object cleanup through the
-    fork's ProcessTree, NVIDIA rerank paths, Tencent SILK 0x03, sender/UMO
-    selectors with UmoSender storage and migration revision 4, trace live
-    updates, simplified compression settings, shared config-form styling,
-    custom-rule page sizes, selective bot cleanup, the .astrbot temp-dir
-    fallback, and Anthropic X-Api-Key headers. Kept the fork's split db/store
-    layout, dict EventBus with semaphore and per-scheduler registries, runtime
-    preferences service instead of the removed global sp, existing platform and
-    session pages, en-US/zh-CN only, in-app /help docs, and regenerated the
-    OpenAPI client/public JSON. Skipped upstream 4.29.2/4.29.3 version bumps and
-    the Dockerfile pip bootstrap, the self-update dependency-lock bypass, the
-    removed Shipyard/Boxlite runtime fix, the upstream-only QQ group listing, and
-    the contributors-image update. Fork changes are recorded in
-    changelogs/v4.30.0.md; no version bump was made because the fork tracks its
-    next release as 4.30.0.
+    Reviewed 29 commits from c5c08a22901d361d2a5d5d6bbe91a96c9ffe96eb
+    (a6c2b31db16343467c22db6069c24454aaca8f83, oldest first). Absorbed group
+    cron task listing and admin deletion, the PyPI mirror picker and verified
+    default mirror TLS, SerpApi Google News, Gemini quick templates and native
+    tool hints, console backpressure that no longer blocks the event loop,
+    per-key web-search failover, and plugin-attributed failure logs, plus the
+    community/provider documentation updates and the GitHub Actions dependency
+    bump. Kept the fork's bounded console sink, web-search router registration
+    for SerpApi, runtime-owned key rotation, split plugin runtime loader, and
+    en-US/zh-CN-only locale/docs scope. Skipped already-implemented fixes
+    (skill file-tool preference, plugin configuration reload wiring, DashScope
+    timeout, text_chat final retry, ChatUI project workspace, plugin-page SSE),
+    the Firefox-only scrollbar scoping, upstream 4.29.4's version bump, and all
+    GitHub Project sync automation (no workflow, script, or tests in this
+    fork). Deferred portable message buttons (#9809) and the main-agent
+    construction/wakeup refactor (#10934, #10936) as revisit pending dedicated
+    design decisions. Fork changes are recorded in changelogs/v4.30.0.md; no
+    version bump was made because the fork tracks its next release as 4.30.0.

@@ -190,11 +190,30 @@ def _collect_leaked_threads(
     ]
 
 
+def _stop_process_console_writer() -> None:
+    """Stop the process-lifetime console writer a test may have started.
+
+    ``LogManager`` keeps one bounded console writer for the whole process, so
+    its writer thread outlives any single test that configures logging. Closing
+    it here keeps the thread-leak gate meaningful and lets the next test rebuild
+    a fresh writer instead of reusing a closed one.
+    """
+    from astrbot.core.log import LogManager
+
+    sink = LogManager._console_output
+    LogManager._console_output = None
+    LogManager._console_sink_id = None
+    LogManager._configured = False
+    if sink is not None:
+        sink.close()
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item, nextitem):  # noqa: ARG001
     """Report threads that a test left alive after its fixtures tear down."""
     yield
 
+    _stop_process_console_writer()
     existing_threads = getattr(item, "_astrbot_test_threads", None)
     if existing_threads is None:
         return

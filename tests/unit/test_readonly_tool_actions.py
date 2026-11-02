@@ -22,3 +22,14 @@ def test_kb_read_action_is_available_to_members():
     policy = ACTION_POLICIES["tool.kb_read"]
 
     assert ROLE_TO_RELATION[Role.MEMBER] in policy.relations
+
+
+def test_schedule_read_action_is_available_to_members():
+    """Group members may list scheduled tasks but not change them."""
+
+    read_policy = ACTION_POLICIES["tool.schedule_read"]
+    write_policy = ACTION_POLICIES["tool.schedule_write"]
+
+    assert ROLE_TO_RELATION[Role.MEMBER] in read_policy.relations
+    assert ROLE_TO_RELATION[Role.MEMBER] not in write_policy.relations
+    assert ROLE_TO_RELATION[Role.SESSION_OWNER] in write_policy.relations

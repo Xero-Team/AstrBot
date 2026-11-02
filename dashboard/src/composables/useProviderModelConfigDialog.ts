@@ -38,6 +38,44 @@ interface UseProviderModelConfigDialogOptions {
   requestStepUp?: RequestDashboardStepUp;
 }
 
+// Quick-add templates for `custom_extra_body` on Gemini providers. They use the
+// Gemini SDK parameter names (`max_output_tokens` instead of OpenAI's
+// `max_tokens`) and drop presets the Gemini SDK rejects, such as
+// `reasoning_effort`. Any other parameter can still be added by key.
+//
+// Labels reuse the `custom_extra_body` config-metadata keys so the dialog stays
+// localized instead of embedding hard-coded Chinese text in this module.
+const GEMINI_EXTRA_BODY_I18N_PREFIX =
+  'provider_group.provider.custom_extra_body.template_schema';
+
+function geminiTemplateLabels(key: string) {
+  return {
+    name: `${GEMINI_EXTRA_BODY_I18N_PREFIX}.${key}.name`,
+    description: `${GEMINI_EXTRA_BODY_I18N_PREFIX}.${key}.description`,
+    hint: `${GEMINI_EXTRA_BODY_I18N_PREFIX}.${key}.hint`,
+  };
+}
+
+const GEMINI_EXTRA_BODY_TEMPLATE = {
+  temperature: {
+    ...geminiTemplateLabels('temperature'),
+    type: 'float',
+    default: 1.0,
+    slider: { min: 0, max: 2, step: 0.1 },
+  },
+  top_p: {
+    ...geminiTemplateLabels('top_p'),
+    type: 'float',
+    default: 1.0,
+    slider: { min: 0, max: 1, step: 0.01 },
+  },
+  max_output_tokens: {
+    ...geminiTemplateLabels('max_output_tokens'),
+    type: 'int',
+    default: 8192,
+  },
+};
+
 export function useProviderModelConfigDialog(
   options: UseProviderModelConfigDialogOptions,
 ) {
@@ -69,9 +107,9 @@ export function useProviderModelConfigDialog(
 
     const geminiExtraBody = schema.provider?.items?.custom_extra_body as
       { template_schema?: Record<string, unknown> } | undefined;
-    if (sourceType === 'googlegenai_chat_completion') {
-      // Gemini rejects this OpenAI-only preset; keep the field usable.
-      delete geminiExtraBody?.template_schema?.reasoning_effort;
+    if (sourceType === 'googlegenai_chat_completion' && geminiExtraBody) {
+      // Replace the OpenAI-oriented presets with Gemini-native parameters.
+      geminiExtraBody.template_schema = GEMINI_EXTRA_BODY_TEMPLATE;
     }
 
     for (const key of hiddenKeys) {

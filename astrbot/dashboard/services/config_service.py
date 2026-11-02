@@ -40,7 +40,7 @@ from astrbot.core.star.plugin_lifecycle import PluginLifecycle
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
-from astrbot.core.utils.error_redaction import safe_error
+from astrbot.core.utils.error_redaction import redact_sensitive_text, safe_error
 from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
 from astrbot.core.utils.totp import (
     TotpRuntimeState,
@@ -1387,20 +1387,82 @@ class ConfigFileService:
             _restore_redacted_sensitive_config(post_configs, previous)
         committed = await metadata.config.save_config_async(post_configs)
         _require_config_save_commit(committed)
+        await self._reload_plugin_or_rollback(
+            metadata.config,
+            plugin_name,
+            previous,
+        )
+
+    async def _reload_plugin_or_rollback(
+        self,
+        plugin_config,
+        plugin_name: str,
+        previous: dict | None,
+    ) -> None:
+        """Reload one plugin after saving its configuration.
+
+        A reload that reports failure or raises is surfaced to the Dashboard
+        operator instead of being treated as a successful save. When a snapshot
+        of the previous configuration exists, it is restored and reloaded again
+        so the persisted configuration keeps matching the running plugin.
+
+        Args:
+            plugin_config: Live plugin configuration object that was just saved.
+            plugin_name: Plugin name passed to the lifecycle reload.
+            previous: Previous configuration snapshot, or ``None`` if unavailable.
+
+        Raises:
+            DashboardValidationError: The plugin could not be reloaded.
+        """
+        reload_failed = False
+        reload_error = ""
         try:
-            await self.plugin_lifecycle.reload(plugin_name)
-        except Exception:
-            if previous is None:
-                raise
+            reloaded, message = await self.plugin_lifecycle.reload(plugin_name)
+        except Exception as exc:
+            logger.exception(
+                "Failed to reload plugin %s after saving its configuration.",
+                plugin_name,
+            )
+            reload_failed = True
+            reload_error = str(exc)
+        else:
+            if not reloaded:
+                reload_failed = True
+                reload_error = message or ""
+        if not reload_failed:
+            return
+        rollback_note = ""
+        if previous is not None:
             try:
-                rollback_committed = await metadata.config.save_config_async(previous)
+                rollback_committed = await plugin_config.save_config_async(previous)
                 _require_config_save_commit(rollback_committed)
-                await self.plugin_lifecycle.reload(plugin_name)
             except Exception:
                 logger.error(
                     "Failed to roll back plugin configuration after reload failure"
                 )
-            raise
+            else:
+                try:
+                    restored, restore_error = await self.plugin_lifecycle.reload(
+                        plugin_name
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to reload the restored configuration of plugin %s.",
+                        plugin_name,
+                    )
+                else:
+                    if restored:
+                        rollback_note = "，已回滚到上一次配置"
+                    else:
+                        logger.error(
+                            "Plugin %s failed to reload its restored configuration: %s",
+                            plugin_name,
+                            restore_error,
+                        )
+        raise DashboardValidationError(
+            f"插件 {plugin_name} 配置重载失败{rollback_note}: "
+            f"{redact_sensitive_text(reload_error or '未知错误，请查看日志')}"
+        )
 
     async def upload_config_file(
         self,

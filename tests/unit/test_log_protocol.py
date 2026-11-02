@@ -73,6 +73,86 @@ def test_log_enricher_normalizes_unknown_fields_and_bounds_summary():
     assert "secret" not in entry["summary"]
 
 
+def test_log_enricher_prefers_explicit_plugin_name_from_framework_logs():
+    record = logging.LogRecord(
+        "astrbot",
+        logging.ERROR,
+        __file__,
+        10,
+        "plugin failed to load",
+        (),
+        None,
+    )
+    record.plugin_name = "demo_plugin"
+
+    _RecordEnricherFilter().filter(record)
+
+    assert record.plugin_name == "demo_plugin"
+    assert record.plugin_tag == "[demo_plugin]"
+    assert record.source == "plugin"
+
+
+def _collect_enriched_records(
+    logger_name: str,
+) -> tuple[logging.Logger, list[logging.LogRecord], logging.Handler]:
+    records: list[logging.LogRecord] = []
+
+    class _Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    handler = _Collector()
+    handler.addFilter(_RecordEnricherFilter())
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    return logger, records, handler
+
+
+def test_logger_adapter_extra_reaches_enricher_as_plugin_attribution():
+    logger, records, handler = _collect_enriched_records(
+        "test.plugin_log_attribution.adapter"
+    )
+    try:
+        adapter = logging.LoggerAdapter(logger, {"plugin_name": "demo_plugin"})
+        adapter.error("plugin failed to load")
+    finally:
+        logger.removeHandler(handler)
+
+    assert [record.plugin_name for record in records] == ["demo_plugin"]
+    assert records[0].plugin_tag == "[demo_plugin]"
+    assert records[0].source == "plugin"
+
+
+def test_explicit_extra_plugin_name_reaches_enricher_as_plugin_attribution():
+    logger, records, handler = _collect_enriched_records(
+        "test.plugin_log_attribution.extra"
+    )
+    try:
+        logger.error("handler failed", extra={"plugin_name": "handler_plugin"})
+    finally:
+        logger.removeHandler(handler)
+
+    assert [record.plugin_name for record in records] == ["handler_plugin"]
+    assert records[0].plugin_tag == "[handler_plugin]"
+    assert records[0].source == "plugin"
+
+
+def test_log_enricher_falls_back_to_path_based_source_without_plugin_name():
+    logger, records, handler = _collect_enriched_records(
+        "test.plugin_log_attribution.framework"
+    )
+    try:
+        logger.info("framework message")
+    finally:
+        logger.removeHandler(handler)
+
+    assert len(records) == 1
+    assert records[0].plugin_name is None
+    assert records[0].plugin_tag == "[Core]"
+    assert records[0].source == "core"
+
+
 def test_log_service_filters_categories_and_replays_by_event_id():
     broker = LogBroker()
     broker.publish(

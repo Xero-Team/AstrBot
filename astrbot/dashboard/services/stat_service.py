@@ -6,10 +6,14 @@ import time
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import cmp_to_key
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urljoin, urlparse
+from uuid import uuid4
 
 import psutil
+from packaging.version import InvalidVersion, Version
 from sqlmodel import col, func, select
 
 from astrbot import logger
@@ -26,9 +30,15 @@ from astrbot.core.desktop_runtime import (
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.star.star import PluginRegistry
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
-from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.astrbot_path import get_astrbot_path, get_astrbot_temp_path
 from astrbot.core.utils.auth_password import is_default_dashboard_password
 from astrbot.core.utils.io import get_dashboard_dist_version, get_dashboard_version
+from astrbot.core.utils.outbound_http import (
+    PYPI_INDEX_PROBE,
+    OutboundRequestError,
+    download_to_path,
+    fetch_text,
+)
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from astrbot.dashboard.password_state import (
@@ -41,6 +51,68 @@ from astrbot.utils.version_comparator import VersionComparator
 
 class StatServiceError(Exception):
     pass
+
+
+# Some package indexes reject non-pip clients, so the probes identify as pip.
+_PIP_USER_AGENT = "pip/24.3.1"
+# The simple index is HTML; asking for JSON would return PEP 691 documents that
+# this parser does not read.
+_PIP_INDEX_REQUEST_HEADERS = {
+    "User-Agent": _PIP_USER_AGENT,
+    "Accept": "text/html, */*;q=0.8",
+}
+# Keep the sampled byte count comparable across mirrors by disabling transport
+# compression for the measured file download.
+_PIP_FILE_REQUEST_HEADERS = {
+    "User-Agent": _PIP_USER_AGENT,
+    "Accept-Encoding": "identity",
+}
+
+
+def _normalize_pypi_index_url(index_url: str | None) -> str:
+    """Return a validated PyPI index base URL without a trailing slash.
+
+    Args:
+        index_url: Operator-supplied index URL.
+
+    Returns:
+        The trimmed base URL.
+
+    Raises:
+        StatServiceError: If the URL is missing or not an http(s) URL.
+    """
+
+    normalized = (index_url or "").strip().rstrip("/")
+    if not normalized:
+        raise StatServiceError("请输入 PyPI 源地址")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise StatServiceError("PyPI 源地址必须是一个有效的 http(s) 地址")
+    return normalized
+
+
+class _AnchorHrefParser(HTMLParser):
+    """Collect ``href`` values of anchor tags from a PyPI simple index.
+
+    A real parser is used instead of a regex so that valid markup with single
+    quotes, unquoted values, or uppercase ``HREF`` is handled; tag and attribute
+    names arrive lowercased.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.hrefs: list[str] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        if tag != "a":
+            return
+        for name, value in attrs:
+            if name == "href" and value:
+                self.hrefs.append(value)
 
 
 class StatService:
@@ -603,6 +675,131 @@ class StatService:
         except Exception as exc:
             logger.exception("Failed to test GitHub mirror connection")
             raise StatServiceError("镜像测试失败") from exc
+
+    async def test_pypi_index_connection(self, index_url: str | None) -> dict:
+        """Check whether a PyPI index (mirror) answers requests.
+
+        Args:
+            index_url: Base URL of the PyPI index, e.g.
+                ``https://mirrors.aliyun.com/pypi/simple/``.
+
+        Returns:
+            A dict with the round trip latency in milliseconds.
+
+        Raises:
+            StatServiceError: If the URL is invalid or the index is unreachable.
+        """
+        try:
+            normalized_url = _normalize_pypi_index_url(index_url)
+            start_time = time.time()
+            try:
+                status, _body, _headers = await fetch_text(
+                    f"{normalized_url}/",
+                    PYPI_INDEX_PROBE,
+                    request_headers=_PIP_INDEX_REQUEST_HEADERS,
+                )
+            except OutboundRequestError as exc:
+                raise StatServiceError("镜像测试失败") from exc
+            if status != 200:
+                raise StatServiceError(f"镜像测试失败：HTTP {status}")
+            return {
+                "latency": round((time.time() - start_time) * 1000, 2),
+            }
+        except StatServiceError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to test PyPI index connection")
+            raise StatServiceError("镜像测试失败") from exc
+
+    async def measure_pypi_index_speed(self, index_url: str | None) -> dict:
+        """Download a real wheel from a PyPI index and report the throughput.
+
+        The speed test pulls an actual package file, so the result reflects what
+        ``pip install`` would experience instead of a bare round trip. The index
+        page and the sampled wheel are both bounded by ``PYPI_INDEX_PROBE``.
+
+        Args:
+            index_url: Base URL of the PyPI index, e.g.
+                ``https://mirrors.aliyun.com/pypi/simple/``.
+
+        Returns:
+            A dict with the throughput in MB/s, the sampled byte count, and the
+            elapsed seconds.
+
+        Raises:
+            StatServiceError: If the URL is invalid or the index is unreachable.
+        """
+        try:
+            normalized_url = _normalize_pypi_index_url(index_url)
+            # pip ships a single platform independent wheel and every mirror
+            # serves the same file, which keeps the numbers comparable.
+            package_page_url = f"{normalized_url}/pip/"
+            try:
+                status, page, _headers = await fetch_text(
+                    package_page_url,
+                    PYPI_INDEX_PROBE,
+                    request_headers=_PIP_INDEX_REQUEST_HEADERS,
+                )
+            except OutboundRequestError as exc:
+                raise StatServiceError("镜像测速失败") from exc
+            if status != 200:
+                raise StatServiceError(f"镜像测速失败：HTTP {status}")
+
+            anchor_parser = _AnchorHrefParser()
+            anchor_parser.feed(page)
+            anchor_parser.close()
+
+            wheels: list[tuple[Version, str]] = []
+            for href in anchor_parser.hrefs:
+                # Simple indexes append a "#sha256=..." fragment.
+                href = href.split("#", 1)[0]
+                file_name = href.rsplit("/", 1)[-1]
+                suffix = "-py3-none-any.whl"
+                if not (file_name.startswith("pip-") and file_name.endswith(suffix)):
+                    continue
+                try:
+                    version = Version(file_name[len("pip-") : -len(suffix)])
+                except InvalidVersion:
+                    continue
+                wheels.append((version, urljoin(package_page_url, href)))
+
+            if not wheels:
+                raise StatServiceError("该镜像上未找到 pip 安装包")
+            wheels.sort(key=lambda wheel: wheel[0])
+            wheel_url = wheels[-1][1]
+
+            sample_path = (
+                Path(get_astrbot_temp_path()) / f"pypi_speed_{uuid4().hex}.whl"
+            )
+            start_time = time.time()
+            duration = 0.0
+            received = 0
+            try:
+                await download_to_path(
+                    wheel_url,
+                    sample_path,
+                    PYPI_INDEX_PROBE,
+                    request_headers=_PIP_FILE_REQUEST_HEADERS,
+                )
+                duration = time.time() - start_time
+                received = sample_path.stat().st_size
+            finally:
+                sample_path.unlink(missing_ok=True)
+
+            if not received or duration <= 0:
+                raise StatServiceError("镜像测速失败：未收到数据")
+            return {
+                "speed": round(received / 1048576 / duration, 2),
+                "bytes": received,
+                "duration": round(duration, 2),
+            }
+        except StatServiceError:
+            raise
+        except OutboundRequestError as exc:
+            raise StatServiceError("镜像测速失败") from exc
+        except Exception as exc:
+            logger.exception("Failed to measure PyPI index speed")
+            raise StatServiceError("镜像测速失败") from exc
 
     def get_changelog(self, version: str | None) -> dict:
         try:

@@ -1,12 +1,12 @@
 # SerpApi
 
-[SerpApi](https://serpapi.com/) provides structured, real-time search data from Google, Bing, Baidu and other search engines, helping AI agents access current information without managing web scraping infrastructure.
+[SerpApi](https://serpapi.com/astrbot-github) provides structured, real-time search data from Google, Bing, Baidu and other search engines, helping AI agents access current information without managing web scraping infrastructure.
 
 This page covers SerpApi setup and usage. See [Web Search](../websearch.md) for multi-source routing, provider comparisons, and general checks.
 
 ## Get an API key
 
-1. Open [SerpApi](https://serpapi.com/) and create an account or sign in.
+1. Open [SerpApi](https://serpapi.com/astrbot-github) and create an account or sign in.
 2. Open the [API key page](https://serpapi.com/manage-api-key) and copy your key.
 3. Check that your SerpApi account has search quota available. Refer to SerpApi's website and your account for current quotas, billing, and service access.
 
@@ -17,7 +17,7 @@ Your conversation must use AstrBot Built-in AI, and both the chat model and its 
 1. Open `Config` in the sidebar and select the profile your conversation actually uses.
 2. Open `AI → Capabilities → Web Search` and turn on `Enable Web Search`.
 3. Optionally add `SerpApi` to `Web Search Sources` (`websearch_route`) to include it in the fused `web_search` result; its dedicated tools are available whenever the key is configured.
-4. Add your key to the `SerpApi API Key` list. One key enables all four capabilities below; you can also add multiple keys for rotation.
+4. Add your key to the `SerpApi API Key` list. One key enables all five capabilities below; you can also add multiple keys for rotation.
 5. Click `Save Configuration` at the bottom right.
 
 These settings apply only to the selected profile. Multiple keys rotate, and authentication or quota errors trigger a retry with the next key.
@@ -27,13 +27,14 @@ These settings apply only to the selected profile. Multiple keys rotate, and aut
 | Capability      | SerpApi endpoint                                                       | Content returned by AstrBot                                                                                                                                        |
 | --------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Web search      | [Google Search API](https://serpapi.com/search-api)                    | Titles, source URLs, and snippets from the first page; up to 5 results by default, with a requested maximum of 10                                                  |
+| News search     | [Google News API](https://serpapi.com/google-news-api)                 | Article titles, source URLs, publishers, authors, snippets, and publication times; up to 5 articles by default, with a requested maximum of 10                     |
 | Image search    | [Google Images Light API](https://serpapi.com/google-images-light-api) | Direct image URLs, thumbnails, source pages, and available dimensions; up to 5 images by default, with a requested maximum of 10                                   |
 | Finance queries | [Google Finance API](https://serpapi.com/google-finance-api)           | Available quotes, currencies, timestamps, financial data, and news; a history window returns the quote summary and available price series                          |
 | Academic search | [Google Scholar API](https://serpapi.com/google-scholar-api)           | Publication titles, snippets, publication details, citation counts, and available full-text links; up to 5 publications by default, with a requested maximum of 20 |
 
-The actual number of results and available fields depend on the search response and may be fewer than requested. Web and image search support country and interface language settings. Web search also supports a search location, and academic search supports publication year filters. Include these requirements in your message so the model can pass them to the tool.
+The actual number of results and available fields depend on the search response and may be fewer than requested. Web, news, and image search support country and interface language settings. Web search also supports a search location, and academic search supports publication year filters. Include these requirements in your message so the model can pass them to the tool.
 
-The specialist image, finance, and academic tools mount whenever the key is configured and web search is enabled. They do not need to be listed in `websearch_route`.
+The specialist news, image, finance, and academic tools mount whenever the key is configured and web search is enabled. They do not need to be listed in `websearch_route`.
 
 ## Use SerpApi in a conversation
 
@@ -46,6 +47,14 @@ Search for AstrBot's latest release. Give the version, summarize the main change
 ```
 
 Web search returns titles, links, and snippets without automatically reading full pages. AstrBot's SerpApi integration does not provide a page extraction tool. If you often need to summarize a specific URL, configure a source with page extraction in [Web Search](../websearch.md#page-extraction).
+
+### News search
+
+```text
+Find recent news about AstrBot and list the publisher and publication time for each article.
+```
+
+News search returns grouped stories flattened into individual articles, deduplicated by URL. Google News operators such as `site:` and `when:` work in the query. Specify a country or language when you need another edition.
 
 ### Image search
 
@@ -83,6 +92,6 @@ You can specify a publication year range and request up to 20 publications. Snip
 
 Confirm that you entered a SerpApi key and check your remaining account quota. Inspect the error under `Data & Logs → Logs`. For timeouts, check whether the AstrBot environment can reach the SerpApi API. See [Web Search](../websearch.md) for general multi-source checks.
 
-### The model does not use image, finance, or academic search
+### The model does not use news, image, finance, or academic search
 
-Confirm that Web Search is enabled for the active profile, the SerpApi key has been saved, and ask explicitly for image search, Google Finance, or Google Scholar. All four tools share the same configuration, with no extra switch required; the model still decides whether to call them.
+Confirm that Web Search is enabled for the active profile, the SerpApi key has been saved, and ask explicitly for news search, image search, Google Finance, or Google Scholar. All five tools share the same configuration, with no extra switch required; the model still decides whether to call them.

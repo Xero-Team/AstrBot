@@ -2764,17 +2764,17 @@ CONFIG_METADATA_2 = {
                     "gm_native_search": {
                         "description": "启用原生搜索功能",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用；Gemini 3 及以上模型的原生搜索仅限付费层级，计费规则请查阅官方文档",
                     },
                     "gm_native_coderunner": {
                         "description": "启用原生代码执行器",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用",
                     },
                     "gm_url_context": {
                         "description": "启用URL上下文功能",
                         "type": "bool",
-                        "hint": "启用后所有函数工具将全部失效",
+                        "hint": "仅 Gemini 3 及以上模型支持与函数工具同时使用",
                     },
                     "gm_safety_settings": {
                         "description": "安全过滤器",
@@ -4013,7 +4013,7 @@ CONFIG_METADATA_3 = {
                         "subtitles": [
                             "",
                             "",
-                            "Google 网页、图片、学术和财经搜索",
+                            "Google 网页、新闻、图片、学术和财经搜索",
                             "DeepSeek 官方搜索接口",
                             "",
                             "",
@@ -4119,7 +4119,7 @@ CONFIG_METADATA_3 = {
                         "description": "SerpApi API Key",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "支持 Google 网页、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：https://serpapi.com/manage-api-key",
+                        "hint": "支持 Google 网页、新闻、图片、学术和财经搜索。可添加多个 Key 轮询。获取 Key：https://serpapi.com/manage-api-key",
                         "secret": True,
                         "condition": {
                             "provider_settings.web_search": True,
@@ -5279,7 +5279,7 @@ CONFIG_METADATA_3_SYSTEM = {
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",
                         "type": "string",
-                        "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。",
+                        "hint": "安装插件依赖时，会使用 Python 的 pip 工具。这里可以填写额外的参数，如 `--break-system-package` 等。PyPI 镜像的 TLS 证书默认会校验；若使用自签名/私有 CA 镜像，请通过 `--cert <CA 路径>` 指定信任的证书（推荐），或显式添加 `--trusted-host <主机名>`。",
                     },
                     "pypi_index_url": {
                         "description": "PyPI 软件仓库地址",

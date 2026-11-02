@@ -692,6 +692,10 @@ class PluginRuntimeLoader:
         alter_cmd: dict,
     ) -> list[str]:
         assert metadata.module_path is not None
+        plugin_logger = logging.LoggerAdapter(
+            logger,
+            {"plugin_name": metadata.name or metadata.root_dir_name},
+        )
         full_names: list[str] = []
         plugin_cfg = alter_cmd.setdefault(metadata.name, {})
         for (
@@ -713,7 +717,7 @@ class PluginRuntimeLoader:
                         break
                 else:
                     handler.event_filters.append(ActionPermissionFilter(action))
-                logger.debug(
+                plugin_logger.debug(
                     "插入权限过滤器 %s 到 %s 的 %s 方法。",
                     action,
                     metadata.name,
@@ -738,7 +742,7 @@ class PluginRuntimeLoader:
                 handler.event_filters.append(
                     ActionPermissionFilter("plugin:__undeclared__")
                 )
-                logger.warning(
+                plugin_logger.warning(
                     "Plugin handler %s has no declared authorization action; denying it.",
                     handler.handler_full_name,
                 )
@@ -771,18 +775,25 @@ class PluginRuntimeLoader:
         ) in self._catalog.runtime_catalogs.handlers.get_handlers_by_event_type(
             EventType.OnPluginLoadedEvent,
         ):
+            source_plugin = self._catalog.plugins.get_by_module(
+                handler.handler_module_path,
+            )
+            handler_plugin_name = (
+                source_plugin.name if source_plugin else None
+            ) or handler.handler_module_path
             try:
-                source_plugin = self._catalog.plugins.get_by_module(
-                    handler.handler_module_path,
-                )
                 logger.info(
                     "hook(on_plugin_loaded) -> %s - %s",
-                    source_plugin.name if source_plugin else "unknown",
+                    handler_plugin_name,
                     handler.handler_name,
+                    extra={"plugin_name": handler_plugin_name},
                 )
                 await handler.handler(metadata)
             except Exception:
-                logger.error(traceback.format_exc())
+                logger.error(
+                    traceback.format_exc(),
+                    extra={"plugin_name": handler_plugin_name},
+                )
 
     async def load(
         self,
@@ -835,6 +846,7 @@ class PluginRuntimeLoader:
     ) -> tuple[bool, str | None]:
         has_load_error = False
         for plugin_module in plugin_modules:
+            plugin_logger: logging.Logger | logging.LoggerAdapter = logger
             root_dir_name = str(plugin_module["pname"])
             reserved = bool(plugin_module.get("reserved", False))
             plugin_dir_path = (
@@ -856,7 +868,12 @@ class PluginRuntimeLoader:
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
 
-                logger.info("Loading plugin %s ...", root_dir_name)
+                # Use the directory name until plugin metadata is available.
+                plugin_logger = logging.LoggerAdapter(
+                    logger,
+                    {"plugin_name": root_dir_name},
+                )
+                plugin_logger.info("Loading plugin %s ...", root_dir_name)
                 validated_metadata = self.load_metadata(plugin_path=plugin_dir_path)
                 try:
                     module = await self.import_with_dependency_recovery(
@@ -868,8 +885,10 @@ class PluginRuntimeLoader:
                     )
                 except Exception as exc:
                     error_trace = traceback.format_exc()
-                    logger.error(error_trace)
-                    logger.error("插件 %s 导入失败。原因：%s", root_dir_name, exc)
+                    plugin_logger.error(error_trace)
+                    plugin_logger.error(
+                        "插件 %s 导入失败。原因：%s", root_dir_name, exc
+                    )
                     has_load_error = True
                     self._failed_plugins[root_dir_name] = (
                         self._build_failed_plugin_record(
@@ -920,13 +939,21 @@ class PluginRuntimeLoader:
                     reserved=reserved,
                     activated=module_path not in inactivated_plugins,
                 )
-                plugin_name, plugin_author, plugin_id = self._apply_plugin_metadata(
-                    metadata,
-                    plugin_dir_path,
-                    plugin_config,
-                    ignore_version_check=ignore_version_check,
-                    metadata_yaml=validated_metadata,
-                )
+                try:
+                    plugin_name, plugin_author, plugin_id = self._apply_plugin_metadata(
+                        metadata,
+                        plugin_dir_path,
+                        plugin_config,
+                        ignore_version_check=ignore_version_check,
+                        metadata_yaml=validated_metadata,
+                    )
+                finally:
+                    # metadata.name is populated before version validation, so
+                    # refresh attribution even when validation rejects the load.
+                    plugin_logger = logging.LoggerAdapter(
+                        logger,
+                        {"plugin_name": metadata.name or root_dir_name},
+                    )
                 declarations = collect_plugin_module_declarations(module)
                 self._catalog.materialize_declarations(
                     metadata, declaration, declarations
@@ -945,7 +972,7 @@ class PluginRuntimeLoader:
                     )
                 else:
                     metadata.star_cls = None
-                    logger.info("Plugin %s is disabled.", metadata.name)
+                    plugin_logger.info("Plugin %s is disabled.", metadata.name)
                 self.bind_handlers(metadata, inactivated_llm_tools)
                 if os.path.exists(logo_path):
                     metadata.logo_path = logo_path
@@ -959,11 +986,11 @@ class PluginRuntimeLoader:
                     self._after_module_materialized()
                 await self._initialize_plugin_and_run_hooks(metadata)
             except Exception as exc:
-                logger.error("----- 插件 %s 载入失败 -----", root_dir_name)
+                plugin_logger.error("----- 插件 %s 载入失败 -----", root_dir_name)
                 errors = traceback.format_exc()
                 for line in errors.split("\n"):
-                    logger.error("| %s", line)
-                logger.error("----------------------------------")
+                    plugin_logger.error("| %s", line)
+                plugin_logger.error("----------------------------------")
                 has_load_error = True
                 self._failed_plugins[root_dir_name] = self._build_failed_plugin_record(
                     root_dir_name=root_dir_name,

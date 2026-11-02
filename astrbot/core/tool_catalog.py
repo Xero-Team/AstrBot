@@ -80,6 +80,13 @@ WRITE_CAPABILITY_ACTIONS: frozenset[str] = frozenset(
     }
 )
 
+# Tools that admit a read action so members can use their read paths but can
+# still change AstrBot state through other actions.  ``future_task`` declares
+# ``tool.schedule_read`` to let group members list their group's tasks, then
+# re-authorizes create and edit against ``tool.schedule_write``; the declared
+# action therefore does not answer the write-capability question on its own.
+ACTION_GATED_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"future_task"})
+
 DELEGATE_CODING_TASK_TOOL_NAME = "delegate_coding_task"
 SUBMIT_WORK_TASK_TOOL_NAME = "submit_work_task"
 
@@ -97,6 +104,7 @@ WEB_FETCH_TOOL_NAME = "web_fetch"
 WEB_SEARCH_CONFIGURED_TOOLS: Mapping[str, tuple[str, ...]] = {
     "serpapi": (
         "web_search_serpapi",
+        "news_search_serpapi",
         "image_search_serpapi",
         "finance_search_serpapi",
         "scholar_search_serpapi",
@@ -534,6 +542,8 @@ def _is_write_capable_tool(name: str, actions: Sequence[str]) -> bool:
         # surface elevation, and the authorization decision all still gate it;
         # only this loop-level rule steps aside.
         return False
+    if name in ACTION_GATED_WRITE_TOOL_NAMES:
+        return True
     if name in COMPUTER_TOOL_NAMES:
         return name not in WORKSPACE_FILE_READ_TOOLS
     if not actions:

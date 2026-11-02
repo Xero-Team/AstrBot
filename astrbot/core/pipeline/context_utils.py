@@ -125,7 +125,10 @@ async def call_event_hook(
         except KeyboardInterrupt, SystemExit:
             raise
         except Exception:
-            logger.error(redact_sensitive_text(traceback.format_exc()))
+            logger.error(
+                redact_sensitive_text(traceback.format_exc()),
+                extra={"plugin_name": plugin_name},
+            )
             event.trace.record(
                 "handler_end",
                 kind="plugin_handler",

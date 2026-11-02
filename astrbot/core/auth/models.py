@@ -88,6 +88,7 @@ ACTIONS = frozenset(
         "tool.session_history",
         "tool.memory_read",
         "tool.memory_write",
+        "tool.schedule_read",
         "tool.schedule_write",
         "skill.read",
         "dashboard.account.manage",

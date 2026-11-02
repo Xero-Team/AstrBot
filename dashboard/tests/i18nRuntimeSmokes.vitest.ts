@@ -1,6 +1,9 @@
+import { ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { initI18n } from '@/i18n/composables';
+import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog';
+import ObjectEditor from '@/components/shared/ObjectEditor.vue';
 import TemplateListEditor from '@/components/shared/TemplateListEditor.vue';
 import PromptSelector from '@/components/shared/PromptSelector.vue';
 import { mountWithVuetify } from './utils/mountWithVuetify';
@@ -113,6 +116,60 @@ describe('i18n runtime smokes', () => {
             'Translation key not found: core.shared.promptSelector.editPrompt',
           ),
         ),
+      ),
+    ).toBe(false);
+  });
+
+  it('renders the Gemini custom_extra_body template in en-US', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const dialog = useProviderModelConfigDialog({
+      selectedProviderSource: ref({
+        id: 'gemini',
+        type: 'googlegenai_chat_completion',
+      }),
+      configSchema: ref({
+        provider: {
+          items: {
+            id: {},
+            model: {},
+            custom_extra_body: { template_schema: {} },
+          },
+        },
+      }),
+      buildModelProviderConfig: () => ({ id: 'm', model: 'm' }),
+      loadConfig: vi.fn(),
+      tm: (key) => key,
+      showMessage: vi.fn(),
+    });
+    const extraBody =
+      dialog.providerModelConfigSchema.value.provider.items.custom_extra_body;
+
+    const wrapper = mountWithVuetify(ObjectEditor, {
+      props: {
+        modelValue: {},
+        itemMeta: extraBody,
+        configKey: 'provider_group.provider.custom_extra_body',
+      },
+      global: {
+        stubs: {
+          VDialog: {
+            props: ['modelValue'],
+            template: '<div v-if="modelValue"><slot /></div>',
+          },
+        },
+      },
+    });
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect(text).toContain('Max Output Tokens');
+    expect(text).toContain('Maximum number of generated tokens.');
+    expect(text).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(
+      warnSpy.mock.calls.some((args) =>
+        args.some((arg) => String(arg).includes('Translation key not found')),
       ),
     ).toBe(false);
   });
